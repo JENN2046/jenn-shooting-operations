@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { extname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -34,6 +34,7 @@ const ATTACHMENT_TYPES = new Map([
 ]);
 const OPERATION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const DEFAULT_ORPHAN_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const STAGED_CLEANUP_FILE = /^(?<storedName>[a-f0-9]{64}\.[a-z0-9]+)\.cleanup-[0-9a-f-]{36}$/;
 
 function safeName(value) {
   const name = String(value || '').replace(/[\u0000-\u001f<>:"/\\|?*]/g, '_').trim();
@@ -54,15 +55,30 @@ function matchesSignature(contentType, buffer) {
 }
 
 export class ScheduleStore {
-  constructor({ filename, uploadRoot, clock = () => new Date(), idFactory = randomUUID, orphanMaxAgeMs = DEFAULT_ORPHAN_MAX_AGE_MS }) {
-    if (filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
+  constructor({
+    filename,
+    uploadRoot,
+    clock = () => new Date(),
+    idFactory = randomUUID,
+    orphanMaxAgeMs = DEFAULT_ORPHAN_MAX_AGE_MS,
+    readOnly = false,
+    fileOperations = {},
+  }) {
+    if (!readOnly && filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
     this.uploadRoot = uploadRoot || (filename === ':memory:' ? null : join(dirname(filename), 'uploads'));
-    if (this.uploadRoot) mkdirSync(this.uploadRoot, { recursive: true });
+    this.cleanupRoot = this.uploadRoot ? join(this.uploadRoot, '.cleanup') : null;
+    if (!readOnly && this.uploadRoot) mkdirSync(this.uploadRoot, { recursive: true });
+    if (!readOnly && this.cleanupRoot) mkdirSync(this.cleanupRoot, { recursive: true });
     this.clock = clock;
     this.idFactory = idFactory;
     this.orphanMaxAgeMs = orphanMaxAgeMs;
-    this.db = new DatabaseSync(filename);
-    this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
+    this.readOnly = readOnly;
+    this.renameFile = fileOperations.rename || renameSync;
+    this.db = new DatabaseSync(filename, { readOnly });
+    this.db.exec(readOnly
+      ? 'PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;'
+      : 'PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
+    if (readOnly) return;
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS schedule_state (
         id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -105,10 +121,61 @@ export class ScheduleStore {
       this.db.prepare('INSERT INTO schedule_state (id, revision, updated_at, snapshot_json) VALUES (1, 0, ?, ?)')
         .run(now, JSON.stringify(snapshot));
     }
+    this.recoverStagedUploadCleanup();
   }
 
   close() {
     this.db.close();
+  }
+
+  recoverStagedUploadCleanup() {
+    if (this.readOnly || !this.uploadRoot || !this.cleanupRoot) {
+      return { ok: true, restored: 0, removed: 0, restoreErrors: 0, cleanupErrors: 0, errors: 0 };
+    }
+    return transaction(this.db, () => this.recoverStagedUploadCleanupLocked());
+  }
+
+  recoverStagedUploadCleanupLocked() {
+    if (!this.uploadRoot || !this.cleanupRoot || !existsSync(this.cleanupRoot)) {
+      return { ok: true, restored: 0, removed: 0, restoreErrors: 0, cleanupErrors: 0, errors: 0 };
+    }
+    let restored = 0;
+    let removed = 0;
+    let restoreErrors = 0;
+    let cleanupErrors = 0;
+    const referenced = this.db.prepare('SELECT 1 FROM uploads WHERE stored_name = ? LIMIT 1');
+    const entries = readdirSync(this.cleanupRoot, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const match = STAGED_CLEANUP_FILE.exec(entry.name);
+      if (!match) continue;
+      const stagedPath = join(this.cleanupRoot, entry.name);
+      const originalPath = join(this.uploadRoot, match.groups.storedName);
+      const hasReference = Boolean(referenced.get(match.groups.storedName));
+      try {
+        if (!hasReference) {
+          unlinkSync(stagedPath);
+          removed += 1;
+        } else if (existsSync(originalPath)) {
+          unlinkSync(stagedPath);
+          removed += 1;
+        } else {
+          this.renameFile(stagedPath, originalPath);
+          restored += 1;
+        }
+      } catch {
+        if (hasReference && !existsSync(originalPath)) restoreErrors += 1;
+        else cleanupErrors += 1;
+      }
+    }
+    return {
+      ok: restoreErrors === 0,
+      restored,
+      removed,
+      restoreErrors,
+      cleanupErrors,
+      errors: restoreErrors + cleanupErrors,
+    };
   }
 
   getSnapshot() {
@@ -168,6 +235,10 @@ export class ScheduleStore {
 
     try {
       const result = transaction(this.db, () => {
+        const recovery = this.recoverStagedUploadCleanupLocked();
+        if (!recovery.ok) {
+          return { ok: false, status: 503, code: 'UPLOAD_RECOVERY_FAILED' };
+        }
         const current = this.getSnapshot();
         const now = isoNow(this.clock);
         const taskId = `REQ-${this.idFactory()}`;
@@ -233,6 +304,7 @@ export class ScheduleStore {
         this.recordAudit('request.submit', role, taskId, next.revision, 'success', now);
         return response;
       });
+      if (!result.ok) return result;
       this.cleanupOrphanUploads({ operationId: submission.operationId });
       return result;
     } catch (error) {
@@ -248,7 +320,7 @@ export class ScheduleStore {
     if (typeof operationId !== 'string' || !OPERATION_ID.test(operationId)) {
       return { ok: false, status: 422, code: 'INVALID_OPERATION_ID' };
     }
-    this.cleanupOrphanUploads();
+    this.cleanupOrphanUploads({ recoverStaged: false });
     const allowed = kind === 'image' ? IMAGE_TYPES : kind === 'attachment' ? ATTACHMENT_TYPES : null;
     if (!allowed?.has(contentType)) return { ok: false, status: 415, code: 'UNSUPPORTED_UPLOAD_TYPE' };
     const maxBytes = kind === 'image' ? 12 * 1024 * 1024 : 20 * 1024 * 1024;
@@ -258,34 +330,46 @@ export class ScheduleStore {
     if (!matchesSignature(contentType, buffer)) {
       return { ok: false, status: 415, code: 'UPLOAD_SIGNATURE_MISMATCH' };
     }
-    const count = this.db.prepare('SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes FROM uploads WHERE operation_id = ?')
-      .get(operationId);
-    if (count.count >= 10 || count.bytes + buffer.length > 40 * 1024 * 1024) {
-      return { ok: false, status: 413, code: 'UPLOAD_BATCH_LIMIT' };
-    }
-    const now = isoNow(this.clock);
-    const id = `UP-${this.idFactory()}`;
-    const sha256 = createHash('sha256').update(buffer).digest('hex');
-    const suffix = allowed.get(contentType) || extname(originalName).toLowerCase();
-    const storedName = `${sha256}${suffix}`;
-    if (this.uploadRoot) {
-      try {
-        writeFileSync(join(this.uploadRoot, storedName), buffer, { flag: 'wx' });
-      } catch (error) {
-        if (error.code !== 'EEXIST') throw error;
+    return transaction(this.db, () => {
+      const count = this.db.prepare('SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes FROM uploads WHERE operation_id = ?')
+        .get(operationId);
+      if (count.count >= 10 || count.bytes + buffer.length > 40 * 1024 * 1024) {
+        return { ok: false, status: 413, code: 'UPLOAD_BATCH_LIMIT' };
       }
-    }
-    this.db.prepare(`
-      INSERT INTO uploads (id, operation_id, original_name, content_type, kind, size, sha256, stored_name, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, operationId, safeName(originalName), contentType, kind, buffer.length, sha256, this.uploadRoot ? storedName : null, now);
-    this.recordAudit('upload.create', role, id, this.getSnapshot().revision, 'success', now);
-    return { ok: true, status: 201, upload: { id, name: safeName(originalName), contentType, kind, size: buffer.length, sha256 } };
+      const now = isoNow(this.clock);
+      const id = `UP-${this.idFactory()}`;
+      const sha256 = createHash('sha256').update(buffer).digest('hex');
+      const suffix = allowed.get(contentType) || extname(originalName).toLowerCase();
+      const storedName = `${sha256}${suffix}`;
+      let createdPath = null;
+      try {
+        if (this.uploadRoot) {
+          const path = join(this.uploadRoot, storedName);
+          try {
+            writeFileSync(path, buffer, { flag: 'wx' });
+            createdPath = path;
+          } catch (error) {
+            if (error.code !== 'EEXIST') throw error;
+          }
+        }
+        this.db.prepare(`
+          INSERT INTO uploads (id, operation_id, original_name, content_type, kind, size, sha256, stored_name, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, operationId, safeName(originalName), contentType, kind, buffer.length, sha256, this.uploadRoot ? storedName : null, now);
+        this.recordAudit('upload.create', role, id, this.getSnapshot().revision, 'success', now);
+        return { ok: true, status: 201, upload: { id, name: safeName(originalName), contentType, kind, size: buffer.length, sha256 } };
+      } catch (error) {
+        if (createdPath) {
+          try { unlinkSync(createdPath); } catch {}
+        }
+        throw error;
+      }
+    });
   }
 
-  cleanupOrphanUploads({ olderThanMs = this.orphanMaxAgeMs, operationId } = {}) {
+  cleanupOrphanUploads({ olderThanMs = this.orphanMaxAgeMs, operationId, dryRun = false, recoverStaged = true } = {}) {
     const now = isoNow(this.clock);
-    const rows = operationId
+    const selectCandidates = () => operationId
       ? this.db.prepare(`
           SELECT id, stored_name FROM uploads
           WHERE operation_id = ? AND claimed_task_id IS NULL
@@ -294,36 +378,92 @@ export class ScheduleStore {
           SELECT id, stored_name FROM uploads
           WHERE claimed_task_id IS NULL AND created_at <= ?
         `).all(new Date(this.clock().getTime() - Math.max(0, olderThanMs)).toISOString());
-    if (!rows.length) return { ok: true, deleted: 0, filesDeleted: 0, fileErrors: 0 };
-
-    const deletedRows = [];
-    transaction(this.db, () => {
-      const remove = this.db.prepare('DELETE FROM uploads WHERE id = ? AND claimed_task_id IS NULL');
-      rows.forEach(row => {
-        if (remove.run(row.id).changes) deletedRows.push(row);
-      });
-      if (deletedRows.length) {
-        this.recordAudit('upload.cleanup', 'system', operationId || null, this.getSnapshot().revision, `deleted:${deletedRows.length}`, now);
-      }
-    });
-    if (!deletedRows.length) return { ok: true, deleted: 0, filesDeleted: 0, fileErrors: 0 };
-
+    if (dryRun) {
+      const rows = selectCandidates();
+      return { ok: true, dryRun: true, candidates: rows.length, deleted: 0, filesDeleted: 0, fileErrors: 0 };
+    }
+    if (this.readOnly) throw new Error('read-only store cannot delete orphan uploads');
+    let candidates = 0;
+    let deleted = 0;
     let filesDeleted = 0;
     let fileErrors = 0;
-    if (this.uploadRoot) {
-      const storedNames = [...new Set(deletedRows.map(row => row.stored_name).filter(Boolean))];
-      const stillReferenced = this.db.prepare('SELECT 1 FROM uploads WHERE stored_name = ? LIMIT 1');
-      for (const storedName of storedNames) {
-        if (stillReferenced.get(storedName)) continue;
-        try {
-          unlinkSync(join(this.uploadRoot, storedName));
-          filesDeleted += 1;
-        } catch (error) {
-          if (error.code !== 'ENOENT') fileErrors += 1;
+    let recoveryRestored = 0;
+    let recoveryRemoved = 0;
+    let recoveryErrors = 0;
+    const stagedFiles = [];
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      if (recoverStaged) {
+        const recovery = this.recoverStagedUploadCleanupLocked();
+        recoveryRestored = recovery.restored;
+        recoveryRemoved = recovery.removed;
+        recoveryErrors = recovery.errors;
+        fileErrors += recovery.errors;
+      }
+      const rows = selectCandidates();
+      candidates = rows.length;
+      if (rows.length) {
+        const candidateIds = new Set(rows.map(row => row.id));
+        const failedStoredNames = new Set();
+        if (this.uploadRoot) {
+          const storedNames = [...new Set(rows.map(row => row.stored_name).filter(Boolean))];
+          const references = this.db.prepare('SELECT id FROM uploads WHERE stored_name = ?');
+          for (const storedName of storedNames) {
+            const hasRemainingReference = references.all(storedName)
+              .some(row => !candidateIds.has(row.id));
+            if (hasRemainingReference) continue;
+            const originalPath = join(this.uploadRoot, storedName);
+            const stagedPath = join(this.cleanupRoot, `${storedName}.cleanup-${randomUUID()}`);
+            try {
+              this.renameFile(originalPath, stagedPath);
+              stagedFiles.push({ originalPath, stagedPath });
+            } catch (error) {
+              if (error.code !== 'ENOENT') {
+                failedStoredNames.add(storedName);
+                fileErrors += 1;
+              }
+            }
+          }
+        }
+
+        const remove = this.db.prepare('DELETE FROM uploads WHERE id = ? AND claimed_task_id IS NULL');
+        rows.forEach(row => {
+          if (row.stored_name && failedStoredNames.has(row.stored_name)) return;
+          deleted += remove.run(row.id).changes;
+        });
+        if (deleted) {
+          this.recordAudit('upload.cleanup', 'system', operationId || null, this.getSnapshot().revision, `deleted:${deleted}`, now);
         }
       }
+      this.db.exec('COMMIT');
+    } catch (error) {
+      for (const { originalPath, stagedPath } of stagedFiles.toReversed()) {
+        try {
+          if (existsSync(stagedPath) && !existsSync(originalPath)) this.renameFile(stagedPath, originalPath);
+        } catch {}
+      }
+      try { this.db.exec('ROLLBACK'); } catch {}
+      throw error;
     }
-    return { ok: fileErrors === 0, deleted: deletedRows.length, filesDeleted, fileErrors };
+    for (const { stagedPath } of stagedFiles) {
+      try {
+        unlinkSync(stagedPath);
+        filesDeleted += 1;
+      } catch (error) {
+        if (error.code !== 'ENOENT') fileErrors += 1;
+      }
+    }
+    return {
+      ok: fileErrors === 0,
+      dryRun: false,
+      candidates,
+      deleted,
+      filesDeleted,
+      fileErrors,
+      recoveryRestored,
+      recoveryRemoved,
+      recoveryErrors,
+    };
   }
 
   recordOperation(operationId, kind, response, now) {
