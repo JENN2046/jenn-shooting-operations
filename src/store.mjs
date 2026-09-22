@@ -62,6 +62,7 @@ export class ScheduleStore {
     idFactory = randomUUID,
     orphanMaxAgeMs = DEFAULT_ORPHAN_MAX_AGE_MS,
     readOnly = false,
+    fileOperations = {},
   }) {
     if (!readOnly && filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
     this.uploadRoot = uploadRoot || (filename === ':memory:' ? null : join(dirname(filename), 'uploads'));
@@ -72,6 +73,7 @@ export class ScheduleStore {
     this.idFactory = idFactory;
     this.orphanMaxAgeMs = orphanMaxAgeMs;
     this.readOnly = readOnly;
+    this.renameFile = fileOperations.rename || renameSync;
     this.db = new DatabaseSync(filename, { readOnly });
     this.db.exec(readOnly
       ? 'PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;'
@@ -158,7 +160,7 @@ export class ScheduleStore {
           unlinkSync(stagedPath);
           removed += 1;
         } else {
-          renameSync(stagedPath, originalPath);
+          this.renameFile(stagedPath, originalPath);
           restored += 1;
         }
       } catch {
@@ -385,10 +387,19 @@ export class ScheduleStore {
     let deleted = 0;
     let filesDeleted = 0;
     let fileErrors = 0;
+    let recoveryRestored = 0;
+    let recoveryRemoved = 0;
+    let recoveryErrors = 0;
     const stagedFiles = [];
     this.db.exec('BEGIN IMMEDIATE');
     try {
-      if (recoverStaged) this.recoverStagedUploadCleanupLocked();
+      if (recoverStaged) {
+        const recovery = this.recoverStagedUploadCleanupLocked();
+        recoveryRestored = recovery.restored;
+        recoveryRemoved = recovery.removed;
+        recoveryErrors = recovery.errors;
+        fileErrors += recovery.errors;
+      }
       const rows = selectCandidates();
       candidates = rows.length;
       if (rows.length) {
@@ -404,7 +415,7 @@ export class ScheduleStore {
             const originalPath = join(this.uploadRoot, storedName);
             const stagedPath = join(this.cleanupRoot, `${storedName}.cleanup-${randomUUID()}`);
             try {
-              renameSync(originalPath, stagedPath);
+              this.renameFile(originalPath, stagedPath);
               stagedFiles.push({ originalPath, stagedPath });
             } catch (error) {
               if (error.code !== 'ENOENT') {
@@ -428,7 +439,7 @@ export class ScheduleStore {
     } catch (error) {
       for (const { originalPath, stagedPath } of stagedFiles.toReversed()) {
         try {
-          if (existsSync(stagedPath) && !existsSync(originalPath)) renameSync(stagedPath, originalPath);
+          if (existsSync(stagedPath) && !existsSync(originalPath)) this.renameFile(stagedPath, originalPath);
         } catch {}
       }
       try { this.db.exec('ROLLBACK'); } catch {}
@@ -449,6 +460,9 @@ export class ScheduleStore {
       deleted,
       filesDeleted,
       fileErrors,
+      recoveryRestored,
+      recoveryRemoved,
+      recoveryErrors,
     };
   }
 

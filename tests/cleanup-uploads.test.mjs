@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
-import { chmodSync, existsSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -229,10 +229,21 @@ test('submission fails closed until a referenced tombstone can be restored', () 
   const databasePath = join(root, 'operations.sqlite');
   const uploadRoot = join(root, 'uploads');
   const cleanupRoot = join(uploadRoot, '.cleanup');
+  let failRecovery = false;
   let store = new ScheduleStore({
     filename: databasePath,
     uploadRoot,
     idFactory: () => 'recovery-failure-upload',
+    fileOperations: {
+      rename(source, destination) {
+        if (failRecovery && source.startsWith(cleanupRoot)) {
+          const error = new Error('injected recovery failure');
+          error.code = 'EIO';
+          throw error;
+        }
+        renameSync(source, destination);
+      },
+    },
   });
   try {
     const upload = store.saveUpload({
@@ -245,7 +256,7 @@ test('submission fails closed until a referenced tombstone can be restored', () 
     const storedPath = join(uploadRoot, `${upload.upload.sha256}.txt`);
     const stagedPath = join(cleanupRoot, `${upload.upload.sha256}.txt.cleanup-00000000-0000-4000-8000-000000000000`);
     renameSync(storedPath, stagedPath);
-    chmodSync(uploadRoot, 0o500);
+    failRecovery = true;
 
     const submission = {
       schemaVersion: 1,
@@ -266,14 +277,17 @@ test('submission fails closed until a referenced tombstone can be restored', () 
     assert.equal(store.getSnapshot().tasks.length, 0);
     assert.equal(existsSync(stagedPath), true);
 
-    chmodSync(uploadRoot, 0o700);
+    const maintenance = store.cleanupOrphanUploads();
+    assert.equal(maintenance.ok, false);
+    assert.equal(maintenance.recoveryErrors, 1);
+    assert.equal(maintenance.fileErrors, 1);
+
+    failRecovery = false;
     const recovered = store.submitRequest({ submission, role: 'public-submitter' });
     assert.equal(recovered.status, 201);
     assert.equal(existsSync(storedPath), true);
     assert.equal(existsSync(stagedPath), false);
   } finally {
-    try { chmodSync(uploadRoot, 0o700); } catch {}
-    try { chmodSync(cleanupRoot, 0o700); } catch {}
     try { store.close(); } catch {}
     rmSync(root, { recursive: true, force: true });
   }
