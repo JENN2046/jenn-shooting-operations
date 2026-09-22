@@ -1,10 +1,10 @@
 # WO-02：规范化存储、迁移证明与状态事件
 
-- 状态：`IN_PROGRESS`（WO-02A / 02B / 02C `PASS_WITH_LIMITS`；WO-02D `NOT_STARTED`）
+- 状态：`PASS_WITH_LIMITS`（WO-02A / 02B / 02C / 02D 均已通过各自受限验收）
 - 执行分支：`codex/v2-1-architecture-freeze`
 - 架构基线：`JSO-ARCH-V2.1-R3`
 - 前置门：WO-00 `PASS`、WO-01 `PASS`
-- 范围：单调 SQLite Schema migration、V1→V2 只读 dry-run/verify、隔离目标契约、Production Run/Event、三 revision 与事务内 V1/V2 投影
+- 范围：单调 SQLite Schema migration、V1→V2 只读 dry-run/verify、临时 fixture 隔离 apply/rollback proof、Production Run/Event、三 revision 与事务内 V1/V2 投影
 - 明确不包含：生产数据库、在线 apply、Switch、部署、真实外部调用、Kiosk HTTP/UI、钉钉 Outbox、Agent Proposal、V1 PUT Adapter
 
 ## 1. 绑定决定
@@ -50,7 +50,8 @@
 - SQLite `readOnly + PRAGMA query_only=ON + BEGIN` 稳定读取；
 - 纯内存映射、L1 fragment 物化、V1/V2 投影、round-trip、附件 manifest 与幂等模拟；
 - 低披露 text/json 报告与稳定 exit code；
-- `--verify-only` 只读核验隔离 target，不补写；
+- `--verify-only` 只读核验隔离 target 的规范化事实，不补写；由于不核验 apply proof seal，成功状态仅为
+  `TARGET_FACTS_VERIFIED_UNSEALED`，并保持 `INVALID_TARGET / exit 5 / Switch BLOCKED`；
 - source、target、附件和报告路径的 realpath/inode/symlink 边界测试。
 
 门禁：
@@ -84,7 +85,7 @@
 
 ### WO-02D：Isolated apply and rollback proof
 
-状态：`NOT_STARTED`
+状态：`PASS_WITH_LIMITS`（仅临时 fixture + 全新隔离路径；不等于真实库或 Switch-ready）
 
 只有 02A–02C 通过后进入。交付：
 
@@ -93,7 +94,8 @@
 - `--acknowledge-isolated-target` 与离线维护确认门；
 - 单事务 facts/counters/projections/batch marker apply；
 - 失败 target 保留证据，不删除、不覆盖、不自动重来；
-- apply 后复用 `verify-only`；相同 batch 只读返回 `ALREADY_APPLIED_VERIFIED`。
+- generic `--verify-only` 不声明 seal 完整性；只有 `--apply` 对既有相同 batch target 完成
+  backup、rollback 与 proof seal 全链复核后，才只读返回 `ALREADY_APPLIED_VERIFIED`。
 
 本工作包不授权生产 apply、在线 apply、Switch 或部署。
 
@@ -160,25 +162,25 @@ SQLite CHECK/FK/UNIQUE 负责行内和静态约束；以下必须由同事务应
 - [x] 事件重放、非法转换和 revision 冲突零重复事实、零多余 revision；
 - [x] run event 不改变 schedule revision；
 - [x] V1/V2 投影与事实、revision 在同一事务可见；
-- [ ] rollback 在新隔离路径验证，不覆盖 source/upload；
+- [x] rollback 在新隔离路径验证，不覆盖 source/upload；
 - [x] `npm run check`、WO-00 validator、migration targeted tests、audit 与独立复核通过；
 - [x] 无生产读取/写入、外部调用、Switch 或部署。
 
 ## 6. 当前阻塞与处理
 
-- VCP Adapter 缺失：继续只阻断 Switch，不阻断 02A–02C；
-- 真实 `businessTimeZone`、resource map、附件 manifest：作为实际 dry-run/apply 输入，不在代码中猜测；
-- backup 目前只证明 `VACUUM INTO` 创建文件：02D 前必须补目的地防覆盖、完整性对照与恢复演练；
-- 跨进程 migration/upload 协调未证明：02D 仅离线隔离目标，在线 apply 不开放；
+- VCP Adapter 缺失：继续只阻断 Switch，不影响本工作包的本地受限结论；
+- 真实 `businessTimeZone`、resource map、附件 manifest：作为未来真实离线预检输入，不在代码中猜测；
+- 已完成的 backup/restore/apply 证明只适用于独占临时 fixture 与全新隔离路径；现有业务库、生产库和真实上传卷仍未授权、未读取、未写入；
+- 跨进程 migration/upload 协调未证明：在线 apply 继续关闭；
 - correction、新 V2 request 的 V1 兼容文本、新 schedule resource catalog：不猜测，留待相应冻结决定或后续工作包。
 
 ## 7. 当前验证证据
 
 ```text
 Schema migration targeted: 28/28 PASS
-Migration dry-run / verify-only targeted: 20/20 PASS
+Migration / recovery / materialization / isolated apply targeted: 85/85 PASS
 Production run/event targeted: 18/18 PASS
-npm run check: 125 tests / 124 PASS / 1 expected VCP adapter SKIP / 0 FAIL
+npm run check: 190 tests / 189 PASS / 1 expected VCP adapter SKIP / 0 FAIL
 WO-00 fixture validator: 13/13 PASS
 npm audit --omit=dev: 0 vulnerabilities
 git diff --check + untracked whitespace scan: PASS
@@ -195,14 +197,16 @@ Independent final review: PASS_WITH_LIMITS / 0 Critical / 0 Major
   `O_NOFOLLOW + fstat + same-descriptor hash`，拒绝 symlink swap；
 - run event 的事实、revision、双投影、append-only receipt digest 与 audit 同事务提交，失败整体回滚；
 - operation 与 audit 同时被伪造时，receipt replay 仍由 append-only event 失败关闭；
-- `--apply`、报告文件写入、HTTP/Kiosk、Switch、生产读取/写入仍未开放。
+- isolated `--apply` 在独占临时 fixture 中完成 verified backup、全新 rollback restore、单事务 facts materialization、post-verify 与 proof seal；既有 target 只允许同一 `--apply` 全链只读重证；
+- generic `--verify-only` 只证明 target facts，固定返回 unsealed/blocked，不得替代 proof seal；
+- 真实库 apply、报告文件写入、HTTP/Kiosk、Switch、部署与生产读取/写入仍未开放。
 
 终审保留限制：
 
 - overlap 扫描对嵌套区间可能少计冲突对数，但至少一个冲突仍会阻断 Switch；
-- compatibility table DDL 刻意绑定 canonical V1 形态；真实库必须在 02D 前离线预检；
-- WO-02D、真实隔离 apply/rollback、Switch 与部署均不在本次通过范围。
+- compatibility table DDL 刻意绑定 canonical V1 形态；任何真实库工作仍必须另行离线预检与授权；
+- 当前通过范围不含现有/生产数据库、真实上传卷、在线协调、Switch、部署或发布。
 
 ## 8. 退出结论
 
-完成后填写 `PASS | PARTIAL | BLOCK`。只有四个子批次均通过，WO-02 才可整体 `PASS`；任一子批次通过不等于 Switch-ready、deploy-ready 或 production-ready。
+结论：`PASS_WITH_LIMITS`。四个子批次均已通过各自受限验收；本结论只覆盖本地 fixture、隔离路径与 API-free 证明，不等于 Switch-ready、deploy-ready 或 production-ready。
