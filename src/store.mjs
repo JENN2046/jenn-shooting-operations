@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { extname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { validateSnapshot, validateSubmission } from './contract-validator.mjs';
+import { initializeWritableSchema } from './sqlite-schema-v2.mjs';
 
 function isoNow(clock) {
   return clock().toISOString();
@@ -35,6 +36,24 @@ const ATTACHMENT_TYPES = new Map([
 const OPERATION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const DEFAULT_ORPHAN_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const STAGED_CLEANUP_FILE = /^(?<storedName>[a-f0-9]{64}\.[a-z0-9]+)\.cleanup-[0-9a-f-]{36}$/;
+const SQLITE_BUSY = 5;
+const WAL_SETUP_TIMEOUT_MS = 5000;
+const WAL_RETRY_WAIT = new Int32Array(new SharedArrayBuffer(4));
+
+function enableWalWithBusyRetry(db) {
+  // SQLite can return SQLITE_BUSY immediately for a concurrent journal-mode
+  // transition even when this connection already has a busy_timeout.
+  const deadline = Date.now() + WAL_SETUP_TIMEOUT_MS;
+  while (true) {
+    try {
+      db.exec('PRAGMA journal_mode = WAL;');
+      return;
+    } catch (error) {
+      if (error?.errcode !== SQLITE_BUSY || Date.now() >= deadline) throw error;
+      Atomics.wait(WAL_RETRY_WAIT, 0, 0, 10);
+    }
+  }
+}
 
 function safeName(value) {
   const name = String(value || '').replace(/[\u0000-\u001f<>:"/\\|?*]/g, '_').trim();
@@ -75,52 +94,26 @@ export class ScheduleStore {
     this.readOnly = readOnly;
     this.renameFile = fileOperations.rename || renameSync;
     this.db = new DatabaseSync(filename, { readOnly });
-    this.db.exec(readOnly
-      ? 'PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;'
-      : 'PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
+    this.db.exec('PRAGMA busy_timeout = 5000;');
+    if (readOnly) {
+      this.db.exec('PRAGMA foreign_keys = ON; PRAGMA query_only = ON;');
+    } else {
+      enableWalWithBusyRetry(this.db);
+      this.db.exec('PRAGMA foreign_keys = ON;');
+    }
     if (readOnly) return;
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS schedule_state (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        revision INTEGER NOT NULL,
-        updated_at TEXT NOT NULL,
-        snapshot_json TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS operations (
-        operation_id TEXT PRIMARY KEY,
-        kind TEXT NOT NULL,
-        response_json TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS audit_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        action TEXT NOT NULL,
-        role TEXT NOT NULL,
-        entity_id TEXT,
-        revision INTEGER NOT NULL,
-        result TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS uploads (
-        id TEXT PRIMARY KEY,
-        operation_id TEXT NOT NULL,
-        original_name TEXT NOT NULL,
-        content_type TEXT NOT NULL,
-        kind TEXT NOT NULL,
-        size INTEGER NOT NULL,
-        sha256 TEXT NOT NULL,
-        stored_name TEXT,
-        claimed_task_id TEXT,
-        created_at TEXT NOT NULL
-      );
-    `);
-    const current = this.db.prepare('SELECT id FROM schedule_state WHERE id = 1').get();
-    if (!current) {
+    initializeWritableSchema(this.db, { now: this.clock });
+    transaction(this.db, () => {
+      const current = this.db.prepare('SELECT id FROM schedule_state WHERE id = 1').get();
+      if (current) return;
       const now = isoNow(this.clock);
       const snapshot = { schemaVersion: 1, revision: 0, updatedAt: now, products: [], tasks: [], sessions: [] };
-      this.db.prepare('INSERT INTO schedule_state (id, revision, updated_at, snapshot_json) VALUES (1, 0, ?, ?)')
-        .run(now, JSON.stringify(snapshot));
-    }
+      this.db.prepare(`
+        INSERT INTO schedule_state (id, revision, updated_at, snapshot_json)
+        VALUES (1, 0, ?, ?)
+        ON CONFLICT(id) DO NOTHING
+      `).run(now, JSON.stringify(snapshot));
+    });
     this.recoverStagedUploadCleanup();
   }
 
