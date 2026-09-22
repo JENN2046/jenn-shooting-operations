@@ -1,0 +1,88 @@
+{
+  "fixtureClassification": "candidate-scenario-matrix",
+  "modelStatus": "illustrative-acceptance-examples-for-adp-017",
+  "initialState": {
+    "scheduleRevision": 12,
+    "projectionRevision": 42,
+    "runRevisions": {
+      "RUN-001": 3,
+      "RUN-002": 8
+    }
+  },
+  "scenarios": [
+    {
+      "id": "schedule-change",
+      "command": "change plannedEnd for one confirmed schedule item",
+      "expectedInputs": {
+        "expectedScheduleRevision": 12
+      },
+      "expectedState": {
+        "scheduleRevision": 13,
+        "projectionRevision": 43,
+        "runRevisions": {
+          "RUN-001": 3,
+          "RUN-002": 8
+        }
+      }
+    },
+    {
+      "id": "kiosk-start",
+      "command": "append a valid start event to RUN-001",
+      "expectedInputs": {
+        "expectedRunRevision": 3
+      },
+      "expectedState": {
+        "scheduleRevision": 12,
+        "projectionRevision": 43,
+        "runRevisions": {
+          "RUN-001": 4,
+          "RUN-002": 8
+        }
+      }
+    },
+    {
+      "id": "new-unscheduled-request",
+      "command": "accept a request into the unscheduled pool",
+      "expectedInputs": {},
+      "expectedState": {
+        "scheduleRevision": 12,
+        "projectionRevision": 43,
+        "runRevisions": {
+          "RUN-001": 3,
+          "RUN-002": 8
+        }
+      }
+    },
+    {
+      "id": "outbox-delivery-status",
+      "command": "mark one outbox delivery as sent",
+      "expectedInputs": {},
+      "expectedState": {
+        "scheduleRevision": 12,
+        "projectionRevision": 42,
+        "runRevisions": {
+          "RUN-001": 3,
+          "RUN-002": 8
+        }
+      }
+    },
+    {
+      "id": "idempotent-kiosk-replay",
+      "command": "replay an already committed RUN-001 eventId",
+      "expectedInputs": {
+        "expectedRunRevision": 3,
+        "eventId": "EVENT-ALREADY-COMMITTED-001"
+      },
+      "expectedState": {
+        "scheduleRevision": 12,
+        "projectionRevision": 42,
+        "runRevisions": {
+          "RUN-001": 3,
+          "RUN-002": 8
+        }
+      },
+      "expectedResult": "return-original-result-without-consuming-revisions"
+    }
+  ],
+  "interpretationRule": "each scenario starts independently from initialState"
+}

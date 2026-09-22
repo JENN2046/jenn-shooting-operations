@@ -1,0 +1,40 @@
+{
+  "fixtureClassification": "expected-invalid",
+  "invalidityCode": "DANGLING_TASK_BINDING",
+  "candidateRecords": {
+    "requests_v2": [
+      {
+        "id": "TASK-KNOWN-001"
+      }
+    ],
+    "schedule_items": [
+      {
+        "id": "SESSION-DANGLING-001",
+        "resource_id": null,
+        "resource_resolution_status": "unresolved",
+        "planned_start": "2026-09-22T01:00:00.000Z",
+        "planned_end": "2026-09-22T02:00:00.000Z",
+        "buffer_after_minutes": null,
+        "lock_status": null,
+        "allocation_mode": "single",
+        "source": "migration",
+        "source_ref": "SESSION-DANGLING-001"
+      }
+    ],
+    "schedule_item_tasks": [
+      {
+        "schedule_item_id": "SESSION-DANGLING-001",
+        "task_id": "TASK-MISSING-999",
+        "display_order": 0
+      }
+    ]
+  },
+  "expectedErrors": [
+    {
+      "code": "UNKNOWN_TASK_REFERENCE",
+      "path": "/candidateRecords/schedule_item_tasks/0/task_id",
+      "message": "task_id does not reference a known migrated requests_v2 identity"
+    }
+  ],
+  "expectedOutcome": "reject-without-writing"
+}

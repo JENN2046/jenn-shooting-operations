@@ -1,0 +1,24 @@
+{
+  "fixtureClassification": "compatibility-classification",
+  "expectedCompatibilityClass": "L3_SOURCE_CORRUPT",
+  "expectedIssueCode": "SOURCE_L3_CORRUPT",
+  "sourceSnapshot": {
+    "schemaVersion": 1,
+    "revision": 5,
+    "updatedAt": "2026-09-22T00:00:00.000Z",
+    "products": [],
+    "tasks": [],
+    "sessions": [
+      {
+        "id": "SESSION-L3-001",
+        "ids": ["TASK-DOES-NOT-EXIST"],
+        "date": "2026-09-22",
+        "start": "09:00",
+        "end": "10:00",
+        "place": "fixture place",
+        "note": "dangling task reference"
+      }
+    ]
+  },
+  "expectedHandling": "reject without writing any V2 fact"
+}

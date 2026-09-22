@@ -1,0 +1,219 @@
+{
+  "fixtureClassification": "contract-parity-matrix",
+  "matrixVersion": "v1-parity-2026-09-22-r1",
+  "baseInputs": {
+    "snapshot": {
+      "schemaVersion": 1,
+      "revision": 2,
+      "updatedAt": "2026-09-22T00:00:00.000Z",
+      "products": [["SKU-PARITY-001", "Parity fixture"]],
+      "tasks": [
+        {
+          "id": "TASK-PARITY-001",
+          "sku": "SKU-PARITY-001",
+          "name": "Parity fixture",
+          "client": "fixture client",
+          "deliver": "fixture deliverable",
+          "kind": "细节",
+          "status": "scheduled",
+          "source": "submission",
+          "createdAt": "2026-09-20T00:00:00.000Z",
+          "updatedAt": "2026-09-22T00:00:00.000Z",
+          "assets": [
+            {
+              "id": "ASSET-PARITY-001",
+              "name": "reference.jpg",
+              "contentType": "image/jpeg",
+              "kind": "image",
+              "size": 1024,
+              "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ],
+          "request": {
+            "productionType": "平面",
+            "shootingSubtype": "细节",
+            "deliverableCount": 4,
+            "aspectRatio": "1:1",
+            "requestedBy": "fixture requester",
+            "desiredDate": "2026-09-25",
+            "note": "fixture note"
+          }
+        }
+      ],
+      "sessions": [
+        {
+          "id": "SESSION-PARITY-001",
+          "ids": ["TASK-PARITY-001"],
+          "date": "2026-09-22",
+          "start": "09:00",
+          "end": "10:00",
+          "place": "fixture place",
+          "note": "fixture session",
+          "updatedAt": "2026-09-22T00:00:00.000Z"
+        }
+      ]
+    },
+    "submission": {
+      "schemaVersion": 1,
+      "operationId": "OP-PARITY-0001",
+      "productionType": "平面",
+      "sku": "SKU-PARITY-001",
+      "name": "Parity fixture",
+      "kind": "细节",
+      "shootingSubtype": "细节",
+      "deliverableCount": 4,
+      "aspectRatio": "1:1",
+      "deliver": "fixture deliverable",
+      "requestedBy": "fixture requester",
+      "desiredDate": "2026-09-25",
+      "note": "fixture note",
+      "uploadIds": ["UPLOAD-PARITY-001"]
+    }
+  },
+  "cases": [
+    {
+      "id": "snapshot-strict-valid",
+      "base": "snapshot",
+      "mutation": null,
+      "expected": { "currentRuntime": "PASS", "strictWrite": "PASS", "legacyRead": "L0_STRICT" }
+    },
+    {
+      "id": "snapshot-root-extra-property",
+      "base": "snapshot",
+      "mutation": { "op": "add", "path": "/rootExtension", "value": true },
+      "expected": { "currentRuntime": "PASS", "strictWrite": "REJECT", "legacyRead": "L1_GRANDFATHERED_OPAQUE" }
+    },
+    {
+      "id": "snapshot-task-extra-property",
+      "base": "snapshot",
+      "mutation": { "op": "add", "path": "/tasks/0/taskExtension", "value": true },
+      "expected": { "currentRuntime": "PASS", "strictWrite": "REJECT", "legacyRead": "L1_GRANDFATHERED_OPAQUE" }
+    },
+    {
+      "id": "snapshot-session-extra-property",
+      "base": "snapshot",
+      "mutation": { "op": "add", "path": "/sessions/0/sessionExtension", "value": true },
+      "expected": { "currentRuntime": "PASS", "strictWrite": "REJECT", "legacyRead": "L1_GRANDFATHERED_OPAQUE" }
+    },
+    {
+      "id": "snapshot-request-extra-property",
+      "base": "snapshot",
+      "mutation": { "op": "add", "path": "/tasks/0/request/requestExtension", "value": true },
+      "expected": { "currentRuntime": "PASS", "strictWrite": "REJECT", "legacyRead": "L1_GRANDFATHERED_OPAQUE" }
+    },
+    {
+      "id": "snapshot-asset-extra-property",
+      "base": "snapshot",
+      "mutation": { "op": "add", "path": "/tasks/0/assets/0/assetExtension", "value": true },
+      "expected": { "currentRuntime": "PASS", "strictWrite": "REJECT", "legacyRead": "L1_GRANDFATHERED_OPAQUE" }
+    },
+    {
+      "id": "snapshot-illegal-status",
+      "base": "snapshot",
+      "mutation": { "op": "replace", "path": "/tasks/0/status", "value": "mystery" },
+      "expected": { "currentRuntime": "PASS", "strictWrite": "REJECT", "legacyRead": "L2_REPAIR_REQUIRED" }
+    },
+    {
+      "id": "snapshot-illegal-civil-time",
+      "base": "snapshot",
+      "mutation": { "op": "replace", "path": "/sessions/0/end", "value": "29:30" },
+      "expected": { "currentRuntime": "PASS", "strictWrite": "REJECT", "legacyRead": "L2_REPAIR_REQUIRED" }
+    },
+    {
+      "id": "snapshot-illegal-calendar-date",
+      "base": "snapshot",
+      "mutation": { "op": "replace", "path": "/sessions/0/date", "value": "2026-02-30" },
+      "expected": { "currentRuntime": "PASS", "strictWrite": "REJECT", "legacyRead": "L2_REPAIR_REQUIRED" }
+    },
+    {
+      "id": "snapshot-invalid-source",
+      "base": "snapshot",
+      "mutation": { "op": "replace", "path": "/tasks/0/source", "value": "mystery" },
+      "expected": { "currentRuntime": "PASS", "strictWrite": "REJECT", "legacyRead": "L2_REPAIR_REQUIRED" }
+    },
+    {
+      "id": "snapshot-duplicate-session-task-id",
+      "base": "snapshot",
+      "mutation": { "op": "add", "path": "/sessions/0/ids/1", "value": "TASK-PARITY-001" },
+      "expected": { "currentRuntime": "PASS", "strictWrite": "REJECT", "legacyRead": "L2_REPAIR_REQUIRED" }
+    },
+    {
+      "id": "snapshot-duplicate-session-id",
+      "base": "snapshot",
+      "mutation": { "op": "add", "path": "/sessions/1", "value": { "id": "SESSION-PARITY-001", "ids": ["TASK-PARITY-001"], "date": "2026-09-22", "start": "10:00", "end": "11:00", "place": "fixture place", "note": "duplicate id" } },
+      "expected": { "currentRuntime": "REJECT", "strictWrite": "REJECT", "legacyRead": "L3_SOURCE_CORRUPT" }
+    },
+    {
+      "id": "snapshot-duplicate-task-id",
+      "base": "snapshot",
+      "mutation": { "op": "add", "path": "/tasks/1", "value": { "id": "TASK-PARITY-001", "sku": "SKU-PARITY-002", "name": "Duplicate task id", "client": "fixture client", "deliver": "fixture deliverable", "kind": "待定" } },
+      "expected": { "currentRuntime": "REJECT", "strictWrite": "REJECT", "legacyRead": "L3_SOURCE_CORRUPT" }
+    },
+    {
+      "id": "snapshot-non-rfc3339-root-timestamp",
+      "base": "snapshot",
+      "mutation": { "op": "replace", "path": "/updatedAt", "value": "2026-09-22" },
+      "expected": { "currentRuntime": "PASS", "strictWrite": "REJECT", "legacyRead": "L2_REPAIR_REQUIRED" }
+    },
+    {
+      "id": "snapshot-unsafe-revision",
+      "base": "snapshot",
+      "mutation": { "op": "replace", "path": "/revision", "value": 9007199254740992 },
+      "expected": { "currentRuntime": "PASS", "strictWrite": "REJECT", "legacyRead": "L3_SOURCE_CORRUPT" }
+    },
+    {
+      "id": "snapshot-whitespace-required-text",
+      "base": "snapshot",
+      "mutation": { "op": "replace", "path": "/tasks/0/name", "value": "   " },
+      "expected": { "currentRuntime": "REJECT", "strictWrite": "REJECT", "legacyRead": "L2_REPAIR_REQUIRED" }
+    },
+    {
+      "id": "snapshot-unknown-task-reference",
+      "base": "snapshot",
+      "mutation": { "op": "replace", "path": "/sessions/0/ids/0", "value": "TASK-MISSING-999" },
+      "expected": { "currentRuntime": "REJECT", "strictWrite": "REJECT", "legacyRead": "L3_SOURCE_CORRUPT" }
+    },
+    {
+      "id": "submission-strict-valid",
+      "base": "submission",
+      "mutation": null,
+      "expected": { "currentRuntime": "PASS", "strictWrite": "PASS", "legacyRead": null }
+    },
+    {
+      "id": "submission-extra-property",
+      "base": "submission",
+      "mutation": { "op": "add", "path": "/submissionExtension", "value": true },
+      "expected": { "currentRuntime": "PASS", "strictWrite": "REJECT", "legacyRead": null }
+    },
+    {
+      "id": "submission-overlong-name",
+      "base": "submission",
+      "mutation": { "op": "replace", "path": "/name", "value": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" },
+      "expected": { "currentRuntime": "PASS", "strictWrite": "REJECT", "legacyRead": null }
+    },
+    {
+      "id": "submission-whitespace-required-text",
+      "base": "submission",
+      "mutation": { "op": "replace", "path": "/name", "value": "   " },
+      "expected": { "currentRuntime": "REJECT", "strictWrite": "REJECT", "legacyRead": null }
+    },
+    {
+      "id": "submission-invalid-production-combination",
+      "base": "submission",
+      "mutation": { "op": "replace", "path": "/shootingSubtype", "value": "产品展示" },
+      "expected": { "currentRuntime": "REJECT", "strictWrite": "REJECT", "legacyRead": null }
+    },
+    {
+      "id": "submission-duplicate-upload-id",
+      "base": "submission",
+      "mutation": { "op": "add", "path": "/uploadIds/1", "value": "UPLOAD-PARITY-001" },
+      "expected": { "currentRuntime": "REJECT", "strictWrite": "REJECT", "legacyRead": null }
+    },
+    {
+      "id": "submission-illegal-calendar-date",
+      "base": "submission",
+      "mutation": { "op": "replace", "path": "/desiredDate", "value": "2026-02-30" },
+      "expected": { "currentRuntime": "PASS", "strictWrite": "REJECT", "legacyRead": null }
+    }
+  ]
+}

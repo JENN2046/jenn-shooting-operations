@@ -7,7 +7,7 @@
 - 上位计划：[VCP 摄制运营调度工作台升级与 Agent 协同演进实施计划书 V2.1](../VCP_SHOOTING_OPERATIONS_EVOLUTION_PLAN_V2.1.md)
 - 不构成：生产部署授权、真实钉钉调用授权、凭据配置授权、生产数据迁移授权
 
-> **Supersession notice：** 本文件保留初次冻结的完整历史决定。当前有效基线请从 [Architecture Baseline Index V2.1](ARCHITECTURE_BASELINE_INDEX_V2.1.md) 进入。ADP-005 已被 ADP-017 替代；原单任务 `schedule_items.taskId` 假设已被 ADP-018 细化。除本通知外，下方历史正文未被改写。
+> **Supersession notice：** 本文件保留初次冻结的完整历史决定。当前有效基线请从 [Architecture Baseline Index V2.1](ARCHITECTURE_BASELINE_INDEX_V2.1.md) 进入。ADP-005 已被 ADP-017 替代；原单任务 `schedule_items.taskId` 假设已被 ADP-018 细化；Request/Task 身份、生命周期和 V1 字段落点由 ADP-019 收口；V1 契约权威与历史兼容由 ADP-020 收口。除本通知外，下方历史正文未被改写。
 
 ## 0. 冻结规则
 

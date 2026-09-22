@@ -1,0 +1,59 @@
+{
+  "fixtureClassification": "expected-invalid",
+  "invalidityCode": "GROUPED_SESSION_WOULD_SPLIT",
+  "sourceV1Session": {
+    "id": "SESSION-GROUP-001",
+    "ids": ["TASK-GROUP-002", "TASK-GROUP-001"],
+    "date": "2026-09-22",
+    "start": "13:00",
+    "end": "15:00"
+  },
+  "candidateRecords": {
+    "requests_v2": [
+      { "id": "TASK-GROUP-002" },
+      { "id": "TASK-GROUP-001" }
+    ],
+    "schedule_items": [
+      {
+        "id": "SESSION-GROUP-001-PART-1",
+        "resource_id": null,
+        "resource_resolution_status": "unresolved",
+        "planned_start": "2026-09-22T05:00:00.000Z",
+        "planned_end": "2026-09-22T06:00:00.000Z",
+        "allocation_mode": "single",
+        "source": "migration",
+        "source_ref": "SESSION-GROUP-001"
+      },
+      {
+        "id": "SESSION-GROUP-001-PART-2",
+        "resource_id": null,
+        "resource_resolution_status": "unresolved",
+        "planned_start": "2026-09-22T06:00:00.000Z",
+        "planned_end": "2026-09-22T07:00:00.000Z",
+        "allocation_mode": "single",
+        "source": "migration",
+        "source_ref": "SESSION-GROUP-001"
+      }
+    ],
+    "schedule_item_tasks": [
+      {
+        "schedule_item_id": "SESSION-GROUP-001-PART-1",
+        "task_id": "TASK-GROUP-002",
+        "display_order": 0
+      },
+      {
+        "schedule_item_id": "SESSION-GROUP-001-PART-2",
+        "task_id": "TASK-GROUP-001",
+        "display_order": 0
+      }
+    ]
+  },
+  "expectedErrors": [
+    {
+      "code": "GROUPED_SESSION_WOULD_SPLIT",
+      "path": "/candidateRecords/schedule_items",
+      "message": "a multi-task V1 session must remain one grouped_unallocated block because the source contains no per-task boundaries"
+    }
+  ],
+  "expectedOutcome": "reject-without-writing"
+}

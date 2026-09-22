@@ -265,9 +265,9 @@ resourceId
 plannedStart
 plannedEnd
 bufferAfterMinutes
-lockStatus: draft | confirmed | completed | cancelled
+scheduleStatus: draft | confirmed | cancelled
+lockStatus: unlocked | locked | null
 source: human | agentProposal | migration
-revision
 createdAt
 updatedAt
 ```
@@ -278,6 +278,8 @@ updatedAt
 - 数据库中任务关系通过 `schedule_item_tasks` 表达，`taskBindings[]` 只是读投影；
 - V1 多任务 session 迁移为 `groupedUnallocated`，不得自动平均分配单任务时长；
 - 同一 `resourceId` 的已确认项目不得物理重叠；
+- `completed/cancelled` 现场状态属于 Production Run，不得借用 Schedule lock 字段表达；
+- V2 Schedule Item 不允许裸 `revision`，排期命令只使用 `expectedScheduleRevision`；
 - `nextStart` 是派生值，不持久化为独立事实；
 - `diagnostics` 是读模型，不进入排期事实表；
 - 缓冲时间来自版本化配置或测量模型，不把 10/35 分钟永久硬编码进领域事实；
@@ -381,15 +383,18 @@ netDuration = grossDuration - blockedDuration
 
 ```text
 schema_migrations
+product_catalog_entries
 requests_v2
 schedule_items
 schedule_item_tasks
+legacy_asset_entries
 production_runs
 production_events
 snapshot_projections
 notification_outbox
 scheduling_proposals
 scheduling_config_versions
+legacy_compat_fragments
 ```
 
 现有表继续保留：
@@ -407,8 +412,9 @@ uploads
 - 初次 V2 迁移不删除 V1 表或列；
 - 外键保持开启；
 - `production_events.event_id` 唯一；
+- `requests_v2.id` 是 canonical work item ID，V1 `task.id` 和 binding `task_id` 均映射到它；
 - Outbox 事件有稳定去重键；
-- Snapshot revision 全局单调递增；
+- `projectionRevision` 作为 Snapshot/投影版本全局单调递增；
 - 上传记录和附件文件的引用、清理与恢复逻辑不因新表引入而失效；
 - 数据库事务内不执行网络请求，也不把普通文件写入伪装成数据库原子事务。
 

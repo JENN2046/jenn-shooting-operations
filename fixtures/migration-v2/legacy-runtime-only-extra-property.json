@@ -1,0 +1,24 @@
+{
+  "fixtureClassification": "compatibility-classification",
+  "expectedCompatibilityClass": "L1_GRANDFATHERED_OPAQUE",
+  "expectedIssueCode": "LEGACY_L1_FRAGMENT",
+  "sourceSnapshot": {
+    "schemaVersion": 1,
+    "revision": 3,
+    "updatedAt": "2026-09-22T00:00:00.000Z",
+    "products": [["SKU-L1-001", "L1 fixture"]],
+    "tasks": [
+      {
+        "id": "TASK-L1-001",
+        "sku": "SKU-L1-001",
+        "name": "L1 fixture",
+        "client": "fixture client",
+        "deliver": "fixture deliverable",
+        "kind": "待定",
+        "runtimeOnlyExtension": { "opaque": true }
+      }
+    ],
+    "sessions": []
+  },
+  "expectedHandling": "preserve the runtime-only extension in legacy_compat_fragments and reject it on strict-write"
+}

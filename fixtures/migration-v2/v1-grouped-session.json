@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "revision": 11,
+  "updatedAt": "2026-09-22T05:00:00.000Z",
+  "products": [
+    ["SKU-GROUP-001", "组合迁移样品 A"],
+    ["SKU-GROUP-002", "组合迁移样品 B"]
+  ],
+  "tasks": [
+    {
+      "id": "TASK-GROUP-001",
+      "sku": "SKU-GROUP-001",
+      "name": "组合迁移样品 A",
+      "client": "迁移验证客户",
+      "deliver": "场景图 3 张",
+      "kind": "场景",
+      "status": "scheduled",
+      "source": "import",
+      "createdAt": "2026-09-20T03:00:00.000Z",
+      "updatedAt": "2026-09-22T05:00:00.000Z"
+    },
+    {
+      "id": "TASK-GROUP-002",
+      "sku": "SKU-GROUP-002",
+      "name": "组合迁移样品 B",
+      "client": "迁移验证客户",
+      "deliver": "场景图 3 张",
+      "kind": "场景",
+      "status": "scheduled",
+      "source": "import",
+      "createdAt": "2026-09-20T03:05:00.000Z",
+      "updatedAt": "2026-09-22T05:00:00.000Z"
+    }
+  ],
+  "sessions": [
+    {
+      "id": "SESSION-GROUP-001",
+      "ids": ["TASK-GROUP-002", "TASK-GROUP-001"],
+      "date": "2026-09-22",
+      "start": "13:00",
+      "end": "15:00",
+      "place": "主影棚",
+      "note": "保留原 ids 顺序，不拆分任务时长",
+      "updatedAt": "2026-09-22T05:00:00.000Z"
+    }
+  ]
+}

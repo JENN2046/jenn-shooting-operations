@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "revision": 17,
+  "updatedAt": "2026-09-22T08:00:00.000Z",
+  "products": [
+    ["SKU-FULL-001", "完整兼容样品"],
+    ["SKU-UNREFERENCED", "未引用目录项"],
+    ["SKU-FULL-001", "完整兼容样品"]
+  ],
+  "tasks": [
+    {
+      "id": "TASK-FULL-001",
+      "sku": "SKU-FULL-001",
+      "name": "完整兼容样品",
+      "client": "fixture client",
+      "deliver": "竖版视频 1 条",
+      "kind": "待定",
+      "status": "completed",
+      "source": "import",
+      "createdAt": "2026-09-20T02:00:00.000Z",
+      "updatedAt": "2026-09-22T08:00:00.000Z",
+      "assets": [
+        {
+          "id": "ASSET-FULL-0001",
+          "name": "legacy-reference.jpg",
+          "contentType": "image/jpeg",
+          "kind": "image",
+          "size": 1024,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "request": {
+        "productionType": "视频",
+        "shootingSubtype": "产品加人物展示",
+        "deliverableCount": 1,
+        "aspectRatio": "9:16",
+        "durationSeconds": 30,
+        "audioRequirement": "配音",
+        "requestedBy": "fixture requester",
+        "desiredDate": "2026-09-25",
+        "note": "full compatibility fixture"
+      }
+    }
+  ],
+  "sessions": [
+    {
+      "id": "SESSION-FULL-001",
+      "ids": ["TASK-FULL-001"],
+      "date": "2026-09-22",
+      "start": "16:00",
+      "end": "17:00",
+      "place": "主影棚",
+      "note": "保留备注",
+      "updatedAt": "2026-09-22T08:00:00.000Z"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Jenn Shooting Operations V2.1 Effective Architecture Baseline
 
-- Baseline ID：`JSO-ARCH-V2.1-R2`
+- Baseline ID：`JSO-ARCH-V2.1-R3`
 - 状态：`FROZEN_FOR_IMPLEMENTATION`
 - 生效日期：2026-09-22
 - 适用范围：WO-00 至 WO-06 的本地设计、实现、迁移演练和验证
@@ -13,8 +13,10 @@ V2.1 的有效架构基线由以下文件共同组成：
 1. [Architecture Decision Pack V2.1](ARCHITECTURE_DECISION_PACK_V2.1.md)
 2. [ADP-017：Revision Domains and Projection Versioning](decisions/ADP-017_REVISION_DOMAINS_AND_PROJECTION_VERSIONING.md)
 3. [ADP-018：Legacy Grouped Session Binding](decisions/ADP-018_LEGACY_GROUPED_SESSION_BINDING.md)
-4. [Implementation Style Guardrails V2.1](IMPLEMENTATION_STYLE_GUARDRAILS_V2.1.md)
-5. [VCP 摄制运营调度工作台升级与 Agent 协同演进实施计划书 V2.1](../VCP_SHOOTING_OPERATIONS_EVOLUTION_PLAN_V2.1.md)
+4. [ADP-019：Canonical Work Identity and Lifecycle](decisions/ADP-019_CANONICAL_WORK_IDENTITY_AND_LIFECYCLE.md)
+5. [ADP-020：V1 Contract Authority and Compatibility](decisions/ADP-020_V1_CONTRACT_AUTHORITY_AND_COMPATIBILITY.md)
+6. [Implementation Style Guardrails V2.1](IMPLEMENTATION_STYLE_GUARDRAILS_V2.1.md)
+7. [VCP 摄制运营调度工作台升级与 Agent 协同演进实施计划书 V2.1](../VCP_SHOOTING_OPERATIONS_EVOLUTION_PLAN_V2.1.md)
 
 ## 2. 优先级与替代关系
 
@@ -22,7 +24,7 @@ V2.1 的有效架构基线由以下文件共同组成：
 
 ```text
 当前明确用户决定
-→ ADP-017 / ADP-018
+→ ADP-017 / ADP-018 / ADP-019 / ADP-020
 → Architecture Decision Pack V2.1 中未被替代的条款
 → Implementation Style Guardrails V2.1
 → 实施计划书 V2.1
@@ -35,6 +37,8 @@ V2.1 的有效架构基线由以下文件共同组成：
 |---|---|---|
 | ADP-017 | ADP-005 全文；ADP-004、ADP-009、ADP-013 中相关 revision 语义 | 生效 revision 改为 `scheduleRevision`、`runRevision`、`projectionRevision` 三域 |
 | ADP-018 | ADP-003、ADP-008、ADP-009、ADP-015 中关于 `schedule_items.taskId` 或单任务假设 | `schedule_items` 表达时间块，任务通过 `schedule_item_tasks` 关联 |
+| ADP-019 | 模糊 Request/Task 身份；Schedule/Run 混合生命周期；V1 字段无落点 | `requests_v2` 是 canonical work item；三套生命周期分离；V1 全字段规范化保存 |
+| ADP-020 | V1 Schema 与手写 validator 双轨；模糊历史兼容和 V1 PUT 全量覆盖 | Schema + 有限语义规则成为单入口；历史按 L0–L3 分类；V1 PUT 仅表达受控排期差异 |
 
 原冻结 Pack 保留为完整历史基线，不通过无痕编辑覆盖原决定。实现者 `MUST` 从本索引进入架构文档，不能只读取原 Pack 后忽略 superseding 决策。
 
@@ -48,6 +52,9 @@ Application Commands + UnitOfWork
 scheduleRevision / runRevision / projectionRevision 三作用域
 V1/V2 双投影和受控兼容写入
 schedule_items + schedule_item_tasks 保留历史组合场次
+requests_v2 作为 canonical schedulable work identity
+Request / Schedule / Production Run 生命周期分离
+V1 strict-write + legacy-read 双 profile 契约
 Transactional Outbox，锁外发送外部通知
 VCP / Kiosk / DingTalk / Agent 全部通过适配器边界
 Agent Proposal 不得直接成为正式排期

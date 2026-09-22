@@ -1,0 +1,103 @@
+{
+  "fixtureClassification": "candidate",
+  "modelStatus": "illustrative-fields-governed-by-adp-019-020",
+  "sourceFixture": "v1-single-session.json",
+  "migrationContext": {
+    "migrationVersion": "candidate-v2-002",
+    "migrationBatchId": "FIXTURE-BATCH-SINGLE-001",
+    "importedAt": "2026-09-22T12:00:00.000Z",
+    "businessTimeZone": "Asia/Shanghai",
+    "resourceMapVersion": "fixture-map-001"
+  },
+  "records": {
+    "product_catalog_entries": [
+      { "source_ordinal": 0, "sku": "SKU-SINGLE-001", "name": "单任务迁移样品" }
+    ],
+    "requests_v2": [
+      {
+        "id": "TASK-SINGLE-001",
+        "sku": "SKU-SINGLE-001",
+        "name": "单任务迁移样品",
+        "client": "迁移验证客户",
+        "legacy_deliver_text": "白底主图 4 张",
+        "kind": "细节",
+        "legacy_v1_status": "scheduled",
+        "v1_status_mode": "legacy_exact",
+        "request_lifecycle": "open",
+        "lifecycle_provenance": "legacy_snapshot",
+        "source": "import",
+        "business_created_at": "2026-09-20T02:00:00.000Z",
+        "business_updated_at": "2026-09-22T01:30:00.000Z",
+        "v1_assets_present": false,
+        "v1_request_present": false,
+        "source_ordinal": 0
+      }
+    ],
+    "schedule_items": [
+      {
+        "id": "SESSION-SINGLE-001",
+        "resource_id": null,
+        "resource_resolution_status": "unresolved",
+        "legacy_place_text": "主影棚",
+        "note": "单任务场次迁移基线",
+        "planned_start": "2026-09-22T01:00:00.000Z",
+        "planned_end": "2026-09-22T02:30:00.000Z",
+        "buffer_after_minutes": null,
+        "buffer_source": "legacy_unknown",
+        "schedule_status": "confirmed",
+        "schedule_status_provenance": "legacy_snapshot",
+        "lock_status": null,
+        "lock_status_provenance": "legacy_unknown",
+        "allocation_mode": "single",
+        "source": "migration",
+        "source_ref": "SESSION-SINGLE-001",
+        "source_ordinal": 0,
+        "business_created_at": null,
+        "business_updated_at": "2026-09-22T01:30:00.000Z",
+        "imported_at": "2026-09-22T12:00:00.000Z"
+      }
+    ],
+    "schedule_item_tasks": [
+      {
+        "schedule_item_id": "SESSION-SINGLE-001",
+        "task_id": "TASK-SINGLE-001",
+        "display_order": 0,
+        "imported_at": "2026-09-22T12:00:00.000Z"
+      }
+    ],
+    "production_runs": [],
+    "production_events": [],
+    "revision_counters": { "schedule_revision": 0, "projection_revision": 7 }
+  },
+  "candidateV2Projection": {
+    "schemaVersion": 2,
+    "projectionRevision": 7,
+    "scheduleRevision": 0,
+    "updatedAt": "2026-09-22T01:30:00.000Z",
+    "scheduleItems": [
+      {
+        "id": "SESSION-SINGLE-001",
+        "allocationMode": "single",
+        "resourceId": null,
+        "resourceResolutionStatus": "unresolved",
+        "legacyPlaceText": "主影棚",
+        "plannedStart": "2026-09-22T01:00:00.000Z",
+        "plannedEnd": "2026-09-22T02:30:00.000Z",
+        "bufferAfterMinutes": null,
+        "scheduleStatus": "confirmed",
+        "lockStatus": null,
+        "taskBindings": [
+          { "taskId": "TASK-SINGLE-001", "displayOrder": 0 }
+        ]
+      }
+    ]
+  },
+  "migrationAssertions": [
+    "the source task id is the canonical requests_v2 and binding identity",
+    "the source session becomes exactly one schedule item",
+    "allocation_mode is single",
+    "the source V1 revision becomes projectionRevision and scheduleRevision starts at zero",
+    "missing legacy buffer, lock, resource resolution, and business_created_at facts remain null",
+    "no production run or event is inferred from scheduled status"
+  ]
+}

@@ -1,0 +1,130 @@
+{
+  "fixtureClassification": "candidate",
+  "modelStatus": "illustrative-fields-governed-by-adp-019-020",
+  "sourceFixture": "v1-grouped-session.json",
+  "migrationContext": {
+    "migrationVersion": "candidate-v2-002",
+    "migrationBatchId": "FIXTURE-BATCH-GROUP-001",
+    "importedAt": "2026-09-22T12:00:00.000Z",
+    "businessTimeZone": "Asia/Shanghai",
+    "resourceMapVersion": "fixture-map-001"
+  },
+  "records": {
+    "product_catalog_entries": [
+      { "source_ordinal": 0, "sku": "SKU-GROUP-001", "name": "组合迁移样品 A" },
+      { "source_ordinal": 1, "sku": "SKU-GROUP-002", "name": "组合迁移样品 B" }
+    ],
+    "requests_v2": [
+      {
+        "id": "TASK-GROUP-001",
+        "sku": "SKU-GROUP-001",
+        "name": "组合迁移样品 A",
+        "client": "迁移验证客户",
+        "legacy_deliver_text": "场景图 3 张",
+        "kind": "场景",
+        "legacy_v1_status": "scheduled",
+        "v1_status_mode": "legacy_exact",
+        "request_lifecycle": "open",
+        "lifecycle_provenance": "legacy_snapshot",
+        "source": "import",
+        "business_created_at": "2026-09-20T03:00:00.000Z",
+        "business_updated_at": "2026-09-22T05:00:00.000Z",
+        "v1_assets_present": false,
+        "v1_request_present": false,
+        "source_ordinal": 0
+      },
+      {
+        "id": "TASK-GROUP-002",
+        "sku": "SKU-GROUP-002",
+        "name": "组合迁移样品 B",
+        "client": "迁移验证客户",
+        "legacy_deliver_text": "场景图 3 张",
+        "kind": "场景",
+        "legacy_v1_status": "scheduled",
+        "v1_status_mode": "legacy_exact",
+        "request_lifecycle": "open",
+        "lifecycle_provenance": "legacy_snapshot",
+        "source": "import",
+        "business_created_at": "2026-09-20T03:05:00.000Z",
+        "business_updated_at": "2026-09-22T05:00:00.000Z",
+        "v1_assets_present": false,
+        "v1_request_present": false,
+        "source_ordinal": 1
+      }
+    ],
+    "schedule_items": [
+      {
+        "id": "SESSION-GROUP-001",
+        "resource_id": null,
+        "resource_resolution_status": "unresolved",
+        "legacy_place_text": "主影棚",
+        "note": "保留原 ids 顺序，不拆分任务时长",
+        "planned_start": "2026-09-22T05:00:00.000Z",
+        "planned_end": "2026-09-22T07:00:00.000Z",
+        "buffer_after_minutes": null,
+        "buffer_source": "legacy_unknown",
+        "schedule_status": "confirmed",
+        "schedule_status_provenance": "legacy_snapshot",
+        "lock_status": null,
+        "lock_status_provenance": "legacy_unknown",
+        "allocation_mode": "grouped_unallocated",
+        "source": "migration",
+        "source_ref": "SESSION-GROUP-001",
+        "source_ordinal": 0,
+        "business_created_at": null,
+        "business_updated_at": "2026-09-22T05:00:00.000Z",
+        "imported_at": "2026-09-22T12:00:00.000Z"
+      }
+    ],
+    "schedule_item_tasks": [
+      {
+        "schedule_item_id": "SESSION-GROUP-001",
+        "task_id": "TASK-GROUP-002",
+        "display_order": 0,
+        "imported_at": "2026-09-22T12:00:00.000Z"
+      },
+      {
+        "schedule_item_id": "SESSION-GROUP-001",
+        "task_id": "TASK-GROUP-001",
+        "display_order": 1,
+        "imported_at": "2026-09-22T12:00:00.000Z"
+      }
+    ],
+    "production_runs": [],
+    "production_events": [],
+    "revision_counters": { "schedule_revision": 0, "projection_revision": 11 }
+  },
+  "candidateV2Projection": {
+    "schemaVersion": 2,
+    "projectionRevision": 11,
+    "scheduleRevision": 0,
+    "updatedAt": "2026-09-22T05:00:00.000Z",
+    "scheduleItems": [
+      {
+        "id": "SESSION-GROUP-001",
+        "allocationMode": "grouped_unallocated",
+        "resourceId": null,
+        "resourceResolutionStatus": "unresolved",
+        "legacyPlaceText": "主影棚",
+        "plannedStart": "2026-09-22T05:00:00.000Z",
+        "plannedEnd": "2026-09-22T07:00:00.000Z",
+        "bufferAfterMinutes": null,
+        "scheduleStatus": "confirmed",
+        "lockStatus": null,
+        "taskBindings": [
+          { "taskId": "TASK-GROUP-002", "displayOrder": 0 },
+          { "taskId": "TASK-GROUP-001", "displayOrder": 1 }
+        ]
+      }
+    ]
+  },
+  "migrationAssertions": [
+    "the source task ids are the canonical requests_v2 and binding identities",
+    "the source session remains exactly one occupied time block",
+    "allocation_mode is grouped_unallocated",
+    "both bindings preserve the source ids order",
+    "the source V1 revision becomes projectionRevision and scheduleRevision starts at zero",
+    "no per-task start, end, planned minutes, run, or event is invented",
+    "the grouped block is excluded from task-level duration training"
+  ]
+}

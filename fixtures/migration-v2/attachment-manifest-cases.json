@@ -1,0 +1,158 @@
+{
+  "fixtureClassification": "attachment-manifest-case-matrix",
+  "cases": [
+    {
+      "id": "managed-upload-consistent",
+      "requestIds": ["TASK-A"],
+      "taskAssets": {
+        "TASK-A": [
+          { "id": "ASSET-A-0001", "name": "a.jpg", "contentType": "image/jpeg", "kind": "image", "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+        ]
+      },
+      "uploads": [
+        { "id": "ASSET-A-0001", "claimed_task_id": "TASK-A", "claimed_order": 0, "original_name": "a.jpg", "content_type": "image/jpeg", "kind": "image", "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "stored_name": "aa.bin" }
+      ],
+      "legacyAssets": [],
+      "fileManifest": [
+        { "stored_name": "aa.bin", "exists": true, "tombstone": false, "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+      ],
+      "expectedIssues": [],
+      "expectedProjectedOrder": { "TASK-A": ["ASSET-A-0001"] }
+    },
+    {
+      "id": "managed-upload-owner-mismatch",
+      "requestIds": ["TASK-A", "TASK-B"],
+      "taskAssets": {
+        "TASK-A": [
+          { "id": "ASSET-A-0001", "name": "a.jpg", "contentType": "image/jpeg", "kind": "image", "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+        ],
+        "TASK-B": []
+      },
+      "uploads": [
+        { "id": "ASSET-A-0001", "claimed_task_id": "TASK-B", "claimed_order": 0, "original_name": "a.jpg", "content_type": "image/jpeg", "kind": "image", "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "stored_name": "aa.bin" }
+      ],
+      "legacyAssets": [],
+      "fileManifest": [
+        { "stored_name": "aa.bin", "exists": true, "tombstone": false, "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+      ],
+      "expectedIssues": ["UPLOAD_CLAIM_MISMATCH"]
+    },
+    {
+      "id": "managed-upload-metadata-mismatch",
+      "requestIds": ["TASK-A"],
+      "taskAssets": {
+        "TASK-A": [
+          { "id": "ASSET-A-0001", "name": "a.jpg", "contentType": "image/jpeg", "kind": "image", "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+        ]
+      },
+      "uploads": [
+        { "id": "ASSET-A-0001", "claimed_task_id": "TASK-A", "claimed_order": 0, "original_name": "a.jpg", "content_type": "image/png", "kind": "image", "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "stored_name": "aa.bin" }
+      ],
+      "legacyAssets": [],
+      "fileManifest": [
+        { "stored_name": "aa.bin", "exists": true, "tombstone": false, "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+      ],
+      "expectedIssues": ["UPLOAD_METADATA_MISMATCH"]
+    },
+    {
+      "id": "claimed-upload-missing-from-task-assets",
+      "requestIds": ["TASK-A"],
+      "taskAssets": { "TASK-A": [] },
+      "uploads": [
+        { "id": "ASSET-A-0001", "claimed_task_id": "TASK-A", "claimed_order": 0, "original_name": "a.jpg", "content_type": "image/jpeg", "kind": "image", "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "stored_name": "aa.bin" }
+      ],
+      "legacyAssets": [],
+      "fileManifest": [
+        { "stored_name": "aa.bin", "exists": true, "tombstone": false, "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+      ],
+      "expectedIssues": ["UPLOAD_PROJECTION_MISSING"]
+    },
+    {
+      "id": "managed-and-legacy-assets-preserve-order",
+      "requestIds": ["TASK-A"],
+      "taskAssets": {
+        "TASK-A": [
+          { "id": "ASSET-A-0001", "name": "a.jpg", "contentType": "image/jpeg", "kind": "image", "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+          { "id": "ASSET-L-0002", "name": "legacy.pdf", "contentType": "application/pdf", "kind": "attachment", "size": 200, "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
+        ]
+      },
+      "uploads": [
+        { "id": "ASSET-A-0001", "claimed_task_id": "TASK-A", "claimed_order": 0, "original_name": "a.jpg", "content_type": "image/jpeg", "kind": "image", "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "stored_name": "aa.bin" }
+      ],
+      "legacyAssets": [
+        { "id": "ASSET-L-0002", "request_id": "TASK-A", "display_order": 1, "name": "legacy.pdf", "contentType": "application/pdf", "kind": "attachment", "size": 200, "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
+      ],
+      "fileManifest": [
+        { "stored_name": "aa.bin", "exists": true, "tombstone": false, "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+      ],
+      "expectedIssues": [],
+      "expectedProjectedOrder": { "TASK-A": ["ASSET-A-0001", "ASSET-L-0002"] }
+    },
+    {
+      "id": "managed-upload-staged-tombstone",
+      "requestIds": ["TASK-A"],
+      "taskAssets": {
+        "TASK-A": [
+          { "id": "ASSET-A-0001", "name": "a.jpg", "contentType": "image/jpeg", "kind": "image", "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+        ]
+      },
+      "uploads": [
+        { "id": "ASSET-A-0001", "claimed_task_id": "TASK-A", "claimed_order": 0, "original_name": "a.jpg", "content_type": "image/jpeg", "kind": "image", "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "stored_name": "aa.bin" }
+      ],
+      "legacyAssets": [],
+      "fileManifest": [
+        { "stored_name": "aa.bin", "exists": false, "tombstone": true, "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+      ],
+      "expectedIssues": ["STAGED_UPLOAD_RECOVERY_REQUIRED"]
+    },
+    {
+      "id": "managed-upload-file-missing",
+      "requestIds": ["TASK-A"],
+      "taskAssets": {
+        "TASK-A": [
+          { "id": "ASSET-A-0001", "name": "a.jpg", "contentType": "image/jpeg", "kind": "image", "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+        ]
+      },
+      "uploads": [
+        { "id": "ASSET-A-0001", "claimed_task_id": "TASK-A", "claimed_order": 0, "original_name": "a.jpg", "content_type": "image/jpeg", "kind": "image", "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "stored_name": "aa.bin" }
+      ],
+      "legacyAssets": [],
+      "fileManifest": [],
+      "expectedIssues": ["UPLOAD_FILE_MISSING"]
+    },
+    {
+      "id": "managed-upload-file-hash-mismatch",
+      "requestIds": ["TASK-A"],
+      "taskAssets": {
+        "TASK-A": [
+          { "id": "ASSET-A-0001", "name": "a.jpg", "contentType": "image/jpeg", "kind": "image", "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+        ]
+      },
+      "uploads": [
+        { "id": "ASSET-A-0001", "claimed_task_id": "TASK-A", "claimed_order": 0, "original_name": "a.jpg", "content_type": "image/jpeg", "kind": "image", "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "stored_name": "aa.bin" }
+      ],
+      "legacyAssets": [],
+      "fileManifest": [
+        { "stored_name": "aa.bin", "exists": true, "tombstone": false, "size": 100, "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" }
+      ],
+      "expectedIssues": ["UPLOAD_HASH_MISMATCH"]
+    },
+    {
+      "id": "managed-upload-dangling-owner",
+      "requestIds": ["TASK-A"],
+      "taskAssets": {
+        "TASK-GHOST": [
+          { "id": "ASSET-A-0001", "name": "a.jpg", "contentType": "image/jpeg", "kind": "image", "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+        ]
+      },
+      "uploads": [
+        { "id": "ASSET-A-0001", "claimed_task_id": "TASK-GHOST", "claimed_order": 0, "original_name": "a.jpg", "content_type": "image/jpeg", "kind": "image", "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "stored_name": "aa.bin" }
+      ],
+      "legacyAssets": [],
+      "fileManifest": [
+        { "stored_name": "aa.bin", "exists": true, "tombstone": false, "size": 100, "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+      ],
+      "expectedIssues": ["UNKNOWN_TASK_REFERENCE"]
+    }
+  ]
+}
