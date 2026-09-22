@@ -11,8 +11,22 @@
   },
   "records": {
     "product_catalog_entries": [
-      { "source_ordinal": 0, "sku": "SKU-GROUP-001", "name": "组合迁移样品 A" },
-      { "source_ordinal": 1, "sku": "SKU-GROUP-002", "name": "组合迁移样品 B" }
+      {
+        "id": "PRODUCT-ENTRY-GROUP-001",
+        "sku": "SKU-GROUP-001",
+        "name": "组合迁移样品 A",
+        "display_order": 0,
+        "source": "migration",
+        "imported_at": "2026-09-22T12:00:00.000Z"
+      },
+      {
+        "id": "PRODUCT-ENTRY-GROUP-002",
+        "sku": "SKU-GROUP-002",
+        "name": "组合迁移样品 B",
+        "display_order": 1,
+        "source": "migration",
+        "imported_at": "2026-09-22T12:00:00.000Z"
+      }
     ],
     "requests_v2": [
       {
@@ -29,8 +43,27 @@
         "source": "import",
         "business_created_at": "2026-09-20T03:00:00.000Z",
         "business_updated_at": "2026-09-22T05:00:00.000Z",
+        "imported_at": "2026-09-22T12:00:00.000Z",
         "v1_assets_present": false,
         "v1_request_present": false,
+        "production_type": null,
+        "shooting_subtype": null,
+        "deliverable_count": null,
+        "aspect_ratio": null,
+        "duration_seconds": null,
+        "audio_requirement": null,
+        "requested_by": null,
+        "desired_date": null,
+        "note": null,
+        "source_operation_id": null,
+        "core_brief_summary": null,
+        "brief_url": null,
+        "hero_asset_id": null,
+        "sample_status": null,
+        "sample_shelf_id": null,
+        "lighting_preset": "unknown",
+        "reflectivity": "unknown",
+        "priority": null,
         "source_ordinal": 0
       },
       {
@@ -47,8 +80,27 @@
         "source": "import",
         "business_created_at": "2026-09-20T03:05:00.000Z",
         "business_updated_at": "2026-09-22T05:00:00.000Z",
+        "imported_at": "2026-09-22T12:00:00.000Z",
         "v1_assets_present": false,
         "v1_request_present": false,
+        "production_type": null,
+        "shooting_subtype": null,
+        "deliverable_count": null,
+        "aspect_ratio": null,
+        "duration_seconds": null,
+        "audio_requirement": null,
+        "requested_by": null,
+        "desired_date": null,
+        "note": null,
+        "source_operation_id": null,
+        "core_brief_summary": null,
+        "brief_url": null,
+        "hero_asset_id": null,
+        "sample_status": null,
+        "sample_shelf_id": null,
+        "lighting_preset": "unknown",
+        "reflectivity": "unknown",
+        "priority": null,
         "source_ordinal": 1
       }
     ],
@@ -57,6 +109,7 @@
         "id": "SESSION-GROUP-001",
         "resource_id": null,
         "resource_resolution_status": "unresolved",
+        "resource_mapping_version": "fixture-map-001",
         "legacy_place_text": "主影棚",
         "note": "保留原 ids 顺序，不拆分任务时长",
         "planned_start": "2026-09-22T05:00:00.000Z",
@@ -81,12 +134,14 @@
         "schedule_item_id": "SESSION-GROUP-001",
         "task_id": "TASK-GROUP-002",
         "display_order": 0,
+        "created_at": "2026-09-22T12:00:00.000Z",
         "imported_at": "2026-09-22T12:00:00.000Z"
       },
       {
         "schedule_item_id": "SESSION-GROUP-001",
         "task_id": "TASK-GROUP-001",
         "display_order": 1,
+        "created_at": "2026-09-22T12:00:00.000Z",
         "imported_at": "2026-09-22T12:00:00.000Z"
       }
     ],
@@ -99,24 +154,95 @@
     "projectionRevision": 11,
     "scheduleRevision": 0,
     "updatedAt": "2026-09-22T05:00:00.000Z",
+    "requests": [
+      {
+        "id": "TASK-GROUP-001",
+        "sourceOrdinal": 0,
+        "sku": "SKU-GROUP-001",
+        "name": "组合迁移样品 A",
+        "client": "迁移验证客户",
+        "legacyDeliverText": "场景图 3 张",
+        "kind": "场景",
+        "legacyV1Status": "scheduled",
+        "v1StatusMode": "legacyExact",
+        "requestLifecycle": "open",
+        "lifecycleProvenance": "legacySnapshot",
+        "source": "import",
+        "productionType": null,
+        "shootingSubtype": null,
+        "aspectRatio": null,
+        "deliverables": null,
+        "requestedBy": null,
+        "desiredDate": null,
+        "note": null,
+        "sourceOperationId": null,
+        "coreBriefSummary": null,
+        "briefUrl": null,
+        "heroAssetId": null,
+        "sampleStatus": null,
+        "sampleShelfId": null,
+        "lightingPreset": "unknown",
+        "reflectivity": "unknown",
+        "priority": null,
+        "businessCreatedAt": "2026-09-20T03:00:00.000Z",
+        "businessUpdatedAt": "2026-09-22T05:00:00.000Z",
+        "importedAt": "2026-09-22T12:00:00.000Z"
+      },
+      {
+        "id": "TASK-GROUP-002",
+        "sourceOrdinal": 1,
+        "sku": "SKU-GROUP-002",
+        "name": "组合迁移样品 B",
+        "client": "迁移验证客户",
+        "legacyDeliverText": "场景图 3 张",
+        "kind": "场景",
+        "legacyV1Status": "scheduled",
+        "v1StatusMode": "legacyExact",
+        "requestLifecycle": "open",
+        "lifecycleProvenance": "legacySnapshot",
+        "source": "import",
+        "productionType": null,
+        "shootingSubtype": null,
+        "aspectRatio": null,
+        "deliverables": null,
+        "requestedBy": null,
+        "desiredDate": null,
+        "note": null,
+        "sourceOperationId": null,
+        "coreBriefSummary": null,
+        "briefUrl": null,
+        "heroAssetId": null,
+        "sampleStatus": null,
+        "sampleShelfId": null,
+        "lightingPreset": "unknown",
+        "reflectivity": "unknown",
+        "priority": null,
+        "businessCreatedAt": "2026-09-20T03:05:00.000Z",
+        "businessUpdatedAt": "2026-09-22T05:00:00.000Z",
+        "importedAt": "2026-09-22T12:00:00.000Z"
+      }
+    ],
     "scheduleItems": [
       {
         "id": "SESSION-GROUP-001",
-        "allocationMode": "grouped_unallocated",
+        "taskBindings": [
+          { "taskId": "TASK-GROUP-002", "displayOrder": 0 },
+          { "taskId": "TASK-GROUP-001", "displayOrder": 1 }
+        ],
+        "allocationMode": "groupedUnallocated",
         "resourceId": null,
         "resourceResolutionStatus": "unresolved",
-        "legacyPlaceText": "主影棚",
         "plannedStart": "2026-09-22T05:00:00.000Z",
         "plannedEnd": "2026-09-22T07:00:00.000Z",
         "bufferAfterMinutes": null,
         "scheduleStatus": "confirmed",
         "lockStatus": null,
-        "taskBindings": [
-          { "taskId": "TASK-GROUP-002", "displayOrder": 0 },
-          { "taskId": "TASK-GROUP-001", "displayOrder": 1 }
-        ]
+        "source": "migration",
+        "createdAt": null,
+        "updatedAt": "2026-09-22T05:00:00.000Z"
       }
-    ]
+    ],
+    "productionRuns": []
   },
   "migrationAssertions": [
     "the source task ids are the canonical requests_v2 and binding identities",
@@ -125,6 +251,7 @@
     "both bindings preserve the source ids order",
     "the source V1 revision becomes projectionRevision and scheduleRevision starts at zero",
     "no per-task start, end, planned minutes, run, or event is invented",
+    "all ADP-019 normalized columns, including unknown lighting and reflectivity, are explicit facts",
     "the grouped block is excluded from task-level duration training"
   ]
 }

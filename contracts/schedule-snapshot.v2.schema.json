@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jenn.local/contracts/schedule-snapshot-v2.schema.json",
+  "title": "Jenn Shooting Schedule Snapshot v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "projectionRevision", "scheduleRevision", "updatedAt", "requests", "scheduleItems", "productionRuns"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "projectionRevision": { "$ref": "#/$defs/revision" },
+    "scheduleRevision": { "$ref": "#/$defs/revision" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "requests": { "type": "array", "items": { "$ref": "#/$defs/request" } },
+    "scheduleItems": { "type": "array", "items": { "$ref": "#/$defs/scheduleItem" } },
+    "productionRuns": { "type": "array", "items": { "$ref": "#/$defs/productionRun" } }
+  },
+  "$defs": {
+    "revision": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "identifier": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "\\S" },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "sourceOrdinal", "sku", "name", "client", "legacyDeliverText", "kind",
+        "legacyV1Status", "v1StatusMode", "requestLifecycle", "lifecycleProvenance", "source",
+        "productionType", "shootingSubtype", "aspectRatio", "deliverables", "requestedBy",
+        "desiredDate", "note", "sourceOperationId", "coreBriefSummary", "briefUrl",
+        "heroAssetId", "sampleStatus", "sampleShelfId", "lightingPreset", "reflectivity", "priority"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "sourceOrdinal": { "type": "integer", "minimum": 0 },
+        "sku": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 240, "pattern": "\\S" },
+        "client": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "\\S" },
+        "legacyDeliverText": { "type": "string", "minLength": 1, "maxLength": 500, "pattern": "\\S" },
+        "kind": { "enum": ["模特", "细节", "场景", "待定"] },
+        "legacyV1Status": { "type": ["string", "null"], "enum": ["pending", "scheduled", "completed", "cancelled", null] },
+        "v1StatusMode": { "enum": ["legacyExact", "legacyOmitted", "canonical"] },
+        "requestLifecycle": { "type": ["string", "null"], "enum": ["open", "fulfilled", "cancelled", null] },
+        "lifecycleProvenance": { "enum": ["legacySnapshot", "domainCommand"] },
+        "source": { "enum": ["workbench", "submission", "import"] },
+        "productionType": { "type": ["string", "null"], "enum": ["平面", "视频", null] },
+        "shootingSubtype": {
+          "type": ["string", "null"],
+          "enum": ["模特", "细节", "场景", "待定", "产品展示", "人物展示", "产品加人物展示", "口播", "剧情短片", "场景视频", null]
+        },
+        "aspectRatio": { "type": ["string", "null"], "enum": ["待定", "1:1", "3:4", "4:5", "9:16", "16:9", null] },
+        "deliverables": {
+          "oneOf": [
+            { "$ref": "#/$defs/flatDeliverables" },
+            { "$ref": "#/$defs/videoDeliverables" },
+            { "type": "null" }
+          ]
+        },
+        "requestedBy": { "anyOf": [{ "type": "string", "minLength": 1, "maxLength": 160, "pattern": "\\S" }, { "type": "null" }] },
+        "desiredDate": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "note": { "type": ["string", "null"], "maxLength": 2000 },
+        "sourceOperationId": { "anyOf": [{ "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$" }, { "type": "null" }] },
+        "coreBriefSummary": { "anyOf": [{ "type": "string", "minLength": 1, "maxLength": 100, "pattern": "\\S" }, { "type": "null" }] },
+        "briefUrl": { "anyOf": [{ "type": "string", "format": "uri", "pattern": "^https://" }, { "type": "null" }] },
+        "heroAssetId": { "anyOf": [{ "$ref": "#/$defs/identifier" }, { "type": "null" }] },
+        "sampleStatus": { "type": ["string", "null"], "enum": ["arrivedVerified", "inTransit", "unavailable", null] },
+        "sampleShelfId": { "anyOf": [{ "$ref": "#/$defs/identifier" }, { "type": "null" }] },
+        "lightingPreset": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+        "reflectivity": { "enum": ["unknown", "low", "medium", "high"] },
+        "priority": { "type": ["string", "null"], "enum": ["p0", "p1", "p2", null] },
+        "businessCreatedAt": { "type": ["string", "null"], "format": "date-time" },
+        "businessUpdatedAt": { "type": ["string", "null"], "format": "date-time" },
+        "importedAt": { "type": "string", "format": "date-time" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "productionType": { "const": "平面" } }, "required": ["productionType"] },
+          "then": {
+            "properties": {
+              "shootingSubtype": { "enum": ["模特", "细节", "场景", "待定"] },
+              "deliverables": { "$ref": "#/$defs/flatDeliverables" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "productionType": { "const": "视频" } }, "required": ["productionType"] },
+          "then": {
+            "properties": {
+              "shootingSubtype": { "enum": ["产品展示", "人物展示", "产品加人物展示", "口播", "剧情短片", "场景视频"] },
+              "deliverables": { "$ref": "#/$defs/videoDeliverables" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "productionType": { "type": "null" } }, "required": ["productionType"] },
+          "then": {
+            "properties": {
+              "shootingSubtype": { "type": "null" },
+              "aspectRatio": { "type": "null" },
+              "deliverables": { "type": "null" }
+            }
+          }
+        }
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "v1StatusMode": { "const": "legacyExact" },
+            "legacyV1Status": { "const": "pending" },
+            "requestLifecycle": { "const": "open" },
+            "lifecycleProvenance": { "const": "legacySnapshot" }
+          },
+          "required": ["v1StatusMode", "legacyV1Status", "requestLifecycle", "lifecycleProvenance"]
+        },
+        {
+          "properties": {
+            "v1StatusMode": { "const": "legacyExact" },
+            "legacyV1Status": { "const": "scheduled" },
+            "requestLifecycle": { "const": "open" },
+            "lifecycleProvenance": { "const": "legacySnapshot" }
+          },
+          "required": ["v1StatusMode", "legacyV1Status", "requestLifecycle", "lifecycleProvenance"]
+        },
+        {
+          "properties": {
+            "v1StatusMode": { "const": "legacyExact" },
+            "legacyV1Status": { "const": "completed" },
+            "requestLifecycle": { "const": "fulfilled" },
+            "lifecycleProvenance": { "const": "legacySnapshot" }
+          },
+          "required": ["v1StatusMode", "legacyV1Status", "requestLifecycle", "lifecycleProvenance"]
+        },
+        {
+          "properties": {
+            "v1StatusMode": { "const": "legacyExact" },
+            "legacyV1Status": { "const": "cancelled" },
+            "requestLifecycle": { "const": "cancelled" },
+            "lifecycleProvenance": { "const": "legacySnapshot" }
+          },
+          "required": ["v1StatusMode", "legacyV1Status", "requestLifecycle", "lifecycleProvenance"]
+        },
+        {
+          "properties": {
+            "v1StatusMode": { "const": "legacyOmitted" },
+            "legacyV1Status": { "type": "null" },
+            "requestLifecycle": { "type": "null" },
+            "lifecycleProvenance": { "const": "legacySnapshot" }
+          },
+          "required": ["v1StatusMode", "legacyV1Status", "requestLifecycle", "lifecycleProvenance"]
+        },
+        {
+          "properties": {
+            "v1StatusMode": { "const": "canonical" },
+            "requestLifecycle": { "enum": ["open", "fulfilled", "cancelled"] },
+            "lifecycleProvenance": { "const": "domainCommand" }
+          },
+          "required": ["v1StatusMode", "requestLifecycle", "lifecycleProvenance"]
+        }
+      ]
+    },
+    "flatDeliverables": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "count"],
+      "properties": {
+        "type": { "const": "flat" },
+        "count": { "type": "integer", "minimum": 1, "maximum": 999 }
+      }
+    },
+    "videoDeliverables": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "durationSeconds", "audioRequirement"],
+      "properties": {
+        "type": { "const": "video" },
+        "durationSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 },
+        "audioRequirement": { "enum": ["待定", "原声", "配音", "音乐", "无声"] }
+      }
+    },
+    "taskBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["taskId", "displayOrder"],
+      "properties": {
+        "taskId": { "$ref": "#/$defs/identifier" },
+        "displayOrder": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "scheduleItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "taskBindings", "allocationMode", "resourceId", "resourceResolutionStatus",
+        "plannedStart", "plannedEnd", "bufferAfterMinutes", "scheduleStatus", "lockStatus",
+        "source", "createdAt", "updatedAt"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "taskBindings": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/taskBinding" } },
+        "allocationMode": { "enum": ["single", "groupedUnallocated"] },
+        "resourceId": { "anyOf": [{ "$ref": "#/$defs/identifier" }, { "type": "null" }] },
+        "resourceResolutionStatus": { "enum": ["resolved", "unresolved"] },
+        "plannedStart": { "type": "string", "format": "date-time" },
+        "plannedEnd": { "type": "string", "format": "date-time" },
+        "bufferAfterMinutes": { "type": ["integer", "null"], "minimum": 0, "maximum": 1440 },
+        "scheduleStatus": { "enum": ["draft", "confirmed", "cancelled"] },
+        "lockStatus": { "type": ["string", "null"], "enum": ["unlocked", "locked", null] },
+        "source": { "enum": ["human", "agentProposal", "migration"] },
+        "createdAt": { "type": ["string", "null"], "format": "date-time" },
+        "updatedAt": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "productionRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "scheduleItemId", "scope", "taskId", "status", "runRevision"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "scheduleItemId": { "$ref": "#/$defs/identifier" },
+        "scope": { "enum": ["task", "block"] },
+        "taskId": { "anyOf": [{ "$ref": "#/$defs/identifier" }, { "type": "null" }] },
+        "status": { "enum": ["scheduled", "shooting", "blocked", "completed", "cancelled"] },
+        "runRevision": { "$ref": "#/$defs/revision" }
+      }
+    }
+  }
+}

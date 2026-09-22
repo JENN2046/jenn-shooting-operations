@@ -3,7 +3,10 @@ import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { validateSnapshot, validateSubmission } from '../src/contract-validator.mjs';
+import {
+  validateV1Snapshot,
+  validateV1Submission,
+} from '../src/contract-validator.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const fixtureRoot = join(root, 'fixtures', 'migration-v2');
@@ -30,7 +33,7 @@ function wallClock(instant, timeZone) {
 function projectCandidateToV1(candidate) {
   const records = candidate.records;
   const products = records.product_catalog_entries
-    .toSorted((a, b) => a.source_ordinal - b.source_ordinal)
+    .toSorted((a, b) => a.display_order - b.display_order)
     .map(entry => [entry.sku, entry.name]);
   const tasks = records.requests_v2
     .toSorted((a, b) => a.source_ordinal - b.source_ordinal)
@@ -168,7 +171,7 @@ for (const name of [
   'v1-grouped-session.json',
   'v1-full-compatibility.json',
 ]) {
-  assert.deepEqual(validateSnapshot(await load(name)), [], `${name} must pass the current runtime validator`);
+  assert.equal(validateV1Snapshot(await load(name)).ok, true, `${name} must pass V1 strict-write`);
 }
 
 for (const name of [
@@ -189,7 +192,7 @@ for (const name of [
   assert.deepEqual(records.production_events, []);
   assert.deepEqual(
     records.product_catalog_entries
-      .sort((a, b) => a.source_ordinal - b.source_ordinal)
+      .sort((a, b) => a.display_order - b.display_order)
       .map(entry => [entry.sku, entry.name]),
     source.products,
   );
@@ -227,11 +230,25 @@ for (const name of [
     assert.equal(item.business_created_at, null);
     assert.equal(item.resource_id, null);
     assert.equal(item.resource_resolution_status, 'unresolved');
+    assert.equal(item.resource_mapping_version, candidate.migrationContext.resourceMapVersion);
+  }
+
+  for (const product of records.product_catalog_entries) {
+    assert.equal(typeof product.id, 'string');
+    assert.equal(product.source, 'migration');
+    assert.equal(product.imported_at, candidate.migrationContext.importedAt);
+  }
+
+  for (const request of records.requests_v2) {
+    assert.equal(request.imported_at, candidate.migrationContext.importedAt);
+    assert.equal(request.lighting_preset, 'unknown');
+    assert.equal(request.reflectivity, 'unknown');
   }
 
   for (const binding of records.schedule_item_tasks) {
     assert.ok(requestIds.has(binding.task_id), `${name} binding must reference requests_v2`);
     assert.ok(scheduleIds.has(binding.schedule_item_id), `${name} binding must reference schedule item`);
+    assert.equal(binding.created_at, candidate.migrationContext.importedAt);
   }
 
   for (const sourceSession of source.sessions) {
@@ -266,25 +283,31 @@ assert.deepEqual(groupedSplitErrors(split.sourceV1Session, split.candidateRecord
 assert.equal(split.expectedErrors[0].code, 'GROUPED_SESSION_WOULD_SPLIT');
 
 const l1 = await load('legacy-runtime-only-extra-property.json');
-assert.deepEqual(validateSnapshot(l1.sourceSnapshot), []);
+assert.equal(validateV1Snapshot(l1.sourceSnapshot).ok, false);
 assert.equal(l1.sourceSnapshot.tasks[0].runtimeOnlyExtension.opaque, true);
 assert.equal(l1.expectedCompatibilityClass, 'L1_GRANDFATHERED_OPAQUE');
+assert.equal(validateV1Snapshot(l1.sourceSnapshot, { profile: 'legacy-read' }).classification, l1.expectedCompatibilityClass);
 
 const l2 = await load('legacy-repair-required-invalid-time.json');
-assert.deepEqual(validateSnapshot(l2.sourceSnapshot), []);
+assert.equal(validateV1Snapshot(l2.sourceSnapshot).ok, false);
 assert.ok(Number(l2.sourceSnapshot.sessions[0].start.slice(0, 2)) > 23);
 assert.equal(l2.expectedCompatibilityClass, 'L2_REPAIR_REQUIRED');
+assert.equal(validateV1Snapshot(l2.sourceSnapshot, { profile: 'legacy-read' }).classification, l2.expectedCompatibilityClass);
 
 const l3 = await load('legacy-source-corrupt-unknown-task.json');
-assert.ok(validateSnapshot(l3.sourceSnapshot).some(error => error.includes('unknown task')));
+assert.equal(validateV1Snapshot(l3.sourceSnapshot).ok, false);
 assert.equal(l3.expectedCompatibilityClass, 'L3_SOURCE_CORRUPT');
+assert.equal(validateV1Snapshot(l3.sourceSnapshot, { profile: 'legacy-read' }).classification, l3.expectedCompatibilityClass);
 
 const parity = await load('v1-contract-parity-matrix.json');
 for (const testCase of parity.cases) {
   const input = applyMutation(parity.baseInputs[testCase.base], testCase.mutation);
-  const errors = testCase.base === 'snapshot' ? validateSnapshot(input) : validateSubmission(input);
-  const observed = errors.length === 0 ? 'PASS' : 'REJECT';
-  assert.equal(observed, testCase.expected.currentRuntime, `${testCase.id} current runtime observation changed`);
+  const strict = testCase.base === 'snapshot' ? validateV1Snapshot(input) : validateV1Submission(input);
+  assert.equal(strict.ok ? 'PASS' : 'REJECT', testCase.expected.strictWrite, `${testCase.id} strict-write mismatch`);
+  if (testCase.base === 'snapshot') {
+    const legacy = validateV1Snapshot(input, { profile: 'legacy-read' });
+    assert.equal(legacy.classification, testCase.expected.legacyRead, `${testCase.id} legacy-read mismatch`);
+  }
 }
 for (const requiredCase of [
   'snapshot-root-extra-property',
@@ -318,4 +341,4 @@ for (const testCase of attachmentMatrix.cases) {
   }
 }
 
-console.log(`PASS ${jsonFiles.length}/${jsonFiles.length} JSON fixtures parse; candidate round-trip, negative-path detection, contract parity observations, and attachment manifest cases hold`);
+console.log(`PASS ${jsonFiles.length}/${jsonFiles.length} JSON fixtures parse; candidate round-trip, negative-path detection, strict/legacy contract parity, and attachment manifest cases hold`);
