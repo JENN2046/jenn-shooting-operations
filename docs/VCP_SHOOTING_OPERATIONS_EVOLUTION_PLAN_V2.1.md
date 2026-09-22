@@ -5,7 +5,7 @@
 - 适用项目：`jenn-shooting-operations`
 - 当前范围：本地设计、实现、迁移演练与验证
 - 明确不包含：生产部署、真实钉钉凭据接入、真实外部通知、发布与切流
-- 冻结架构基线：[Architecture Decision Pack V2.1](architecture/ARCHITECTURE_DECISION_PACK_V2.1.md)
+- 有效冻结架构基线：[Architecture Baseline Index V2.1](architecture/ARCHITECTURE_BASELINE_INDEX_V2.1.md)
 
 ## 0. 执行摘要
 
@@ -157,7 +157,7 @@ SQLite 中已提交的领域记录和事件是唯一业务事实。以下内容�
 
 ### 3.2 投影一致性
 
-规范化业务写入、revision 自增、Snapshot 更新和 Outbox 入队必须在同一个 SQLite 事务中完成。
+规范化业务写入、对应作用域 revision 自增、Snapshot 更新和 Outbox 入队必须在同一个 SQLite 事务中完成。V2.1 使用 `scheduleRevision`、`runRevision` 和 `projectionRevision` 三个明确作用域；具体语义以 ADP-017 为准。
 
 事务提交之后才允许执行：
 
@@ -259,7 +259,8 @@ priority: p0 | p1 | p2
 
 ```text
 id
-taskId
+taskBindings[]
+allocationMode: single | groupedUnallocated
 resourceId
 plannedStart
 plannedEnd
@@ -274,6 +275,8 @@ updatedAt
 规则：
 
 - `plannedEnd` 必须晚于 `plannedStart`；
+- 数据库中任务关系通过 `schedule_item_tasks` 表达，`taskBindings[]` 只是读投影；
+- V1 多任务 session 迁移为 `groupedUnallocated`，不得自动平均分配单任务时长；
 - 同一 `resourceId` 的已确认项目不得物理重叠；
 - `nextStart` 是派生值，不持久化为独立事实；
 - `diagnostics` 是读模型，不进入排期事实表；
@@ -347,6 +350,7 @@ resultingRevision
 
 - `eventId` 唯一，同一事件重放返回原结果；
 - `expectedRunRevision` 不匹配返回 `409 REVISION_CONFLICT`；
+- 成功的现场事件增加对应 `runRevision` 和共享 `projectionRevision`，但不得仅因状态打点增加 `scheduleRevision`；
 - 服务端校验状态转换，不信任客户端给出的 `previousState`；
 - `occurredAt` 超出允许时钟漂移范围时进入人工复核，不直接污染工时；
 - 离线队列按本机序列顺序重放，遇到第一个冲突立即停止；
@@ -379,6 +383,7 @@ netDuration = grossDuration - blockedDuration
 schema_migrations
 requests_v2
 schedule_items
+schedule_item_tasks
 production_runs
 production_events
 snapshot_projections
@@ -472,12 +477,12 @@ P4 不阻塞 P3；P5 可以在没有真实钉钉的情况下使用本地数据�
 | `task.request.*` | Request V2 | 已有值复制；新增字段填 `unknown` 或空值 |
 | `task.assets[]` | 受控资产引用 | 保留现有 upload/asset ID 与摘要 |
 | `session.id` | `scheduleItem.id` | 保留原 ID或记录旧 ID 映射 |
-| `session.ids[]` | 一个或多个 Schedule Item | 多任务场次按明确规则拆分，未确认前不得猜测各任务时长 |
+| `session.ids[]` | Schedule Item + Task Bindings | 单任务映射为 `single`；多任务保留为 `groupedUnallocated`，不得猜测各任务时长 |
 | `date/start/end` | `plannedStart/plannedEnd` | 使用明确业务时区转换为 UTC |
 | `task.status` | 请求/运行状态 | `pending/scheduled/completed/cancelled` 显式映射 |
 | 缺失现场事件 | 无历史事件 | 不反推或伪造开始、阻塞、完成时间 |
 
-`session.ids` 包含多个任务时，是迁移中最重要的不确定点。默认不得平均分割时长。可先保留为一个带任务集合的兼容分组，待调度员确认后再拆分为单任务时间轴项目。
+`session.ids` 包含多个任务时，是迁移中最重要的不确定点。默认不得平均分割时长。必须通过 `schedule_item_tasks` 保留为一个 `groupedUnallocated` 时间块，待调度员确认后再拆分为单任务时间轴项目；未拆分的 block-level 工时不得进入单任务估时样本。
 
 ### 7.3 迁移演练
 
@@ -775,12 +780,15 @@ priority violation count
 - 单调 Schema migration；
 - 隔离数据库 dry-run 迁移器；
 - 状态事件与净工时计算；
+- 三作用域 revision 与多任务时间块关联；
 - V1/V2 Snapshot 事务内物化；
 - migration/rollback/幂等/并发测试。
 
 **验收**
 
 - WAL、外键、revision 和 operations 仍有效；
+- Kiosk 状态事件不制造无关 `scheduleRevision` 冲突；
+- V1 多任务 session 可 round-trip，且不产生伪造的单任务时长；
 - 重复事件不重复计时；
 - 非法转换失败关闭；
 - 两个客户端并发修改时只有一个成功；
