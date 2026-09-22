@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  chmodSync,
   linkSync,
   mkdirSync,
   mkdtempSync,
@@ -19,11 +20,14 @@ import test from 'node:test';
 
 import {
   executeMigration,
+  executeMigrationCommand,
   parseMigrationArgs,
 } from '../scripts/migrate-v1-to-v2.mjs';
 import {
   MIGRATION_VERSION,
+  MigrationError,
   buildMigrationPlan,
+  failureReport,
   parseResourceMap,
 } from '../src/migration-v2.mjs';
 import {
@@ -39,6 +43,9 @@ import {
 const fixtureRoot = new URL('../fixtures/migration-v2/', import.meta.url);
 const FIXED_NOW = '2026-09-22T12:00:00.000Z';
 const LATER_NOW = '2026-09-25T18:30:00.000Z';
+const VALUE_OPTIONS_FOR_TEST = new Set([
+  '--target', '--fixture-root', '--backup', '--rollback-target', '--proof-seal',
+]);
 
 function fixture(name) {
   return JSON.parse(readFileSync(new URL(name, fixtureRoot), 'utf8'));
@@ -134,16 +141,90 @@ function withTempRoot(action) {
   }
 }
 
-test('CLI requires exactly one read-only mode and explicitly rejects apply', () => {
+async function withApplyFixture(action) {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-shooting-migration-fixture-'));
+  chmodSync(root, 0o700);
+  try {
+    return await action(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function applyArgs(root, source, extra = []) {
+  return [
+    '--apply',
+    '--source', source,
+    '--target', join(root, 'target.sqlite'),
+    '--fixture-root', root,
+    '--backup', join(root, 'backup.sqlite'),
+    '--rollback-target', join(root, 'rollback.sqlite'),
+    '--proof-seal', join(root, 'proof.json'),
+    '--business-time-zone', 'UTC',
+    '--hash-uploads',
+    '--acknowledge-isolated-target',
+    '--acknowledge-offline-maintenance',
+    '--format', 'json',
+    ...extra,
+  ];
+}
+
+function clockSequence(...timestamps) {
+  let index = 0;
+  return () => new Date(timestamps[Math.min(index++, timestamps.length - 1)]);
+}
+
+test('CLI enforces one mode and apply-specific paths, hashing, and acknowledgements', () => {
   assert.throws(() => parseMigrationArgs([]), error => error.code === 'MIGRATION_MODE_REQUIRED');
   assert.throws(
     () => parseMigrationArgs(['--dry-run', '--verify-only', '--source', '/x', '--business-time-zone', 'UTC']),
     error => error.code === 'MIGRATION_MODE_REQUIRED',
   );
-  assert.throws(
-    () => parseMigrationArgs(['--apply', '--source', '/x', '--business-time-zone', 'UTC']),
-    error => error.code === 'APPLY_NOT_AVAILABLE' && error.result === 'INVALID_USAGE',
-  );
+  const validApply = parseMigrationArgs([
+    '--apply', '--source', '/source', '--target', '/target',
+    '--fixture-root', '/fixture', '--backup', '/backup', '--rollback-target', '/rollback',
+    '--proof-seal', '/proof', '--business-time-zone', 'UTC', '--hash-uploads',
+    '--acknowledge-isolated-target', '--acknowledge-offline-maintenance',
+  ]);
+  assert.equal(validApply.mode, 'apply');
+  assert.equal(validApply.hashUploads, true);
+  assert.equal(validApply.acknowledgeIsolatedTarget, true);
+  assert.equal(validApply.acknowledgeOfflineMaintenance, true);
+  for (const [removed, code] of [
+    ['--target', 'TARGET_REQUIRED'],
+    ['--fixture-root', 'MISSING_REQUIRED_ARGUMENT'],
+    ['--backup', 'MISSING_REQUIRED_ARGUMENT'],
+    ['--rollback-target', 'ROLLBACK_TARGET_REQUIRED'],
+    ['--proof-seal', 'MISSING_REQUIRED_ARGUMENT'],
+    ['--hash-uploads', 'HASH_UPLOADS_REQUIRED'],
+    ['--acknowledge-isolated-target', 'ISOLATED_TARGET_ACK_REQUIRED'],
+    ['--acknowledge-offline-maintenance', 'OFFLINE_MAINTENANCE_ACK_REQUIRED'],
+  ]) {
+    const args = [
+      '--apply', '--source', '/source', '--target', '/target',
+      '--fixture-root', '/fixture', '--backup', '/backup', '--rollback-target', '/rollback',
+      '--proof-seal', '/proof', '--business-time-zone', 'UTC', '--hash-uploads',
+      '--acknowledge-isolated-target', '--acknowledge-offline-maintenance',
+    ];
+    const index = args.indexOf(removed);
+    args.splice(index, VALUE_OPTIONS_FOR_TEST.has(removed) ? 2 : 1);
+    assert.throws(() => parseMigrationArgs(args), error => error.code === code, removed);
+  }
+  for (const option of [
+    ['--fixture-root', '/fixture'],
+    ['--backup', '/backup'],
+    ['--rollback-target', '/rollback'],
+    ['--proof-seal', '/proof'],
+    ['--acknowledge-isolated-target'],
+    ['--acknowledge-offline-maintenance'],
+  ]) {
+    assert.throws(() => parseMigrationArgs([
+      '--dry-run', '--source', '/x', '--business-time-zone', 'UTC', ...option,
+    ]), error => error.code === 'APPLY_ARGUMENT_NOT_ALLOWED');
+    assert.throws(() => parseMigrationArgs([
+      '--verify-only', '--source', '/x', '--target', '/y', '--business-time-zone', 'UTC', ...option,
+    ]), error => error.code === 'APPLY_ARGUMENT_NOT_ALLOWED');
+  }
   assert.throws(
     () => parseMigrationArgs(['--dry-run', '--source', '/x', '--source', '/y', '--business-time-zone', 'UTC']),
     error => error.code === 'DUPLICATE_ARGUMENT',
@@ -152,13 +233,30 @@ test('CLI requires exactly one read-only mode and explicitly rejects apply', () 
     () => parseMigrationArgs(['--dry-run', '--source', '/x', '--business-time-zone', 'UTC', '--mystery']),
     error => error.code === 'UNKNOWN_ARGUMENT',
   );
-  assert.throws(
-    () => parseMigrationArgs(['--dry-run', '--source', '/x', '--business-time-zone', 'UTC', '--force']),
-    error => error.code === 'FEATURE_NOT_AVAILABLE',
-  );
+  for (const option of ['--force', '--report-json', '--overwrite-report']) {
+    assert.throws(
+      () => parseMigrationArgs(['--dry-run', '--source', '/x', '--business-time-zone', 'UTC', option]),
+      error => error.code === 'FEATURE_NOT_AVAILABLE',
+      option,
+    );
+  }
   assert.equal(parseMigrationArgs([
     '--dry-run', '--source', '/x', '--business-time-zone', 'UTC', '--hash-uploads',
   ]).hashUploads, true);
+});
+
+test('committed-but-unverified failures use target-blocking exit and report semantics', () => {
+  const failure = failureReport(
+    new MigrationError('TARGET_POST_COMMIT_PROOF_FAILED', 'COMMITTED_BUT_UNVERIFIED'),
+    { mode: 'apply' },
+  );
+  assert.equal(failure.exitCode, 5);
+  assert.equal(failure.report.result, 'COMMITTED_BUT_UNVERIFIED');
+  assert.equal(failure.report.switchReadiness, 'BLOCKED');
+  assert.equal(failure.report.targetVerification.status, 'COMMITTED_BUT_UNVERIFIED');
+  assert.deepEqual(failure.report.issues, [{
+    code: 'TARGET_POST_COMMIT_PROOF_FAILED', severity: 'BLOCKER', count: 1,
+  }]);
 });
 
 test('resource map is strict, timezone-bound, and preserves exact place keys', () => {
@@ -781,6 +879,163 @@ function createVerifiedTarget(root, plan) {
   return target;
 }
 
+test('async migration command preserves dry-run and verify-only compatibility', async () => (
+  withApplyFixture(async root => {
+    const sourcePath = createSource(root, emptySnapshot({ revision: 4 }));
+    const dryArgs = [
+      '--dry-run', '--source', sourcePath,
+      '--business-time-zone', 'UTC', '--format', 'json',
+    ];
+    const syncDry = executeMigration(dryArgs, { clock: () => new Date(FIXED_NOW) });
+    const asyncDry = await executeMigrationCommand(dryArgs, { clock: () => new Date(FIXED_NOW) });
+    assert.deepEqual(asyncDry, syncDry);
+
+    const source = readV1Source(resolveExistingPath(sourcePath));
+    const plan = buildMigrationPlan({
+      source,
+      businessTimeZone: 'UTC',
+      importedAt: FIXED_NOW,
+    });
+    const target = createVerifiedTarget(root, plan);
+    const verifyArgs = [
+      '--verify-only', '--source', sourcePath, '--target', target,
+      '--business-time-zone', 'UTC', '--format', 'json',
+    ];
+    const syncVerify = executeMigration(verifyArgs, { clock: () => new Date(FIXED_NOW) });
+    const asyncVerify = await executeMigrationCommand(verifyArgs, { clock: () => new Date(FIXED_NOW) });
+    assert.deepEqual(asyncVerify, syncVerify);
+  })
+));
+
+test('apply parser failures for acknowledgements, hashing, and paths create zero artifacts', async () => (
+  withApplyFixture(async root => {
+    const source = createSource(root, emptySnapshot());
+    const complete = applyArgs(root, source);
+    for (const option of [
+      '--target',
+      '--fixture-root',
+      '--backup',
+      '--rollback-target',
+      '--proof-seal',
+      '--hash-uploads',
+      '--acknowledge-isolated-target',
+      '--acknowledge-offline-maintenance',
+    ]) {
+      const args = [...complete];
+      const index = args.indexOf(option);
+      args.splice(index, VALUE_OPTIONS_FOR_TEST.has(option) ? 2 : 1);
+      const before = readdirSync(root).toSorted();
+      const result = await executeMigrationCommand(args, {
+        clock: clockSequence(FIXED_NOW, FIXED_NOW, LATER_NOW),
+      });
+      assert.equal(result.report.result, 'INVALID_USAGE', option);
+      assert.deepEqual(readdirSync(root).toSorted(), before, option);
+      assert.equal(result.output.includes(root), false, option);
+    }
+  })
+));
+
+test('apply rejects every root-external raw path before resolving or reading inputs', async () => (
+  withApplyFixture(async root => {
+    const source = createSource(root, emptySnapshot());
+    const outside = mkdtempSync(join(tmpdir(), 'jso-migration-outside-'));
+    const privateText = 'PRIVATE-OUTSIDE-PREFLIGHT-CONTENT';
+    const outsideFile = join(outside, 'private-input');
+    const outsideDirectory = join(outside, 'private-uploads');
+    writeFileSync(outsideFile, privateText);
+    mkdirSync(outsideDirectory);
+    try {
+      for (const [option, value] of [
+        ['--source', outsideFile],
+        ['--target', join(outside, 'target.sqlite')],
+        ['--resource-map', outsideFile],
+        ['--upload-root', outsideDirectory],
+      ]) {
+        const args = applyArgs(root, source);
+        const existing = args.indexOf(option);
+        if (existing === -1) args.push(option, value);
+        else args[existing + 1] = value;
+        const before = readdirSync(root).toSorted();
+
+        const result = await executeMigrationCommand(args, {
+          clock: clockSequence(FIXED_NOW, FIXED_NOW, LATER_NOW),
+        });
+
+        assert.equal(result.report.result, 'INVALID_USAGE', option);
+        assert.equal(result.report.issues[0].code, 'UNSAFE_DESTINATION', option);
+        assert.equal(Object.hasOwn(result.report.source, 'pathDigest'), false, option);
+        assert.deepEqual(readdirSync(root).toSorted(), before, option);
+        for (const forbidden of [root, outside, outsideFile, outsideDirectory, privateText]) {
+          assert.equal(result.output.includes(forbidden), false, `${option}:${forbidden}`);
+        }
+      }
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  })
+));
+
+test('isolated apply succeeds, verifies every artifact, and replays without rewriting', async () => (
+  withApplyFixture(async root => {
+    const source = createSource(root, emptySnapshot({ revision: 4 }));
+    const args = applyArgs(root, source);
+    const first = await executeMigrationCommand(args, {
+      clock: clockSequence(FIXED_NOW, FIXED_NOW, LATER_NOW),
+    });
+    assert.equal(first.exitCode, 0, first.output);
+    assert.equal(first.report.result, 'APPLIED_VERIFIED');
+    assert.equal(first.report.targetVerification.status, 'APPLIED_VERIFIED');
+    assert.equal(first.report.switchReadiness, 'BLOCKED');
+    assert.equal(first.report.attachments.validationStatus, 'PASS_NO_FILES');
+
+    const artifacts = ['target.sqlite', 'backup.sqlite', 'rollback.sqlite', 'proof.json'];
+    const beforeReplay = Object.fromEntries(artifacts.map(name => [name, hashFile(join(root, name))]));
+    for (const name of artifacts) assert.equal(statSync(join(root, name)).mode & 0o777, 0o600, name);
+
+    const replay = await executeMigrationCommand(args, {
+      clock: clockSequence(LATER_NOW, LATER_NOW, LATER_NOW),
+    });
+    assert.equal(replay.exitCode, 0, replay.output);
+    assert.equal(replay.report.result, 'ALREADY_APPLIED_VERIFIED');
+    assert.equal(replay.report.targetVerification.status, 'ALREADY_APPLIED_VERIFIED');
+    assert.equal(replay.report.switchReadiness, 'BLOCKED');
+    assert.deepEqual(
+      Object.fromEntries(artifacts.map(name => [name, hashFile(join(root, name))])),
+      beforeReplay,
+    );
+  })
+));
+
+test('direct apply output remains low-disclosure', async () => (
+  withApplyFixture(async root => {
+    const privateText = 'PRIVATE-APPLY-BUSINESS-CONTENT';
+    const source = createSource(root, emptySnapshot({
+      tasks: [{
+        id: 'TASK-PRIVATE-APPLY', sku: 'SKU-PRIVATE', name: privateText,
+        client: privateText, deliver: privateText, kind: '待定', source: 'submission',
+      }],
+    }));
+    const command = spawnSync(process.execPath, [
+      new URL('../scripts/migrate-v1-to-v2.mjs', import.meta.url).pathname,
+      ...applyArgs(root, source),
+    ], { encoding: 'utf8', timeout: 15000 });
+    assert.equal(command.status, 0, command.stderr || command.stdout);
+    const report = JSON.parse(command.stdout);
+    assert.equal(report.result, 'APPLIED_VERIFIED');
+    assert.equal(report.switchReadiness, 'BLOCKED');
+    for (const forbidden of [
+      root,
+      source,
+      join(root, 'target.sqlite'),
+      join(root, 'backup.sqlite'),
+      join(root, 'rollback.sqlite'),
+      join(root, 'proof.json'),
+      privateText,
+      'stack',
+    ]) assert.equal(command.stdout.includes(forbidden), false, forbidden);
+  })
+));
+
 test('verify-only reads a complete matching target and rejects batch mismatch without writes', () => withTempRoot(root => {
   const sourcePath = createSource(root, emptySnapshot({ revision: 4 }));
   const sourceInfo = resolveExistingPath(sourcePath);
@@ -796,8 +1051,14 @@ test('verify-only reads a complete matching target and rejects batch mismatch wi
     '--verify-only', '--source', sourcePath, '--target', target,
     '--business-time-zone', 'Asia/Shanghai', '--format', 'json',
   ], { clock: () => new Date(FIXED_NOW) });
-  assert.equal(result.exitCode, 0, result.output);
-  assert.equal(result.report.targetVerification.status, 'ALREADY_APPLIED_VERIFIED');
+  assert.equal(result.report.result, 'INVALID_TARGET');
+  assert.equal(result.exitCode, 5);
+  assert.equal(result.report.targetVerification.status, 'TARGET_FACTS_VERIFIED_UNSEALED');
+  assert.equal(result.report.switchReadiness, 'BLOCKED');
+  assert.deepEqual(
+    result.report.issues.filter(issue => issue.code === 'PROOF_SEAL_NOT_VERIFIED'),
+    [{ code: 'PROOF_SEAL_NOT_VERIFIED', severity: 'WARNING', count: 1 }],
+  );
   assert.equal(hashFile(target), before);
 
   const writable = new DatabaseSync(target);
@@ -831,8 +1092,10 @@ test('verify-only rejects canonical fact tampering even when counts and stored p
   const laterVerification = executeMigration(verifyArgs, {
     clock: () => new Date(LATER_NOW),
   });
-  assert.equal(laterVerification.exitCode, 0, laterVerification.output);
-  assert.equal(laterVerification.report.targetVerification.status, 'ALREADY_APPLIED_VERIFIED');
+  assert.equal(laterVerification.report.result, 'INVALID_TARGET');
+  assert.equal(laterVerification.exitCode, 5);
+  assert.equal(laterVerification.report.targetVerification.status, 'TARGET_FACTS_VERIFIED_UNSEALED');
+  assert.equal(laterVerification.report.switchReadiness, 'BLOCKED');
 
   const writable = new DatabaseSync(target);
   writable.prepare('UPDATE migration_batches SET completed_at = ?')

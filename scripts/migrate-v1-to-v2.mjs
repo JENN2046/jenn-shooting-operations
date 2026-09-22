@@ -17,8 +17,20 @@ import {
   verifyUploadManifest,
   verifyV2Target,
 } from '../src/migration-sqlite-v2.mjs';
+import {
+  applyIsolatedMigration,
+  preflightIsolatedApplyPaths,
+} from '../src/migration-apply-sqlite-v2.mjs';
 
-const FLAG_OPTIONS = new Set(['--dry-run', '--verify-only', '--apply', '--strict', '--hash-uploads']);
+const FLAG_OPTIONS = new Set([
+  '--dry-run',
+  '--verify-only',
+  '--apply',
+  '--strict',
+  '--hash-uploads',
+  '--acknowledge-isolated-target',
+  '--acknowledge-offline-maintenance',
+]);
 const VALUE_OPTIONS = new Set([
   '--source',
   '--target',
@@ -26,9 +38,21 @@ const VALUE_OPTIONS = new Set([
   '--business-time-zone',
   '--resource-map',
   '--upload-root',
+  '--fixture-root',
+  '--backup',
+  '--rollback-target',
+  '--proof-seal',
   '--format',
 ]);
 const UNSUPPORTED_OPTIONS = new Set(['--report-json', '--overwrite-report', '--force']);
+const APPLY_ONLY_OPTIONS = new Set([
+  '--fixture-root',
+  '--backup',
+  '--rollback-target',
+  '--proof-seal',
+  '--acknowledge-isolated-target',
+  '--acknowledge-offline-maintenance',
+]);
 
 function invalid(code = 'INVALID_USAGE') {
   throw new MigrationError(code, 'INVALID_USAGE');
@@ -55,11 +79,22 @@ export function parseMigrationArgs(args) {
 
   const modes = ['--dry-run', '--verify-only', '--apply'].filter(option => seen.has(option));
   if (modes.length !== 1) invalid('MIGRATION_MODE_REQUIRED');
-  if (modes[0] === '--apply') invalid('APPLY_NOT_AVAILABLE');
   const mode = modes[0].slice(2);
   if (!values.has('--source') || !values.has('--business-time-zone')) invalid('MISSING_REQUIRED_ARGUMENT');
   if (mode === 'verify-only' && !values.has('--target')) invalid('TARGET_REQUIRED');
   if (mode === 'dry-run' && values.has('--target')) invalid('TARGET_NOT_ALLOWED');
+  if (mode !== 'apply' && [...APPLY_ONLY_OPTIONS].some(option => seen.has(option))) {
+    invalid('APPLY_ARGUMENT_NOT_ALLOWED');
+  }
+  if (mode === 'apply') {
+    if (!values.has('--target')) invalid('TARGET_REQUIRED');
+    if (!values.has('--rollback-target')) invalid('ROLLBACK_TARGET_REQUIRED');
+    if (['--fixture-root', '--backup', '--proof-seal']
+      .some(option => !values.has(option))) invalid('MISSING_REQUIRED_ARGUMENT');
+    if (!seen.has('--hash-uploads')) invalid('HASH_UPLOADS_REQUIRED');
+    if (!seen.has('--acknowledge-isolated-target')) invalid('ISOLATED_TARGET_ACK_REQUIRED');
+    if (!seen.has('--acknowledge-offline-maintenance')) invalid('OFFLINE_MAINTENANCE_ACK_REQUIRED');
+  }
   const format = values.get('--format') ?? 'text';
   if (!['text', 'json'].includes(format)) invalid('INVALID_FORMAT');
   const sourceLabel = values.get('--source-label') ?? 'source';
@@ -72,9 +107,15 @@ export function parseMigrationArgs(args) {
     businessTimeZone: values.get('--business-time-zone'),
     resourceMap: values.get('--resource-map'),
     uploadRoot: values.get('--upload-root'),
+    fixtureRoot: values.get('--fixture-root'),
+    backup: values.get('--backup'),
+    rollbackTarget: values.get('--rollback-target'),
+    proofSeal: values.get('--proof-seal'),
     format,
     strict: seen.has('--strict'),
     hashUploads: seen.has('--hash-uploads'),
+    acknowledgeIsolatedTarget: seen.has('--acknowledge-isolated-target'),
+    acknowledgeOfflineMaintenance: seen.has('--acknowledge-offline-maintenance'),
   });
 }
 
@@ -107,6 +148,7 @@ export function executeMigration(args, { clock = () => new Date() } = {}) {
   const requestedMode = requestedModes.length === 1 ? requestedModes[0].slice(2) : 'unknown';
   try {
     options = parseMigrationArgs(args);
+    if (options.mode === 'apply') invalid('ASYNC_APPLY_REQUIRED');
     sourceInfo = resolveExistingPath(options.source, 'file');
     let targetInfo;
     if (options.target) {
@@ -168,10 +210,123 @@ export function executeMigration(args, { clock = () => new Date() } = {}) {
   }
 }
 
+export async function executeMigrationCommand(args, { clock = () => new Date() } = {}) {
+  let options;
+  let sourceInfo;
+  const requestedModes = Array.isArray(args)
+    ? ['--dry-run', '--verify-only', '--apply'].filter(mode => args.includes(mode))
+    : [];
+  const requestedMode = requestedModes.length === 1 ? requestedModes[0].slice(2) : 'unknown';
+  try {
+    options = parseMigrationArgs(args);
+    if (options.mode !== 'apply') return executeMigration(args, { clock });
+
+    const pathPreflight = preflightIsolatedApplyPaths({
+      fixtureRoot: options.fixtureRoot,
+      source: options.source,
+      target: options.target,
+      backup: options.backup,
+      rollbackTarget: options.rollbackTarget,
+      proofSeal: options.proofSeal,
+      uploadRoot: options.uploadRoot,
+      resourceMapPath: options.resourceMap,
+    });
+    sourceInfo = resolveExistingPath(pathPreflight.source.path, 'file');
+    let uploadRootInfo;
+    if (pathPreflight.uploadRoot) {
+      uploadRootInfo = resolveExistingPath(pathPreflight.uploadRoot.path, 'directory');
+    }
+    let resourceMapInfo;
+    let resourceMap = null;
+    if (pathPreflight.resourceMap) {
+      resourceMapInfo = resolveExistingPath(pathPreflight.resourceMap.path, 'file');
+      if (sameFile(sourceInfo, resourceMapInfo)) invalid('SOURCE_RESOURCE_MAP_CONFLICT');
+      resourceMap = parseResourceMap(
+        readResourceMapFile(resourceMapInfo),
+        options.businessTimeZone,
+      );
+    }
+
+    let startedAt;
+    let completedAt;
+    try {
+      startedAt = clock().toISOString();
+      completedAt = clock().toISOString();
+    } catch {
+      invalid('INVALID_MIGRATION_TIME');
+    }
+    if (Date.parse(completedAt) < Date.parse(startedAt)) invalid('INVALID_MIGRATION_TIME');
+
+    const source = readV1Source(sourceInfo);
+    const plan = buildMigrationPlan({
+      source,
+      businessTimeZone: options.businessTimeZone,
+      resourceMap,
+      importedAt: startedAt,
+    });
+    const attachmentManifest = verifyUploadManifest(uploadRootInfo, plan, {
+      hashUploads: true,
+    });
+    const application = await applyIsolatedMigration({
+      fixtureRoot: options.fixtureRoot,
+      source: sourceInfo.realPath,
+      target: pathPreflight.target.path,
+      backup: pathPreflight.backup.path,
+      rollbackTarget: pathPreflight.rollbackTarget.path,
+      proofSeal: pathPreflight.proofSeal.path,
+      plan,
+      uploadRoot: uploadRootInfo?.realPath,
+      resourceMapPath: resourceMapInfo?.realPath,
+      startedAt,
+      completedAt,
+      clock,
+    });
+    const baseReport = reportForPlan(plan, {
+      mode: options.mode,
+      sourceLabel: options.sourceLabel,
+      sourcePathDigest: sourceInfo.pathDigest,
+      attachmentManifest,
+      uploadHashing: true,
+    });
+    const report = {
+      ...baseReport,
+      result: application.status,
+      switchReadiness: 'BLOCKED',
+      targetVerification: { status: application.status },
+      application: {
+        status: application.status,
+        batchIdentity: application.batchIdentity,
+        targetArtifactDigest: application.targetArtifactDigest,
+        backupProofIdentity: application.backupProofIdentity,
+        rollbackProofIdentity: application.rollbackProofIdentity,
+        sourceAndUploadIdentityDigest: application.sourceAndUploadIdentityDigest,
+      },
+    };
+    return {
+      report,
+      output: renderMigrationReport(report, options.format),
+      exitCode: ['APPLIED_VERIFIED', 'ALREADY_APPLIED_VERIFIED'].includes(application.status) ? 0 : 5,
+    };
+  } catch (error) {
+    const mode = options?.mode ?? requestedMode;
+    const format = options?.format ?? 'text';
+    const failure = failureReport(error, {
+      mode,
+      sourceLabel: options?.sourceLabel ?? 'source',
+      sourcePathDigest: sourceInfo?.pathDigest,
+    });
+    return {
+      report: failure.report,
+      output: renderMigrationReport(failure.report, format),
+      exitCode: failure.exitCode,
+    };
+  }
+}
+
 const invokedDirectly = process.argv[1]
   && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (invokedDirectly) {
-  const result = executeMigration(process.argv.slice(2));
+  const result = await executeMigrationCommand(process.argv.slice(2));
   const write = result.exitCode === 0 ? console.log : console.error;
   write(result.output);
   process.exitCode = result.exitCode;

@@ -20,6 +20,7 @@ const RESULT_EXIT_CODES = Object.freeze({
   INVALID_USAGE: 3,
   INVALID_SOURCE: 4,
   INVALID_TARGET: 5,
+  COMMITTED_BUT_UNVERIFIED: 5,
   INTERNAL_ERROR: 10,
 });
 
@@ -553,7 +554,7 @@ export function reportForPlan(plan, {
   uploadHashing = false,
 } = {}) {
   const records = plan.records;
-  const verified = verification?.status === 'ALREADY_APPLIED_VERIFIED';
+  const targetFactsVerified = verification?.status === 'ALREADY_APPLIED_VERIFIED';
   const attachment = attachmentManifest ?? {
     validationStatus: 'NOT_RUN',
     databaseReferencesValid: true,
@@ -567,7 +568,12 @@ export function reportForPlan(plan, {
     uploadSetStable: false,
     issues: [issue('ATTACHMENT_VALIDATION_NOT_RUN', 'WARNING')],
   };
-  const issues = [...plan.issues, ...(attachment.issues ?? [])];
+  const unsealedVerification = mode === 'verify-only' && targetFactsVerified;
+  const issues = [
+    ...plan.issues,
+    ...(attachment.issues ?? []),
+    ...(unsealedVerification ? [issue('PROOF_SEAL_NOT_VERIFIED', 'WARNING')] : []),
+  ];
   const blocked = issues.some(entry => entry.severity === 'BLOCKER');
   const warning = issues.some(entry => entry.severity === 'WARNING');
   const relevantOperations = plan.source.operations.filter(operation => operation.kind === 'request.submit').length;
@@ -577,8 +583,10 @@ export function reportForPlan(plan, {
   return {
     specVersion: MIGRATION_SPEC_VERSION,
     mode,
-    result: blocked ? 'BLOCKED_MAPPING' : (warning ? 'PASS_WITH_WARNINGS' : 'PASS'),
-    switchReadiness: blocked ? 'BLOCKED' : 'NOT_RUN',
+    result: unsealedVerification
+      ? 'INVALID_TARGET'
+      : (blocked ? 'BLOCKED_MAPPING' : (warning ? 'PASS_WITH_WARNINGS' : 'PASS')),
+    switchReadiness: blocked || unsealedVerification ? 'BLOCKED' : 'NOT_RUN',
     source: {
       label: sourceLabel,
       pathDigest: sourcePathDigest,
@@ -650,7 +658,11 @@ export function reportForPlan(plan, {
     },
     attachments: Object.fromEntries(Object.entries(attachment).filter(([key]) => key !== 'issues')),
     targetVerification: mode === 'verify-only'
-      ? { status: verified ? 'ALREADY_APPLIED_VERIFIED' : (verification?.status ?? 'NOT_RUN') }
+      ? {
+          status: targetFactsVerified
+            ? 'TARGET_FACTS_VERIFIED_UNSEALED'
+            : (verification?.status ?? 'NOT_RUN'),
+        }
       : { status: 'NOT_RUN' },
     issues,
   };
@@ -663,16 +675,21 @@ export function failureReport(error, { mode = 'unknown', sourceLabel = 'source',
   const attachmentManifest = known && error.attachmentManifest
     ? error.attachmentManifest
     : { validationStatus: 'NOT_RUN', hashesChecked: 0 };
+  const committedButUnverified = result === 'COMMITTED_BUT_UNVERIFIED';
   return {
     report: {
       specVersion: MIGRATION_SPEC_VERSION,
       mode,
       result,
-      switchReadiness: 'NOT_RUN',
+      switchReadiness: committedButUnverified ? 'BLOCKED' : 'NOT_RUN',
       source: { label: sourceLabel, ...(sourcePathDigest ? { pathDigest: sourcePathDigest } : {}) },
       roundTrip: { validatorStatus: 'NOT_RUN', v2ValidatorStatus: 'NOT_RUN' },
       attachments: attachmentManifest,
-      targetVerification: { status: result === 'INVALID_TARGET' ? code : 'NOT_RUN' },
+      targetVerification: {
+        status: committedButUnverified
+          ? 'COMMITTED_BUT_UNVERIFIED'
+          : (result === 'INVALID_TARGET' ? code : 'NOT_RUN'),
+      },
       issues: [issue(code, 'BLOCKER')],
     },
     exitCode: known ? error.exitCode : RESULT_EXIT_CODES.INTERNAL_ERROR,
