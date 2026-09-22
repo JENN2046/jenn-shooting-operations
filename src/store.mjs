@@ -269,34 +269,46 @@ export class ScheduleStore {
     if (!matchesSignature(contentType, buffer)) {
       return { ok: false, status: 415, code: 'UPLOAD_SIGNATURE_MISMATCH' };
     }
-    const count = this.db.prepare('SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes FROM uploads WHERE operation_id = ?')
-      .get(operationId);
-    if (count.count >= 10 || count.bytes + buffer.length > 40 * 1024 * 1024) {
-      return { ok: false, status: 413, code: 'UPLOAD_BATCH_LIMIT' };
-    }
-    const now = isoNow(this.clock);
-    const id = `UP-${this.idFactory()}`;
-    const sha256 = createHash('sha256').update(buffer).digest('hex');
-    const suffix = allowed.get(contentType) || extname(originalName).toLowerCase();
-    const storedName = `${sha256}${suffix}`;
-    if (this.uploadRoot) {
-      try {
-        writeFileSync(join(this.uploadRoot, storedName), buffer, { flag: 'wx' });
-      } catch (error) {
-        if (error.code !== 'EEXIST') throw error;
+    return transaction(this.db, () => {
+      const count = this.db.prepare('SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes FROM uploads WHERE operation_id = ?')
+        .get(operationId);
+      if (count.count >= 10 || count.bytes + buffer.length > 40 * 1024 * 1024) {
+        return { ok: false, status: 413, code: 'UPLOAD_BATCH_LIMIT' };
       }
-    }
-    this.db.prepare(`
-      INSERT INTO uploads (id, operation_id, original_name, content_type, kind, size, sha256, stored_name, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, operationId, safeName(originalName), contentType, kind, buffer.length, sha256, this.uploadRoot ? storedName : null, now);
-    this.recordAudit('upload.create', role, id, this.getSnapshot().revision, 'success', now);
-    return { ok: true, status: 201, upload: { id, name: safeName(originalName), contentType, kind, size: buffer.length, sha256 } };
+      const now = isoNow(this.clock);
+      const id = `UP-${this.idFactory()}`;
+      const sha256 = createHash('sha256').update(buffer).digest('hex');
+      const suffix = allowed.get(contentType) || extname(originalName).toLowerCase();
+      const storedName = `${sha256}${suffix}`;
+      let createdPath = null;
+      try {
+        if (this.uploadRoot) {
+          const path = join(this.uploadRoot, storedName);
+          try {
+            writeFileSync(path, buffer, { flag: 'wx' });
+            createdPath = path;
+          } catch (error) {
+            if (error.code !== 'EEXIST') throw error;
+          }
+        }
+        this.db.prepare(`
+          INSERT INTO uploads (id, operation_id, original_name, content_type, kind, size, sha256, stored_name, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, operationId, safeName(originalName), contentType, kind, buffer.length, sha256, this.uploadRoot ? storedName : null, now);
+        this.recordAudit('upload.create', role, id, this.getSnapshot().revision, 'success', now);
+        return { ok: true, status: 201, upload: { id, name: safeName(originalName), contentType, kind, size: buffer.length, sha256 } };
+      } catch (error) {
+        if (createdPath) {
+          try { unlinkSync(createdPath); } catch {}
+        }
+        throw error;
+      }
+    });
   }
 
   cleanupOrphanUploads({ olderThanMs = this.orphanMaxAgeMs, operationId, dryRun = false } = {}) {
     const now = isoNow(this.clock);
-    const rows = operationId
+    const selectCandidates = () => operationId
       ? this.db.prepare(`
           SELECT id, stored_name FROM uploads
           WHERE operation_id = ? AND claimed_task_id IS NULL
@@ -306,43 +318,54 @@ export class ScheduleStore {
           WHERE claimed_task_id IS NULL AND created_at <= ?
         `).all(new Date(this.clock().getTime() - Math.max(0, olderThanMs)).toISOString());
     if (dryRun) {
+      const rows = selectCandidates();
       return { ok: true, dryRun: true, candidates: rows.length, deleted: 0, filesDeleted: 0, fileErrors: 0 };
     }
     if (this.readOnly) throw new Error('read-only store cannot delete orphan uploads');
-    if (!rows.length) return { ok: true, dryRun: false, candidates: 0, deleted: 0, filesDeleted: 0, fileErrors: 0 };
-
-    const deletedRows = [];
-    transaction(this.db, () => {
-      const remove = this.db.prepare('DELETE FROM uploads WHERE id = ? AND claimed_task_id IS NULL');
-      rows.forEach(row => {
-        if (remove.run(row.id).changes) deletedRows.push(row);
-      });
-      if (deletedRows.length) {
-        this.recordAudit('upload.cleanup', 'system', operationId || null, this.getSnapshot().revision, `deleted:${deletedRows.length}`, now);
-      }
-    });
-    if (!deletedRows.length) return { ok: true, dryRun: false, candidates: rows.length, deleted: 0, filesDeleted: 0, fileErrors: 0 };
-
+    let candidates = 0;
+    let deleted = 0;
     let filesDeleted = 0;
     let fileErrors = 0;
-    if (this.uploadRoot) {
-      const storedNames = [...new Set(deletedRows.map(row => row.stored_name).filter(Boolean))];
-      const stillReferenced = this.db.prepare('SELECT 1 FROM uploads WHERE stored_name = ? LIMIT 1');
-      for (const storedName of storedNames) {
-        if (stillReferenced.get(storedName)) continue;
-        try {
-          unlinkSync(join(this.uploadRoot, storedName));
-          filesDeleted += 1;
-        } catch (error) {
-          if (error.code !== 'ENOENT') fileErrors += 1;
+    transaction(this.db, () => {
+      const rows = selectCandidates();
+      candidates = rows.length;
+      if (!rows.length) return;
+
+      const candidateIds = new Set(rows.map(row => row.id));
+      const failedStoredNames = new Set();
+      if (this.uploadRoot) {
+        const storedNames = [...new Set(rows.map(row => row.stored_name).filter(Boolean))];
+        const references = this.db.prepare('SELECT id FROM uploads WHERE stored_name = ?');
+        for (const storedName of storedNames) {
+          const hasRemainingReference = references.all(storedName)
+            .some(row => !candidateIds.has(row.id));
+          if (hasRemainingReference) continue;
+          try {
+            unlinkSync(join(this.uploadRoot, storedName));
+            filesDeleted += 1;
+          } catch (error) {
+            if (error.code !== 'ENOENT') {
+              failedStoredNames.add(storedName);
+              fileErrors += 1;
+            }
+          }
         }
       }
-    }
+
+      const remove = this.db.prepare('DELETE FROM uploads WHERE id = ? AND claimed_task_id IS NULL');
+      rows.forEach(row => {
+        if (row.stored_name && failedStoredNames.has(row.stored_name)) return;
+        deleted += remove.run(row.id).changes;
+      });
+      if (deleted) {
+        this.recordAudit('upload.cleanup', 'system', operationId || null, this.getSnapshot().revision, `deleted:${deleted}`, now);
+      }
+    });
     return {
       ok: fileErrors === 0,
       dryRun: false,
-      candidates: rows.length,
-      deleted: deletedRows.length,
+      candidates,
+      deleted,
       filesDeleted,
       fileErrors,
     };

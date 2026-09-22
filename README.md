@@ -64,4 +64,6 @@ npm run uploads:cleanup -- --apply
 ```
 
 可用 `--max-age-hours <hours>` 调整保留期。命令读取 `DATABASE_PATH` 和
-`UPLOAD_ROOT`；默认输出只有统计数量，不输出上传文件名或内容。
+`UPLOAD_ROOT`；默认输出只有统计数量，不输出上传文件名或内容。执行模式与在线上传
+共同使用 SQLite `BEGIN IMMEDIATE` 写锁，文件去重、引用复核和删除在同一写临界区
+内完成，避免相同哈希文件被并发上传重新引用后又遭清理。
