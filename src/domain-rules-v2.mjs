@@ -33,6 +33,10 @@ const REVISION_EFFECTS = Object.freeze({
   replay: Object.freeze({ scheduleRevision: 0, runRevision: 0, projectionRevision: 0 }),
 });
 
+export const RUN_METRICS_ALGORITHM_VERSION = 'production-run-net-v1';
+
+const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/u;
+
 function invalidTransition(code, state, actionName, action) {
   return { ok: false, code, state, [actionName]: action };
 }
@@ -43,6 +47,134 @@ export function transitionProductionRun({ state, eventType } = {}) {
   const resultingState = RUN_TRANSITIONS.get(`${state}:${eventType}`);
   if (!resultingState) return invalidTransition('INVALID_RUN_TRANSITION', state, 'eventType', eventType);
   return { ok: true, previousState: state, resultingState };
+}
+
+function timestampMillis(value) {
+  if (typeof value !== 'string' || !value) return null;
+  const match = RFC3339.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (month < 1 || month > 12 || day < 1 || day > days[month - 1]) return null;
+  const millis = Date.parse(value);
+  return Number.isFinite(millis) ? millis : null;
+}
+
+function invalidRunFold(code, details = {}) {
+  return { ok: false, code, ...details };
+}
+
+function safeDuration(value) {
+  return Number.isSafeInteger(value) && value >= 0;
+}
+
+export function foldProductionRunEvent({
+  run,
+  eventType,
+  occurredAt,
+  lastOccurredAt = null,
+  metricsAlgorithmVersion = RUN_METRICS_ALGORITHM_VERSION,
+} = {}) {
+  if (!run || typeof run !== 'object' || Array.isArray(run)) {
+    return invalidRunFold('INVALID_RUN_FACT');
+  }
+  const transition = transitionProductionRun({ state: run.status, eventType });
+  if (!transition.ok) return transition;
+
+  const occurredMillis = timestampMillis(occurredAt);
+  if (occurredMillis === null) return invalidRunFold('INVALID_EVENT_TIME');
+  const canonicalOccurredAt = new Date(occurredMillis).toISOString();
+  if (lastOccurredAt !== null) {
+    const lastMillis = timestampMillis(lastOccurredAt);
+    if (lastMillis === null) return invalidRunFold('INVALID_RUN_FACT');
+    if (occurredMillis < lastMillis) return invalidRunFold('EVENT_TIME_OUT_OF_ORDER');
+  }
+
+  const blockedDurationMs = run.blocked_duration_ms ?? 0;
+  if (!safeDuration(blockedDurationMs)) return invalidRunFold('INVALID_RUN_METRICS');
+  const patch = {
+    status: transition.resultingState,
+    started_at: run.started_at ?? null,
+    completed_at: run.completed_at ?? null,
+    active_block_started_at: run.active_block_started_at ?? null,
+    gross_duration_ms: run.gross_duration_ms ?? null,
+    blocked_duration_ms: blockedDurationMs,
+    net_duration_ms: run.net_duration_ms ?? null,
+    metrics_algorithm_version: run.metrics_algorithm_version ?? null,
+  };
+  const hasFinalMetrics = patch.completed_at !== null
+    || patch.gross_duration_ms !== null
+    || patch.net_duration_ms !== null
+    || patch.metrics_algorithm_version !== null;
+  if (hasFinalMetrics) return invalidRunFold('INVALID_RUN_METRICS');
+  if (run.status === 'scheduled' && (
+    patch.started_at !== null || patch.active_block_started_at !== null || blockedDurationMs !== 0
+  )) return invalidRunFold('INVALID_RUN_METRICS');
+  if (run.status === 'shooting' && (
+    timestampMillis(patch.started_at) === null || patch.active_block_started_at !== null
+  )) return invalidRunFold('INVALID_RUN_METRICS');
+  if (run.status === 'blocked' && (
+    timestampMillis(patch.started_at) === null || timestampMillis(patch.active_block_started_at) === null
+  )) return invalidRunFold('INVALID_RUN_METRICS');
+
+  if (eventType === 'start') {
+    if (
+      patch.started_at !== null
+      || patch.active_block_started_at !== null
+    ) return invalidRunFold('INVALID_RUN_METRICS');
+    patch.started_at = canonicalOccurredAt;
+  } else if (eventType === 'block') {
+    const startedMillis = timestampMillis(patch.started_at);
+    if (startedMillis === null || patch.active_block_started_at !== null) {
+      return invalidRunFold('INVALID_RUN_METRICS');
+    }
+    if (occurredMillis < startedMillis) return invalidRunFold('EVENT_TIME_OUT_OF_ORDER');
+    patch.active_block_started_at = canonicalOccurredAt;
+  } else if (eventType === 'resume') {
+    const blockStartedMillis = timestampMillis(patch.active_block_started_at);
+    if (timestampMillis(patch.started_at) === null || blockStartedMillis === null) {
+      return invalidRunFold('INVALID_RUN_METRICS');
+    }
+    if (occurredMillis < blockStartedMillis) return invalidRunFold('EVENT_TIME_OUT_OF_ORDER');
+    const closedBlockMs = occurredMillis - blockStartedMillis;
+    const nextBlockedDurationMs = blockedDurationMs + closedBlockMs;
+    if (!safeDuration(closedBlockMs) || !safeDuration(nextBlockedDurationMs)) {
+      return invalidRunFold('RUN_METRICS_OVERFLOW');
+    }
+    patch.blocked_duration_ms = nextBlockedDurationMs;
+    patch.active_block_started_at = null;
+  } else if (eventType === 'complete') {
+    const startedMillis = timestampMillis(patch.started_at);
+    if (startedMillis === null || patch.active_block_started_at !== null) {
+      return invalidRunFold('UNCLOSED_BLOCK_INTERVAL');
+    }
+    if (occurredMillis < startedMillis) return invalidRunFold('EVENT_TIME_OUT_OF_ORDER');
+    const grossDurationMs = occurredMillis - startedMillis;
+    const netDurationMs = grossDurationMs - blockedDurationMs;
+    if (!safeDuration(grossDurationMs) || !safeDuration(netDurationMs)) {
+      return invalidRunFold('INVALID_RUN_METRICS');
+    }
+    patch.completed_at = canonicalOccurredAt;
+    patch.gross_duration_ms = grossDurationMs;
+    patch.net_duration_ms = netDurationMs;
+    patch.metrics_algorithm_version = metricsAlgorithmVersion;
+  } else if (eventType === 'cancel') {
+    patch.active_block_started_at = null;
+    patch.gross_duration_ms = null;
+    patch.net_duration_ms = null;
+    patch.metrics_algorithm_version = null;
+  }
+
+  return {
+    ok: true,
+    previousState: transition.previousState,
+    resultingState: transition.resultingState,
+    occurredAt: canonicalOccurredAt,
+    run: patch,
+  };
 }
 
 export function transitionScheduleItem({ state, commandType } = {}) {
