@@ -168,3 +168,58 @@ test('cleanup serializes with a live identical upload across processes', { timeo
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('startup restores a staged file after cleanup crashes before commit', { timeout: 10_000 }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-shooting-cleanup-crash-'));
+  const databasePath = join(root, 'operations.sqlite');
+  const uploadRoot = join(root, 'uploads');
+  let store = new ScheduleStore({
+    filename: databasePath,
+    uploadRoot,
+    clock: () => new Date('2026-09-20T08:00:00.000Z'),
+    idFactory: () => 'crash-recovery-upload',
+  });
+  let child;
+  try {
+    const upload = store.saveUpload({
+      operationId: 'crash-recovery-operation-0001',
+      originalName: 'recover.txt',
+      contentType: 'text/plain',
+      kind: 'attachment',
+      buffer: Buffer.from('recoverable attachment'),
+    });
+    const storedPath = join(uploadRoot, `${upload.upload.sha256}.txt`);
+    store.close();
+    store = null;
+
+    child = fork(
+      fileURLToPath(new URL('./fixtures/crashed-cleanup-process.mjs', import.meta.url)),
+      [databasePath, storedPath],
+      { stdio: ['ignore', 'ignore', 'inherit', 'ipc'] },
+    );
+    const exitPromise = once(child, 'exit');
+    const staged = await waitForMessage(child, 'staged');
+    assert.equal(existsSync(storedPath), false);
+    assert.equal(existsSync(staged.stagedPath), true);
+
+    child.kill('SIGKILL');
+    await exitPromise;
+    child = null;
+
+    const rolledBack = new DatabaseSync(databasePath, { readOnly: true });
+    const row = rolledBack.prepare('SELECT id FROM uploads WHERE id = ?').get(upload.upload.id);
+    rolledBack.close();
+    assert.equal(row.id, upload.upload.id);
+    assert.equal(existsSync(storedPath), false);
+
+    store = new ScheduleStore({ filename: databasePath, uploadRoot });
+    assert.equal(existsSync(storedPath), true);
+    assert.equal(existsSync(staged.stagedPath), false);
+    const recovered = store.db.prepare('SELECT id FROM uploads WHERE id = ?').get(upload.upload.id);
+    assert.equal(recovered.id, upload.upload.id);
+  } finally {
+    if (child) child.kill('SIGKILL');
+    try { store?.close(); } catch {}
+    rmSync(root, { recursive: true, force: true });
+  }
+});

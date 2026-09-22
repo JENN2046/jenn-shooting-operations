@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { extname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -34,6 +34,7 @@ const ATTACHMENT_TYPES = new Map([
 ]);
 const OPERATION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const DEFAULT_ORPHAN_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const STAGED_CLEANUP_FILE = /^(?<storedName>[a-f0-9]{64}\.[a-z0-9]+)\.cleanup-[0-9a-f-]{36}$/;
 
 function safeName(value) {
   const name = String(value || '').replace(/[\u0000-\u001f<>:"/\\|?*]/g, '_').trim();
@@ -116,10 +117,47 @@ export class ScheduleStore {
       this.db.prepare('INSERT INTO schedule_state (id, revision, updated_at, snapshot_json) VALUES (1, 0, ?, ?)')
         .run(now, JSON.stringify(snapshot));
     }
+    this.recoverStagedUploadCleanup();
   }
 
   close() {
     this.db.close();
+  }
+
+  recoverStagedUploadCleanup() {
+    if (this.readOnly || !this.uploadRoot) return { ok: true, restored: 0, removed: 0, errors: 0 };
+    return transaction(this.db, () => this.recoverStagedUploadCleanupLocked());
+  }
+
+  recoverStagedUploadCleanupLocked() {
+    if (!this.uploadRoot) return { ok: true, restored: 0, removed: 0, errors: 0 };
+    let restored = 0;
+    let removed = 0;
+    let errors = 0;
+    const referenced = this.db.prepare('SELECT 1 FROM uploads WHERE stored_name = ? LIMIT 1');
+    const entries = readdirSync(this.uploadRoot, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const match = STAGED_CLEANUP_FILE.exec(entry.name);
+      if (!match) continue;
+      const stagedPath = join(this.uploadRoot, entry.name);
+      const originalPath = join(this.uploadRoot, match.groups.storedName);
+      try {
+        if (!referenced.get(match.groups.storedName)) {
+          unlinkSync(stagedPath);
+          removed += 1;
+        } else if (existsSync(originalPath)) {
+          unlinkSync(stagedPath);
+          removed += 1;
+        } else {
+          renameSync(stagedPath, originalPath);
+          restored += 1;
+        }
+      } catch {
+        errors += 1;
+      }
+    }
+    return { ok: errors === 0, restored, removed, errors };
   }
 
   getSnapshot() {
@@ -179,6 +217,7 @@ export class ScheduleStore {
 
     try {
       const result = transaction(this.db, () => {
+        this.recoverStagedUploadCleanupLocked();
         const current = this.getSnapshot();
         const now = isoNow(this.clock);
         const taskId = `REQ-${this.idFactory()}`;
@@ -326,41 +365,63 @@ export class ScheduleStore {
     let deleted = 0;
     let filesDeleted = 0;
     let fileErrors = 0;
-    transaction(this.db, () => {
+    const stagedFiles = [];
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.recoverStagedUploadCleanupLocked();
       const rows = selectCandidates();
       candidates = rows.length;
-      if (!rows.length) return;
-
-      const candidateIds = new Set(rows.map(row => row.id));
-      const failedStoredNames = new Set();
-      if (this.uploadRoot) {
-        const storedNames = [...new Set(rows.map(row => row.stored_name).filter(Boolean))];
-        const references = this.db.prepare('SELECT id FROM uploads WHERE stored_name = ?');
-        for (const storedName of storedNames) {
-          const hasRemainingReference = references.all(storedName)
-            .some(row => !candidateIds.has(row.id));
-          if (hasRemainingReference) continue;
-          try {
-            unlinkSync(join(this.uploadRoot, storedName));
-            filesDeleted += 1;
-          } catch (error) {
-            if (error.code !== 'ENOENT') {
-              failedStoredNames.add(storedName);
-              fileErrors += 1;
+      if (rows.length) {
+        const candidateIds = new Set(rows.map(row => row.id));
+        const failedStoredNames = new Set();
+        if (this.uploadRoot) {
+          const storedNames = [...new Set(rows.map(row => row.stored_name).filter(Boolean))];
+          const references = this.db.prepare('SELECT id FROM uploads WHERE stored_name = ?');
+          for (const storedName of storedNames) {
+            const hasRemainingReference = references.all(storedName)
+              .some(row => !candidateIds.has(row.id));
+            if (hasRemainingReference) continue;
+            const originalPath = join(this.uploadRoot, storedName);
+            const stagedPath = join(this.uploadRoot, `${storedName}.cleanup-${randomUUID()}`);
+            try {
+              renameSync(originalPath, stagedPath);
+              stagedFiles.push({ originalPath, stagedPath });
+            } catch (error) {
+              if (error.code !== 'ENOENT') {
+                failedStoredNames.add(storedName);
+                fileErrors += 1;
+              }
             }
           }
         }
-      }
 
-      const remove = this.db.prepare('DELETE FROM uploads WHERE id = ? AND claimed_task_id IS NULL');
-      rows.forEach(row => {
-        if (row.stored_name && failedStoredNames.has(row.stored_name)) return;
-        deleted += remove.run(row.id).changes;
-      });
-      if (deleted) {
-        this.recordAudit('upload.cleanup', 'system', operationId || null, this.getSnapshot().revision, `deleted:${deleted}`, now);
+        const remove = this.db.prepare('DELETE FROM uploads WHERE id = ? AND claimed_task_id IS NULL');
+        rows.forEach(row => {
+          if (row.stored_name && failedStoredNames.has(row.stored_name)) return;
+          deleted += remove.run(row.id).changes;
+        });
+        if (deleted) {
+          this.recordAudit('upload.cleanup', 'system', operationId || null, this.getSnapshot().revision, `deleted:${deleted}`, now);
+        }
       }
-    });
+      this.db.exec('COMMIT');
+    } catch (error) {
+      for (const { originalPath, stagedPath } of stagedFiles.toReversed()) {
+        try {
+          if (existsSync(stagedPath) && !existsSync(originalPath)) renameSync(stagedPath, originalPath);
+        } catch {}
+      }
+      try { this.db.exec('ROLLBACK'); } catch {}
+      throw error;
+    }
+    for (const { stagedPath } of stagedFiles) {
+      try {
+        unlinkSync(stagedPath);
+        filesDeleted += 1;
+      } catch (error) {
+        if (error.code !== 'ENOENT') fileErrors += 1;
+      }
+    }
     return {
       ok: fileErrors === 0,
       dryRun: false,
