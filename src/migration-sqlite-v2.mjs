@@ -732,6 +732,17 @@ export function verifyV2Target(pathInfo, plan) {
         v1_assets_present: Boolean(row.v1_assets_present),
         v1_request_present: Boolean(row.v1_request_present),
       })),
+      legacy_compat_fragments: targetFacts.legacy_compat_fragments.map(row => ({
+        entity_type: row.entity_type,
+        entity_id: row.entity_id,
+        json_pointer: row.json_pointer,
+        value_json: row.value_json,
+        value_digest: row.value_digest,
+        violation_code: row.violation_code,
+        classification: row.classification,
+        mapping_version: row.mapping_version,
+        source_ordinal: row.source_ordinal,
+      })),
       revision_counters: counters[0],
     };
     let reconstructedV1;
