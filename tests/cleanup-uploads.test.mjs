@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -194,7 +194,7 @@ test('startup restores a staged file after cleanup crashes before commit', { tim
 
     child = fork(
       fileURLToPath(new URL('./fixtures/crashed-cleanup-process.mjs', import.meta.url)),
-      [databasePath, storedPath],
+      [databasePath, storedPath, join(uploadRoot, '.cleanup')],
       { stdio: ['ignore', 'ignore', 'inherit', 'ipc'] },
     );
     const exitPromise = once(child, 'exit');
@@ -220,6 +220,61 @@ test('startup restores a staged file after cleanup crashes before commit', { tim
   } finally {
     if (child) child.kill('SIGKILL');
     try { store?.close(); } catch {}
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('submission fails closed until a referenced tombstone can be restored', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-shooting-recovery-failure-'));
+  const databasePath = join(root, 'operations.sqlite');
+  const uploadRoot = join(root, 'uploads');
+  const cleanupRoot = join(uploadRoot, '.cleanup');
+  let store = new ScheduleStore({
+    filename: databasePath,
+    uploadRoot,
+    idFactory: () => 'recovery-failure-upload',
+  });
+  try {
+    const upload = store.saveUpload({
+      operationId: 'recovery-failure-operation-0001',
+      originalName: 'blocked.txt',
+      contentType: 'text/plain',
+      kind: 'attachment',
+      buffer: Buffer.from('must be restored before claim'),
+    });
+    const storedPath = join(uploadRoot, `${upload.upload.sha256}.txt`);
+    const stagedPath = join(cleanupRoot, `${upload.upload.sha256}.txt.cleanup-00000000-0000-4000-8000-000000000000`);
+    renameSync(storedPath, stagedPath);
+    chmodSync(uploadRoot, 0o500);
+
+    const submission = {
+      schemaVersion: 1,
+      operationId: 'recovery-failure-operation-0001',
+      productionType: '平面',
+      shootingSubtype: '待定',
+      aspectRatio: '待定',
+      sku: 'SKU-RECOVERY',
+      name: '恢复失败测试',
+      kind: '待定',
+      deliver: '待定',
+      requestedBy: '测试提报人',
+      uploadIds: [upload.upload.id],
+    };
+    const blocked = store.submitRequest({ submission, role: 'public-submitter' });
+    assert.equal(blocked.status, 503);
+    assert.equal(blocked.code, 'UPLOAD_RECOVERY_FAILED');
+    assert.equal(store.getSnapshot().tasks.length, 0);
+    assert.equal(existsSync(stagedPath), true);
+
+    chmodSync(uploadRoot, 0o700);
+    const recovered = store.submitRequest({ submission, role: 'public-submitter' });
+    assert.equal(recovered.status, 201);
+    assert.equal(existsSync(storedPath), true);
+    assert.equal(existsSync(stagedPath), false);
+  } finally {
+    try { chmodSync(uploadRoot, 0o700); } catch {}
+    try { chmodSync(cleanupRoot, 0o700); } catch {}
+    try { store.close(); } catch {}
     rmSync(root, { recursive: true, force: true });
   }
 });

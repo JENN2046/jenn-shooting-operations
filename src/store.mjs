@@ -65,7 +65,9 @@ export class ScheduleStore {
   }) {
     if (!readOnly && filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
     this.uploadRoot = uploadRoot || (filename === ':memory:' ? null : join(dirname(filename), 'uploads'));
+    this.cleanupRoot = this.uploadRoot ? join(this.uploadRoot, '.cleanup') : null;
     if (!readOnly && this.uploadRoot) mkdirSync(this.uploadRoot, { recursive: true });
+    if (!readOnly && this.cleanupRoot) mkdirSync(this.cleanupRoot, { recursive: true });
     this.clock = clock;
     this.idFactory = idFactory;
     this.orphanMaxAgeMs = orphanMaxAgeMs;
@@ -125,25 +127,31 @@ export class ScheduleStore {
   }
 
   recoverStagedUploadCleanup() {
-    if (this.readOnly || !this.uploadRoot) return { ok: true, restored: 0, removed: 0, errors: 0 };
+    if (this.readOnly || !this.uploadRoot || !this.cleanupRoot) {
+      return { ok: true, restored: 0, removed: 0, restoreErrors: 0, cleanupErrors: 0, errors: 0 };
+    }
     return transaction(this.db, () => this.recoverStagedUploadCleanupLocked());
   }
 
   recoverStagedUploadCleanupLocked() {
-    if (!this.uploadRoot) return { ok: true, restored: 0, removed: 0, errors: 0 };
+    if (!this.uploadRoot || !this.cleanupRoot || !existsSync(this.cleanupRoot)) {
+      return { ok: true, restored: 0, removed: 0, restoreErrors: 0, cleanupErrors: 0, errors: 0 };
+    }
     let restored = 0;
     let removed = 0;
-    let errors = 0;
+    let restoreErrors = 0;
+    let cleanupErrors = 0;
     const referenced = this.db.prepare('SELECT 1 FROM uploads WHERE stored_name = ? LIMIT 1');
-    const entries = readdirSync(this.uploadRoot, { withFileTypes: true });
+    const entries = readdirSync(this.cleanupRoot, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isFile()) continue;
       const match = STAGED_CLEANUP_FILE.exec(entry.name);
       if (!match) continue;
-      const stagedPath = join(this.uploadRoot, entry.name);
+      const stagedPath = join(this.cleanupRoot, entry.name);
       const originalPath = join(this.uploadRoot, match.groups.storedName);
+      const hasReference = Boolean(referenced.get(match.groups.storedName));
       try {
-        if (!referenced.get(match.groups.storedName)) {
+        if (!hasReference) {
           unlinkSync(stagedPath);
           removed += 1;
         } else if (existsSync(originalPath)) {
@@ -154,10 +162,18 @@ export class ScheduleStore {
           restored += 1;
         }
       } catch {
-        errors += 1;
+        if (hasReference && !existsSync(originalPath)) restoreErrors += 1;
+        else cleanupErrors += 1;
       }
     }
-    return { ok: errors === 0, restored, removed, errors };
+    return {
+      ok: restoreErrors === 0,
+      restored,
+      removed,
+      restoreErrors,
+      cleanupErrors,
+      errors: restoreErrors + cleanupErrors,
+    };
   }
 
   getSnapshot() {
@@ -217,7 +233,10 @@ export class ScheduleStore {
 
     try {
       const result = transaction(this.db, () => {
-        this.recoverStagedUploadCleanupLocked();
+        const recovery = this.recoverStagedUploadCleanupLocked();
+        if (!recovery.ok) {
+          return { ok: false, status: 503, code: 'UPLOAD_RECOVERY_FAILED' };
+        }
         const current = this.getSnapshot();
         const now = isoNow(this.clock);
         const taskId = `REQ-${this.idFactory()}`;
@@ -283,6 +302,7 @@ export class ScheduleStore {
         this.recordAudit('request.submit', role, taskId, next.revision, 'success', now);
         return response;
       });
+      if (!result.ok) return result;
       this.cleanupOrphanUploads({ operationId: submission.operationId });
       return result;
     } catch (error) {
@@ -298,7 +318,7 @@ export class ScheduleStore {
     if (typeof operationId !== 'string' || !OPERATION_ID.test(operationId)) {
       return { ok: false, status: 422, code: 'INVALID_OPERATION_ID' };
     }
-    this.cleanupOrphanUploads();
+    this.cleanupOrphanUploads({ recoverStaged: false });
     const allowed = kind === 'image' ? IMAGE_TYPES : kind === 'attachment' ? ATTACHMENT_TYPES : null;
     if (!allowed?.has(contentType)) return { ok: false, status: 415, code: 'UNSUPPORTED_UPLOAD_TYPE' };
     const maxBytes = kind === 'image' ? 12 * 1024 * 1024 : 20 * 1024 * 1024;
@@ -345,7 +365,7 @@ export class ScheduleStore {
     });
   }
 
-  cleanupOrphanUploads({ olderThanMs = this.orphanMaxAgeMs, operationId, dryRun = false } = {}) {
+  cleanupOrphanUploads({ olderThanMs = this.orphanMaxAgeMs, operationId, dryRun = false, recoverStaged = true } = {}) {
     const now = isoNow(this.clock);
     const selectCandidates = () => operationId
       ? this.db.prepare(`
@@ -368,7 +388,7 @@ export class ScheduleStore {
     const stagedFiles = [];
     this.db.exec('BEGIN IMMEDIATE');
     try {
-      this.recoverStagedUploadCleanupLocked();
+      if (recoverStaged) this.recoverStagedUploadCleanupLocked();
       const rows = selectCandidates();
       candidates = rows.length;
       if (rows.length) {
@@ -382,7 +402,7 @@ export class ScheduleStore {
               .some(row => !candidateIds.has(row.id));
             if (hasRemainingReference) continue;
             const originalPath = join(this.uploadRoot, storedName);
-            const stagedPath = join(this.uploadRoot, `${storedName}.cleanup-${randomUUID()}`);
+            const stagedPath = join(this.cleanupRoot, `${storedName}.cleanup-${randomUUID()}`);
             try {
               renameSync(originalPath, stagedPath);
               stagedFiles.push({ originalPath, stagedPath });
