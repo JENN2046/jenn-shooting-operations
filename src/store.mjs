@@ -54,15 +54,26 @@ function matchesSignature(contentType, buffer) {
 }
 
 export class ScheduleStore {
-  constructor({ filename, uploadRoot, clock = () => new Date(), idFactory = randomUUID, orphanMaxAgeMs = DEFAULT_ORPHAN_MAX_AGE_MS }) {
-    if (filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
+  constructor({
+    filename,
+    uploadRoot,
+    clock = () => new Date(),
+    idFactory = randomUUID,
+    orphanMaxAgeMs = DEFAULT_ORPHAN_MAX_AGE_MS,
+    readOnly = false,
+  }) {
+    if (!readOnly && filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
     this.uploadRoot = uploadRoot || (filename === ':memory:' ? null : join(dirname(filename), 'uploads'));
-    if (this.uploadRoot) mkdirSync(this.uploadRoot, { recursive: true });
+    if (!readOnly && this.uploadRoot) mkdirSync(this.uploadRoot, { recursive: true });
     this.clock = clock;
     this.idFactory = idFactory;
     this.orphanMaxAgeMs = orphanMaxAgeMs;
-    this.db = new DatabaseSync(filename);
-    this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
+    this.readOnly = readOnly;
+    this.db = new DatabaseSync(filename, { readOnly });
+    this.db.exec(readOnly
+      ? 'PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;'
+      : 'PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
+    if (readOnly) return;
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS schedule_state (
         id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -283,7 +294,7 @@ export class ScheduleStore {
     return { ok: true, status: 201, upload: { id, name: safeName(originalName), contentType, kind, size: buffer.length, sha256 } };
   }
 
-  cleanupOrphanUploads({ olderThanMs = this.orphanMaxAgeMs, operationId } = {}) {
+  cleanupOrphanUploads({ olderThanMs = this.orphanMaxAgeMs, operationId, dryRun = false } = {}) {
     const now = isoNow(this.clock);
     const rows = operationId
       ? this.db.prepare(`
@@ -294,7 +305,11 @@ export class ScheduleStore {
           SELECT id, stored_name FROM uploads
           WHERE claimed_task_id IS NULL AND created_at <= ?
         `).all(new Date(this.clock().getTime() - Math.max(0, olderThanMs)).toISOString());
-    if (!rows.length) return { ok: true, deleted: 0, filesDeleted: 0, fileErrors: 0 };
+    if (dryRun) {
+      return { ok: true, dryRun: true, candidates: rows.length, deleted: 0, filesDeleted: 0, fileErrors: 0 };
+    }
+    if (this.readOnly) throw new Error('read-only store cannot delete orphan uploads');
+    if (!rows.length) return { ok: true, dryRun: false, candidates: 0, deleted: 0, filesDeleted: 0, fileErrors: 0 };
 
     const deletedRows = [];
     transaction(this.db, () => {
@@ -306,7 +321,7 @@ export class ScheduleStore {
         this.recordAudit('upload.cleanup', 'system', operationId || null, this.getSnapshot().revision, `deleted:${deletedRows.length}`, now);
       }
     });
-    if (!deletedRows.length) return { ok: true, deleted: 0, filesDeleted: 0, fileErrors: 0 };
+    if (!deletedRows.length) return { ok: true, dryRun: false, candidates: rows.length, deleted: 0, filesDeleted: 0, fileErrors: 0 };
 
     let filesDeleted = 0;
     let fileErrors = 0;
@@ -323,7 +338,14 @@ export class ScheduleStore {
         }
       }
     }
-    return { ok: fileErrors === 0, deleted: deletedRows.length, filesDeleted, fileErrors };
+    return {
+      ok: fileErrors === 0,
+      dryRun: false,
+      candidates: rows.length,
+      deleted: deletedRows.length,
+      filesDeleted,
+      fileErrors,
+    };
   }
 
   recordOperation(operationId, kind, response, now) {
