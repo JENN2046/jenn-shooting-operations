@@ -1,0 +1,17 @@
+{
+  "name": "jenn-shooting-operations",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "npm run validate:contract && npm test",
+    "backup": "node scripts/backup.mjs",
+    "validate:contract": "node scripts/validate-contracts.mjs",
+    "validate:planner": "node scripts/validate-current-planner.mjs"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

@@ -1,0 +1,25 @@
+services:
+  shooting-operations:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3800:3800"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3800
+      DATABASE_PATH: /app/data/shooting-operations.sqlite
+      UPLOAD_ROOT: /app/data/uploads
+      VIEWER_TOKEN: ${VIEWER_TOKEN:?VIEWER_TOKEN is required}
+      SUBMITTER_TOKEN: ${SUBMITTER_TOKEN:?SUBMITTER_TOKEN is required}
+      SCHEDULER_TOKEN: ${SCHEDULER_TOKEN:?SCHEDULER_TOKEN is required}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?ADMIN_TOKEN is required}
+    volumes:
+      - shooting_data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  shooting_data:

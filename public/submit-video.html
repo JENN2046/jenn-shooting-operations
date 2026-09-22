@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>提交视频拍摄需求</title><link rel="stylesheet" href="/app.css?v=ui-20260922"></head>
+<body><a class="skip-link" href="#main">跳至内容</a>
+<header class="topbar"><a class="brand" href="/board"><strong>Jenn 拍摄排班</strong><span>拍摄工作台</span></a><nav aria-label="主导航"><a href="/board">排班</a><a class="nav-submit" href="/submit" aria-current="page">＋ 提需求</a></nav></header>
+<main id="main" class="shell narrow">
+  <a class="back-link" href="/submit">← 返回需求类型</a>
+  <div class="form-heading video"><span class="form-kicker">视频拍摄</span><h1>提交视频拍摄需求</h1><p>填写视频类型、画幅与拍摄要求。 <span class="required">*</span> 为必填项。</p></div>
+  <nav class="form-outline" aria-label="表单章节"><a href="#product"><span>01</span> 产品</a><a href="#requirements"><span>02</span> 拍摄要求</a><a href="#contact"><span>03</span> 提报信息</a><a href="#references"><span>04</span> 参考素材</a></nav>
+  <form id="request-form" class="request-form video-form" data-production-type="视频">
+    <section id="product" class="form-section" aria-labelledby="product-title"><div class="form-section-heading"><span>01</span><h2 id="product-title">产品信息</h2></div>
+      <div class="pair"><label>SKU <span class="required" aria-hidden="true">*</span><input name="sku" required maxlength="120" placeholder="填写产品 SKU" autocomplete="off"></label><label>产品名称 <span class="required" aria-hidden="true">*</span><input name="name" required maxlength="240" placeholder="填写产品名称" autocomplete="off"></label></div>
+    </section>
+    <section id="requirements" class="form-section" aria-labelledby="requirements-title"><div class="form-section-heading"><span>02</span><h2 id="requirements-title">拍摄要求</h2></div>
+      <label>视频类型 <span class="required" aria-hidden="true">*</span><select name="shootingSubtype" required><option value="产品展示">产品展示</option><option value="人物展示">人物展示</option><option value="产品加人物展示">产品加人物展示</option></select></label>
+      <label>画幅<select name="aspectRatio"><option value="待定">待定</option><option value="9:16">9:16 竖屏</option><option value="16:9">16:9 横屏</option><option value="1:1">1:1 方形</option></select></label>
+      <label>脚本 / 分镜 / 拍摄要求 <span class="required" aria-hidden="true">*</span><textarea name="deliver" required maxlength="500" rows="4" placeholder="请写明核心卖点、镜头结构、人物表现或参考脚本"></textarea><span class="field-hint"><span>具体要求有助于安排拍摄</span><span data-count-for="deliver">0 / 500</span></span></label>
+    </section>
+    <section id="contact" class="form-section" aria-labelledby="contact-title"><div class="form-section-heading"><span>03</span><h2 id="contact-title">提报信息</h2></div>
+      <div class="pair"><label>提报人 <span class="required" aria-hidden="true">*</span><input name="requestedBy" required maxlength="160" autocomplete="name" placeholder="填写姓名"></label><label>期望日期 <span class="optional">选填</span><input name="desiredDate" type="date"><span class="field-hint">最终时间以排班为准</span></label></div>
+      <label>补充说明 <span class="optional">选填</span><textarea name="note" maxlength="2000" rows="3" placeholder="其他需要提前说明的事项"></textarea><span class="field-hint count-only"><span data-count-for="note">0 / 2000</span></span></label>
+    </section>
+    <section id="references" class="form-section" aria-labelledby="references-title"><div class="form-section-heading"><span>04</span><h2 id="references-title">参考素材</h2><span class="optional">选填</span></div>
+      <div class="upload-field"><span class="upload-field-label">产品 / 画面参考</span>
+        <div class="image-upload-box">
+          <label class="image-upload-trigger"><input name="images" type="file" aria-label="选择图片" accept="image/jpeg,image/png,image/webp,image/gif,image/heic" multiple aria-describedby="image-hint upload-hint"><span class="upload-trigger-content"><b aria-hidden="true">＋</b><span class="upload-trigger-text">选择图片</span><small>点击选择，可一次添加多张</small></span></label>
+          <div id="image-preview-list" class="image-preview-grid" aria-live="polite"></div>
+        </div><p id="image-hint" class="upload-hint">JPG、PNG、WebP、GIF、HEIC · 单张不超过 12 MB</p>
+      </div>
+      <div class="attachment-field"><span class="upload-field-label">脚本 / 表格 / 压缩包</span><label class="attachment-trigger"><input name="attachments" type="file" aria-label="选择附件" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip" multiple aria-describedby="attachment-hint upload-hint"><span>＋ 选择附件</span><small>可多选</small></label><p id="attachment-hint" class="upload-hint">PDF、Word、Excel、CSV、TXT、ZIP · 单个不超过 20 MB</p></div>
+      <div id="file-list" class="file-list" aria-live="polite"></div>
+      <div class="upload-summary"><p id="upload-hint" class="upload-hint">图片与附件合计最多 10 个，总容量不超过 40 MB。</p><span id="file-total">0 / 10 · 0 MB</span></div>
+      <p id="file-message" role="status"></p>
+    </section>
+    <div class="submit-footer"><p>提交后进入待排任务</p><button type="submit">提交视频需求 <span aria-hidden="true">↗</span></button></div>
+    <p id="message" class="form-message" role="status" tabindex="-1"></p>
+  </form>
+</main><script type="module" src="/submit.js?v=ui-20260922b"></script></body></html>

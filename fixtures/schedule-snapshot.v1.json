@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "revision": 0,
+  "updatedAt": "2026-09-22T00:00:00.000Z",
+  "products": [
+    ["SKU-001", "示例产品"]
+  ],
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "sku": "SKU-001",
+      "name": "示例产品",
+      "client": "待确认",
+      "deliver": "主图模特",
+      "kind": "模特",
+      "status": "pending",
+      "source": "submission",
+      "createdAt": "2026-09-22T00:00:00.000Z",
+      "updatedAt": "2026-09-22T00:00:00.000Z"
+    }
+  ],
+  "sessions": []
+}
