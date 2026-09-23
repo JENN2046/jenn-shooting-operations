@@ -128,28 +128,6 @@ export function createSqliteKioskRunEventStore({
           `).run(runId, scheduleItemId, scope, taskId, createdAt, createdAt);
         },
 
-        insertRunContextSnapshot({ snapshot, snapshotJson, snapshotDigest }) {
-          return db.prepare(`
-            INSERT INTO scheduling_run_context_snapshots (
-              run_id, schema_version, context_status, snapshot_json, snapshot_digest, captured_at
-            ) VALUES (?, ?, ?, ?, ?, ?)
-          `).run(
-            snapshot.runId,
-            snapshot.schemaVersion,
-            snapshot.contextStatus,
-            snapshotJson,
-            snapshotDigest,
-            snapshot.capturedAt,
-          ).changes;
-        },
-
-        getRunContextSnapshot(runId) {
-          return db.prepare(`
-            SELECT run_id, schema_version, context_status, snapshot_json, snapshot_digest, captured_at
-            FROM scheduling_run_context_snapshots WHERE run_id = ?
-          `).get(runId) ?? null;
-        },
-
         insertReview({ command, digest, responseDigest, response, receivedAt, reviewDecision }) {
           db.prepare(`
             INSERT INTO run_event_reviews (
