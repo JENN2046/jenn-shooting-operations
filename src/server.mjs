@@ -40,7 +40,6 @@ export function createKioskV2Application({
   });
 }
 
-
 export function createSchedulingV2Application({
   store,
   authenticate,
@@ -89,6 +88,9 @@ export function createOperationsServer({
   kioskAuthenticate,
   kioskBusinessTimeZone,
   kioskAllowedBriefHosts = [],
+  schedulingAuthenticate,
+  schedulingBusinessTimeZone,
+  schedulingAllowedBriefHosts = [],
 }) {
   const effectiveClock = clock ?? (() => new Date());
   const store = new ScheduleStore({
