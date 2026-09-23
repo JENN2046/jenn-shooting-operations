@@ -273,17 +273,10 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
     reject(decisionInput, trustedActor) {
       if (typeof trustedActor !== 'string' || trustedActor.length === 0) return denied('TRUSTED_ACTOR_REQUIRED');
       return transaction(db, 'BEGIN IMMEDIATE', () => {
-        const operation = db.prepare(`SELECT kind, response_json, request_digest FROM operations
-          WHERE operation_id = ?`).get(decisionInput?.decisionId);
-        if (operation && operation.kind !== 'rejectSchedulingProposal') {
-          return denied('IDEMPOTENCY_KEY_REUSE');
-        }
-        if (operation && JSON.parse(operation.response_json).proposalId !== decisionInput?.proposalId) {
-          return denied('IDEMPOTENCY_KEY_REUSE');
-        }
-        const reused = db.prepare(`SELECT proposal_id FROM scheduling_proposal_decisions
+        const prior = db.prepare(`SELECT proposal_id, decision_command_digest, decision_type,
+          receipt_json, receipt_digest FROM scheduling_proposal_decisions
           WHERE decision_id = ?`).get(decisionInput?.decisionId);
-        if (reused && reused.proposal_id !== decisionInput?.proposalId) {
+        if (prior && prior.proposal_id !== decisionInput?.proposalId) {
           return denied('IDEMPOTENCY_KEY_REUSE');
         }
         const found = admitStoredProposal(readProposalRow(db, decisionInput?.proposalId));
@@ -291,26 +284,40 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
         const admitted = admitSchedulingProposalDecisionV1(decisionInput, found.proposal);
         if (!admitted.ok) return admitted;
         if (admitted.command.decisionType !== 'reject') return denied('PROPOSAL_ACCEPT_NOT_WIRED');
-        if (operation) return operation.request_digest === admitted.decisionCommandDigest
-          ? { ok: true, receipt: JSON.parse(operation.response_json), exactReplay: true }
-          : denied('IDEMPOTENCY_KEY_REUSE');
-        const prior = db.prepare(`SELECT decision_command_digest, receipt_json, receipt_digest
-          FROM scheduling_proposal_decisions WHERE decision_id = ?`).get(admitted.command.decisionId);
+
         if (prior) {
-          if (prior.decision_command_digest !== admitted.decisionCommandDigest) {
+          if (prior.decision_type !== 'reject'
+            || prior.decision_command_digest !== admitted.decisionCommandDigest) {
             return denied('IDEMPOTENCY_KEY_REUSE');
           }
           const receipt = {
             ...JSON.parse(prior.receipt_json), decisionReceiptDigest: prior.receipt_digest,
           };
-          db.prepare(`INSERT INTO operations
-            (operation_id, kind, response_json, created_at, request_digest)
-            VALUES (?, 'rejectSchedulingProposal', ?, ?, ?)`).run(
-            admitted.command.decisionId, canonicalJsonSchedulingV1(receipt),
-            receipt.decidedAt, admitted.decisionCommandDigest,
-          );
+          const operation = db.prepare(`SELECT kind, response_json, request_digest FROM operations
+            WHERE operation_id = ?`).get(admitted.command.decisionId);
+          if (!operation) {
+            db.prepare(`INSERT INTO operations
+              (operation_id, kind, response_json, created_at, request_digest)
+              VALUES (?, 'rejectSchedulingProposal', ?, ?, ?)`).run(
+              admitted.command.decisionId, canonicalJsonSchedulingV1(receipt),
+              receipt.decidedAt, admitted.decisionCommandDigest,
+            );
+          }
           return { ok: true, receipt, exactReplay: true };
         }
+
+        const operation = db.prepare(`SELECT kind, response_json, request_digest FROM operations
+          WHERE operation_id = ?`).get(admitted.command.decisionId);
+        if (operation && operation.kind !== 'rejectSchedulingProposal') {
+          return denied('IDEMPOTENCY_KEY_REUSE');
+        }
+        if (operation && JSON.parse(operation.response_json).proposalId !== admitted.command.proposalId) {
+          return denied('IDEMPOTENCY_KEY_REUSE');
+        }
+        if (operation) return operation.request_digest === admitted.decisionCommandDigest
+          ? { ok: true, receipt: JSON.parse(operation.response_json), exactReplay: true }
+          : denied('IDEMPOTENCY_KEY_REUSE');
+
         if (reservedSystemDecisionId(admitted.command.decisionId)) {
           return denied('DECISION_ID_RESERVED');
         }
