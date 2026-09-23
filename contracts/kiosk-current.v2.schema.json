@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jenn.local/contracts/kiosk-current-v2.schema.json",
+  "title": "Jenn Shooting Kiosk Current View v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "serverTime", "projectionRevision", "resourceId", "current", "next"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "serverTime": { "type": "string", "format": "date-time" },
+    "projectionRevision": { "$ref": "#/$defs/revision" },
+    "resourceId": { "$ref": "#/$defs/identifier" },
+    "current": {
+      "oneOf": [
+        { "$ref": "#/$defs/candidateItem" },
+        { "$ref": "#/$defs/activeItem" },
+        { "type": "null" }
+      ]
+    },
+    "next": {
+      "oneOf": [
+        { "$ref": "#/$defs/candidateItem" },
+        { "type": "null" }
+      ]
+    }
+  },
+  "$defs": {
+    "revision": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sku", "name", "summary"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "sku": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "\\S" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 240, "pattern": "\\S" },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 100, "pattern": "\\S" },
+        "heroAssetId": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "kioskItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scheduleItemId", "allocationMode", "plannedStart", "plannedEnd", "runId",
+        "runRevision", "runState", "tasks", "isGrouped", "groupedNotice"
+      ],
+      "properties": {
+        "scheduleItemId": { "$ref": "#/$defs/identifier" },
+        "allocationMode": { "enum": ["single", "grouped_unallocated"] },
+        "plannedStart": { "type": "string", "format": "date-time" },
+        "plannedEnd": { "type": "string", "format": "date-time" },
+        "runId": {
+          "oneOf": [
+            { "$ref": "#/$defs/identifier" },
+            { "type": "null" }
+          ]
+        },
+        "runRevision": { "$ref": "#/$defs/revision" },
+        "runState": { "enum": ["scheduled", "shooting", "blocked", "completed", "cancelled"] },
+        "tasks": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/task" }
+        },
+        "isGrouped": { "type": "boolean" },
+        "groupedNotice": {
+          "type": ["string", "null"],
+          "enum": ["组合场次，未拆分单任务工时", null]
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "allocationMode": { "const": "single" },
+            "tasks": { "type": "array", "maxItems": 1 },
+            "isGrouped": { "const": false },
+            "groupedNotice": { "type": "null" }
+          },
+          "required": ["allocationMode", "tasks", "isGrouped", "groupedNotice"]
+        },
+        {
+          "properties": {
+            "allocationMode": { "const": "grouped_unallocated" },
+            "tasks": { "type": "array", "minItems": 2 },
+            "isGrouped": { "const": true },
+            "groupedNotice": { "const": "组合场次，未拆分单任务工时" }
+          },
+          "required": ["allocationMode", "tasks", "isGrouped", "groupedNotice"]
+        }
+      ]
+    },
+    "candidateItem": {
+      "allOf": [
+        { "$ref": "#/$defs/kioskItem" },
+        {
+          "type": "object",
+          "properties": {
+            "runId": { "type": "null" },
+            "runRevision": { "const": 0 },
+            "runState": { "const": "scheduled" }
+          },
+          "required": ["runId", "runRevision", "runState"]
+        }
+      ]
+    },
+    "activeItem": {
+      "allOf": [
+        { "$ref": "#/$defs/kioskItem" },
+        {
+          "type": "object",
+          "properties": {
+            "runId": { "$ref": "#/$defs/identifier" },
+            "runRevision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+            "runState": { "enum": ["shooting", "blocked"] }
+          },
+          "required": ["runId", "runRevision", "runState"]
+        }
+      ]
+    }
+  }
+}

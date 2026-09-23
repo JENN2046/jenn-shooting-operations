@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jenn.local/contracts/kiosk-run-event-v2.schema.json",
+  "title": "Jenn Shooting Kiosk Run Event v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "eventId", "runId", "scheduleItemId", "eventType",
+    "expectedRunRevision", "occurredAt", "deviceId", "localSequence"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "eventId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$" },
+    "runId": { "$ref": "#/$defs/identifier" },
+    "scheduleItemId": { "$ref": "#/$defs/identifier" },
+    "eventType": { "enum": ["start", "block", "resume", "complete"] },
+    "expectedRunRevision": { "$ref": "#/$defs/revision" },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "deviceId": { "$ref": "#/$defs/identifier" },
+    "localSequence": { "$ref": "#/$defs/revision" },
+    "reasonCode": {
+      "enum": ["sampleWaiting", "specConfirming", "deviceIssue", "talentWaiting", "siteIssue", "other"]
+    },
+    "note": { "type": "string", "maxLength": 2000 }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "eventType": { "const": "block" } },
+        "required": ["eventType"]
+      },
+      "then": {
+        "required": ["reasonCode"],
+        "properties": {
+          "reasonCode": {
+            "enum": ["sampleWaiting", "specConfirming", "deviceIssue", "talentWaiting", "siteIssue", "other"]
+          }
+        }
+      },
+      "else": { "properties": { "reasonCode": false } }
+    },
+    {
+      "if": {
+        "properties": { "reasonCode": { "const": "other" } },
+        "required": ["reasonCode"]
+      },
+      "then": {
+        "required": ["note"],
+        "properties": {
+          "note": { "type": "string", "minLength": 1, "maxLength": 2000, "pattern": "\\S" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "revision": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    }
+  }
+}

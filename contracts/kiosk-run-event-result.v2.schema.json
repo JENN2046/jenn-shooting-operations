@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jenn.local/contracts/kiosk-run-event-result-v2.schema.json",
+  "title": "Jenn Shooting Kiosk Run Event Result v2",
+  "oneOf": [
+    { "$ref": "#/$defs/applied" },
+    { "$ref": "#/$defs/replayed" },
+    { "$ref": "#/$defs/revisionConflict" },
+    { "$ref": "#/$defs/reviewRequired" },
+    { "$ref": "#/$defs/failure" }
+  ],
+  "$defs": {
+    "revision": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "eventId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$" },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^\\S(?:[\\s\\S]*\\S)?$"
+    },
+    "nullableTimestamp": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "nullableDuration": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "duration": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "nullableAlgorithmVersion": {
+      "anyOf": [
+        { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "\\S" },
+        { "type": "null" }
+      ]
+    },
+    "runState": { "enum": ["scheduled", "shooting", "blocked", "completed", "cancelled"] },
+    "applied": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "ok", "code", "replayed", "eventId", "runId",
+        "previousState", "resultingState", "runRevision", "projectionRevision",
+        "scheduleRevision", "startedAt", "completedAt", "grossDurationMs",
+        "blockedDurationMs", "netDurationMs", "metricsAlgorithmVersion"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 2 },
+        "ok": { "const": true },
+        "code": { "const": "RUN_EVENT_APPLIED" },
+        "replayed": { "const": false },
+        "eventId": { "$ref": "#/$defs/eventId" },
+        "runId": { "$ref": "#/$defs/identifier" },
+        "previousState": { "$ref": "#/$defs/runState" },
+        "resultingState": { "$ref": "#/$defs/runState" },
+        "runRevision": { "$ref": "#/$defs/revision" },
+        "projectionRevision": { "$ref": "#/$defs/revision" },
+        "scheduleRevision": { "$ref": "#/$defs/revision" },
+        "startedAt": { "$ref": "#/$defs/nullableTimestamp" },
+        "completedAt": { "$ref": "#/$defs/nullableTimestamp" },
+        "grossDurationMs": { "$ref": "#/$defs/nullableDuration" },
+        "blockedDurationMs": { "$ref": "#/$defs/duration" },
+        "netDurationMs": { "$ref": "#/$defs/nullableDuration" },
+        "metricsAlgorithmVersion": { "$ref": "#/$defs/nullableAlgorithmVersion" }
+      }
+    },
+    "replayed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "ok", "code", "replayed", "eventId", "runId",
+        "previousState", "resultingState", "runRevision", "projectionRevision",
+        "scheduleRevision", "startedAt", "completedAt", "grossDurationMs",
+        "blockedDurationMs", "netDurationMs", "metricsAlgorithmVersion"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 2 },
+        "ok": { "const": true },
+        "code": { "const": "RUN_EVENT_APPLIED" },
+        "replayed": { "const": true },
+        "eventId": { "$ref": "#/$defs/eventId" },
+        "runId": { "$ref": "#/$defs/identifier" },
+        "previousState": { "$ref": "#/$defs/runState" },
+        "resultingState": { "$ref": "#/$defs/runState" },
+        "runRevision": { "$ref": "#/$defs/revision" },
+        "projectionRevision": { "$ref": "#/$defs/revision" },
+        "scheduleRevision": { "$ref": "#/$defs/revision" },
+        "startedAt": { "$ref": "#/$defs/nullableTimestamp" },
+        "completedAt": { "$ref": "#/$defs/nullableTimestamp" },
+        "grossDurationMs": { "$ref": "#/$defs/nullableDuration" },
+        "blockedDurationMs": { "$ref": "#/$defs/duration" },
+        "netDurationMs": { "$ref": "#/$defs/nullableDuration" },
+        "metricsAlgorithmVersion": { "$ref": "#/$defs/nullableAlgorithmVersion" }
+      }
+    },
+    "revisionConflict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "ok", "code", "replayed", "eventId", "runId", "scope", "currentRunRevision"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 2 },
+        "ok": { "const": false },
+        "code": { "const": "REVISION_CONFLICT" },
+        "replayed": { "const": false },
+        "eventId": { "$ref": "#/$defs/eventId" },
+        "runId": { "$ref": "#/$defs/identifier" },
+        "scope": { "const": "run" },
+        "currentRunRevision": { "$ref": "#/$defs/revision" }
+      }
+    },
+    "reviewRequired": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "ok", "code", "replayed", "eventId", "runId",
+        "scheduleItemId", "reviewStatus", "reviewReason", "policyVersion", "receivedAt"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 2 },
+        "ok": { "const": false },
+        "code": { "const": "EVENT_TIME_REVIEW_REQUIRED" },
+        "replayed": { "type": "boolean" },
+        "eventId": { "$ref": "#/$defs/eventId" },
+        "runId": { "$ref": "#/$defs/identifier" },
+        "scheduleItemId": { "$ref": "#/$defs/identifier" },
+        "reviewStatus": { "const": "pending" },
+        "reviewReason": { "enum": ["tooFarFuture", "tooOld"] },
+        "policyVersion": { "const": "kiosk-event-time-local-v1" },
+        "receivedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "ok", "code", "replayed"],
+      "properties": {
+        "schemaVersion": { "const": 2 },
+        "ok": { "const": false },
+        "code": {
+          "enum": [
+            "INVALID_JSON", "INVALID_REQUEST",
+            "UNAUTHENTICATED", "AUTH_NOT_CONFIGURED", "FORBIDDEN",
+            "RESOURCE_NOT_FOUND", "SCHEDULE_ITEM_NOT_FOUND", "RUN_NOT_FOUND",
+            "IDEMPOTENCY_KEY_REUSE", "RUN_ID_MISMATCH", "RUN_ID_REUSE",
+            "SCHEDULE_ITEM_ID_MISMATCH", "RUN_PREPARATION_REQUIRED",
+            "MULTIPLE_ACTIVE_RUNS", "MULTIPLE_CURRENT_CANDIDATES", "MULTIPLE_NEXT_CANDIDATES",
+            "INVALID_RUN_TRANSITION", "EVENT_TIME_OUT_OF_ORDER",
+            "INVALID_RUN_EVENT_COMMAND", "INVALID_EVENT_ID", "INVALID_EVENT_TIME",
+            "INVALID_BLOCKING_REASON", "BLOCKING_REASON_NOTE_REQUIRED",
+            "EVENT_RECEIPT_INTEGRITY_ERROR", "INTERNAL_ERROR",
+            "STORE_BUSY", "SERVICE_UNAVAILABLE"
+          ]
+        },
+        "replayed": { "const": false }
+      }
+    }
+  }
+}
