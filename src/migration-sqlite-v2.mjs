@@ -50,6 +50,7 @@ const REQUIRED_TARGET_TABLES = Object.freeze([
   'production_events',
   'run_event_id_owners',
   'run_event_reviews',
+  'notification_outbox',
   'snapshot_projections',
 ]);
 
@@ -471,6 +472,7 @@ function expectedCounts(plan) {
   return {
     run_event_reviews: 0,
     run_event_id_owners: 0,
+    notification_outbox: 0,
     product_catalog_entries: plan.records.product_catalog_entries.length,
     requests_v2: plan.records.requests_v2.length,
     schedule_items: plan.records.schedule_items.length,
@@ -524,6 +526,7 @@ function expectedTargetFacts(plan, batchId) {
     production_events: [],
     run_event_id_owners: [],
     run_event_reviews: [],
+    notification_outbox: [],
   };
 }
 
@@ -581,6 +584,7 @@ function readTargetFacts(db) {
     production_events: db.prepare('SELECT * FROM production_events ORDER BY event_id').all(),
     run_event_id_owners: db.prepare('SELECT * FROM run_event_id_owners ORDER BY event_id').all(),
     run_event_reviews: db.prepare('SELECT * FROM run_event_reviews ORDER BY event_id').all(),
+    notification_outbox: db.prepare('SELECT * FROM notification_outbox ORDER BY outbox_id').all(),
   };
 }
 

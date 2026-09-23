@@ -1068,7 +1068,18 @@ test('apply rejects every root-external raw path before resolving or reading inp
 
 test('isolated apply succeeds, verifies every artifact, and replays without rewriting', async () => (
   withApplyFixture(async root => {
-    const source = createSource(root, emptySnapshot({ revision: 4 }));
+    const historicalSnapshot = fixture('v1-single-session.json');
+    const source = createSource(root, {
+      ...historicalSnapshot,
+      revision: 4,
+      sessions: [],
+    }, {
+      operations: [{
+        operation_id: 'operation-historical-request-submit',
+        kind: 'request.submit',
+        response_json: JSON.stringify({ taskId: historicalSnapshot.tasks[0].id }),
+      }],
+    });
     const args = applyArgs(root, source);
     const first = await executeMigrationCommand(args, {
       clock: clockSequence(FIXED_NOW, FIXED_NOW, LATER_NOW),
@@ -1078,6 +1089,21 @@ test('isolated apply succeeds, verifies every artifact, and replays without rewr
     assert.equal(first.report.targetVerification.status, 'APPLIED_VERIFIED');
     assert.equal(first.report.switchReadiness, 'BLOCKED');
     assert.equal(first.report.attachments.validationStatus, 'PASS_NO_FILES');
+
+    const verifiedTarget = new DatabaseSync(join(root, 'target.sqlite'), { readOnly: true });
+    try {
+      assert.equal(
+        verifiedTarget.prepare('SELECT COUNT(*) AS count FROM operations').get().count,
+        1,
+      );
+      assert.equal(
+        verifiedTarget.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count,
+        0,
+        'historical V1 operations must not be migrated or replayed as notifications',
+      );
+    } finally {
+      verifiedTarget.close();
+    }
 
     const artifacts = ['target.sqlite', 'backup.sqlite', 'rollback.sqlite', 'proof.json'];
     const beforeReplay = Object.fromEntries(artifacts.map(name => [name, hashFile(join(root, name))]));
@@ -1163,6 +1189,52 @@ test('verify-only reads a complete matching target and rejects batch mismatch wi
   ], { clock: () => new Date(FIXED_NOW) });
   assert.equal(mismatch.report.result, 'INVALID_TARGET');
   assert.equal(mismatch.report.issues[0].code, 'TARGET_BATCH_MISMATCH');
+}));
+
+test('verify-only rejects any notification intent added to an isolated migration target', () => withTempRoot(root => {
+  const sourcePath = createSource(root, emptySnapshot({ revision: 4 }));
+  const source = readV1Source(resolveExistingPath(sourcePath));
+  const plan = buildMigrationPlan({
+    source,
+    businessTimeZone: 'Asia/Shanghai',
+    importedAt: FIXED_NOW,
+  });
+  const target = createVerifiedTarget(root, plan);
+  const payload = '{}';
+  const payloadDigest = `sha256:${createHash('sha256').update(payload).digest('hex')}`;
+  const writable = new DatabaseSync(target);
+  writable.prepare(`
+    INSERT INTO notification_outbox (
+      outbox_id, channel, dedupe_key, intent_type, aggregate_type, aggregate_id,
+      aggregate_revision_scope, aggregate_revision, route_key, card_schema_version,
+      delivery_policy_version, payload_json, payload_digest, status, attempt_count,
+      available_at, created_at, updated_at
+    ) VALUES (?, 'dingtalk', ?, 'production-run.completed.v1', 'production_run', ?,
+      'run', 1, 'fixture-route', 'dingtalk-card-v1', 'outbox-dispatch-v1', ?, ?,
+      'pending', 0, ?, ?, ?)
+  `).run(
+    'OUTBOX-UNEXPECTED-HISTORICAL-INTENT',
+    'dingtalk:dingtalk-card-v1:production-run.completed.v1:production_run:RUN-HISTORICAL:run:1',
+    'RUN-HISTORICAL',
+    payload,
+    payloadDigest,
+    FIXED_NOW,
+    FIXED_NOW,
+    FIXED_NOW,
+  );
+  writable.close();
+  const before = hashFile(target);
+
+  const result = executeMigration([
+    '--verify-only', '--source', sourcePath, '--target', target,
+    '--business-time-zone', 'Asia/Shanghai', '--format', 'json',
+  ], { clock: () => new Date(FIXED_NOW) });
+
+  assert.equal(result.report.result, 'INVALID_TARGET');
+  assert.equal(result.exitCode, 5);
+  assert.equal(result.report.issues[0].code, 'TARGET_BATCH_MISMATCH');
+  assert.equal(result.report.switchReadiness, 'NOT_RUN');
+  assert.equal(hashFile(target), before);
 }));
 
 test('verify-only rejects canonical fact tampering even when counts and stored projections still match', () => withTempRoot(root => {

@@ -72,12 +72,44 @@ function columns(db, table) {
   return db.prepare(`PRAGMA table_info(${JSON.stringify(table)})`).all().map(row => row.name);
 }
 
+function insertPendingOutbox(db, {
+  outboxId = 'OUTBOX-0001',
+  dedupeKey = `dingtalk:dingtalk-card-v1:production-run.completed.v1:production_run:RUN-1:run:1`,
+  availableAt = '2026-09-22T08:00:00.000Z',
+  intentType = 'production-run.completed.v1',
+  aggregateType = 'production_run',
+  aggregateId = 'RUN-1',
+  revisionScope = 'run',
+} = {}) {
+  db.prepare(`
+    INSERT INTO notification_outbox (
+      outbox_id, channel, dedupe_key, intent_type, aggregate_type, aggregate_id,
+      aggregate_revision_scope, aggregate_revision, route_key, card_schema_version,
+      delivery_policy_version, payload_json, payload_digest, status, attempt_count,
+      available_at, created_at, updated_at
+    ) VALUES (?, 'dingtalk', ?, ?, ?, ?,
+      ?, 1, 'operations.default', 'dingtalk-card-v1', 'outbox-dispatch-v1',
+      '{"runId":"RUN-1"}', ?, 'pending', 0, ?, ?, ?)
+  `).run(
+    outboxId,
+    dedupeKey,
+    intentType,
+    aggregateType,
+    aggregateId,
+    revisionScope,
+    'sha256:' + 'a'.repeat(64),
+    availableAt,
+    availableAt,
+    availableAt,
+  );
+}
+
 test('fresh schema applies the continuous migration prefix and known tables', () => {
   const db = memoryDatabase();
   try {
     const result = initializeWritableSchema(db, { now: () => new Date('2026-09-22T08:00:00.000Z') });
     assert.deepEqual(result, { version: LATEST_SCHEMA_VERSION, latestVersion: LATEST_SCHEMA_VERSION });
-    assert.equal(LATEST_SCHEMA_VERSION, 3);
+    assert.equal(LATEST_SCHEMA_VERSION, 4);
     assert.deepEqual(
       db.prepare('SELECT version, name, checksum FROM schema_migrations ORDER BY version').all().map(row => ({ ...row })),
       MIGRATIONS.map(({ version, name, checksum }) => ({ version, name, checksum })),
@@ -89,9 +121,9 @@ test('fresh schema applies the continuous migration prefix and known tables', ()
       'migration_batches', 'revision_counters', 'product_catalog_entries', 'requests_v2',
       'schedule_items', 'schedule_item_tasks', 'legacy_asset_entries', 'legacy_compat_fragments',
       'production_runs', 'production_events', 'snapshot_projections', 'run_event_id_owners',
-      'run_event_reviews',
+      'run_event_reviews', 'notification_outbox',
     ]) assert.ok(tables.includes(table), `expected ${table}`);
-    for (const deferred of ['notification_outbox', 'scheduling_proposals', 'scheduling_config_versions']) {
+    for (const deferred of ['scheduling_proposals', 'scheduling_config_versions']) {
       assert.equal(tables.includes(deferred), false);
     }
 
@@ -101,6 +133,39 @@ test('fresh schema applies the continuous migration prefix and known tables', ()
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM revision_counters').get().count, 0);
     assert.equal(db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
     assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test('migration v4 upgrades an exact v3 prefix without changing prior markers', () => {
+  const db = memoryDatabase();
+  try {
+    const v3Migrations = MIGRATIONS.slice(0, 3);
+    assert.deepEqual(
+      initializeWritableSchema(db, { migrations: v3Migrations }),
+      { version: 3, latestVersion: 3 },
+    );
+    const before = db.prepare(`
+      SELECT version, name, checksum, applied_at
+      FROM schema_migrations ORDER BY version
+    `).all().map(row => ({ ...row }));
+    assert.equal(tableNames(db).includes('notification_outbox'), false);
+
+    assert.deepEqual(initializeWritableSchema(db), { version: 4, latestVersion: 4 });
+    const after = db.prepare(`
+      SELECT version, name, checksum, applied_at
+      FROM schema_migrations ORDER BY version
+    `).all().map(row => ({ ...row }));
+    assert.deepEqual(after.slice(0, 3), before);
+    assert.deepEqual(after[3], {
+      version: 4,
+      name: 'notification_outbox',
+      checksum: MIGRATIONS[3].checksum,
+      applied_at: after[3].applied_at,
+    });
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 0);
+    assert.deepEqual(assertKnownSchema(db), { version: 4, latestVersion: 4 });
   } finally {
     db.close();
   }
@@ -288,6 +353,24 @@ test('unmarked partial structure fails closed and a late DDL failure rolls the m
       );
       assert.equal(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count, 0);
       assert.equal(tableNames(db).includes('rollback_probe'), false);
+    } finally {
+      db.close();
+    }
+  });
+
+  await t.test('unmarked migration v4 Outbox object', () => {
+    const db = memoryDatabase();
+    try {
+      initializeWritableSchema(db, { migrations: MIGRATIONS.slice(0, 3) });
+      db.exec('CREATE TABLE notification_outbox (outbox_id TEXT PRIMARY KEY) STRICT;');
+      assert.throws(
+        () => applySchemaMigrations(db),
+        error => error.code === 'SCHEMA_PARTIAL_MIGRATION',
+      );
+      assert.deepEqual(
+        db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(row => row.version),
+        [1, 2, 3],
+      );
     } finally {
       db.close();
     }
@@ -484,6 +567,131 @@ test('known schema rejects altered canonical DDL and unknown persistent objects'
       db.close();
     }
   });
+
+  await t.test('notification Outbox trigger drift', () => {
+    const db = memoryDatabase();
+    try {
+      initializeWritableSchema(db);
+      db.exec(`
+        DROP TRIGGER notification_outbox_terminal_sealed;
+        CREATE TRIGGER notification_outbox_terminal_sealed
+        BEFORE UPDATE ON notification_outbox BEGIN SELECT 1; END;
+      `);
+      assert.throws(
+        () => assertKnownSchema(db),
+        error => error.code === 'SCHEMA_STRUCTURE_MISMATCH'
+          && /notification_outbox_terminal_sealed/.test(error.message),
+      );
+    } finally {
+      db.close();
+    }
+  });
+});
+
+test('notification Outbox v1 constraints seal identity and terminal delivery states', () => {
+  const db = memoryDatabase();
+  try {
+    initializeWritableSchema(db);
+
+    assert.throws(() => insertPendingOutbox(db, {
+      outboxId: 'OUTBOX-REQUEST',
+      dedupeKey: 'dingtalk:dingtalk-card-v1:request.submitted.v1:request:REQUEST-1:run:1',
+      intentType: 'request.submitted.v1',
+      aggregateType: 'request',
+      aggregateId: 'REQUEST-1',
+    }), /CHECK constraint failed/);
+    assert.throws(() => insertPendingOutbox(db, {
+      outboxId: 'OUTBOX-BAD-SCOPE',
+      dedupeKey: 'dingtalk:dingtalk-card-v1:schedule.confirmed.v1:production_run:RUN-1:run:1',
+      intentType: 'schedule.confirmed.v1',
+    }), /CHECK constraint failed/);
+
+    insertPendingOutbox(db);
+    assert.throws(
+      () => db.prepare(`
+        UPDATE notification_outbox
+        SET status = 'leased', attempt_count = 6, available_at = NULL,
+            lease_token = 'LEASE-TOO-MANY', lease_owner = 'WORKER-1',
+            lease_expires_at = ?, updated_at = ?
+        WHERE outbox_id = 'OUTBOX-0001'
+      `).run('2026-09-22T08:01:00.000Z', '2026-09-22T08:00:01.000Z'),
+      /CHECK constraint failed|invalid notification outbox transition/,
+    );
+    db.prepare(`
+      UPDATE notification_outbox
+      SET status = 'leased', attempt_count = 1, available_at = NULL,
+          lease_token = 'LEASE-1', lease_owner = 'WORKER-1',
+          lease_expires_at = ?, updated_at = ?
+      WHERE outbox_id = 'OUTBOX-0001'
+    `).run('2026-09-22T08:01:00.000Z', '2026-09-22T08:00:01.000Z');
+    assert.throws(
+      () => db.prepare(`
+        UPDATE notification_outbox
+        SET status = 'sent', available_at = NULL,
+            lease_token = NULL, lease_owner = NULL, lease_expires_at = NULL,
+            provider_ref = 'CARD:CHANGED', delivery_receipt_digest = ?,
+            sent_at = ?, payload_json = '{"changed":true}', updated_at = ?
+        WHERE outbox_id = 'OUTBOX-0001'
+      `).run(
+        'sha256:' + 'b'.repeat(64),
+        '2026-09-22T08:00:02.000Z',
+        '2026-09-22T08:00:02.000Z',
+      ),
+      /identity is immutable/,
+    );
+    db.prepare(`
+      UPDATE notification_outbox
+      SET status = 'sent', available_at = NULL,
+          lease_token = NULL, lease_owner = NULL, lease_expires_at = NULL,
+          provider_ref = 'CARD:0001', delivery_receipt_digest = ?,
+          sent_at = ?, updated_at = ?
+      WHERE outbox_id = 'OUTBOX-0001'
+    `).run(
+      'sha256:' + 'b'.repeat(64),
+      '2026-09-22T08:00:03.000Z',
+      '2026-09-22T08:00:03.000Z',
+    );
+    assert.throws(
+      () => db.prepare(`
+        UPDATE notification_outbox SET updated_at = ? WHERE outbox_id = 'OUTBOX-0001'
+      `).run('2026-09-22T08:00:04.000Z'),
+      /terminal notification outbox record is sealed|invalid notification outbox transition/,
+    );
+    assert.throws(
+      () => db.exec(`DELETE FROM notification_outbox WHERE outbox_id = 'OUTBOX-0001'`),
+      /cannot be deleted/,
+    );
+
+    insertPendingOutbox(db, {
+      outboxId: 'OUTBOX-0002',
+      dedupeKey: 'dingtalk:dingtalk-card-v1:production-run.completed.v1:production_run:RUN-2:run:1',
+    });
+    db.prepare(`
+      UPDATE notification_outbox
+      SET status = 'leased', attempt_count = 1, available_at = NULL,
+          lease_token = 'LEASE-2', lease_owner = 'WORKER-2',
+          lease_expires_at = ?, updated_at = ?
+      WHERE outbox_id = 'OUTBOX-0002'
+    `).run('2026-09-22T08:01:00.000Z', '2026-09-22T08:00:01.000Z');
+    db.prepare(`
+      UPDATE notification_outbox
+      SET status = 'deadLetter', available_at = NULL,
+          lease_token = NULL, lease_owner = NULL, lease_expires_at = NULL,
+          last_error_code = 'DINGTALK_AUTH_REJECTED', updated_at = ?
+      WHERE outbox_id = 'OUTBOX-0002'
+    `).run('2026-09-22T08:00:02.000Z');
+    assert.throws(
+      () => db.prepare(`
+        UPDATE notification_outbox
+        SET status = 'pending', attempt_count = 0, available_at = ?,
+            last_error_code = NULL, updated_at = ?
+        WHERE outbox_id = 'OUTBOX-0002'
+      `).run('2026-09-22T08:00:03.000Z', '2026-09-22T08:00:03.000Z'),
+      /terminal notification outbox record is sealed|attempt count cannot decrease|invalid notification outbox transition/,
+    );
+  } finally {
+    db.close();
+  }
 });
 
 test('marker rows and production events are append-only, and foreign keys remain enforced', () => {
@@ -625,7 +833,7 @@ test('concurrent independent processes safely initialize and migrate the same da
         });
         assert.deepEqual(
           db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(row => row.version),
-          [1, 2, 3],
+          [1, 2, 3, 4],
         );
       } finally {
         db.close();

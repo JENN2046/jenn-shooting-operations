@@ -550,6 +550,215 @@ const KIOSK_REVIEW_SQL = `
     );
 `;
 
+const NOTIFICATION_OUTBOX_SQL = `
+  CREATE TABLE notification_outbox (
+    outbox_id TEXT PRIMARY KEY,
+    channel TEXT NOT NULL CHECK (channel = 'dingtalk'),
+    dedupe_key TEXT NOT NULL UNIQUE,
+    intent_type TEXT NOT NULL CHECK (intent_type IN (
+      'schedule.confirmed.v1', 'production-run.completed.v1'
+    )),
+    aggregate_type TEXT NOT NULL CHECK (aggregate_type IN (
+      'schedule_item', 'production_run'
+    )),
+    aggregate_id TEXT NOT NULL,
+    aggregate_revision_scope TEXT NOT NULL CHECK (aggregate_revision_scope IN ('schedule', 'run')),
+    aggregate_revision INTEGER NOT NULL
+      CHECK (aggregate_revision BETWEEN 0 AND ${MAX_SAFE_INTEGER}),
+    route_key TEXT NOT NULL,
+    card_schema_version TEXT NOT NULL,
+    delivery_policy_version TEXT NOT NULL CHECK (delivery_policy_version = 'outbox-dispatch-v1'),
+    payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
+    payload_digest TEXT NOT NULL CHECK (
+      length(payload_digest) = 71
+      AND substr(payload_digest, 1, 7) = 'sha256:'
+      AND substr(payload_digest, 8) NOT GLOB '*[^0-9a-f]*'
+    ),
+    status TEXT NOT NULL CHECK (status IN (
+      'pending', 'leased', 'sent', 'retryableFailed', 'deadLetter'
+    )),
+    attempt_count INTEGER NOT NULL CHECK (attempt_count BETWEEN 0 AND 5),
+    available_at TEXT,
+    lease_token TEXT,
+    lease_owner TEXT,
+    lease_expires_at TEXT,
+    provider_ref TEXT CHECK (
+      provider_ref IS NULL OR (
+        length(provider_ref) BETWEEN 1 AND 512
+        AND provider_ref NOT GLOB '*[^A-Za-z0-9._:/+=@-]*'
+      )
+    ),
+    delivery_receipt_digest TEXT CHECK (
+      delivery_receipt_digest IS NULL OR (
+        length(delivery_receipt_digest) = 71
+        AND substr(delivery_receipt_digest, 1, 7) = 'sha256:'
+        AND substr(delivery_receipt_digest, 8) NOT GLOB '*[^0-9a-f]*'
+      )
+    ),
+    last_error_code TEXT CHECK (last_error_code IS NULL OR last_error_code IN (
+      'DINGTALK_TIMEOUT',
+      'DINGTALK_RATE_LIMITED',
+      'DINGTALK_UNAVAILABLE',
+      'DINGTALK_TRANSPORT_ERROR',
+      'DINGTALK_NOT_CONFIGURED',
+      'DINGTALK_AUTH_REJECTED',
+      'DINGTALK_REQUEST_REJECTED',
+      'DINGTALK_RESPONSE_INVALID',
+      'DINGTALK_ADAPTER_PROTOCOL_ERROR',
+      'OUTBOX_DELIVERY_OUTCOME_UNKNOWN'
+    )),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    sent_at TEXT,
+    CHECK (
+      (intent_type = 'schedule.confirmed.v1'
+        AND aggregate_type = 'schedule_item' AND aggregate_revision_scope = 'schedule')
+      OR
+      (intent_type = 'production-run.completed.v1'
+        AND aggregate_type = 'production_run' AND aggregate_revision_scope = 'run')
+    ),
+    CHECK (
+      (status = 'pending'
+        AND attempt_count = 0
+        AND available_at IS NOT NULL
+        AND lease_token IS NULL AND lease_owner IS NULL AND lease_expires_at IS NULL
+        AND provider_ref IS NULL AND delivery_receipt_digest IS NULL
+        AND last_error_code IS NULL AND sent_at IS NULL)
+      OR
+      (status = 'leased'
+        AND attempt_count BETWEEN 1 AND 5
+        AND available_at IS NULL
+        AND lease_token IS NOT NULL AND lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL
+        AND provider_ref IS NULL AND delivery_receipt_digest IS NULL
+        AND last_error_code IS NULL AND sent_at IS NULL)
+      OR
+      (status = 'retryableFailed'
+        AND attempt_count BETWEEN 1 AND 4
+        AND available_at IS NOT NULL
+        AND lease_token IS NULL AND lease_owner IS NULL AND lease_expires_at IS NULL
+        AND provider_ref IS NULL AND delivery_receipt_digest IS NULL AND sent_at IS NULL
+        AND last_error_code IN (
+          'DINGTALK_TIMEOUT', 'DINGTALK_RATE_LIMITED',
+          'DINGTALK_UNAVAILABLE', 'DINGTALK_TRANSPORT_ERROR'
+        ))
+      OR
+      (status = 'sent'
+        AND attempt_count BETWEEN 1 AND 5
+        AND available_at IS NULL
+        AND lease_token IS NULL AND lease_owner IS NULL AND lease_expires_at IS NULL
+        AND provider_ref IS NOT NULL AND delivery_receipt_digest IS NOT NULL
+        AND last_error_code IS NULL AND sent_at IS NOT NULL)
+      OR
+      (status = 'deadLetter'
+        AND attempt_count BETWEEN 1 AND 5
+        AND available_at IS NULL
+        AND lease_token IS NULL AND lease_owner IS NULL AND lease_expires_at IS NULL
+        AND provider_ref IS NULL AND delivery_receipt_digest IS NULL
+        AND last_error_code IS NOT NULL AND sent_at IS NULL)
+    )
+  ) STRICT;
+
+  CREATE INDEX notification_outbox_dispatch_idx
+    ON notification_outbox(status, available_at, created_at, outbox_id);
+  CREATE INDEX notification_outbox_lease_idx
+    ON notification_outbox(status, lease_expires_at);
+  CREATE UNIQUE INDEX notification_outbox_provider_ref_uq
+    ON notification_outbox(provider_ref) WHERE provider_ref IS NOT NULL;
+
+  CREATE TRIGGER notification_outbox_insert_pending
+  BEFORE INSERT ON notification_outbox
+  WHEN NEW.status <> 'pending' OR NEW.attempt_count <> 0
+  BEGIN
+    SELECT RAISE(ABORT, 'notification outbox records must begin pending');
+  END;
+
+  CREATE TRIGGER notification_outbox_identity_immutable
+  BEFORE UPDATE ON notification_outbox
+  WHEN NEW.outbox_id IS NOT OLD.outbox_id
+    OR NEW.channel IS NOT OLD.channel
+    OR NEW.dedupe_key IS NOT OLD.dedupe_key
+    OR NEW.intent_type IS NOT OLD.intent_type
+    OR NEW.aggregate_type IS NOT OLD.aggregate_type
+    OR NEW.aggregate_id IS NOT OLD.aggregate_id
+    OR NEW.aggregate_revision_scope IS NOT OLD.aggregate_revision_scope
+    OR NEW.aggregate_revision IS NOT OLD.aggregate_revision
+    OR NEW.route_key IS NOT OLD.route_key
+    OR NEW.card_schema_version IS NOT OLD.card_schema_version
+    OR NEW.delivery_policy_version IS NOT OLD.delivery_policy_version
+    OR NEW.payload_json IS NOT OLD.payload_json
+    OR NEW.payload_digest IS NOT OLD.payload_digest
+    OR NEW.created_at IS NOT OLD.created_at
+  BEGIN
+    SELECT RAISE(ABORT, 'notification outbox identity is immutable');
+  END;
+
+  CREATE TRIGGER notification_outbox_attempt_monotonic
+  BEFORE UPDATE ON notification_outbox
+  WHEN NEW.attempt_count < OLD.attempt_count
+  BEGIN
+    SELECT RAISE(ABORT, 'notification outbox attempt count cannot decrease');
+  END;
+
+  CREATE TRIGGER notification_outbox_transition_guard
+  BEFORE UPDATE ON notification_outbox
+  WHEN NOT (
+    (OLD.status = 'pending' AND NEW.status = 'leased'
+      AND OLD.attempt_count = 0 AND NEW.attempt_count = 1
+      AND OLD.available_at <= NEW.updated_at)
+    OR
+    (OLD.status = 'retryableFailed' AND NEW.status = 'leased'
+      AND OLD.attempt_count BETWEEN 1 AND 4
+      AND NEW.attempt_count = OLD.attempt_count + 1
+      AND OLD.available_at <= NEW.updated_at)
+    OR
+    (OLD.status = 'leased' AND NEW.status = 'leased'
+      AND OLD.attempt_count BETWEEN 1 AND 4
+      AND NEW.attempt_count = OLD.attempt_count + 1
+      AND NEW.lease_token IS NOT OLD.lease_token
+      AND OLD.lease_expires_at <= NEW.updated_at)
+    OR
+    (OLD.status = 'leased' AND NEW.status = 'sent'
+      AND NEW.attempt_count = OLD.attempt_count)
+    OR
+    (OLD.status = 'leased' AND NEW.status = 'retryableFailed'
+      AND OLD.attempt_count BETWEEN 1 AND 4
+      AND NEW.attempt_count = OLD.attempt_count)
+    OR
+    (OLD.status = 'leased' AND NEW.status = 'deadLetter'
+      AND NEW.attempt_count = OLD.attempt_count
+      AND (
+        NEW.last_error_code IN (
+          'DINGTALK_NOT_CONFIGURED', 'DINGTALK_AUTH_REJECTED',
+          'DINGTALK_REQUEST_REJECTED', 'DINGTALK_RESPONSE_INVALID',
+          'DINGTALK_ADAPTER_PROTOCOL_ERROR'
+        )
+        OR (OLD.attempt_count = 5 AND NEW.last_error_code IN (
+          'DINGTALK_TIMEOUT', 'DINGTALK_RATE_LIMITED',
+          'DINGTALK_UNAVAILABLE', 'DINGTALK_TRANSPORT_ERROR'
+        ))
+        OR (OLD.attempt_count = 5
+          AND NEW.last_error_code = 'OUTBOX_DELIVERY_OUTCOME_UNKNOWN'
+          AND OLD.lease_expires_at <= NEW.updated_at)
+      ))
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'invalid notification outbox transition');
+  END;
+
+  CREATE TRIGGER notification_outbox_terminal_sealed
+  BEFORE UPDATE ON notification_outbox
+  WHEN OLD.status IN ('sent', 'deadLetter')
+  BEGIN
+    SELECT RAISE(ABORT, 'terminal notification outbox record is sealed');
+  END;
+
+  CREATE TRIGGER notification_outbox_no_delete
+  BEFORE DELETE ON notification_outbox
+  BEGIN
+    SELECT RAISE(ABORT, 'notification outbox records cannot be deleted');
+  END;
+`;
+
 function normalizeSchemaSql(sql) {
   return String(sql || '').replace(/\s+/g, ' ').trim().replace(/;$/, '');
 }
@@ -571,6 +780,9 @@ const V2_TABLE_DEFINITIONS = schemaDefinitions(V2_CORE_SQL, 'table');
 const KIOSK_REVIEW_INDEX_DEFINITIONS = schemaDefinitions(KIOSK_REVIEW_SQL, 'index');
 const KIOSK_REVIEW_TRIGGER_DEFINITIONS = schemaDefinitions(KIOSK_REVIEW_SQL, 'trigger');
 const KIOSK_REVIEW_TABLE_DEFINITIONS = schemaDefinitions(KIOSK_REVIEW_SQL, 'table');
+const NOTIFICATION_OUTBOX_INDEX_DEFINITIONS = schemaDefinitions(NOTIFICATION_OUTBOX_SQL, 'index');
+const NOTIFICATION_OUTBOX_TRIGGER_DEFINITIONS = schemaDefinitions(NOTIFICATION_OUTBOX_SQL, 'trigger');
+const NOTIFICATION_OUTBOX_TABLE_DEFINITIONS = schemaDefinitions(NOTIFICATION_OUTBOX_SQL, 'table');
 const V2_COMPAT_TABLE_DEFINITIONS = Object.freeze({
   uploads: normalizeSchemaSql(`
     CREATE TABLE uploads (
@@ -605,6 +817,7 @@ export const MIGRATIONS = Object.freeze([
   Object.freeze({ version: 1, name: 'v2_normalized_core', sql: V2_CORE_SQL, checksum: checksum(V2_CORE_SQL) }),
   Object.freeze({ version: 2, name: 'v1_compatibility_columns', sql: V1_COMPATIBILITY_SQL, checksum: checksum(V1_COMPATIBILITY_SQL) }),
   Object.freeze({ version: 3, name: 'kiosk_run_event_review_ownership', sql: KIOSK_REVIEW_SQL, checksum: checksum(KIOSK_REVIEW_SQL) }),
+  Object.freeze({ version: 4, name: 'notification_outbox', sql: NOTIFICATION_OUTBOX_SQL, checksum: checksum(NOTIFICATION_OUTBOX_SQL) }),
 ]);
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1).version;
@@ -733,6 +946,26 @@ const KIOSK_REVIEW_COLUMNS = Object.freeze({
 const KIOSK_REVIEW_INDEXES = Object.freeze([
   'run_event_reviews_run_created_idx',
   'run_event_reviews_pending_created_idx',
+]);
+
+const NOTIFICATION_OUTBOX_TABLES = Object.freeze([
+  'notification_outbox',
+]);
+
+const NOTIFICATION_OUTBOX_COLUMNS = Object.freeze({
+  notification_outbox: [
+    'outbox_id', 'channel', 'dedupe_key', 'intent_type', 'aggregate_type', 'aggregate_id',
+    'aggregate_revision_scope', 'aggregate_revision', 'route_key', 'card_schema_version',
+    'delivery_policy_version', 'payload_json', 'payload_digest', 'status', 'attempt_count',
+    'available_at', 'lease_token', 'lease_owner', 'lease_expires_at', 'provider_ref',
+    'delivery_receipt_digest', 'last_error_code', 'created_at', 'updated_at', 'sent_at',
+  ],
+});
+
+const NOTIFICATION_OUTBOX_INDEXES = Object.freeze([
+  'notification_outbox_dispatch_idx',
+  'notification_outbox_lease_idx',
+  'notification_outbox_provider_ref_uq',
 ]);
 
 function schemaError(code, message, cause) {
@@ -912,6 +1145,19 @@ function assertKioskReviewStructure(db) {
   }
 }
 
+function assertNotificationOutboxStructure(db) {
+  for (const table of NOTIFICATION_OUTBOX_TABLES) {
+    assertExactColumns(db, table, NOTIFICATION_OUTBOX_COLUMNS[table]);
+    assertObjectDefinition(db, 'table', table, NOTIFICATION_OUTBOX_TABLE_DEFINITIONS[table]);
+  }
+  for (const index of NOTIFICATION_OUTBOX_INDEXES) {
+    assertObjectDefinition(db, 'index', index, NOTIFICATION_OUTBOX_INDEX_DEFINITIONS[index]);
+  }
+  for (const trigger of Object.keys(NOTIFICATION_OUTBOX_TRIGGER_DEFINITIONS)) {
+    assertObjectDefinition(db, 'trigger', trigger, NOTIFICATION_OUTBOX_TRIGGER_DEFINITIONS[trigger]);
+  }
+}
+
 function assertNoUnknownSchemaObjects(db, version) {
   const allowed = new Set([
     ...Object.keys(V1_COLUMNS).map(name => `table:${name}`),
@@ -932,6 +1178,11 @@ function assertNoUnknownSchemaObjects(db, version) {
     for (const name of KIOSK_REVIEW_TABLES) allowed.add(`table:${name}`);
     for (const name of KIOSK_REVIEW_INDEXES) allowed.add(`index:${name}`);
     for (const name of Object.keys(KIOSK_REVIEW_TRIGGER_DEFINITIONS)) allowed.add(`trigger:${name}`);
+  }
+  if (version >= 4) {
+    for (const name of NOTIFICATION_OUTBOX_TABLES) allowed.add(`table:${name}`);
+    for (const name of NOTIFICATION_OUTBOX_INDEXES) allowed.add(`index:${name}`);
+    for (const name of Object.keys(NOTIFICATION_OUTBOX_TRIGGER_DEFINITIONS)) allowed.add(`trigger:${name}`);
   }
 
   const unknown = db.prepare(`
@@ -962,6 +1213,7 @@ function assertStructureForVersion(db, version) {
   if (version >= 1) assertCoreStructure(db);
   if (version >= 2) assertCompatibilityStructure(db);
   if (version >= 3) assertKioskReviewStructure(db);
+  if (version >= 4) assertNotificationOutboxStructure(db);
 }
 
 function assertNoPendingArtifacts(db, nextVersion) {
@@ -988,6 +1240,14 @@ function assertNoPendingArtifacts(db, nextVersion) {
   )) {
     throw schemaError('SCHEMA_PARTIAL_MIGRATION', 'unmarked Kiosk review schema objects are present');
   }
+  if (nextVersion === 4 && (
+    NOTIFICATION_OUTBOX_TABLES.some(table => objectExists(db, 'table', table))
+    || NOTIFICATION_OUTBOX_INDEXES.some(index => objectExists(db, 'index', index))
+    || Object.keys(NOTIFICATION_OUTBOX_TRIGGER_DEFINITIONS)
+      .some(trigger => objectExists(db, 'trigger', trigger))
+  )) {
+    throw schemaError('SCHEMA_PARTIAL_MIGRATION', 'unmarked notification Outbox schema objects are present');
+  }
 }
 
 export function assertKnownSchema(db, { migrations = MIGRATIONS } = {}) {
@@ -1012,7 +1272,9 @@ export function applySchemaMigrations(db, { now = () => new Date(), migrations =
       assertAppliedPrefix(applied, migrations);
       assertStructureForVersion(db, applied.length);
       if (applied.length >= migration.version) {
-        assertNoUnknownSchemaObjects(db, applied.length);
+        if (applied.length === migrations.length) {
+          assertNoUnknownSchemaObjects(db, applied.length);
+        }
         db.exec('COMMIT');
         continue;
       }

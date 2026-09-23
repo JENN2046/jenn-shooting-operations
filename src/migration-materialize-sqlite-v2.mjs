@@ -7,6 +7,7 @@ import { assertKnownSchema } from './sqlite-schema-v2.mjs';
 const EMPTY_TARGET_QUERIES = Object.freeze([
   ['run_event_reviews', 'SELECT COUNT(*) AS count FROM run_event_reviews'],
   ['run_event_id_owners', 'SELECT COUNT(*) AS count FROM run_event_id_owners'],
+  ['notification_outbox', 'SELECT COUNT(*) AS count FROM notification_outbox'],
   ['migration_batches', 'SELECT COUNT(*) AS count FROM migration_batches'],
   ['revision_counters', 'SELECT COUNT(*) AS count FROM revision_counters'],
   ['product_catalog_entries', 'SELECT COUNT(*) AS count FROM product_catalog_entries'],
@@ -25,6 +26,7 @@ const EMPTY_RUNTIME_FACT_QUERIES = Object.freeze([
   'SELECT COUNT(*) AS count FROM production_events',
   'SELECT COUNT(*) AS count FROM run_event_id_owners',
   'SELECT COUNT(*) AS count FROM run_event_reviews',
+  'SELECT COUNT(*) AS count FROM notification_outbox',
 ]);
 
 function fail(code, result = 'INVALID_TARGET') {
