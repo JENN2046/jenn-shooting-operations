@@ -122,8 +122,11 @@ function planningCalendarDates(formatter, planningStart, planningEnd) {
 }
 
 function sortCandidates(left, right) {
+  const desiredDateOrder = left.desiredDate === null
+    ? (right.desiredDate === null ? 0 : 1)
+    : (right.desiredDate === null ? -1 : codePointCompare(left.desiredDate, right.desiredDate));
   return (PRIORITY[left.priority] ?? 3) - (PRIORITY[right.priority] ?? 3)
-    || codePointCompare(left.desiredDate ?? '9999-12-31', right.desiredDate ?? '9999-12-31')
+    || desiredDateOrder
     || left.sourceOrdinal - right.sourceOrdinal
     || codePointCompare(left.requestId, right.requestId);
 }

@@ -93,6 +93,27 @@ test('priority, Buffer and fallback produce a deterministic proposal across inpu
     'spi_cc9a01dbe4f4d73bbf9432fe5fffd6ed897650670b17922a30618e1b7c9347f3');
 });
 
+test('a real maximum desired date sorts before null when only one slot is available', () => {
+  const settings = config({ resourceCalendars: [{
+    resourceId: 'STUDIO-A', capabilityDigest,
+    weeklyWindows: [{ weekday: 5, start: '09:00', end: '10:15' }], dateOverrides: [],
+  }] });
+  const scheduled = generateDeterministicScheduleV1(input(settings, {
+    resources: [{ resourceId: 'STUDIO-A', v1DisplayPlace: 'Studio A', status: 'active',
+      capabilityJson, capabilityDigest,
+      businessWindows: [{ start: '2026-09-25T01:00:00.000Z', end: '2026-09-25T02:15:00.000Z' }],
+    }],
+    candidates: [
+      candidate('REQ-P1', { desiredDate: null }),
+      candidate('REQ-P0', { desiredDate: '9999-12-31' }),
+    ],
+  }), settings);
+  assert.equal(scheduled.ok, true, JSON.stringify(scheduled));
+  assert.deepEqual(scheduled.result.proposedItems.map(item => item.requestId), ['REQ-P0']);
+  assert.ok(scheduled.result.diagnostics.some(item => item.requestId === 'REQ-P1'
+    && item.code === 'RESOURCE_OVERLAP'));
+});
+
 test('unknown legacy Buffer blocks its resource and P0 cannot override an unverified sample', () => {
   const settings = config();
   const blocked = generateDeterministicScheduleV1(input(settings, {

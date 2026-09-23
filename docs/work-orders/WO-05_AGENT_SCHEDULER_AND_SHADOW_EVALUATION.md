@@ -59,8 +59,9 @@
 - `deterministic-scheduler-v1` 只消费已规范化的冻结输入与 active config；不读取 DB、clock、random、filesystem、network、env 或默认 locale；
 - 完成 calendar window 再验证、显式/retrospective/fallback duration 解析、Buffer 占用、sample/resource/capability/legacy hard gate、p0/p1/p2 稳定顺序、soft diagnostic 与 deterministic Proposal item ID；
 - grouped/locked occupancy 不拆分或移动，未知历史 Buffer 和 unresolved resource 失败关闭；
-- Windows 本地 `11/11` 定向测试通过，项目全量 `455 PASS / 0 FAIL / 3 SKIP`；Linux/跨运行时回归尚未执行；
+- Windows 本地 `12/12` 定向测试通过，项目全量 `456 PASS / 0 FAIL / 3 SKIP`；Linux/跨运行时回归尚未执行；
 - review 修复：业务窗口按 planning range 裁剪后必须与配置编译的完整窗口集合精确一致，防止部分日范围丢失可用时段或静默漏报；单次 planning range 的本地日历跨度超过 366 天时失败关闭；
+- review 修复：`desiredDate: null` 显式排在所有有效日期之后，包括 `9999-12-31`；
 - 无 DB、HTTP、真实 provider、正式排期写入或自动采用。
 
 交付：
