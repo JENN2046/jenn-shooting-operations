@@ -136,7 +136,7 @@
 
 ### WO-05E：Sample Capture and Offline Evaluation
 
-状态：`BLOCKED_DATA / IMPLEMENTATION_ALLOWED`
+状态：`BLOCKED_DATA / IMPLEMENTATION_CLOSURE_IN_PROGRESS`
 
 #### WO-05E-A：Future Run-Context Capture
 
@@ -155,7 +155,7 @@
 
 #### WO-05E-B：Checked-in Fixture Dataset + Offline Replay
 
-状态：`LOCAL_FIXTURE_REPLAY_IMPLEMENTED / REVIEW_REQUIRED`
+状态：`MERGED / POST_MERGE_VERIFICATION_PENDING`
 
 当前实现：
 
@@ -171,7 +171,21 @@
 
 #### WO-05E-C：Low-Disclosure Report Integration Closure
 
-仍待 integration closure。真实 Level C 数据与真实 shadow threshold gate 继续保持 `BLOCKED_DATA`。
+状态：`LOCAL_REPORT_INTEGRATION_IMPLEMENTED / REVIEW_REQUIRED`
+
+当前实现：
+
+- `src/shadow-low-disclosure-report-v1.mjs` 为 aggregate shadow report 增加独立 admission boundary，只接受固定 report root、eligibility、exclusion 与 metric allowlist；
+- report admission 验证 synthetic / approved-low-disclosure approval matrix、stable exclusion code/order/count、Level A/B/C count relation 与每类 metric 的 `OK / NOT_ENOUGH_DATA` 数值矩阵；
+- `resultDigest` 由不含 `generatedAt` 的 report fact body 重新计算并核对；`generatedAt` 仅做 RFC3339 规范化，不参与事实 digest；
+- report-only integration 出口固定为 `npm run evaluate:shadow:report`，不输出 fixtureId、sampleId、requestId、scheduleItemId、runId 或 per-case classification；
+- `npm run validate:shadow` 只读取 checked-in synthetic fixture，重放 evaluator 后再经过 low-disclosure admission；
+- `npm check` 已串入 `validate:shadow`，使 report schema widening、digest drift、zero-denominator 伪成功或不稳定 exclusion 直接阻断主检查；
+- regression 覆盖 root/nested disclosure widening、`NOT_ENOUGH_DATA + value:null`、metric-specific numerator/denominator semantics、resultDigest、generatedAt-outside-digest 与 exclusion allowlist/order/bounds。
+
+05E-C 尚需：fresh runtime `npm check`、PR independent review、post-merge verification。完成这些实现门后，WO-05E 只能进入 `SHADOW_EVALUATOR_PASS_WITH_BLOCKED_DATA`，仍不得声称真实 shadow acceptance 通过。
+
+真实 Level C 数据与真实 shadow threshold gate 继续保持 `BLOCKED_DATA`。
 
 交付：
 
