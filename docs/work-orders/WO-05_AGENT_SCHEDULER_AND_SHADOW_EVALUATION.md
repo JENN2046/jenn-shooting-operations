@@ -138,6 +138,25 @@
 
 状态：`BLOCKED_DATA / IMPLEMENTATION_ALLOWED`
 
+#### WO-05E-A：Future Run-Context Capture
+
+状态：`LOCAL_CAPTURE_IMPLEMENTED / REVIEW_REQUIRED`
+
+当前实现：
+
+- schema migration v6 新增 `scheduling_run_context_snapshots`，每个 run 至多一条，禁止 update/delete；
+- 当前仓库唯一 canonical run-create / first-start 路径 Kiosk 在原 `BEGIN IMMEDIATE` 事务内写 snapshot；capture 不额外增加 schedule/run/projection revision；
+- task run 在 request/resource/config/duration/buffer 事实完整时写 `contextStatus=complete`；缺 config 或规则事实诚实写 ineligible；grouped block 固定 `GROUPED_UNALLOCATED`；
+- `capturedAt` 使用 first-start 的注入事务 clock，排除在 snapshot content digest 外；snapshot content 由 `buildSchedulingRunContextSnapshotV1` canonicalize/digest；
+- exact event replay 不重复 snapshot；历史 run 不回填，不因本迁移自动升级 Level B；
+- generic `run-event-use-case-v2` 当前只更新既有 run，不创建 run，因此当前没有第二条 canonical first-start 写入口需要接线。
+
+05E-A 尚需：fresh regression、PR independent review、post-merge verification。未通过这些门前不得标记 capture closure。
+
+#### WO-05E-B / 05E-C
+
+仍待：checked-in fixture replay pipeline 与 low-disclosure report integration closure。真实 Level C 数据与真实 shadow threshold gate 继续保持 `BLOCKED_DATA`。
+
 交付：
 
 - Level A/B/C sample classifier；
