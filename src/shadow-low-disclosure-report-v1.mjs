@@ -133,7 +133,7 @@ function admitExclusions(value) {
   return Object.freeze(result);
 }
 
-function admitMetric(value) {
+function admitMetric(name, value) {
   const record = exactRecord(value, METRIC_KEYS);
   if (!record || !['OK', 'NOT_ENOUGH_DATA'].includes(record.status)) return null;
   if (record.status === 'NOT_ENOUGH_DATA') {
@@ -144,9 +144,25 @@ function admitMetric(value) {
   }
   if (!Number.isFinite(record.value) || record.value < 0
     || !Number.isSafeInteger(record.denominator) || record.denominator <= 0) return null;
-  if (record.numerator !== null
-    && (!Number.isSafeInteger(record.numerator) || record.numerator < 0
-      || record.numerator > record.denominator)) return null;
+
+  const statistics = new Set([
+    'medianAbsoluteDurationErrorMs',
+    'p90OverrunMs',
+    'retrospectiveDurationBaselineMedianAbsoluteErrorMs',
+    'retrospectiveDurationBaselineP90OverrunMs',
+  ]);
+  const rates = new Set(['setupBufferMissRate', 'humanOverrideRate']);
+  const counts = new Set(['hardConflictCount', 'priorityViolationCount']);
+
+  if (statistics.has(name)) {
+    if (record.numerator !== null) return null;
+  } else {
+    if (!Number.isSafeInteger(record.numerator) || record.numerator < 0
+      || record.numerator > record.denominator) return null;
+    if (rates.has(name) && record.value !== record.numerator / record.denominator) return null;
+    if (counts.has(name) && record.value !== record.numerator) return null;
+  }
+
   return Object.freeze({
     status: 'OK',
     value: record.value,
@@ -160,7 +176,7 @@ function admitMetrics(value) {
   if (!record) return null;
   const result = {};
   for (const name of SHADOW_METRIC_NAMES_V1) {
-    const admitted = admitMetric(record[name]);
+    const admitted = admitMetric(name, record[name]);
     if (!admitted) return null;
     Object.defineProperty(result, name, {
       value: admitted,
