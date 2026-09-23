@@ -18,7 +18,7 @@ ADP-013 已冻结“Agent 只生成 Proposal、人工最终确认”的正确方
 - `accepted / partiallyAccepted` 没有选择集、原子性和幂等 receipt；
 - 当前没有 canonical V2 schedule command，只有 V1 whole-snapshot 写入和 Kiosk V2 命令；
 - V1 projector 需要稳定的 resource display place，而当前 normalized projection 中 `resources` 仍为空；
-- 当前 checked-in fixtures 中，满足严格 task-level 完成样本资格的数量为 `0`。
+- 当前 checked-in synthetic fixtures 已包含可重复的 Level A/Level B task-level 完成样本；它们仅用于合同与离线 replay 验证。当前可用于关闭真实 shadow acceptance gate 的 approved/real Level C dataset 数量仍为 `0`。
 
 因此 WO-05 必须拆成“可以诚实完成的本地能力”和“仍然被事实阻断的正式采用/真实影子验收”。不得借用 V1 `PUT /api/v1/snapshot`、直接 SQL 或伪造历史事实来关闭缺口。
 
@@ -476,7 +476,7 @@ generatedAt outside result digest
 
 Level B 可以另报 `retrospectiveDurationBaseline`，公式与 duration 两项相同，但其中 `predictedMs` 必须来自 run-context snapshot 的 resolved duration estimate，而不是 Proposal；报告必须明确标为 baseline，不能冒充 Agent shadow metric。`setup buffer miss rate` 在没有显式 setup measurement schema 前必然无分母。
 
-任何 metric 没有合格分母时，机器状态固定为 `NOT_ENOUGH_DATA`、`value = null`；`N/A` 只用于 UI 展示，不存在 `N-A` 机器值。不得输出 0 或 PASS。当前 checked-in fixtures 的严格 task-level 完成样本为 0，因此真实 WO-05 shadow acceptance gate 为：
+任何 metric 没有合格分母时，机器状态固定为 `NOT_ENOUGH_DATA`、`value = null`；`N/A` 只用于 UI 展示，不存在 `N-A` 机器值。不得输出 0 或 PASS。当前 checked-in synthetic fixtures 可以验证 Level A/Level B 与 baseline replay，但 approved/real Level C dataset 仍为 0，因此真实 WO-05 shadow acceptance gate 为：
 
 ```text
 BLOCKED_DATA
