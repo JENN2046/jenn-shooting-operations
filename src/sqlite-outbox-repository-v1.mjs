@@ -130,12 +130,16 @@ export function createSqliteOutboxRepositoryV1({
   db,
   tokenFactory = randomUUID,
   random = Math.random,
+  resultBusyTimeoutMs = OUTBOX_DISPATCH_POLICY_V1.resultBusyTimeoutMs,
 } = {}) {
   if (!db || typeof db.exec !== 'function' || typeof db.prepare !== 'function') {
     throw new TypeError('SQLite database is required');
   }
   if (typeof tokenFactory !== 'function') throw new TypeError('tokenFactory must be a function');
   if (typeof random !== 'function') throw new TypeError('random must be a function');
+  if (!Number.isSafeInteger(resultBusyTimeoutMs) || resultBusyTimeoutMs < 0) {
+    throw new TypeError('resultBusyTimeoutMs must be a non-negative safe integer');
+  }
 
   const byId = db.prepare(`SELECT ${OUTBOX_ROW_COLUMNS} FROM notification_outbox WHERE outbox_id = ?`);
   const byDedupe = db.prepare(`SELECT ${OUTBOX_ROW_COLUMNS} FROM notification_outbox WHERE dedupe_key = ?`);
@@ -210,8 +214,14 @@ export function createSqliteOutboxRepositoryV1({
         SET status = 'deadLetter', available_at = NULL,
             lease_token = NULL, lease_owner = NULL, lease_expires_at = NULL,
             last_error_code = 'OUTBOX_DELIVERY_OUTCOME_UNKNOWN', updated_at = ?
-        WHERE status = 'leased' AND attempt_count = ? AND lease_expires_at <= ?
-      `).run(now, OUTBOX_DISPATCH_POLICY_V1.maxAttempts, now).changes;
+        WHERE outbox_id IN (
+          SELECT outbox_id
+          FROM notification_outbox
+          WHERE status = 'leased' AND attempt_count = ? AND lease_expires_at <= ?
+          ORDER BY lease_expires_at, created_at, outbox_id
+          LIMIT ?
+        )
+      `).run(now, OUTBOX_DISPATCH_POLICY_V1.maxAttempts, now, limit).changes;
       const eligible = db.prepare(`
         SELECT ${OUTBOX_ROW_COLUMNS}
         FROM notification_outbox
@@ -269,14 +279,7 @@ export function createSqliteOutboxRepositoryV1({
     }
   }
 
-  function settleDelivery({ outboxId, leaseToken, result: deliveryResult, now } = {}) {
-    if (
-      db.isTransaction
-      || !validOpaque(outboxId, 160)
-      || !validOpaque(leaseToken, 128)
-      || !validUtcIso(now)
-    ) return result('OUTBOX_SETTLE_INVALID');
-
+  function performSettlement({ outboxId, leaseToken, result: deliveryResult, now }) {
     try {
       db.exec('BEGIN IMMEDIATE');
       const row = byId.get(outboxId);
@@ -382,6 +385,44 @@ export function createSqliteOutboxRepositoryV1({
       if (isBusy(error)) return result('STORE_BUSY');
       return result('OUTBOX_STORE_ERROR');
     }
+  }
+
+  function settleDelivery({ outboxId, leaseToken, result: deliveryResult, now } = {}) {
+    if (
+      db.isTransaction
+      || !validOpaque(outboxId, 160)
+      || !validOpaque(leaseToken, 128)
+      || !validUtcIso(now)
+    ) return result('OUTBOX_SETTLE_INVALID');
+
+    let previousBusyTimeout;
+    try {
+      const row = db.prepare('PRAGMA busy_timeout').get();
+      if (!Number.isSafeInteger(row?.timeout) || row.timeout < 0) {
+        return result('OUTBOX_STORE_ERROR');
+      }
+      previousBusyTimeout = row.timeout;
+      if (previousBusyTimeout !== resultBusyTimeoutMs) {
+        db.exec(`PRAGMA busy_timeout = ${resultBusyTimeoutMs}`);
+      }
+    } catch (error) {
+      return isBusy(error) ? result('STORE_BUSY') : result('OUTBOX_STORE_ERROR');
+    }
+
+    let settlement;
+    let restoreFailed = false;
+    try {
+      settlement = performSettlement({ outboxId, leaseToken, result: deliveryResult, now });
+    } finally {
+      try {
+        if (previousBusyTimeout !== resultBusyTimeoutMs) {
+          db.exec(`PRAGMA busy_timeout = ${previousBusyTimeout}`);
+        }
+      } catch {
+        restoreFailed = true;
+      }
+    }
+    return restoreFailed ? result('OUTBOX_STORE_ERROR') : settlement;
   }
 
   function getById(id) {

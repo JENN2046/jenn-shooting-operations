@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { performance } from 'node:perf_hooks';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -326,6 +327,62 @@ test('an expired fifth lease becomes outcome-unknown instead of being delivered 
   }
 });
 
+test('expired fifth-lease maintenance is bounded by the requested claim batch', () => {
+  const db = openDatabase();
+  try {
+    let token = 0;
+    const repository = createSqliteOutboxRepositoryV1({
+      db,
+      tokenFactory: () => `LEASE-MAINTENANCE-${++token}`,
+      random: () => 0,
+    });
+    let fifthClaimAt = CREATED_AT;
+    for (let index = 1; index <= 10; index += 1) {
+      const intent = buildIntent({
+        outboxId: `OUTBOX-MAINTENANCE-${String(index).padStart(2, '0')}`,
+        aggregateId: `RUN-MAINTENANCE-${String(index).padStart(2, '0')}`,
+      });
+      assert.equal(enqueueCommitted(db, repository, intent).ok, true);
+      let claimAt = CREATED_AT;
+      for (let attempt = 1; attempt <= 5; attempt += 1) {
+        const claimed = repository.claimBatch({ workerId: 'worker-maintenance', now: claimAt, limit: 1 });
+        assert.equal(claimed.items.length, 1);
+        assert.equal(claimed.items[0].outboxId, intent.outboxId);
+        assert.equal(claimed.items[0].attemptCount, attempt);
+        if (attempt === 5) {
+          fifthClaimAt = claimAt;
+          break;
+        }
+        const settled = repository.settleDelivery({
+          outboxId: intent.outboxId,
+          leaseToken: claimed.items[0].leaseToken,
+          result: { ok: false, code: 'DINGTALK_TIMEOUT' },
+          now: plusMilliseconds(claimAt, 1),
+        });
+        assert.equal(settled.code, 'OUTBOX_RETRY_SCHEDULED');
+        claimAt = settled.availableAt;
+      }
+    }
+
+    const recoveryAt = plusMilliseconds(fifthClaimAt, 30_001);
+    const first = repository.claimBatch({ workerId: 'worker-recovery', now: recoveryAt, limit: 3 });
+    assert.deepEqual(first, {
+      ok: true,
+      code: 'OUTBOX_CLAIMED',
+      items: [],
+      expiredDeadLettered: 3,
+    });
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM notification_outbox WHERE status = 'leased'").get().count, 7);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM notification_outbox WHERE status = 'deadLetter'").get().count, 3);
+
+    const second = repository.claimBatch({ workerId: 'worker-recovery', now: recoveryAt, limit: 8 });
+    assert.equal(second.expiredDeadLettered, 7);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM notification_outbox WHERE status = 'leased'").get().count, 0);
+  } finally {
+    db.close();
+  }
+});
+
 test('claim and settle reject non-UTC times, and busy results are stable and low-disclosure', () => {
   const root = mkdtempSync(join(tmpdir(), 'jso-outbox-busy-'));
   const filename = join(root, 'outbox.sqlite');
@@ -353,12 +410,18 @@ test('claim and settle reject non-UTC times, and busy results are stable and low
     const busy = contenderRepo.claimBatch({ workerId: 'worker-busy', now: CREATED_AT, limit: 1 });
     assert.deepEqual(busy, { ok: false, code: 'STORE_BUSY', items: [] });
     assert.deepEqual(Object.keys(busy), ['ok', 'code', 'items']);
+    contender.exec('PRAGMA busy_timeout = 1234');
+    const settleStartedAt = performance.now();
     assert.deepEqual(contenderRepo.settleDelivery({
       outboxId: intent.outboxId,
       leaseToken: 'LEASE-1',
       result: { ok: false, code: 'DINGTALK_TIMEOUT' },
       now: CREATED_AT,
     }), { ok: false, code: 'STORE_BUSY' });
+    const settleElapsedMs = performance.now() - settleStartedAt;
+    assert.ok(settleElapsedMs >= 50, `expected real busy wait, got ${settleElapsedMs}ms`);
+    assert.ok(settleElapsedMs < 1_000, `settle busy wait was not bounded: ${settleElapsedMs}ms`);
+    assert.equal(contender.prepare('PRAGMA busy_timeout').get().timeout, 1234);
     holder.exec('ROLLBACK');
   } finally {
     if (holder.isTransaction) holder.exec('ROLLBACK');

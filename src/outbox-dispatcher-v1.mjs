@@ -139,6 +139,39 @@ async function deliverWithTimeout({ adapter, input, timeoutMs, setTimer, clearTi
   }
 }
 
+async function waitForRetry(delay, setTimer) {
+  try {
+    await new Promise((resolve, reject) => {
+      try {
+        setTimer(resolve, delay);
+      } catch (error) {
+        reject(error);
+      }
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function settleWithBusyRetry({ repository, input, policy, setTimer }) {
+  for (let attempt = 0; attempt <= policy.resultRetryMs.length; attempt += 1) {
+    let settlement;
+    let settlementError;
+    try {
+      settlement = await repository.settleDelivery(input);
+    } catch (error) {
+      settlementError = error;
+    }
+    const busy = (settlement?.ok === false && settlement.code === 'STORE_BUSY')
+      || isBusy(settlementError);
+    if (!busy) return settlementError === undefined ? settlement : null;
+    if (attempt === policy.resultRetryMs.length) return null;
+    if (!await waitForRetry(policy.resultRetryMs[attempt], setTimer)) return null;
+  }
+  return null;
+}
+
 export function createOutboxDispatcherV1({
   repository,
   dingTalkAdapter,
@@ -167,6 +200,10 @@ export function createOutboxDispatcherV1({
     || policy.batchSize < 1
     || !Number.isSafeInteger(policy.deliveryTimeoutMs)
     || policy.deliveryTimeoutMs < 1
+    || !Number.isSafeInteger(policy.resultBusyTimeoutMs)
+    || policy.resultBusyTimeoutMs < 1
+    || !Array.isArray(policy.resultRetryMs)
+    || policy.resultRetryMs.some(delay => !Number.isSafeInteger(delay) || delay < 0)
   ) throw new TypeError('valid outbox dispatch policy is required');
 
   async function dispatchOnce({ workerId } = {}) {
@@ -211,12 +248,7 @@ export function createOutboxDispatcherV1({
     const claimed = claim.items;
     if (claimed.length === 0) return summary({ ok: true, code: 'OUTBOX_DISPATCH_IDLE' });
 
-    let sentCount = 0;
-    let retryableFailureCount = 0;
-    let nonRetryableFailureCount = 0;
-    let settlementFailureCount = 0;
-
-    for (const claimedItem of claimed) {
+    const outcomes = await Promise.all(claimed.map(async claimedItem => {
       const adapterInput = Object.freeze({
         dedupeKey: claimedItem.dedupeKey,
         routeKey: claimedItem.routeKey,
@@ -229,29 +261,35 @@ export function createOutboxDispatcherV1({
         setTimer,
         clearTimer,
       });
-      if (result.ok) {
-        sentCount += 1;
-      } else if (classifyDingTalkFailureV1(result.code).retryable) {
-        retryableFailureCount += 1;
-      } else {
-        nonRetryableFailureCount += 1;
-      }
+      const retryableFailure = !result.ok && classifyDingTalkFailureV1(result.code).retryable;
 
       // A post-send clock fault must not skip the settlement attempt; the already validated
       // claim timestamp is the bounded fallback and keeps the lease recoverable.
       const settledAt = clockIso(clock) ?? claimTime;
-      try {
-        const settlement = await repository.settleDelivery({
+      const settlement = await settleWithBusyRetry({
+        repository,
+        input: {
           outboxId: claimedItem.outboxId,
           leaseToken: claimedItem.leaseToken,
           result,
           now: settledAt,
-        });
-        if (!validSettleResult(settlement)) settlementFailureCount += 1;
-      } catch {
-        settlementFailureCount += 1;
-      }
-    }
+        },
+        policy,
+        setTimer,
+      });
+      const settlementSucceeded = validSettleResult(settlement);
+      return Object.freeze({
+        sent: result.ok && settlementSucceeded && settlement.code === 'OUTBOX_SENT',
+        retryableFailure,
+        nonRetryableFailure: !result.ok && !retryableFailure,
+        settlementFailed: !settlementSucceeded,
+      });
+    }));
+
+    const sentCount = outcomes.filter(outcome => outcome.sent).length;
+    const retryableFailureCount = outcomes.filter(outcome => outcome.retryableFailure).length;
+    const nonRetryableFailureCount = outcomes.filter(outcome => outcome.nonRetryableFailure).length;
+    const settlementFailureCount = outcomes.filter(outcome => outcome.settlementFailed).length;
 
     return summary({
       ok: settlementFailureCount === 0,
