@@ -146,7 +146,7 @@ test('migration three creates the canonical review and event-id ownership schema
       version: 3,
       latestVersion: 3,
     });
-    assert.equal(LATEST_SCHEMA_VERSION, 5);
+    assert.equal(LATEST_SCHEMA_VERSION, 6);
     assert.deepEqual(
       db.prepare('SELECT version, name FROM schema_migrations ORDER BY version').all().map(row => ({ ...row })),
       [
