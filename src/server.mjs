@@ -43,16 +43,12 @@ export function createKioskV2Application({
 export function createSchedulingV2Application({
   store,
   authenticate,
-  businessTimeZone,
   clock = () => new Date(),
   allowedBriefHosts = [],
 } = {}) {
   if (!store?.db) throw new TypeError('ScheduleStore is required');
   if (typeof authenticate !== 'function') {
     throw new TypeError('Scheduling authenticate port is required');
-  }
-  if (typeof businessTimeZone !== 'string' || businessTimeZone.length === 0) {
-    throw new TypeError('Scheduling businessTimeZone is required');
   }
   const proposalStore = createSqliteSchedulingProposalStoreV1({
     db: store.db,
@@ -63,11 +59,25 @@ export function createSchedulingV2Application({
       && Array.isArray(resourceIds)
       && resourceIds.every(resourceId => principal.resourceIds?.includes(resourceId))
     ),
-    refreshProjections: context => refreshSqliteSnapshotProjectionsV2({
-      ...context,
-      businessTimeZone,
-      allowedBriefHosts,
-    }),
+    refreshProjections: context => {
+      const active = store.db.prepare(`SELECT version.config_json
+        FROM scheduling_active_config AS active
+        JOIN scheduling_config_versions AS version
+          ON version.config_version = active.config_version
+        WHERE active.id = 1`).get();
+      let businessTimeZone = null;
+      try {
+        businessTimeZone = JSON.parse(active?.config_json ?? 'null')?.businessTimeZone ?? null;
+      } catch {}
+      if (typeof businessTimeZone !== 'string' || businessTimeZone.length === 0) {
+        throw new Error('SCHEDULING_CONFIG_NOT_ACTIVE');
+      }
+      return refreshSqliteSnapshotProjectionsV2({
+        ...context,
+        businessTimeZone,
+        allowedBriefHosts,
+      });
+    },
   });
   return Object.freeze({
     authenticate,
@@ -89,7 +99,6 @@ export function createOperationsServer({
   kioskBusinessTimeZone,
   kioskAllowedBriefHosts = [],
   schedulingAuthenticate,
-  schedulingBusinessTimeZone,
   schedulingAllowedBriefHosts = [],
 }) {
   const effectiveClock = clock ?? (() => new Date());
@@ -115,7 +124,6 @@ export function createOperationsServer({
     : createSchedulingV2Application({
         store,
         authenticate: schedulingAuthenticate,
-        businessTimeZone: schedulingBusinessTimeZone,
         clock: effectiveClock,
         allowedBriefHosts: schedulingAllowedBriefHosts,
       });
