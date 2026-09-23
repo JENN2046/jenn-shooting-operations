@@ -3,6 +3,7 @@ import {
   classifySchedulingSampleV1,
   evaluateShadowMetricsV1,
 } from './scheduling-evaluation-contract-v1.mjs';
+import { canonicalJsonSchedulingV1 } from './scheduling-contract-v1.mjs';
 
 const FIXTURE_KEYS = Object.freeze(['schemaVersion', 'fixtureId', 'reportInput', 'expected']);
 const EXPECTED_KEYS = Object.freeze(['datasetDigest', 'caseClassifications', 'report']);
@@ -41,7 +42,8 @@ export function replayShadowEvaluationFixtureV1(value) {
     if (!classified.ok) return invalid(`CLASSIFIER:${classified.reason ?? classified.code}`);
     classifications.push(classified.classification);
   }
-  if (JSON.stringify(classifications) !== JSON.stringify(value.expected.caseClassifications)) {
+  if (canonicalJsonSchedulingV1(classifications)
+    !== canonicalJsonSchedulingV1(value.expected.caseClassifications)) {
     return invalid('CLASSIFICATION_MISMATCH');
   }
 
@@ -51,7 +53,8 @@ export function replayShadowEvaluationFixtureV1(value) {
     expectedApprovalDigest: null,
   });
   if (!evaluated.ok) return invalid(`EVALUATOR:${evaluated.reason ?? evaluated.code}`);
-  if (JSON.stringify(evaluated.report) !== JSON.stringify(value.expected.report)) {
+  if (canonicalJsonSchedulingV1(evaluated.report)
+    !== canonicalJsonSchedulingV1(value.expected.report)) {
     return invalid('REPORT_MISMATCH');
   }
 
