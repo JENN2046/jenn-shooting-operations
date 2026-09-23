@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createTrustedPrincipal } from '../src/authorization-v2.mjs';
-import { createSchedulingV2Application } from '../src/server.mjs';
+import { createOperationsServer, createSchedulingV2Application } from '../src/server.mjs';
 import { ScheduleStore } from '../src/store.mjs';
 
 test('Scheduling V2 runtime composition is explicit and connects the canonical proposal store', () => {
@@ -50,6 +50,27 @@ test('Scheduling V2 runtime composition refuses implicit authentication or time-
       () => createSchedulingV2Application({ store, authenticate: () => null }),
       /businessTimeZone/u,
     );
+  } finally {
+    store.close();
+  }
+});
+
+test('Operations server accepts explicit scheduling composition inputs without enabling env auth', () => {
+  const created = createTrustedPrincipal({
+    subjectId: 'SCHEDULER-SERVER-LOCAL',
+    role: 'scheduler',
+    resourceIds: ['STUDIO-A'],
+  });
+  assert.equal(created.ok, true);
+  const { server, store } = createOperationsServer({
+    databasePath: ':memory:',
+    cleanupIntervalMs: 0,
+    schedulingAuthenticate: () => created.principal,
+    schedulingBusinessTimeZone: 'UTC',
+  });
+  try {
+    assert.equal(typeof server.listen, 'function');
+    assert.equal(store.db.isOpen, true);
   } finally {
     store.close();
   }
