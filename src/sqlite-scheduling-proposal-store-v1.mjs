@@ -301,6 +301,11 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
         || typeof refreshProjections !== 'function') return denied('PROPOSAL_ACCEPT_NOT_WIRED');
       if (!validateTrustedPrincipal(principal).ok) return denied('TRUSTED_SCHEDULER_REQUIRED');
       return transaction(db, 'BEGIN IMMEDIATE', () => {
+        const reused = db.prepare(`SELECT proposal_id FROM scheduling_proposal_decisions
+          WHERE decision_id = ?`).get(decisionInput?.decisionId);
+        if (reused && reused.proposal_id !== decisionInput?.proposalId) {
+          return denied('IDEMPOTENCY_KEY_REUSE');
+        }
         const found = admitStoredProposal(readProposalRow(db, decisionInput?.proposalId));
         if (!found) return denied('PROPOSAL_NOT_FOUND');
         const admitted = buildSchedulingProposalDecisionCommandV1(decisionInput, found.proposal);

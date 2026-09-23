@@ -190,6 +190,8 @@ test('acceptance creates canonical schedule, projections and one Outbox intent p
     const replay = f.store.accept(command, schedulerPrincipal);
     assert.equal(replay.ok, true);
     assert.equal(replay.exactReplay, true);
+    assert.equal(f.store.accept({ ...command, proposalId: 'MISSING-PROPOSAL' },
+      schedulerPrincipal).code, 'IDEMPOTENCY_KEY_REUSE');
     assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 2);
   } finally { f.db.close(); }
 });
