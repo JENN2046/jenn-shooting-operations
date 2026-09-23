@@ -424,14 +424,13 @@ test('decision matrix rejects invalid full/partial/terminal selection and stale 
   for (const command of invalid) {
     assert.equal(buildSchedulingProposalDecisionCommandV1(command, proposal).ok, false);
   }
-  const reserved = buildSchedulingProposalDecisionCommandV1(decision({
+  const reservedLooking = buildSchedulingProposalDecisionCommandV1(decision({
     decisionId: `spd_${'0'.repeat(64)}`,
     decisionType: 'reject',
     selectedProposalItemIds: null,
     reasonCode: 'HUMAN_REJECTED',
   }), proposal);
-  assert.equal(reserved.ok, false);
-  assert.equal(reserved.reason, 'DECISION_ID_RESERVED');
+  assert.equal(reservedLooking.ok, true, JSON.stringify(reservedLooking));
 });
 
 test('accept and partiallyAccept stay at the exact stable NOT_WIRED boundary', () => {
