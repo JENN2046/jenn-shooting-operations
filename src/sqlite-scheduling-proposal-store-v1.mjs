@@ -94,6 +94,45 @@ function insertDecision(db, receipt, proposal, status) {
   if (changed !== 1) throw new Error('SCHEDULING_PROPOSAL_DECISION_CAS_FAILED');
 }
 
+function admitStoredHumanDecisionReceipt(row, proposal) {
+  if (!row) return null;
+  try {
+    const body = JSON.parse(row.receipt_json);
+    const selectedProposalItemIds = body.selectedProposalItemIdsJson === null
+      ? null : JSON.parse(body.selectedProposalItemIdsJson);
+    const adoptedItems = body.adoptedItemsJson === null
+      ? null : JSON.parse(body.adoptedItemsJson);
+    const rebuilt = buildSchedulingProposalDecisionReceiptV1({
+      decisionId: body.decisionId,
+      decisionCommandDigest: body.decisionCommandDigest,
+      proposalId: body.proposalId,
+      decisionType: body.decisionType,
+      selectedProposalItemIds,
+      selectionDigest: body.selectionDigest,
+      adoptedItems,
+      adoptionDigest: body.adoptionDigest,
+      decidedBy: body.decidedBy,
+      decidedAt: body.decidedAt,
+      decisionNote: body.decisionNote,
+      baseScheduleRevision: body.baseScheduleRevision,
+      currentScheduleRevision: body.currentScheduleRevision,
+      resultingScheduleRevision: body.resultingScheduleRevision,
+      reasonCode: body.reasonCode,
+    }, proposal);
+    if (!rebuilt.ok
+      || rebuilt.receiptJson !== row.receipt_json
+      || rebuilt.decisionReceiptDigest !== row.receipt_digest
+      || row.proposal_id !== proposal.proposalId
+      || row.decision_command_digest !== rebuilt.receipt.decisionCommandDigest
+      || row.decision_type !== rebuilt.receipt.decisionType) {
+      throw new Error('stored decision receipt mismatch');
+    }
+    return rebuilt.receipt;
+  } catch {
+    throw new Error('SCHEDULING_PROPOSAL_DECISION_STORED_FACT_INVALID');
+  }
+}
+
 function staleOneInTransaction(db, { proposalId, triggerOperationId, reasonCode, now }) {
   const found = admitStoredProposal(readProposalRow(db, proposalId));
   if (!found) return denied('PROPOSAL_NOT_FOUND');
@@ -286,13 +325,11 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
         if (admitted.command.decisionType !== 'reject') return denied('PROPOSAL_ACCEPT_NOT_WIRED');
 
         if (prior) {
-          if (prior.decision_type !== 'reject'
-            || prior.decision_command_digest !== admitted.decisionCommandDigest) {
+          const receipt = admitStoredHumanDecisionReceipt(prior, found.proposal);
+          if (receipt.decisionType !== 'reject'
+            || receipt.decisionCommandDigest !== admitted.decisionCommandDigest) {
             return denied('IDEMPOTENCY_KEY_REUSE');
           }
-          const receipt = {
-            ...JSON.parse(prior.receipt_json), decisionReceiptDigest: prior.receipt_digest,
-          };
           const operation = db.prepare(`SELECT kind, response_json, request_digest FROM operations
             WHERE operation_id = ?`).get(admitted.command.decisionId);
           if (!operation) {
