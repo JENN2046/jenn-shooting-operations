@@ -325,11 +325,11 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
         if (admitted.command.decisionType !== 'reject') return denied('PROPOSAL_ACCEPT_NOT_WIRED');
 
         if (prior) {
-          const receipt = admitStoredHumanDecisionReceipt(prior, found.proposal);
-          if (receipt.decisionType !== 'reject'
-            || receipt.decisionCommandDigest !== admitted.decisionCommandDigest) {
+          if (prior.decision_type !== 'reject'
+            || prior.decision_command_digest !== admitted.decisionCommandDigest) {
             return denied('IDEMPOTENCY_KEY_REUSE');
           }
+          const receipt = admitStoredHumanDecisionReceipt(prior, found.proposal);
           const operation = db.prepare(`SELECT kind, response_json, request_digest FROM operations
             WHERE operation_id = ?`).get(admitted.command.decisionId);
           if (!operation) {
