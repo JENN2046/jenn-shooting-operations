@@ -549,9 +549,12 @@ test('proposal item IDs and result digest are deterministic across input permuta
   assert.equal(Object.isFrozen(first.result.proposedItems[0]), true);
 
   const golden = canonicalizeSchedulingResultV1(schedulingResult({ proposedItems: [proposedItem()] }));
+  const portableGoldenBody = JSON.parse(golden.resultJson);
+  assert.equal(golden.resultDigest, digestCanonicalJsonSchedulingV1(portableGoldenBody));
+  portableGoldenBody.timeZoneDataVersion = 'fixture-tzdata-v1';
   assert.equal(
-    golden.resultDigest,
-    'sha256:1ebdb171fef4e4ce3ec2e2996e1b382612cccd3deb6179fb6087f8b63b19fc6f',
+    digestCanonicalJsonSchedulingV1(portableGoldenBody),
+    'sha256:60c15d56c54138b167c8a35ce0e2be9fd27fcd79e991653ce9fa33ce2c90caec',
   );
 });
 

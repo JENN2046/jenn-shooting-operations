@@ -36,7 +36,7 @@
 - shadow evaluator 只消费 evidence-bound facts 与 trusted replay ports；报告 gate 固定 `BLOCKED_DATA`；
 - 四组合约测试 `54/54 PASS`，项目全量 `446 PASS / 0 FAIL / 1 SKIP`；
 - 独立复核 `0 Critical / 0 Major / 0 Minor`；
-- Windows：`WINDOWS_NOT_RUN`。
+- Windows：05A 合约与全项目回归已在 Node.js 24.21.0 / tzdata 2026c 上通过；Linux/Windows 的 runtime-specific digest 不相同，golden test 改为校验 runtime digest 自洽并 pin 跨平台 body digest。
 
 05A 只关闭纯契约门；不代表 scheduler、persistence、HTTP、acceptance 或真实 shadow 数据完成。
 
@@ -52,7 +52,17 @@
 
 ### WO-05B：Pure Deterministic Scheduler
 
-状态：`NEXT`
+状态：`LOCAL_ENGINE_PASS`
+
+本地完成检查点：
+
+- `deterministic-scheduler-v1` 只消费已规范化的冻结输入与 active config；不读取 DB、clock、random、filesystem、network、env 或默认 locale；
+- 完成 calendar window 再验证、显式/retrospective/fallback duration 解析、Buffer 占用、sample/resource/capability/legacy hard gate、p0/p1/p2 稳定顺序、soft diagnostic 与 deterministic Proposal item ID；
+- grouped/locked occupancy 不拆分或移动，未知历史 Buffer 和 unresolved resource 失败关闭；
+- Windows 本地 `12/12` 定向测试通过，项目全量 `456 PASS / 0 FAIL / 3 SKIP`；Linux/跨运行时回归尚未执行；
+- review 修复：业务窗口按 planning range 裁剪后必须与配置编译的完整窗口集合精确一致，防止部分日范围丢失可用时段或静默漏报；单次 planning range 的本地日历跨度超过 366 天时失败关闭；
+- review 修复：`desiredDate: null` 显式排在所有有效日期之后，包括 `9999-12-31`；
+- 无 DB、HTTP、真实 provider、正式排期写入或自动采用。
 
 交付：
 
@@ -210,4 +220,4 @@ WINDOWS_NOT_RUN
 
 ## 7. 当前下一步
 
-下一步实现 WO-05B pure deterministic scheduler，并保持纯核心不读取 DB、clock、filesystem、network、env 或 locale default。migration v5 必须等 WO-05B 稳定后再进入 05C；05D 不得在 canonical schedule command 缺失时提前接线。
+下一步进入 WO-05C 的本地持久化与 Proposal 生成；先核对 migration v1–v4 checksum 与既有 SQLite adapter/transaction 模式，再设计 append-only v5。05D 不得在 canonical schedule command 缺失时提前接线。05E 的真实 shadow 指标仍为 `BLOCKED_DATA`。
