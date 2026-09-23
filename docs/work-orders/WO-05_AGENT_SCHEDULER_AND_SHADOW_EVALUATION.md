@@ -104,14 +104,17 @@
 
 ### WO-05D：Canonical Schedule Acceptance
 
-状态：`LOCAL_ACCEPTANCE_PASS / HTTP_PRINCIPAL_NOT_WIRED`
+状态：`LOCAL_ACCEPTANCE_PASS / HTTP_PRINCIPAL_ADAPTER_IMPLEMENTED_LOCAL_ONLY`
 
 本地完成检查点：
 
 - 独立 canonical V2 schedule transaction kernel 接受调用方已开启的 `BEGIN IMMEDIATE`，一次性创建 selected Schedule Items 与单一 request binding；Proposal handler 不直接写排班表，也不调用 V1 whole-snapshot PUT；
 - 采用命令对 revision、active config、完整 input digest、algorithm 和重算结果做同事务复核；revision/config/input 漂移只留下 stale receipt，不创建正式排班；普通约束或投影失败整笔回滚；
 - 全选/部分采用只增加一次 schedule/projection revision，同事务刷新 V1/V2 投影、保存 decision/operation/audit，并为每个正式场次入队一条 `schedule.confirmed.v1` Outbox intent；不启动外部通知执行器；
-- 本地可信 principal 授权 port 未配置时失败关闭；没有 HTTP 路由或真实鉴权绑定，因此此状态不代表网页端可采用或生产就绪。
+- `ba16abe` 已完成 post-merge independent code/evidence verification，结果为 `PASS_TO_HTTP_WIRING`；reviewer 环境因无法 clone GitHub，fresh runtime re-execution 记录为 `NOT_RUN_ENVIRONMENT_LIMIT`，不得冒充 fresh PASS；
+- 已实现本地 HTTP principal adapter：`POST /api/v2/proposals/:id/decisions` 只接受注入 Auth Port 产生的 trusted `scheduler` / `administrator` principal；URL proposal ID 为路由权威，body actor/role/subject 不构成身份，resource scope 与 `modifySchedule` 仍在 canonical application path 失败关闭；
+- runtime composition 仍不读取或猜测真实凭据、真实用户映射或 resource scope；未显式注入 scheduling Auth Port 时保持 `AUTH_NOT_CONFIGURED`，direct server env 未启用该能力；
+- HTTP adapter 不启动外部通知执行器、不允许 Agent/LLM/background worker 自动采用，也不代表生产鉴权、部署或公开服务完成。
 
 前置：
 
@@ -237,4 +240,4 @@ WINDOWS_NOT_RUN
 
 ## 7. 当前下一步
 
-下一步需独立复核 WO-05D 的本地采用链路，并在单独授权下把 trusted scheduler/admin HTTP principal adapter 接入；当前 `accept` 仅可通过内部显式授权 port 调用，不是可公开使用的 API。05E 的真实 shadow 指标仍为 `BLOCKED_DATA`。
+WO-05D post-merge independent code/evidence verification 已完成并放行本地 HTTP wiring；trusted scheduler/admin HTTP principal adapter 已在本地实现分支接入，仍需 fresh runtime regression 与 PR 独立复核后才能关闭该子门。之后进入 WO-05E implementation；真实 shadow 指标继续保持 `BLOCKED_DATA`，不得用合成数据关闭。
