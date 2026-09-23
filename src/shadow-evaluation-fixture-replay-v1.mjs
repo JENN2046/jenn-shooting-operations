@@ -33,6 +33,67 @@ function ownDataRecord(value, expected) {
   }
 }
 
+function deepOwnDataSnapshot(value, ancestors = new WeakSet()) {
+  try {
+    if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+      return { ok: true, value };
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? { ok: true, value } : { ok: false };
+    }
+    if (typeof value !== 'object' || ancestors.has(value)) return { ok: false };
+
+    ancestors.add(value);
+    try {
+      if (Array.isArray(value)) {
+        if (Object.getPrototypeOf(value) !== Array.prototype) return { ok: false };
+        const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+        if (!lengthDescriptor || !Object.hasOwn(lengthDescriptor, 'value')
+          || !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value < 0) {
+          return { ok: false };
+        }
+        const length = lengthDescriptor.value;
+        const keys = Reflect.ownKeys(value);
+        if (keys.some(key => typeof key !== 'string')
+          || keys.length !== length + 1
+          || !keys.includes('length')) {
+          return { ok: false };
+        }
+        const snapshot = [];
+        for (let index = 0; index < length; index += 1) {
+          const key = String(index);
+          if (!keys.includes(key)) return { ok: false };
+          const descriptor = Object.getOwnPropertyDescriptor(value, key);
+          if (!descriptor || descriptor.enumerable !== true
+            || !Object.hasOwn(descriptor, 'value')) return { ok: false };
+          const nested = deepOwnDataSnapshot(descriptor.value, ancestors);
+          if (!nested.ok) return nested;
+          snapshot.push(nested.value);
+        }
+        return { ok: true, value: Object.freeze(snapshot) };
+      }
+
+      if (Object.getPrototypeOf(value) !== Object.prototype) return { ok: false };
+      const keys = Reflect.ownKeys(value);
+      if (keys.some(key => typeof key !== 'string')) return { ok: false };
+      const snapshot = {};
+      for (const key of keys) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, key);
+        if (!descriptor || descriptor.enumerable !== true
+          || !Object.hasOwn(descriptor, 'value')) return { ok: false };
+        const nested = deepOwnDataSnapshot(descriptor.value, ancestors);
+        if (!nested.ok) return nested;
+        snapshot[key] = nested.value;
+      }
+      return { ok: true, value: Object.freeze(snapshot) };
+    } finally {
+      ancestors.delete(value);
+    }
+  } catch {
+    return { ok: false };
+  }
+}
+
 function invalid(reason) {
   return Object.freeze({ ok: false, code: 'SHADOW_FIXTURE_REPLAY_INVALID', reason });
 }
@@ -47,11 +108,18 @@ export function replayShadowEvaluationFixtureV1(value) {
     const expected = ownDataRecord(fixture.expected, EXPECTED_KEYS);
     if (!expected) return invalid('FIXTURE_ENVELOPE_INVALID');
 
-    const reportInput = fixture.reportInput;
+    const reportInputSnapshot = deepOwnDataSnapshot(fixture.reportInput);
+    const classificationSnapshot = deepOwnDataSnapshot(expected.caseClassifications);
+    const reportSnapshot = deepOwnDataSnapshot(expected.report);
+    if (!reportInputSnapshot.ok || !classificationSnapshot.ok || !reportSnapshot.ok) {
+      return invalid('FIXTURE_ENVELOPE_INVALID');
+    }
+
+    const reportInput = reportInputSnapshot.value;
     const fixtureId = fixture.fixtureId;
     const datasetDigest = expected.datasetDigest;
-    const expectedClassifications = expected.caseClassifications;
-    const expectedReport = expected.report;
+    const expectedClassifications = classificationSnapshot.value;
+    const expectedReport = reportSnapshot.value;
 
     const manifest = buildShadowDatasetManifestV1(
       reportInput?.manifest,
