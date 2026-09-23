@@ -23,6 +23,8 @@ import {
 import { createSqliteRunEventStore } from '../src/sqlite-run-event-store-v2.mjs';
 import { initializeWritableSchema } from '../src/sqlite-schema-v2.mjs';
 import { projectV2Snapshot } from '../src/projections-v2.mjs';
+import { normalizeSchedulingConfigV1 } from '../src/scheduling-admin-contract-v1.mjs';
+import { canonicalJsonSchedulingV1, digestResourceCapabilitiesV1 } from '../src/scheduling-contract-v1.mjs';
 
 const T0 = '2026-09-22T09:00:00.000Z';
 const ALLOW_EVENT_TIME = () => ({ ok: true });
@@ -152,6 +154,88 @@ function seedSingle(db, suffix, sourceOrdinal = 0) {
   });
   seedRun(db, { runId, scheduleId, taskId: requestId });
   return { requestId, scheduleId, runId };
+}
+
+function seedCompleteRunContextFacts(db, { requestId, scheduleId, resourceId,
+  durationSourceVersion = 'fixture-v1' }) {
+  const capabilityJson = { schemaVersion: 1, capabilityIds: ['FLAT'] };
+  const capabilityDigest = digestResourceCapabilitiesV1(capabilityJson);
+  const config = {
+    schemaVersion: 1,
+    businessTimeZone: 'UTC',
+    resourceCalendars: [{
+      resourceId,
+      capabilityDigest,
+      weeklyWindows: [{ weekday: 2, start: '00:00', end: '23:59' }],
+      dateOverrides: [],
+    }],
+    durationFallbackRules: [{
+      ruleId: 'duration-flat',
+      productionType: '平面',
+      shootingSubtype: '细节',
+      durationMs: 3_600_000,
+    }],
+    bufferRules: [{
+      ruleId: 'buffer-flat',
+      productionType: '平面',
+      shootingSubtype: '细节',
+      bufferAfterMinutes: 15,
+    }],
+    softScoringWeights: {
+      LIGHTING_SWITCH: 1,
+      REFLECTIVITY_SEQUENCE: 1,
+      IDLE_GAP: 1,
+      EXPECTED_OVERRUN: 1,
+      DESIRED_DATE_MISS: 1,
+    },
+    compatibleAlgorithmVersions: ['deterministic-scheduler-v1'],
+  };
+  const admitted = normalizeSchedulingConfigV1(config);
+  assert.equal(admitted.ok, true, JSON.stringify(admitted));
+
+  db.prepare(`UPDATE requests_v2 SET production_type = '平面', shooting_subtype = '细节',
+    aspect_ratio = '1:1', deliverable_count = 1, lighting_preset = 'LIGHT-SOFT',
+    reflectivity = 'low' WHERE id = ?`).run(requestId);
+  db.prepare(`UPDATE schedule_items SET buffer_after_minutes = 15, buffer_source = 'config-v1'
+    WHERE id = ?`).run(scheduleId);
+  db.prepare(`INSERT INTO scheduling_resources
+    (resource_id, v1_display_place, status, capability_json, capability_digest,
+     created_at, updated_at, source_operation_id)
+    VALUES (?, 'Studio A', 'active', ?, ?, ?, ?, ?)`).run(
+    resourceId,
+    canonicalJsonSchedulingV1(capabilityJson),
+    capabilityDigest,
+    T0,
+    T0,
+    `RESOURCE-CAPTURE-${resourceId}`,
+  );
+  db.prepare(`INSERT INTO scheduling_request_requirements
+    (request_id, required_capability_ids_json, duration_estimate_json, updated_at, source_operation_id)
+    VALUES (?, ?, ?, ?, ?)`).run(
+    requestId,
+    canonicalJsonSchedulingV1(['FLAT']),
+    canonicalJsonSchedulingV1({
+      durationMs: 1_800_000,
+      source: 'explicit',
+      sourceVersion: durationSourceVersion,
+    }),
+    T0,
+    `REQ-CAPTURE-${requestId}`,
+  );
+  db.prepare(`INSERT INTO scheduling_config_versions
+    (config_version, schema_version, algorithm_version, calendar_compiler_version,
+     estimate_policy_version, config_json, config_digest, published_by, published_at,
+     publish_operation_id)
+    VALUES ('config-v1', 1, 'deterministic-scheduler-v1', 'calendar-compiler-v1',
+      'estimate-policy-v1', ?, ?, 'admin:fixture', ?, 'CONFIG-PUBLISH-1')`).run(
+    admitted.configJson,
+    admitted.configDigest,
+    T0,
+  );
+  db.prepare(`INSERT INTO scheduling_active_config
+    (id, config_version, activated_at, activation_operation_id, projection_revision)
+    VALUES (1, 'config-v1', ?, 'CONFIG-ACTIVATE-1', 10)`).run(T0);
+  return { capabilityDigest, configDigest: admitted.configDigest };
 }
 
 function makeApply(db, {
@@ -334,6 +418,92 @@ if (!isMainThread && workerData?.mode === 'apply-run-event') {
       eventType: 'start',
       occurredAt: '2026-02-31T09:00:00.000Z',
     }).code, 'INVALID_EVENT_TIME');
+  });
+
+  test('generic start of a pre-provisioned scheduled run captures complete immutable context', () => {
+    const db = openDatabase(':memory:');
+    try {
+      seedBase(db);
+      const ids = seedSingle(db, 'CAPTURE', 0);
+      const resourceId = 'RESOURCE-0';
+      const expected = seedCompleteRunContextFacts(db, {
+        requestId: ids.requestId,
+        scheduleId: ids.scheduleId,
+        resourceId,
+      });
+      const apply = makeApply(db, { receivedAt: '2026-09-22T12:00:00.000Z' });
+      const command = eventCommand({
+        eventId: 'EVENT-CAPTURE-START',
+        runId: ids.runId,
+        scheduleId: ids.scheduleId,
+        expectedRunRevision: 0,
+        eventType: 'start',
+        occurredAt: '2026-09-22T09:00:00.000Z',
+      });
+      const first = apply(command);
+      assert.equal(first.ok, true, JSON.stringify(first));
+      assert.equal(first.previousState, 'scheduled');
+      assert.equal(first.resultingState, 'shooting');
+
+      const row = db.prepare(`SELECT schema_version, context_status, snapshot_json,
+        snapshot_digest, captured_at FROM scheduling_run_context_snapshots WHERE run_id = ?`)
+        .get(ids.runId);
+      assert.equal(row.schema_version, 1);
+      assert.equal(row.context_status, 'complete');
+      assert.equal(row.captured_at, '2026-09-22T12:00:00.000Z');
+      const snapshot = JSON.parse(row.snapshot_json);
+      assert.equal(snapshot.runId, ids.runId);
+      assert.equal(snapshot.requestId, ids.requestId);
+      assert.equal(snapshot.resourceId, resourceId);
+      assert.deepEqual(snapshot.durationEstimate, {
+        durationMs: 1_800_000,
+        provenance: 'explicit',
+        version: 'fixture-v1',
+      });
+      assert.equal(snapshot.resourceCapabilityDigest, expected.capabilityDigest);
+      assert.equal(snapshot.configDigest, expected.configDigest);
+
+      const replay = apply(command);
+      assert.equal(replay.replayed, true);
+      assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scheduling_run_context_snapshots
+        WHERE run_id = ?`).get(ids.runId).count, 1);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('generic start stays successful when valid duration sourceVersion is not an evaluation token', () => {
+    const db = openDatabase(':memory:');
+    try {
+      seedBase(db);
+      const ids = seedSingle(db, 'CAPTURE-WIDE-VERSION', 0);
+      seedCompleteRunContextFacts(db, {
+        requestId: ids.requestId,
+        scheduleId: ids.scheduleId,
+        resourceId: 'RESOURCE-0',
+        durationSourceVersion: '版本 1',
+      });
+      const apply = makeApply(db);
+      const response = apply(eventCommand({
+        eventId: 'EVENT-CAPTURE-WIDE-VERSION',
+        runId: ids.runId,
+        scheduleId: ids.scheduleId,
+        expectedRunRevision: 0,
+        eventType: 'start',
+        occurredAt: '2026-09-22T09:00:00.000Z',
+      }));
+      assert.equal(response.ok, true, JSON.stringify(response));
+      assert.equal(response.resultingState, 'shooting');
+
+      const row = db.prepare(`SELECT context_status, snapshot_json
+        FROM scheduling_run_context_snapshots WHERE run_id = ?`).get(ids.runId);
+      assert.equal(row.context_status, 'ineligible');
+      const snapshot = JSON.parse(row.snapshot_json);
+      assert.equal(snapshot.ineligibleReason, 'RULE_FACT_MISSING');
+      assert.equal(snapshot.durationEstimate, null);
+    } finally {
+      db.close();
+    }
   });
 
   test('full event flow persists metrics, scoped revisions, projections, receipt, and audit atomically', () => {

@@ -7,6 +7,7 @@ import {
   transitionRequest,
 } from './domain-rules-v2.mjs';
 import { buildProductionRunCompletedNotificationV1 } from './production-run-completed-notification-v1.mjs';
+import { buildFirstStartRunContextSnapshotV1 } from './run-context-capture-v1.mjs';
 
 const EVENT_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/u;
 const IDENTIFIER = /^\S(?:.*\S)?$/u;
@@ -326,6 +327,24 @@ export function createApplyRunEvent({ store, clock, eventTimePolicy } = {}) {
           netDurationMs: folded.run.net_duration_ms,
           metricsAlgorithmVersion: folded.run.metrics_algorithm_version,
         };
+        const captureRequired = folded.previousState === 'scheduled'
+          && folded.resultingState === 'shooting';
+        if (captureRequired) {
+          const captured = buildFirstStartRunContextSnapshotV1({
+            runId: run.id,
+            scope: run.scope,
+            scheduleItem: context.scheduleItem,
+            requests: context.requests,
+            resource: context.resource,
+            requestRequirements: context.requestRequirements,
+            activeConfig: context.activeConfig,
+            capturedAt: receivedAt,
+          });
+          if (!captured.ok) throw abort(captured.code ?? 'RUN_CONTEXT_CAPTURE_FAILED');
+          if (transaction.insertRunContextSnapshot(captured) !== 1) {
+            throw abort('RUN_CONTEXT_CAPTURE_WRITE_FAILED');
+          }
+        }
         if (transaction.updateRun({
           runId: run.id,
           expectedRunRevision: run.run_revision,

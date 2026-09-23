@@ -131,7 +131,7 @@ test('fresh schema applies the continuous migration prefix and known tables', ()
   try {
     const result = initializeWritableSchema(db, { now: () => new Date('2026-09-22T08:00:00.000Z') });
     assert.deepEqual(result, { version: LATEST_SCHEMA_VERSION, latestVersion: LATEST_SCHEMA_VERSION });
-    assert.equal(LATEST_SCHEMA_VERSION, 5);
+    assert.equal(LATEST_SCHEMA_VERSION, 6);
     assert.deepEqual(
       db.prepare('SELECT version, name, checksum FROM schema_migrations ORDER BY version').all().map(row => ({ ...row })),
       MIGRATIONS.map(({ version, name, checksum }) => ({ version, name, checksum })),
@@ -148,6 +148,7 @@ test('fresh schema applies the continuous migration prefix and known tables', ()
       'scheduling_request_requirements',
       'scheduling_config_versions', 'scheduling_active_config',
       'scheduling_config_activations', 'scheduling_proposals', 'scheduling_proposal_decisions',
+      'scheduling_run_context_snapshots',
     ]) assert.ok(tables.includes(table), `expected ${table}`);
 
     assert.equal(db.prepare(`PRAGMA table_info(product_catalog_entries)`).all().find(row => row.name === 'id').type, 'TEXT');
@@ -203,7 +204,8 @@ test('migration v5 upgrades v4 without changing historical markers and seals pro
     const before = db.prepare(`SELECT version, name, checksum, applied_at
       FROM schema_migrations ORDER BY version`).all().map(row => ({ ...row }));
     assert.equal(tableNames(db).includes('scheduling_proposals'), false);
-    assert.deepEqual(initializeWritableSchema(db), { version: 5, latestVersion: 5 });
+    assert.deepEqual(initializeWritableSchema(db, { migrations: MIGRATIONS.slice(0, 5) }),
+      { version: 5, latestVersion: 5 });
     const after = db.prepare(`SELECT version, name, checksum, applied_at
       FROM schema_migrations ORDER BY version`).all().map(row => ({ ...row }));
     assert.deepEqual(after.slice(0, 4), before);
@@ -251,6 +253,54 @@ test('migration v5 upgrades v4 without changing historical markers and seals pro
     db.close();
   }
 });
+test('migration v6 upgrades v5 with immutable run-context snapshot storage', () => {
+  const db = memoryDatabase();
+  try {
+    initializeWritableSchema(db, { migrations: MIGRATIONS.slice(0, 5) });
+    const before = db.prepare(`SELECT version, name, checksum, applied_at
+      FROM schema_migrations ORDER BY version`).all().map(row => ({ ...row }));
+    assert.equal(tableNames(db).includes('scheduling_run_context_snapshots'), false);
+
+    assert.deepEqual(initializeWritableSchema(db), { version: 6, latestVersion: 6 });
+    const after = db.prepare(`SELECT version, name, checksum, applied_at
+      FROM schema_migrations ORDER BY version`).all().map(row => ({ ...row }));
+    assert.deepEqual(after.slice(0, 5), before);
+    assert.deepEqual(after[5], {
+      version: 6,
+      name: 'scheduling_run_context_capture',
+      checksum: MIGRATIONS[5].checksum,
+      applied_at: after[5].applied_at,
+    });
+
+    db.prepare(`INSERT INTO schedule_items (
+      id, source_ordinal, resource_id, resource_resolution_status, resource_mapping_version,
+      legacy_place_text, planned_start, planned_end, buffer_after_minutes, buffer_source,
+      schedule_status, schedule_status_provenance, lock_status, lock_status_provenance,
+      note, allocation_mode, source, source_ref, imported_at, migration_batch_id
+    ) VALUES ('SCHEDULE-CAPTURE', 1, 'RESOURCE-A', 'resolved', 'resource-test', NULL,
+      '2026-09-22T09:00:00.000Z', '2026-09-22T10:00:00.000Z', 15, 'config-v1',
+      'confirmed', 'domain_command', 'unlocked', 'domain_command', '', 'single',
+      'human', NULL, '2026-09-22T08:00:00.000Z', NULL)`).run();
+    db.prepare(`INSERT INTO production_runs (
+      id, schedule_item_id, scope, task_id, status, run_revision,
+      blocked_duration_ms, created_at, updated_at
+    ) VALUES ('RUN-CAPTURE', 'SCHEDULE-CAPTURE', 'block', NULL, 'scheduled', 0, 0, ?, ?)`)
+      .run('2026-09-22T08:00:00.000Z', '2026-09-22T08:00:00.000Z');
+    db.prepare(`INSERT INTO scheduling_run_context_snapshots (
+      run_id, schema_version, context_status, snapshot_json, snapshot_digest, captured_at
+    ) VALUES ('RUN-CAPTURE', 1, 'ineligible', '{}', ?, ?)`)
+      .run('sha256:' + 'a'.repeat(64), '2026-09-22T08:00:00.000Z');
+    assert.throws(() => db.exec(`UPDATE scheduling_run_context_snapshots
+      SET context_status = 'complete' WHERE run_id = 'RUN-CAPTURE'`), /immutable/);
+    assert.throws(() => db.exec(`DELETE FROM scheduling_run_context_snapshots
+      WHERE run_id = 'RUN-CAPTURE'`), /cannot be deleted/);
+    assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+
 
 test('migration preserves all existing V1 rows and leaves compatibility columns nullable', () => {
   const db = memoryDatabase();

@@ -9,6 +9,7 @@ import {
 } from './domain-rules-v2.mjs';
 import { evaluateKioskEventTime } from './event-time-policy-v2.mjs';
 import { buildProductionRunCompletedNotificationV1 } from './production-run-completed-notification-v1.mjs';
+import { buildFirstStartRunContextSnapshotV1 } from './run-context-capture-v1.mjs';
 import {
   digestRunEventResponse,
   rebuildRunAtReceipt,
@@ -323,7 +324,7 @@ export function createApplyKioskRunEvent({ store, clock, eventTimePolicy = evalu
         const activeRuns = context.runs.filter(run => ['scheduled', 'shooting', 'blocked'].includes(run.status));
         if (activeRuns.length > 1) return result('MULTIPLE_ACTIVE_RUNS');
         let run;
-        let firstStart = false;
+        let provisionRun = false;
         let lastOccurredAt = null;
         if (activeRuns.length === 1) {
           run = activeRuns[0];
@@ -335,7 +336,7 @@ export function createApplyKioskRunEvent({ store, clock, eventTimePolicy = evalu
             return result('RUN_PREPARATION_REQUIRED');
           }
           if (transaction.findRunById(command.runId)) return result('RUN_ID_REUSE');
-          firstStart = true;
+          provisionRun = true;
           run = virtualRun(command, derivedScope);
         }
 
@@ -440,13 +441,33 @@ export function createApplyKioskRunEvent({ store, clock, eventTimePolicy = evalu
           metricsAlgorithmVersion: folded.run.metrics_algorithm_version,
         };
 
-        if (firstStart) transaction.insertProvisionedRun({
-          runId: run.id,
-          scheduleItemId: run.schedule_item_id,
-          scope: run.scope,
-          taskId: run.task_id,
-          createdAt: receivedAt,
-        });
+        if (provisionRun) {
+          transaction.insertProvisionedRun({
+            runId: run.id,
+            scheduleItemId: run.schedule_item_id,
+            scope: run.scope,
+            taskId: run.task_id,
+            createdAt: receivedAt,
+          });
+        }
+        const captureRequired = folded.previousState === 'scheduled'
+          && folded.resultingState === 'shooting';
+        if (captureRequired) {
+          const captured = buildFirstStartRunContextSnapshotV1({
+            runId: run.id,
+            scope: run.scope,
+            scheduleItem: context.scheduleItem,
+            requests: context.requests,
+            resource: context.resource,
+            requestRequirements: context.requestRequirements,
+            activeConfig: context.activeConfig,
+            capturedAt: receivedAt,
+          });
+          if (!captured.ok) throw new Error(`RUN_CONTEXT_CAPTURE_FAILED:${captured.code}`);
+          if (transaction.insertRunContextSnapshot(captured) !== 1) {
+            throw new Error('RUN_CONTEXT_CAPTURE_WRITE_FAILED');
+          }
+        }
         if (transaction.updateRun({
           runId: run.id,
           expectedRunRevision: run.run_revision,

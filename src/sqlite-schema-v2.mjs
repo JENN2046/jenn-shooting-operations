@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { SCHEDULING_SCHEMA_SQL } from './sqlite-scheduling-schema-v1.mjs';
+import { RUN_CONTEXT_CAPTURE_SCHEMA_SQL } from './sqlite-run-context-capture-schema-v1.mjs';
 
 const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
 
@@ -787,6 +788,8 @@ const NOTIFICATION_OUTBOX_TABLE_DEFINITIONS = schemaDefinitions(NOTIFICATION_OUT
 const SCHEDULING_TABLE_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'table');
 const SCHEDULING_INDEX_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'index');
 const SCHEDULING_TRIGGER_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'trigger');
+const RUN_CONTEXT_CAPTURE_TABLE_DEFINITIONS = schemaDefinitions(RUN_CONTEXT_CAPTURE_SCHEMA_SQL, 'table');
+const RUN_CONTEXT_CAPTURE_TRIGGER_DEFINITIONS = schemaDefinitions(RUN_CONTEXT_CAPTURE_SCHEMA_SQL, 'trigger');
 const V2_COMPAT_TABLE_DEFINITIONS = Object.freeze({
   uploads: normalizeSchemaSql(`
     CREATE TABLE uploads (
@@ -823,6 +826,7 @@ export const MIGRATIONS = Object.freeze([
   Object.freeze({ version: 3, name: 'kiosk_run_event_review_ownership', sql: KIOSK_REVIEW_SQL, checksum: checksum(KIOSK_REVIEW_SQL) }),
   Object.freeze({ version: 4, name: 'notification_outbox', sql: NOTIFICATION_OUTBOX_SQL, checksum: checksum(NOTIFICATION_OUTBOX_SQL) }),
   Object.freeze({ version: 5, name: 'scheduling_proposals', sql: SCHEDULING_SCHEMA_SQL, checksum: checksum(SCHEDULING_SCHEMA_SQL) }),
+  Object.freeze({ version: 6, name: 'scheduling_run_context_capture', sql: RUN_CONTEXT_CAPTURE_SCHEMA_SQL, checksum: checksum(RUN_CONTEXT_CAPTURE_SCHEMA_SQL) }),
 ]);
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1).version;
@@ -976,6 +980,13 @@ const NOTIFICATION_OUTBOX_INDEXES = Object.freeze([
 const SCHEDULING_TABLES = Object.freeze(Object.keys(SCHEDULING_TABLE_DEFINITIONS));
 const SCHEDULING_INDEXES = Object.freeze(Object.keys(SCHEDULING_INDEX_DEFINITIONS));
 const SCHEDULING_TRIGGERS = Object.freeze(Object.keys(SCHEDULING_TRIGGER_DEFINITIONS));
+const RUN_CONTEXT_CAPTURE_TABLES = Object.freeze(Object.keys(RUN_CONTEXT_CAPTURE_TABLE_DEFINITIONS));
+const RUN_CONTEXT_CAPTURE_TRIGGERS = Object.freeze(Object.keys(RUN_CONTEXT_CAPTURE_TRIGGER_DEFINITIONS));
+const RUN_CONTEXT_CAPTURE_COLUMNS = Object.freeze({
+  scheduling_run_context_snapshots: [
+    'run_id', 'schema_version', 'context_status', 'snapshot_json', 'snapshot_digest', 'captured_at',
+  ],
+});
 
 function schemaError(code, message, cause) {
   const error = new Error(message, cause ? { cause } : undefined);
@@ -1179,6 +1190,16 @@ function assertSchedulingStructure(db) {
   }
 }
 
+function assertRunContextCaptureStructure(db) {
+  for (const table of RUN_CONTEXT_CAPTURE_TABLES) {
+    assertExactColumns(db, table, RUN_CONTEXT_CAPTURE_COLUMNS[table]);
+    assertObjectDefinition(db, 'table', table, RUN_CONTEXT_CAPTURE_TABLE_DEFINITIONS[table]);
+  }
+  for (const trigger of RUN_CONTEXT_CAPTURE_TRIGGERS) {
+    assertObjectDefinition(db, 'trigger', trigger, RUN_CONTEXT_CAPTURE_TRIGGER_DEFINITIONS[trigger]);
+  }
+}
+
 function assertNoUnknownSchemaObjects(db, version) {
   const allowed = new Set([
     ...Object.keys(V1_COLUMNS).map(name => `table:${name}`),
@@ -1209,6 +1230,10 @@ function assertNoUnknownSchemaObjects(db, version) {
     for (const name of SCHEDULING_TABLES) allowed.add(`table:${name}`);
     for (const name of SCHEDULING_INDEXES) allowed.add(`index:${name}`);
     for (const name of SCHEDULING_TRIGGERS) allowed.add(`trigger:${name}`);
+  }
+  if (version >= 6) {
+    for (const name of RUN_CONTEXT_CAPTURE_TABLES) allowed.add(`table:${name}`);
+    for (const name of RUN_CONTEXT_CAPTURE_TRIGGERS) allowed.add(`trigger:${name}`);
   }
 
   const unknown = db.prepare(`
@@ -1241,6 +1266,7 @@ function assertStructureForVersion(db, version) {
   if (version >= 3) assertKioskReviewStructure(db);
   if (version >= 4) assertNotificationOutboxStructure(db);
   if (version >= 5) assertSchedulingStructure(db);
+  if (version >= 6) assertRunContextCaptureStructure(db);
 }
 
 function assertNoPendingArtifacts(db, nextVersion) {
@@ -1281,6 +1307,12 @@ function assertNoPendingArtifacts(db, nextVersion) {
     || SCHEDULING_TRIGGERS.some(trigger => objectExists(db, 'trigger', trigger))
   )) {
     throw schemaError('SCHEMA_PARTIAL_MIGRATION', 'unmarked scheduling schema objects are present');
+  }
+  if (nextVersion === 6 && (
+    RUN_CONTEXT_CAPTURE_TABLES.some(table => objectExists(db, 'table', table))
+    || RUN_CONTEXT_CAPTURE_TRIGGERS.some(trigger => objectExists(db, 'trigger', trigger))
+  )) {
+    throw schemaError('SCHEMA_PARTIAL_MIGRATION', 'unmarked run-context capture schema objects are present');
   }
 }
 
