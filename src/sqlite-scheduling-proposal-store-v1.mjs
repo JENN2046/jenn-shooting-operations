@@ -19,6 +19,9 @@ import {
 } from './scheduling-proposal-contract-v1.mjs';
 
 function denied(code) { return Object.freeze({ ok: false, code }); }
+function reservedSystemDecisionId(value) {
+  return typeof value === 'string' && value.startsWith('spd_');
+}
 const ASSEMBLER_DENIALS = new Set([
   'SCHEDULING_PLANNING_RANGE_UNSUPPORTED',
   'SCHEDULING_RESOURCE_NOT_REGISTERED',
@@ -308,6 +311,9 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
           );
           return { ok: true, receipt, exactReplay: true };
         }
+        if (reservedSystemDecisionId(admitted.command.decisionId)) {
+          return denied('DECISION_ID_RESERVED');
+        }
         if (found.lifecycle.status !== 'draft') return denied('PROPOSAL_NOT_DRAFT');
         const decidedAt = now().toISOString();
         const built = buildSchedulingProposalDecisionReceiptV1({
@@ -376,6 +382,9 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
           ? { ok: true, receipt: {
             ...JSON.parse(prior.receipt_json), decisionReceiptDigest: prior.receipt_digest,
           }, exactReplay: true } : denied('IDEMPOTENCY_KEY_REUSE');
+        if (reservedSystemDecisionId(admitted.command.decisionId)) {
+          return denied('DECISION_ID_RESERVED');
+        }
         if (found.lifecycle.status !== 'draft') return denied('PROPOSAL_NOT_DRAFT');
         const proposal = found.proposal;
         const current = db.prepare(`SELECT schedule_revision, projection_revision
