@@ -156,7 +156,8 @@ function seedSingle(db, suffix, sourceOrdinal = 0) {
   return { requestId, scheduleId, runId };
 }
 
-function seedCompleteRunContextFacts(db, { requestId, scheduleId, resourceId }) {
+function seedCompleteRunContextFacts(db, { requestId, scheduleId, resourceId,
+  durationSourceVersion = 'fixture-v1' }) {
   const capabilityJson = { schemaVersion: 1, capabilityIds: ['FLAT'] };
   const capabilityDigest = digestResourceCapabilitiesV1(capabilityJson);
   const config = {
@@ -216,7 +217,7 @@ function seedCompleteRunContextFacts(db, { requestId, scheduleId, resourceId }) 
     canonicalJsonSchedulingV1({
       durationMs: 1_800_000,
       source: 'explicit',
-      sourceVersion: 'fixture-v1',
+      sourceVersion: durationSourceVersion,
     }),
     T0,
     `REQ-CAPTURE-${requestId}`,
@@ -466,6 +467,40 @@ if (!isMainThread && workerData?.mode === 'apply-run-event') {
       assert.equal(replay.replayed, true);
       assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scheduling_run_context_snapshots
         WHERE run_id = ?`).get(ids.runId).count, 1);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('generic start stays successful when valid duration sourceVersion is not an evaluation token', () => {
+    const db = openDatabase(':memory:');
+    try {
+      seedBase(db);
+      const ids = seedSingle(db, 'CAPTURE-WIDE-VERSION', 0);
+      seedCompleteRunContextFacts(db, {
+        requestId: ids.requestId,
+        scheduleId: ids.scheduleId,
+        resourceId: 'RESOURCE-0',
+        durationSourceVersion: '版本 1',
+      });
+      const apply = makeApply(db);
+      const response = apply(eventCommand({
+        eventId: 'EVENT-CAPTURE-WIDE-VERSION',
+        runId: ids.runId,
+        scheduleId: ids.scheduleId,
+        expectedRunRevision: 0,
+        eventType: 'start',
+        occurredAt: '2026-09-22T09:00:00.000Z',
+      }));
+      assert.equal(response.ok, true, JSON.stringify(response));
+      assert.equal(response.resultingState, 'shooting');
+
+      const row = db.prepare(`SELECT context_status, snapshot_json
+        FROM scheduling_run_context_snapshots WHERE run_id = ?`).get(ids.runId);
+      assert.equal(row.context_status, 'ineligible');
+      const snapshot = JSON.parse(row.snapshot_json);
+      assert.equal(snapshot.ineligibleReason, 'RULE_FACT_MISSING');
+      assert.equal(snapshot.durationEstimate, null);
     } finally {
       db.close();
     }
