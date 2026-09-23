@@ -31,6 +31,7 @@ export function applyCanonicalScheduleAcceptanceInTransactionV2({ db, proposal, 
   const inserted = [];
   for (let index = 0; index < selectedItems.length; index += 1) {
     const item = selectedItems[index];
+    if (item.configVersion !== proposal.configVersion) fail('SCHEDULE_CONFIG_VERSION_MISMATCH');
     const resource = db.prepare(`SELECT status FROM scheduling_resources WHERE resource_id = ?`)
       .get(item.resourceId);
     if (resource?.status !== 'active') fail('SCHEDULE_RESOURCE_INACTIVE');
@@ -67,10 +68,10 @@ export function applyCanonicalScheduleAcceptanceInTransactionV2({ db, proposal, 
        note, allocation_mode, source, source_ref, business_created_at, business_updated_at,
        imported_at, migration_batch_id)
        VALUES (?, ?, ?, 'resolved', 'resource-catalog-v1', NULL, ?, ?, ?,
-         'scheduling-config-v1', 'confirmed', 'domain_command', 'unlocked', 'domain_command',
+         ?, 'confirmed', 'domain_command', 'unlocked', 'domain_command',
          '', 'single', 'agent_proposal', ?, ?, ?, ?, NULL)`).run(
       id.scheduleItemId, sourceOrdinal, item.resourceId, item.plannedStart, item.plannedEnd,
-      item.bufferAfterMinutes, proposal.proposalId, at, at, at,
+      item.bufferAfterMinutes, proposal.configVersion, proposal.proposalId, at, at, at,
     );
     db.prepare(`INSERT INTO schedule_item_tasks
       (schedule_item_id, task_id, display_order, created_at, imported_at)

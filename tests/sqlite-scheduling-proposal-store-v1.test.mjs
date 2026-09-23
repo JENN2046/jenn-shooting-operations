@@ -182,6 +182,8 @@ test('acceptance creates canonical schedule, projections and one Outbox intent p
     assert.equal(result.ok, true, JSON.stringify(result));
     assert.equal(result.receipt.resultingScheduleRevision, 8);
     assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 2);
+    assert.deepEqual(f.db.prepare(`SELECT DISTINCT buffer_source FROM schedule_items
+      ORDER BY buffer_source`).all().map(row => row.buffer_source), ['config-v1']);
     assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_item_tasks').get().count, 2);
     assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 2);
     assert.equal(f.db.prepare(`SELECT projection_revision, schedule_revision FROM revision_counters
@@ -239,6 +241,67 @@ test('revision drift seals only the proposal and emits no schedule or Outbox fac
       schedulerPrincipal).code, 'IDEMPOTENCY_KEY_REUSE');
     assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM operations WHERE operation_id = ?')
       .get(command.decisionId).count, 1);
+  } finally { f.db.close(); }
+});
+
+test('acceptance assembly failure keeps the draft retryable without decision or schedule effects', () => {
+  for (const { assembleInput, expectedCode } of [
+    { assembleInput: () => { throw new Error('TRANSIENT_ASSEMBLER_FAILURE'); },
+      expectedCode: 'SCHEDULING_INPUT_ASSEMBLY_FAILED' },
+    { assembleInput: () => ({ schemaVersion: 1 }), expectedCode: 'SCHEDULING_INPUT_INVALID' },
+  ]) {
+    const f = acceptanceFixture();
+    try {
+      const generated = f.store.generate(f.command, 'scheduler:fixture');
+      assert.equal(generated.ok, true, JSON.stringify(generated));
+      const failing = createSqliteSchedulingProposalStoreV1({ db: f.db,
+        assembleInput,
+        now: () => new Date('2026-09-23T08:00:00.000Z'),
+        authorizeAcceptance: () => true,
+        refreshProjections: () => {},
+      });
+      const command = { decisionId: 'DEC-ASSEMBLY-FAIL-1',
+        proposalId: generated.proposal.proposalId, decisionType: 'accept',
+        selectedProposalItemIds: JSON.parse(generated.proposal.proposedItemsJson)
+          .map(item => item.proposalItemId), decisionNote: null, reasonCode: null,
+      };
+      const result = failing.accept(command, schedulerPrincipal);
+      assert.equal(result.code, expectedCode);
+      assert.equal(f.store.read(command.proposalId).lifecycle.status, 'draft');
+      assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM scheduling_proposal_decisions').get().count, 0);
+      assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM operations').get().count, 0);
+      assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
+      assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 0);
+      const retry = f.store.accept(command, schedulerPrincipal);
+      assert.equal(retry.ok, true, JSON.stringify(retry));
+      assert.equal(retry.receipt.decisionType, 'accept');
+    } finally { f.db.close(); }
+  }
+});
+
+test('successfully assembled changed input still stales the proposal', () => {
+  const f = acceptanceFixture();
+  try {
+    const generated = f.store.generate(f.command, 'scheduler:fixture');
+    assert.equal(generated.ok, true, JSON.stringify(generated));
+    const changedInput = JSON.parse(generated.proposal.inputSnapshotJson);
+    changedInput.candidates[0].priority = 'p0';
+    const changed = createSqliteSchedulingProposalStoreV1({ db: f.db,
+      assembleInput: () => changedInput,
+      now: () => new Date('2026-09-23T08:00:00.000Z'),
+      authorizeAcceptance: () => true,
+      refreshProjections: () => {},
+    });
+    const result = changed.accept({ decisionId: 'DEC-INPUT-DRIFT-1',
+      proposalId: generated.proposal.proposalId, decisionType: 'accept',
+      selectedProposalItemIds: JSON.parse(generated.proposal.proposedItemsJson)
+        .map(item => item.proposalItemId), decisionNote: null, reasonCode: null,
+    }, schedulerPrincipal);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.receipt.decisionType, 'stale');
+    assert.equal(result.receipt.reasonCode, 'SCHEDULING_INPUT_CHANGED');
+    assert.equal(f.store.read(generated.proposal.proposalId).lifecycle.status, 'stale');
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
   } finally { f.db.close(); }
 });
 

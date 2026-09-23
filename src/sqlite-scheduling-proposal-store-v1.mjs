@@ -361,7 +361,8 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
         if (!staleReason) {
           input = readAssembled({ planningWindowStart: proposal.planningWindowStart,
             planningWindowEnd: proposal.planningWindowEnd, resourceScope: proposal.resourceScope }, active);
-          if (!input || input.inputDigest !== proposal.inputDigest) {
+          if (!input.ok) return input;
+          if (input.inputDigest !== proposal.inputDigest) {
             staleReason = 'SCHEDULING_INPUT_CHANGED';
           }
         }
