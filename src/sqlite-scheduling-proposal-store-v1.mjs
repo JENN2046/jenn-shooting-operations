@@ -16,6 +16,12 @@ import {
 } from './scheduling-proposal-contract-v1.mjs';
 
 function denied(code) { return Object.freeze({ ok: false, code }); }
+const ASSEMBLER_DENIALS = new Set([
+  'SCHEDULING_PLANNING_RANGE_UNSUPPORTED',
+  'SCHEDULING_RESOURCE_NOT_REGISTERED',
+  'SCHEDULING_CALENDAR_COMPILE_FAILED',
+  'SCHEDULING_REVISION_NOT_READY',
+]);
 
 function transaction(db, begin, work) {
   db.exec(begin);
@@ -139,8 +145,15 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now }
   }
 
   function readAssembled(command, active) {
-    const admitted = normalizeSchedulingInputV1(assembleInput({ db, command, activeConfig: active }));
-    if (!admitted.ok) return null;
+    let assembled;
+    try {
+      assembled = assembleInput({ db, command, activeConfig: active });
+    } catch (error) {
+      return denied(ASSEMBLER_DENIALS.has(error?.message) ? error.message
+        : 'SCHEDULING_INPUT_ASSEMBLY_FAILED');
+    }
+    const admitted = normalizeSchedulingInputV1(assembled);
+    if (!admitted.ok) return denied('SCHEDULING_INPUT_INVALID');
     if (admitted.input.configVersion !== active.config_version
       || admitted.input.configDigest !== active.config_digest
       || admitted.input.algorithmVersion !== active.algorithm_version
@@ -149,7 +162,7 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now }
       || admitted.input.planningWindowStart !== command.planningWindowStart
       || admitted.input.planningWindowEnd !== command.planningWindowEnd
       || canonicalJsonSchedulingV1(admitted.input.resources.map(item => item.resourceId))
-        !== canonicalJsonSchedulingV1(command.resourceScope)) return null;
+        !== canonicalJsonSchedulingV1(command.resourceScope)) return denied('SCHEDULING_INPUT_INVALID');
     return admitted;
   }
 
@@ -167,12 +180,14 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now }
       const snapshot = transaction(db, 'BEGIN DEFERRED', () => {
         const active = readActiveConfig(db);
         const revision = readRevision(db);
-        if (!active || revision === null) return null;
+        if (!active) return denied('SCHEDULING_CONFIG_NOT_ACTIVE');
+        if (revision === null) return denied('SCHEDULING_REVISION_NOT_READY');
         const input = readAssembled(command, active);
-        if (!input || input.input.baseScheduleRevision !== revision) return null;
-        return { active, input, revision };
+        if (!input.ok) return input;
+        if (input.input.baseScheduleRevision !== revision) return denied('SCHEDULING_INPUT_INVALID');
+        return { ok: true, active, input, revision };
       });
-      if (!snapshot) return denied('SCHEDULING_CONFIG_NOT_ACTIVE_OR_INPUT_INVALID');
+      if (!snapshot.ok) return snapshot;
       const computed = generateDeterministicScheduleV1(snapshot.input.input, snapshot.active.config);
       if (!computed.ok) return computed;
       const createdAt = now().toISOString();
@@ -213,7 +228,7 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now }
           return denied('SCHEDULING_INPUT_CHANGED_RETRY');
         }
         const currentInput = readAssembled(command, currentActive);
-        if (!currentInput || currentInput.inputDigest !== snapshot.input.inputDigest) {
+        if (!currentInput.ok || currentInput.inputDigest !== snapshot.input.inputDigest) {
           return denied('SCHEDULING_INPUT_CHANGED_RETRY');
         }
         db.prepare(`INSERT INTO scheduling_proposals
