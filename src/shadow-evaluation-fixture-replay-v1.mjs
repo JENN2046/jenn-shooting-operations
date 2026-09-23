@@ -95,3 +95,15 @@ export function replayShadowEvaluationFixtureV1(value) {
     return invalid('FIXTURE_ENVELOPE_INVALID');
   }
 }
+
+
+export function replayShadowEvaluationFixtureJsonV1(text) {
+  if (typeof text !== 'string') return invalid('FIXTURE_JSON_INVALID');
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return invalid('FIXTURE_JSON_INVALID');
+  }
+  return replayShadowEvaluationFixtureV1(value);
+}
