@@ -98,11 +98,19 @@ function staleOneInTransaction(db, { proposalId, triggerOperationId, reasonCode,
     proposalId, triggerOperationId, reasonCode,
   });
   if (!derived.ok) return derived;
-  const prior = db.prepare(`SELECT receipt_json, receipt_digest FROM scheduling_proposal_decisions
+  const prior = db.prepare(`SELECT proposal_id, decision_command_digest, decision_type,
+    receipt_json, receipt_digest FROM scheduling_proposal_decisions
     WHERE decision_id = ?`).get(derived.decisionId);
-  if (prior) return { ok: true, receipt: {
-    ...JSON.parse(prior.receipt_json), decisionReceiptDigest: prior.receipt_digest,
-  }, exactReplay: true };
+  if (prior) {
+    if (prior.proposal_id !== proposalId
+      || prior.decision_command_digest !== derived.decisionCommandDigest
+      || prior.decision_type !== 'stale') {
+      return denied('IDEMPOTENCY_KEY_REUSE');
+    }
+    return { ok: true, receipt: {
+      ...JSON.parse(prior.receipt_json), decisionReceiptDigest: prior.receipt_digest,
+    }, exactReplay: true };
+  }
   if (found.lifecycle.status !== 'draft') return denied('PROPOSAL_NOT_DRAFT');
   const built = buildSchedulingProposalDecisionReceiptV1({
     decisionId: derived.decisionId,
