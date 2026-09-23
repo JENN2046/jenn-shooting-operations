@@ -11,6 +11,7 @@ import { canonicalJsonSchedulingV1, digestResourceCapabilitiesV1,
   SCHEDULING_TIME_ZONE_DATA_VERSION } from '../src/scheduling-contract-v1.mjs';
 import { normalizeSchedulingConfigV1 } from '../src/scheduling-admin-contract-v1.mjs';
 import { createTrustedPrincipal } from '../src/authorization-v2.mjs';
+import { deriveSchedulingSystemStaleDecisionV1 } from '../src/scheduling-proposal-contract-v1.mjs';
 
 const schedulerPrincipal = createTrustedPrincipal({ subjectId: 'scheduler:fixture',
   role: 'scheduler', resourceIds: ['STUDIO-A'] }).principal;
@@ -468,6 +469,40 @@ test('reject reserves the shared operation ID and fails closed on global collisi
     assert.equal(f.db.prepare(`SELECT COUNT(*) AS count FROM scheduling_proposal_decisions
       WHERE decision_id = 'DEC-REJECT-TAKEN'`).get().count, 0);
     assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
+  } finally { f.db.close(); }
+});
+
+test('system stale replay fails closed when its deterministic ID is occupied by another decision', () => {
+  const f = fixture();
+  try {
+    const proposalA = f.store.generate(f.command, 'scheduler:fixture');
+    const proposalB = f.store.generate({ ...f.command, operationId: 'GEN-COLLISION-B' },
+      'scheduler:fixture');
+    assert.equal(proposalA.ok && proposalB.ok, true);
+    const stale = deriveSchedulingSystemStaleDecisionV1({
+      proposalId: proposalB.proposal.proposalId,
+      triggerOperationId: 'FUTURE-TRIGGER-1',
+      reasonCode: 'RESOURCE_CHANGED',
+    });
+    assert.equal(stale.ok, true, JSON.stringify(stale));
+    f.db.prepare(`INSERT INTO scheduling_proposal_decisions
+      (decision_id, proposal_id, decision_command_digest, decision_type,
+       receipt_json, receipt_digest, decided_at)
+      VALUES (?, ?, ?, 'reject', '{}', ?, ?)`).run(
+      stale.decisionId,
+      proposalA.proposal.proposalId,
+      `sha256:${'1'.repeat(64)}`,
+      `sha256:${'2'.repeat(64)}`,
+      '2026-09-23T08:00:00.000Z',
+    );
+    const result = f.store.stale({
+      proposalId: proposalB.proposal.proposalId,
+      triggerOperationId: 'FUTURE-TRIGGER-1',
+      reasonCode: 'RESOURCE_CHANGED',
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'IDEMPOTENCY_KEY_REUSE');
+    assert.equal(f.store.read(proposalB.proposal.proposalId).lifecycle.status, 'draft');
   } finally { f.db.close(); }
 });
 
