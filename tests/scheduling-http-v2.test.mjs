@@ -108,6 +108,25 @@ test('body role claims cannot upgrade an unprivileged principal', async () => {
   assert.equal(calls, 0);
 });
 
+test('malformed decision identifiers are rejected before persistence dispatch', async () => {
+  let calls = 0;
+  const app = createHttpApp({
+    store: fakeStore(),
+    scheduling: {
+      authenticate: () => principal(),
+      decideProposal: () => { calls += 1; return { ok: false, code: 'SHOULD_NOT_RUN' }; },
+    },
+  });
+  for (const decisionId of [{ x: 1 }, ['bad'], null, 7]) {
+    const response = await invoke(app, {
+      body: JSON.stringify(command({ decisionId })),
+    });
+    assert.equal(response.status, 422);
+    assert.equal(response.body.code, 'SCHEDULING_PROPOSAL_DECISION_COMMAND_INVALID');
+  }
+  assert.equal(calls, 0);
+});
+
 test('proposal path is authoritative and query parameters are rejected', async () => {
   let calls = 0;
   const scheduling = {
