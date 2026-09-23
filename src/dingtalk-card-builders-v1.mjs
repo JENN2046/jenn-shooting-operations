@@ -41,7 +41,7 @@ function validIdentifier(value) {
   return typeof value === 'string'
     && value.length > 0
     && value === value.trim()
-    && [...value].length <= 128
+    && [...value].length <= 160
     && /\S/u.test(value)
     && !CONTROL_OR_LINE_SEPARATOR.test(value);
 }

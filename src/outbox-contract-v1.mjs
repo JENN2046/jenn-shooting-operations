@@ -113,11 +113,11 @@ export function digestCanonicalJsonV1(value) {
   return `sha256:${createHash('sha256').update(canonicalJsonV1(value), 'utf8').digest('hex')}`;
 }
 
-function validIdentifier(value) {
+function validIdentifier(value, maxCodePoints) {
   return typeof value === 'string'
     && value.length > 0
     && value === value.trim()
-    && [...value].length <= 128
+    && [...value].length <= maxCodePoints
     && /\S/u.test(value)
     && !CONTROL_OR_LINE_SEPARATOR.test(value);
 }
@@ -131,8 +131,9 @@ function validTimestamp(value) {
   const day = Number(match[3]);
   const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
   const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  return month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1]
-    && Number.isFinite(Date.parse(value));
+  if (month < 1 || month > 12 || day < 1 || day > days[month - 1]) return false;
+  const millis = Date.parse(value);
+  return Number.isFinite(millis) && new Date(millis).toISOString() === value;
 }
 
 function invalid(code = 'NOTIFICATION_INTENT_INVALID', details = {}) {
@@ -141,10 +142,10 @@ function invalid(code = 'NOTIFICATION_INTENT_INVALID', details = {}) {
 
 function validCommonInput(input) {
   return exactKeys(input, INTENT_INPUT_KEYS)
-    && validIdentifier(input.outboxId)
-    && validIdentifier(input.aggregateId)
-    && validIdentifier(input.routeKey)
-    && validIdentifier(input.cardSchemaVersion)
+    && validIdentifier(input.outboxId, 160)
+    && validIdentifier(input.aggregateId, 160)
+    && validIdentifier(input.routeKey, 128)
+    && validIdentifier(input.cardSchemaVersion, 128)
     && Number.isSafeInteger(input.aggregateRevision)
     && input.aggregateRevision >= 0
     && validTimestamp(input.createdAt);
@@ -197,6 +198,47 @@ export function buildNotificationIntentV1(input) {
     createdAt: input.createdAt,
   });
   return Object.freeze({ ok: true, intent });
+}
+
+export function validateNotificationIntentV1(intent) {
+  if (!exactKeys(intent, INTENT_KEYS)) return invalid();
+  const admission = NOTIFICATION_INTENT_ADMISSION_V1[intent.intentType];
+  const spec = INTENT_SPEC.get(intent.intentType);
+  if (
+    admission?.status !== 'WIRED'
+    || !spec
+    || !validIdentifier(intent.outboxId, 160)
+    || !validIdentifier(intent.aggregateId, 160)
+    || !validIdentifier(intent.routeKey, 128)
+    || !validIdentifier(intent.cardSchemaVersion, 128)
+    || !validIdentifier(intent.dedupeKey, 1024)
+    || intent.aggregateType !== spec.aggregateType
+    || intent.aggregateRevisionScope !== admission.aggregateRevisionScope
+    || !Number.isSafeInteger(intent.aggregateRevision)
+    || intent.aggregateRevision < 0
+    || intent.cardSchemaVersion !== spec.cardSchemaVersion
+    || intent.deliveryPolicyVersion !== OUTBOX_DISPATCH_POLICY_V1.policyVersion
+    || !validTimestamp(intent.createdAt)
+  ) return invalid();
+
+  let payload;
+  try {
+    payload = JSON.parse(intent.payloadJson);
+    if (
+      canonicalJsonV1(payload) !== intent.payloadJson
+      || digestCanonicalJsonV1(payload) !== intent.payloadDigest
+    ) return invalid();
+  } catch {
+    return invalid();
+  }
+  const cardValidation = validateDingTalkCardV1(payload);
+  if (!cardValidation.ok || cardValidation.cardSchemaVersion !== intent.cardSchemaVersion) return invalid();
+  const expectedDedupeKey = [
+    'dingtalk', intent.cardSchemaVersion, intent.intentType, intent.aggregateType,
+    intent.aggregateId, intent.aggregateRevisionScope, String(intent.aggregateRevision),
+  ].join(':');
+  if (intent.dedupeKey !== expectedDedupeKey) return invalid();
+  return Object.freeze({ ok: true, intent: Object.freeze({ ...intent }), card: Object.freeze(payload) });
 }
 
 const DEDUPE_EQUIVALENCE_FIELDS = Object.freeze([

@@ -39,6 +39,10 @@ function validOpaque(value, maxCodePoints) {
     && !CONTROL_OR_LINE_SEPARATOR.test(value);
 }
 
+function validProviderRef(value) {
+  return validOpaque(value, 256) && /^[A-Za-z0-9._:/+=@-]+$/u.test(value);
+}
+
 function protocolError() {
   return Object.freeze({ ok: false, code: 'DINGTALK_ADAPTER_PROTOCOL_ERROR' });
 }
@@ -68,7 +72,7 @@ export function normalizeDingTalkResultV1(result, { operation } = {}) {
     if (
       !exactKeys(result, new Set(['ok', 'code', 'providerRef']))
       || result.code !== expectedCode
-      || !validOpaque(result.providerRef, 256)
+      || !validProviderRef(result.providerRef)
     ) return protocolError();
     return Object.freeze({ ok: true, code: expectedCode, providerRef: result.providerRef });
   }
@@ -105,7 +109,7 @@ function normalizedInput(input, operation) {
     || !validOpaque(input.dedupeKey, 1024)
     || !validOpaque(input.routeKey, 128)
     || !validateDingTalkCardV1(input.card).ok
-    || (operation === 'updateCard' && !validOpaque(input.providerRef, 256))
+    || (operation === 'updateCard' && !validProviderRef(input.providerRef))
   ) return null;
   const cloned = operation === 'sendCard'
     ? { dedupeKey: input.dedupeKey, routeKey: input.routeKey, card: Object.freeze({ ...input.card }) }

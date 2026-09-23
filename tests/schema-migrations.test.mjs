@@ -72,6 +72,28 @@ function columns(db, table) {
   return db.prepare(`PRAGMA table_info(${JSON.stringify(table)})`).all().map(row => row.name);
 }
 
+test('historical migration 1-3 identities remain pinned', () => {
+  assert.deepEqual(MIGRATIONS.slice(0, 3).map(({ version, name, checksum }) => ({
+    version, name, checksum,
+  })), [
+    {
+      version: 1,
+      name: 'v2_normalized_core',
+      checksum: 'sha256:b77dcddc0284a94a1dbc1e1a981fb7cbf3e4f2d41f8d6ccc999d37a298d1a3b5',
+    },
+    {
+      version: 2,
+      name: 'v1_compatibility_columns',
+      checksum: 'sha256:b944e3ed4d77774e77aa378a3e04cce7a07ae744dd867d7b89aa4ac704d94670',
+    },
+    {
+      version: 3,
+      name: 'kiosk_run_event_review_ownership',
+      checksum: 'sha256:20cbd2b8a992a888120fdaad41ddb7ec7f8aa4de65a2d7388c018c382e4e9476',
+    },
+  ]);
+});
+
 function insertPendingOutbox(db, {
   outboxId = 'OUTBOX-0001',
   dedupeKey = `dingtalk:dingtalk-card-v1:production-run.completed.v1:production_run:RUN-1:run:1`,

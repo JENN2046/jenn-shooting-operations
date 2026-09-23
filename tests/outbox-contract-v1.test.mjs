@@ -8,6 +8,7 @@ import {
   canonicalJsonV1,
   compareNotificationIntentV1,
   digestCanonicalJsonV1,
+  validateNotificationIntentV1,
 } from '../src/outbox-contract-v1.mjs';
 import { buildProductionRunCompletedCardV1 } from '../src/dingtalk-card-builders-v1.mjs';
 
@@ -95,6 +96,7 @@ test('builds an exact canonical completion intent and deterministic dedupe key',
   assert.equal(result.intent.payloadDigest, digestCanonicalJsonV1(completedCard.card));
   assert.equal(result.intent.deliveryPolicyVersion, 'outbox-dispatch-v1');
   assert.equal(Object.isFrozen(result.intent), true);
+  assert.equal(validateNotificationIntentV1(result.intent).ok, true);
 });
 
 test('completion intent rejects unknown keys, wrong scope/card/aggregate and malformed identifiers', () => {
@@ -132,4 +134,56 @@ test('intent comparison distinguishes exact no-op from a dedupe mismatch', () =>
   assert.deepEqual(compareNotificationIntentV1(built, { ...built, payloadDigest: `sha256:${'0'.repeat(64)}` }), {
     ok: false, code: 'OUTBOX_DEDUPE_MISMATCH',
   });
+});
+
+test('builder and validator preserve canonical 160-character aggregate identifiers', () => {
+  const runId = 'R'.repeat(160);
+  const card = buildProductionRunCompletedCardV1({
+    runId,
+    scheduleItemId: 'SCHEDULE-0001',
+    resourceId: 'STUDIO-A',
+    scope: 'task',
+    taskCount: 1,
+    completedAt: '2026-09-25T09:00:00.000Z',
+    netDurationMs: 1,
+    runRevision: 4,
+  });
+  assert.equal(card.ok, true);
+  const built = buildNotificationIntentV1({
+    outboxId: 'O'.repeat(160),
+    intentType: 'production-run.completed.v1',
+    aggregateType: 'production_run',
+    aggregateId: runId,
+    routeKey: 'shooting-operations',
+    aggregateRevisionScope: 'run',
+    aggregateRevision: 4,
+    cardSchemaVersion: card.cardSchemaVersion,
+    payload: card.card,
+    createdAt: '2026-09-25T09:00:01.000Z',
+  });
+  assert.equal(built.ok, true, built.code);
+  assert.ok([...built.intent.dedupeKey].length > 160);
+  assert.equal(validateNotificationIntentV1(built.intent).ok, true);
+});
+
+test('built intent validation requires canonical payload, exact dedupe and UTC toISOString time', () => {
+  const input = {
+    outboxId: 'OUTBOX-00000001', intentType: 'production-run.completed.v1',
+    aggregateType: 'production_run', aggregateId: 'RUN-00000001', routeKey: 'shooting-operations',
+    aggregateRevisionScope: 'run', aggregateRevision: 4,
+    cardSchemaVersion: completedCard.cardSchemaVersion, payload: completedCard.card,
+    createdAt: '2026-09-25T09:00:01.000Z',
+  };
+  const built = buildNotificationIntentV1(input).intent;
+  for (const candidate of [
+    { ...built, payloadJson: JSON.stringify({ ...completedCard.card, extra: true }) },
+    { ...built, payloadDigest: `sha256:${'0'.repeat(64)}` },
+    { ...built, dedupeKey: `${built.dedupeKey}:changed` },
+    { ...built, createdAt: '2026-09-25T17:00:01.000+08:00' },
+  ]) assert.deepEqual(validateNotificationIntentV1(candidate), {
+    ok: false, code: 'NOTIFICATION_INTENT_INVALID',
+  });
+  assert.deepEqual(buildNotificationIntentV1({
+    ...input, createdAt: '2026-09-25T17:00:01.000+08:00',
+  }), { ok: false, code: 'NOTIFICATION_INTENT_INVALID' });
 });

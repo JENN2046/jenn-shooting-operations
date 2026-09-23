@@ -115,6 +115,20 @@ test('card validator rejects truncated, extended and non-card objects', () => {
   }).ok, false);
 });
 
+test('card identifiers preserve the canonical 160-code-point boundary', () => {
+  const base = {
+    scheduleItemId: 'SCHEDULE-0001',
+    resourceId: 'STUDIO-A',
+    scope: 'task',
+    taskCount: 1,
+    completedAt: '2026-09-25T09:00:00.000Z',
+    netDurationMs: 1,
+    runRevision: 1,
+  };
+  assert.equal(buildProductionRunCompletedCardV1({ ...base, runId: 'R'.repeat(160) }).ok, true);
+  assert.equal(buildProductionRunCompletedCardV1({ ...base, runId: 'R'.repeat(161) }).ok, false);
+});
+
 test('exact-key validation is independent of JSON object key order', () => {
   assert.deepEqual(validateDingTalkCardV1({
     desiredDate: '2026-09-25',
