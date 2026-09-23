@@ -79,7 +79,16 @@
 
 ### WO-05C：Persistence and Proposal Generation
 
-状态：`PENDING`
+状态：`LOCAL_PROPOSAL_PASS_WITH_ACCEPTANCE_NOT_WIRED`
+
+本地完成检查点：
+
+- append-only migration v5 新增 canonical resource catalog、显式 request capability/estimate facts、immutable config versions、single active pointer/activation receipts、immutable Proposal 和 append-only decision receipts；v1–v4 SQL/checksum 未修改；
+- admin 内部命令支持资源登记/替换、配置发布/激活和显式需求能力登记；使用 expected revision、operation digest 与同事务读投影刷新；变更时 draft Proposal 在同一事务保守失效；
+- DB input assembler 只读取结构化字段、明确登记的需求能力与版本化配置；缺失能力事实保留为 `null` 并由 hard diagnostic 阻断，不从自由文本猜测；
+- Proposal generate 在 `BEGIN DEFERRED` 读取一致快照，锁外纯计算，`BEGIN IMMEDIATE` 内复核 active config、schedule revision 与 input digest；支持 read/reject/stale、exact replay 与 one-shot terminal receipt；
+- 未连接 HTTP、principal adapter、真实数据库、正式排期采用或 schedule Outbox；admin projection port 未配置时失败关闭；
+- Windows 本地 schema/Proposal 定向测试通过，全项目 `465 PASS / 0 FAIL / 3 SKIP`；Linux/跨运行时回归尚未执行。
 
 交付：
 
@@ -220,4 +229,4 @@ WINDOWS_NOT_RUN
 
 ## 7. 当前下一步
 
-下一步进入 WO-05C 的本地持久化与 Proposal 生成；先核对 migration v1–v4 checksum 与既有 SQLite adapter/transaction 模式，再设计 append-only v5。05D 不得在 canonical schedule command 缺失时提前接线。05E 的真实 shadow 指标仍为 `BLOCKED_DATA`。
+下一步实现 WO-05D 所需的 canonical V2 schedule application command、可信 principal 边界、resource → V1 display projection 与 transaction-bound schedule.confirmed Outbox producer；不得借 V1 PUT 或直接 SQL 绕过这些门。05E 的真实 shadow 指标仍为 `BLOCKED_DATA`。

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { SCHEDULING_SCHEMA_SQL } from './sqlite-scheduling-schema-v1.mjs';
 
 const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
 
@@ -783,6 +784,9 @@ const KIOSK_REVIEW_TABLE_DEFINITIONS = schemaDefinitions(KIOSK_REVIEW_SQL, 'tabl
 const NOTIFICATION_OUTBOX_INDEX_DEFINITIONS = schemaDefinitions(NOTIFICATION_OUTBOX_SQL, 'index');
 const NOTIFICATION_OUTBOX_TRIGGER_DEFINITIONS = schemaDefinitions(NOTIFICATION_OUTBOX_SQL, 'trigger');
 const NOTIFICATION_OUTBOX_TABLE_DEFINITIONS = schemaDefinitions(NOTIFICATION_OUTBOX_SQL, 'table');
+const SCHEDULING_TABLE_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'table');
+const SCHEDULING_INDEX_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'index');
+const SCHEDULING_TRIGGER_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'trigger');
 const V2_COMPAT_TABLE_DEFINITIONS = Object.freeze({
   uploads: normalizeSchemaSql(`
     CREATE TABLE uploads (
@@ -818,6 +822,7 @@ export const MIGRATIONS = Object.freeze([
   Object.freeze({ version: 2, name: 'v1_compatibility_columns', sql: V1_COMPATIBILITY_SQL, checksum: checksum(V1_COMPATIBILITY_SQL) }),
   Object.freeze({ version: 3, name: 'kiosk_run_event_review_ownership', sql: KIOSK_REVIEW_SQL, checksum: checksum(KIOSK_REVIEW_SQL) }),
   Object.freeze({ version: 4, name: 'notification_outbox', sql: NOTIFICATION_OUTBOX_SQL, checksum: checksum(NOTIFICATION_OUTBOX_SQL) }),
+  Object.freeze({ version: 5, name: 'scheduling_proposals', sql: SCHEDULING_SCHEMA_SQL, checksum: checksum(SCHEDULING_SCHEMA_SQL) }),
 ]);
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1).version;
@@ -967,6 +972,10 @@ const NOTIFICATION_OUTBOX_INDEXES = Object.freeze([
   'notification_outbox_lease_idx',
   'notification_outbox_provider_ref_uq',
 ]);
+
+const SCHEDULING_TABLES = Object.freeze(Object.keys(SCHEDULING_TABLE_DEFINITIONS));
+const SCHEDULING_INDEXES = Object.freeze(Object.keys(SCHEDULING_INDEX_DEFINITIONS));
+const SCHEDULING_TRIGGERS = Object.freeze(Object.keys(SCHEDULING_TRIGGER_DEFINITIONS));
 
 function schemaError(code, message, cause) {
   const error = new Error(message, cause ? { cause } : undefined);
@@ -1158,6 +1167,18 @@ function assertNotificationOutboxStructure(db) {
   }
 }
 
+function assertSchedulingStructure(db) {
+  for (const table of SCHEDULING_TABLES) {
+    assertObjectDefinition(db, 'table', table, SCHEDULING_TABLE_DEFINITIONS[table]);
+  }
+  for (const index of SCHEDULING_INDEXES) {
+    assertObjectDefinition(db, 'index', index, SCHEDULING_INDEX_DEFINITIONS[index]);
+  }
+  for (const trigger of SCHEDULING_TRIGGERS) {
+    assertObjectDefinition(db, 'trigger', trigger, SCHEDULING_TRIGGER_DEFINITIONS[trigger]);
+  }
+}
+
 function assertNoUnknownSchemaObjects(db, version) {
   const allowed = new Set([
     ...Object.keys(V1_COLUMNS).map(name => `table:${name}`),
@@ -1183,6 +1204,11 @@ function assertNoUnknownSchemaObjects(db, version) {
     for (const name of NOTIFICATION_OUTBOX_TABLES) allowed.add(`table:${name}`);
     for (const name of NOTIFICATION_OUTBOX_INDEXES) allowed.add(`index:${name}`);
     for (const name of Object.keys(NOTIFICATION_OUTBOX_TRIGGER_DEFINITIONS)) allowed.add(`trigger:${name}`);
+  }
+  if (version >= 5) {
+    for (const name of SCHEDULING_TABLES) allowed.add(`table:${name}`);
+    for (const name of SCHEDULING_INDEXES) allowed.add(`index:${name}`);
+    for (const name of SCHEDULING_TRIGGERS) allowed.add(`trigger:${name}`);
   }
 
   const unknown = db.prepare(`
@@ -1214,6 +1240,7 @@ function assertStructureForVersion(db, version) {
   if (version >= 2) assertCompatibilityStructure(db);
   if (version >= 3) assertKioskReviewStructure(db);
   if (version >= 4) assertNotificationOutboxStructure(db);
+  if (version >= 5) assertSchedulingStructure(db);
 }
 
 function assertNoPendingArtifacts(db, nextVersion) {
@@ -1247,6 +1274,13 @@ function assertNoPendingArtifacts(db, nextVersion) {
       .some(trigger => objectExists(db, 'trigger', trigger))
   )) {
     throw schemaError('SCHEMA_PARTIAL_MIGRATION', 'unmarked notification Outbox schema objects are present');
+  }
+  if (nextVersion === 5 && (
+    SCHEDULING_TABLES.some(table => objectExists(db, 'table', table))
+    || SCHEDULING_INDEXES.some(index => objectExists(db, 'index', index))
+    || SCHEDULING_TRIGGERS.some(trigger => objectExists(db, 'trigger', trigger))
+  )) {
+    throw schemaError('SCHEMA_PARTIAL_MIGRATION', 'unmarked scheduling schema objects are present');
   }
 }
 

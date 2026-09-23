@@ -41,8 +41,56 @@ function projectionRecords(db) {
     `).all(),
     production_runs: db.prepare('SELECT * FROM production_runs ORDER BY created_at, id').all(),
     uploads: db.prepare('SELECT * FROM uploads ORDER BY created_at, id').all(),
-    resources: [],
+    resources: db.prepare(`SELECT resource_id, v1_display_place, status,
+      capability_json, capability_digest FROM scheduling_resources
+      ORDER BY resource_id`).all(),
   };
+}
+
+/** Refresh both canonical read projections inside the caller's existing write transaction. */
+export function refreshSqliteSnapshotProjectionsV2({ db, businessTimeZone,
+  allowedBriefHosts = [], projectionRevision, scheduleRevision, updatedAt,
+  projectV1 = projectV1CompatibilitySnapshot, projectV2 = projectV2Snapshot } = {}) {
+  const records = projectionRecords(db);
+  if (records.revision_counters?.projection_revision !== projectionRevision
+    || records.revision_counters?.schedule_revision !== scheduleRevision) {
+    const error = new Error('PROJECTION_COUNTER_MISMATCH');
+    error.code = 'PROJECTION_COUNTER_MISMATCH';
+    throw error;
+  }
+  const v1 = projectV1(records, { businessTimeZone, updatedAt });
+  const v2 = projectV2(records, { allowedBriefHosts, updatedAt });
+  const v1Validation = validateV1Snapshot(v1, { profile: 'legacy-read' });
+  if (v1Validation.switchReady !== true
+    || !['L0_STRICT', 'L1_GRANDFATHERED_OPAQUE'].includes(v1Validation.classification)) {
+    const error = new Error('V1_PROJECTION_CONTRACT_INVALID');
+    error.code = 'V1_PROJECTION_CONTRACT_INVALID';
+    throw error;
+  }
+  const v2Validation = validateV2Snapshot(v2, { allowedBriefHosts });
+  if (!v2Validation.ok) {
+    const error = new Error('V2_PROJECTION_CONTRACT_INVALID');
+    error.code = 'V2_PROJECTION_CONTRACT_INVALID';
+    throw error;
+  }
+  const upsert = db.prepare(`
+    INSERT INTO snapshot_projections (
+      projection_name, schema_version, revision, schedule_revision,
+      updated_at, payload_json, source_schema_version
+    ) VALUES (?, ?, ?, ?, ?, ?, 2)
+    ON CONFLICT(projection_name) DO UPDATE SET
+      schema_version = excluded.schema_version,
+      revision = excluded.revision,
+      schedule_revision = excluded.schedule_revision,
+      updated_at = excluded.updated_at,
+      payload_json = excluded.payload_json,
+      source_schema_version = excluded.source_schema_version
+  `);
+  requireChanges(upsert.run('schedule-v1-compat', 1, projectionRevision, null,
+    updatedAt, JSON.stringify(v1)), 'V1_PROJECTION_WRITE_FAILED');
+  requireChanges(upsert.run('schedule-v2', 2, projectionRevision, scheduleRevision,
+    updatedAt, JSON.stringify(v2)), 'V2_PROJECTION_WRITE_FAILED');
+  return { v1, v2 };
 }
 
 export function createSqliteRunEventStore({
@@ -198,52 +246,10 @@ export function createSqliteRunEventStore({
     },
 
     refreshSnapshotProjections({ projectionRevision, scheduleRevision, updatedAt }) {
-      const records = projectionRecords(db);
-      if (
-        records.revision_counters?.projection_revision !== projectionRevision
-        || records.revision_counters?.schedule_revision !== scheduleRevision
-      ) {
-        const error = new Error('PROJECTION_COUNTER_MISMATCH');
-        error.code = 'PROJECTION_COUNTER_MISMATCH';
-        throw error;
-      }
-      const v1 = projectV1(records, { businessTimeZone, updatedAt });
-      const v2 = projectV2(records, { allowedBriefHosts, updatedAt });
-      const v1Validation = validateV1Snapshot(v1, { profile: 'legacy-read' });
-      if (
-        v1Validation.switchReady !== true
-        || !['L0_STRICT', 'L1_GRANDFATHERED_OPAQUE'].includes(v1Validation.classification)
-      ) {
-        const error = new Error('V1_PROJECTION_CONTRACT_INVALID');
-        error.code = 'V1_PROJECTION_CONTRACT_INVALID';
-        throw error;
-      }
-      const v2Validation = validateV2Snapshot(v2, { allowedBriefHosts });
-      if (!v2Validation.ok) {
-        const error = new Error('V2_PROJECTION_CONTRACT_INVALID');
-        error.code = 'V2_PROJECTION_CONTRACT_INVALID';
-        throw error;
-      }
-      const upsert = db.prepare(`
-        INSERT INTO snapshot_projections (
-          projection_name, schema_version, revision, schedule_revision,
-          updated_at, payload_json, source_schema_version
-        ) VALUES (?, ?, ?, ?, ?, ?, 2)
-        ON CONFLICT(projection_name) DO UPDATE SET
-          schema_version = excluded.schema_version,
-          revision = excluded.revision,
-          schedule_revision = excluded.schedule_revision,
-          updated_at = excluded.updated_at,
-          payload_json = excluded.payload_json,
-          source_schema_version = excluded.source_schema_version
-      `);
-      requireChanges(upsert.run(
-        'schedule-v1-compat', 1, projectionRevision, null, updatedAt, JSON.stringify(v1),
-      ), 'V1_PROJECTION_WRITE_FAILED');
-      requireChanges(upsert.run(
-        'schedule-v2', 2, projectionRevision, scheduleRevision, updatedAt, JSON.stringify(v2),
-      ), 'V2_PROJECTION_WRITE_FAILED');
-      return { v1, v2 };
+      return refreshSqliteSnapshotProjectionsV2({ db, businessTimeZone,
+        allowedBriefHosts, projectionRevision, scheduleRevision, updatedAt,
+        projectV1, projectV2,
+      });
     },
 
     enqueueNotification(intent) {

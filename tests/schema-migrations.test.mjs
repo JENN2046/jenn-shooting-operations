@@ -131,7 +131,7 @@ test('fresh schema applies the continuous migration prefix and known tables', ()
   try {
     const result = initializeWritableSchema(db, { now: () => new Date('2026-09-22T08:00:00.000Z') });
     assert.deepEqual(result, { version: LATEST_SCHEMA_VERSION, latestVersion: LATEST_SCHEMA_VERSION });
-    assert.equal(LATEST_SCHEMA_VERSION, 4);
+    assert.equal(LATEST_SCHEMA_VERSION, 5);
     assert.deepEqual(
       db.prepare('SELECT version, name, checksum FROM schema_migrations ORDER BY version').all().map(row => ({ ...row })),
       MIGRATIONS.map(({ version, name, checksum }) => ({ version, name, checksum })),
@@ -143,11 +143,12 @@ test('fresh schema applies the continuous migration prefix and known tables', ()
       'migration_batches', 'revision_counters', 'product_catalog_entries', 'requests_v2',
       'schedule_items', 'schedule_item_tasks', 'legacy_asset_entries', 'legacy_compat_fragments',
       'production_runs', 'production_events', 'snapshot_projections', 'run_event_id_owners',
-      'run_event_reviews', 'notification_outbox',
+      'run_event_reviews', 'notification_outbox', 'scheduling_resources',
+      'scheduling_admin_operations',
+      'scheduling_request_requirements',
+      'scheduling_config_versions', 'scheduling_active_config',
+      'scheduling_config_activations', 'scheduling_proposals', 'scheduling_proposal_decisions',
     ]) assert.ok(tables.includes(table), `expected ${table}`);
-    for (const deferred of ['scheduling_proposals', 'scheduling_config_versions']) {
-      assert.equal(tables.includes(deferred), false);
-    }
 
     assert.equal(db.prepare(`PRAGMA table_info(product_catalog_entries)`).all().find(row => row.name === 'id').type, 'TEXT');
     assert.ok(columns(db, 'uploads').includes('claimed_order'));
@@ -174,7 +175,8 @@ test('migration v4 upgrades an exact v3 prefix without changing prior markers', 
     `).all().map(row => ({ ...row }));
     assert.equal(tableNames(db).includes('notification_outbox'), false);
 
-    assert.deepEqual(initializeWritableSchema(db), { version: 4, latestVersion: 4 });
+    assert.deepEqual(initializeWritableSchema(db, { migrations: MIGRATIONS.slice(0, 4) }),
+      { version: 4, latestVersion: 4 });
     const after = db.prepare(`
       SELECT version, name, checksum, applied_at
       FROM schema_migrations ORDER BY version
@@ -187,7 +189,64 @@ test('migration v4 upgrades an exact v3 prefix without changing prior markers', 
       applied_at: after[3].applied_at,
     });
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 0);
-    assert.deepEqual(assertKnownSchema(db), { version: 4, latestVersion: 4 });
+    assert.deepEqual(assertKnownSchema(db, { migrations: MIGRATIONS.slice(0, 4) }),
+      { version: 4, latestVersion: 4 });
+  } finally {
+    db.close();
+  }
+});
+
+test('migration v5 upgrades v4 without changing historical markers and seals proposal facts', () => {
+  const db = memoryDatabase();
+  try {
+    initializeWritableSchema(db, { migrations: MIGRATIONS.slice(0, 4) });
+    const before = db.prepare(`SELECT version, name, checksum, applied_at
+      FROM schema_migrations ORDER BY version`).all().map(row => ({ ...row }));
+    assert.equal(tableNames(db).includes('scheduling_proposals'), false);
+    assert.deepEqual(initializeWritableSchema(db), { version: 5, latestVersion: 5 });
+    const after = db.prepare(`SELECT version, name, checksum, applied_at
+      FROM schema_migrations ORDER BY version`).all().map(row => ({ ...row }));
+    assert.deepEqual(after.slice(0, 4), before);
+    assert.deepEqual(after[4], {
+      version: 5, name: 'scheduling_proposals', checksum: MIGRATIONS[4].checksum,
+      applied_at: after[4].applied_at,
+    });
+    db.prepare(`INSERT INTO scheduling_config_versions
+      (config_version, schema_version, algorithm_version, calendar_compiler_version,
+       estimate_policy_version, config_json, config_digest, published_by, published_at,
+       publish_operation_id) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      'config-v1', 'algorithm-v1', 'calendar-v1', 'estimate-v1', '{}',
+      'sha256:' + 'a'.repeat(64), 'admin', '2026-09-22T08:00:00.000Z', 'PUBLISH-1',
+    );
+    assert.throws(() => db.exec(`UPDATE scheduling_config_versions SET config_json = '{}'
+      WHERE config_version = 'config-v1'`), /immutable/);
+    db.prepare(`INSERT INTO scheduling_proposals
+      (proposal_id, proposal_json, generation_operation_id, generation_command_digest,
+       input_digest, result_digest, base_schedule_revision, config_version, status,
+       terminal_decision_id, created_at, lifecycle_updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 0, ?, 'draft', NULL, ?, ?)`).run(
+      'PROPOSAL-1', '{}', 'GENERATE-1', 'sha256:' + 'b'.repeat(64),
+      'sha256:' + 'c'.repeat(64), 'sha256:' + 'd'.repeat(64), 'config-v1',
+      '2026-09-22T08:00:00.000Z', '2026-09-22T08:00:00.000Z',
+    );
+    assert.throws(() => db.exec(`UPDATE scheduling_proposals SET proposal_json = '{}'
+      WHERE proposal_id = 'PROPOSAL-1'`), /immutable|invalid scheduling proposal transition/);
+    assert.throws(() => db.exec(`UPDATE scheduling_proposals SET status = 'rejected',
+      terminal_decision_id = 'DECISION-1' WHERE proposal_id = 'PROPOSAL-1'`), /invalid scheduling proposal transition/);
+    db.prepare(`INSERT INTO scheduling_proposal_decisions
+      (decision_id, proposal_id, decision_command_digest, decision_type,
+       receipt_json, receipt_digest, decided_at) VALUES (?, ?, ?, 'reject', ?, ?, ?)`).run(
+      'DECISION-1', 'PROPOSAL-1', 'sha256:' + 'e'.repeat(64), '{}',
+      'sha256:' + 'f'.repeat(64), '2026-09-22T08:01:00.000Z',
+    );
+    db.exec(`UPDATE scheduling_proposals SET status = 'rejected',
+      terminal_decision_id = 'DECISION-1', lifecycle_updated_at = '2026-09-22T08:01:00.000Z'
+      WHERE proposal_id = 'PROPOSAL-1'`);
+    assert.throws(() => db.exec(`UPDATE scheduling_proposals SET status = 'stale'
+      WHERE proposal_id = 'PROPOSAL-1'`), /sealed|invalid scheduling proposal transition/);
+    assert.throws(() => db.exec(`DELETE FROM scheduling_proposal_decisions
+      WHERE decision_id = 'DECISION-1'`), /cannot be deleted/);
+    assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
   } finally {
     db.close();
   }
@@ -855,7 +914,7 @@ test('concurrent independent processes safely initialize and migrate the same da
         });
         assert.deepEqual(
           db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(row => row.version),
-          [1, 2, 3, 4],
+          MIGRATIONS.map(migration => migration.version),
         );
       } finally {
         db.close();
