@@ -140,7 +140,7 @@
 
 #### WO-05E-A：Future Run-Context Capture
 
-状态：`LOCAL_CAPTURE_IMPLEMENTED / REVIEW_REQUIRED`
+状态：`MERGED / POST_MERGE_VERIFICATION_PENDING`
 
 当前实现：
 
@@ -153,9 +153,25 @@
 
 05E-A 尚需：fresh regression、PR independent review、post-merge verification。未通过这些门前不得标记 capture closure。
 
-#### WO-05E-B / 05E-C
+#### WO-05E-B：Checked-in Fixture Dataset + Offline Replay
 
-仍待：checked-in fixture replay pipeline 与 low-disclosure report integration closure。真实 Level C 数据与真实 shadow threshold gate 继续保持 `BLOCKED_DATA`。
+状态：`LOCAL_FIXTURE_REPLAY_IMPLEMENTED / REVIEW_REQUIRED`
+
+当前实现：
+
+- checked-in synthetic fixture `fixtures/shadow-evaluation-v1/synthetic-level-a-b.v1.json` 固定包含一个 Level A 与一个 Level B case，明确保持 Level C = 0；
+- fixture 固定 dataset/result digest、case classification、eligibility/exclusion counts 与完整 low-disclosure expected report；
+- `src/shadow-evaluation-fixture-replay-v1.mjs` 依次重放 dataset admission、sample classifier 与 `shadow-metrics-v1` evaluator，并用 canonical JSON 校验 expected classification/report；
+- replay context 对 hard/priority ports 固定为 null；由于 fixture 无 Level C，不伪造 hard conflict / priority 结论，全部 Agent shadow metrics 必须保持 `NOT_ENOUGH_DATA + value:null`；
+- Level B retrospective duration baseline 可得到确定性 100ms median absolute error / P90 overrun，仅作为 baseline，不冒充 Agent shadow metric；
+- `npm run evaluate:shadow:fixtures` 只读取 checked-in fixture，不访问网络、provider、环境凭据或生产数据库；CLI 只输出 classification 与 low-disclosure report；
+- regression 覆盖 deterministic replay、digest/report tamper fail-closed、zero Level C 和 low-disclosure output。
+
+05E-B 尚需：fresh runtime replay、PR independent review、post-merge verification。
+
+#### WO-05E-C：Low-Disclosure Report Integration Closure
+
+仍待 integration closure。真实 Level C 数据与真实 shadow threshold gate 继续保持 `BLOCKED_DATA`。
 
 交付：
 

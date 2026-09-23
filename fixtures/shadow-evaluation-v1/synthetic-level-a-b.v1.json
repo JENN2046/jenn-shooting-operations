@@ -1,0 +1,257 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "wo-05e-b-synthetic-level-a-b-v1",
+  "reportInput": {
+    "manifest": {
+      "schemaVersion": 1,
+      "datasetId": "synthetic-level-a-b-v1",
+      "datasetClass": "synthetic",
+      "approvalDigest": null,
+      "windowStart": "2026-09-01T00:00:00.000Z",
+      "windowEnd": "2026-10-01T00:00:00.000Z",
+      "outcomeCutoff": "2026-10-02T00:00:00.000Z",
+      "cases": [
+        {
+          "caseId": "CASE-A",
+          "occurredAt": "2026-09-28T00:00:00.000Z",
+          "qualification": {
+            "schemaVersion": 1,
+            "sampleId": "CASE-A",
+            "requestId": "REQUEST-A",
+            "scheduleItemId": "SCHEDULE-A",
+            "runId": "RUN-A",
+            "scope": "task",
+            "requestBindingCount": 1,
+            "runStatus": "completed",
+            "eventChainEvidence": {
+              "runId": "RUN-A",
+              "status": "valid",
+              "derivationVersion": "production-run-event-chain-v1",
+              "correctionProvenance": [],
+              "evidenceDigest": "sha256:39d344607081aa11229697ac2b7051ca1e00a8221d9604e2e1983f1832c1f187"
+            },
+            "metricsEvidence": {
+              "runId": "RUN-A",
+              "algorithmVersion": "production-run-net-v1",
+              "derivationVersion": "production-run-net-derivation-v1",
+              "actualNetDurationMs": 1100,
+              "evidenceDigest": "sha256:8e8ae3f3d46c58573f05615a0731708c115552dc92b343ee3b1efa37a09c27ff"
+            },
+            "pendingReview": false,
+            "scheduleStatus": "confirmed",
+            "allocationMode": "single",
+            "legacySynthesized": false,
+            "runContextSnapshot": null,
+            "shadowEvidence": null,
+            "outcomeCutoff": "2026-10-02T00:00:00.000Z"
+          },
+          "schedulingInput": null,
+          "proposalItem": null,
+          "decisionFacts": null,
+          "finalItem": null,
+          "setupMeasurement": null,
+          "priorityPairs": []
+        },
+        {
+          "caseId": "CASE-B",
+          "occurredAt": "2026-09-29T00:00:00.000Z",
+          "qualification": {
+            "schemaVersion": 1,
+            "sampleId": "CASE-B",
+            "requestId": "REQUEST-B",
+            "scheduleItemId": "SCHEDULE-B",
+            "runId": "RUN-B",
+            "scope": "task",
+            "requestBindingCount": 1,
+            "runStatus": "completed",
+            "eventChainEvidence": {
+              "runId": "RUN-B",
+              "status": "valid",
+              "derivationVersion": "production-run-event-chain-v1",
+              "correctionProvenance": [],
+              "evidenceDigest": "sha256:2cf723f3ba60b8719258ba128adb4af75e8f9df6d8ec0f8f5cb6391836cc35b0"
+            },
+            "metricsEvidence": {
+              "runId": "RUN-B",
+              "algorithmVersion": "production-run-net-v1",
+              "derivationVersion": "production-run-net-derivation-v1",
+              "actualNetDurationMs": 1300,
+              "evidenceDigest": "sha256:be93cd8d224af2395223cb0f52e6d8c0a411a8e1dd7b24571f322fbbcdee7ba6"
+            },
+            "pendingReview": false,
+            "scheduleStatus": "confirmed",
+            "allocationMode": "single",
+            "legacySynthesized": false,
+            "runContextSnapshot": {
+              "schemaVersion": 1,
+              "runId": "RUN-B",
+              "scope": "task",
+              "scheduleItemId": "SCHEDULE-B",
+              "requestId": "REQUEST-B",
+              "resourceId": "STUDIO-A",
+              "productionType": "平面",
+              "shootingSubtype": "细节",
+              "lightingPreset": "LIGHT-SOFT",
+              "reflectivity": "low",
+              "durationEstimate": {
+                "durationMs": 1200,
+                "provenance": "explicit",
+                "version": "estimate-v1"
+              },
+              "bufferAfterMinutes": 10,
+              "bufferSource": "fixture-config-v1",
+              "resourceCapabilityDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "configVersion": "fixture-config-v1",
+              "configDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "contextStatus": "complete",
+              "ineligibleReason": null,
+              "capturedAt": "2026-09-25T00:00:00.000Z",
+              "snapshotDigest": "sha256:3943a8ed50dfb543b1ead79126267794d6fcf736f555bb0a7b18fe4459acb3fd"
+            },
+            "shadowEvidence": null,
+            "outcomeCutoff": "2026-10-02T00:00:00.000Z"
+          },
+          "schedulingInput": null,
+          "proposalItem": null,
+          "decisionFacts": null,
+          "finalItem": null,
+          "setupMeasurement": null,
+          "priorityPairs": []
+        }
+      ]
+    },
+    "algorithmVersion": "deterministic-scheduler-v1",
+    "configVersion": "fixture-config-v1",
+    "configDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "metricDefinitionVersion": "shadow-metrics-v1",
+    "generatedAt": "2026-10-03T00:00:00.000Z"
+  },
+  "expected": {
+    "datasetDigest": "sha256:cfb26445a913c5b61ee48f29c6b9247678dbac73b8b48fe56f4bee614ce20cec",
+    "caseClassifications": [
+      {
+        "sampleId": "CASE-A",
+        "highestLevel": "LEVEL_A",
+        "eligibleLevels": {
+          "levelA": true,
+          "levelB": false,
+          "levelC": false
+        },
+        "exclusionCodes": [
+          "RUN_CONTEXT_SNAPSHOT_MISSING",
+          "SCHEDULING_INPUT_MISSING",
+          "PROPOSAL_MISSING",
+          "ITEM_DECISION_DIFF_MISSING",
+          "OUTCOME_MISSING"
+        ]
+      },
+      {
+        "sampleId": "CASE-B",
+        "highestLevel": "LEVEL_B",
+        "eligibleLevels": {
+          "levelA": true,
+          "levelB": true,
+          "levelC": false
+        },
+        "exclusionCodes": [
+          "SCHEDULING_INPUT_MISSING",
+          "PROPOSAL_MISSING",
+          "ITEM_DECISION_DIFF_MISSING",
+          "OUTCOME_MISSING"
+        ]
+      }
+    ],
+    "report": {
+      "schemaVersion": 1,
+      "gateStatus": "BLOCKED_DATA",
+      "datasetDigest": "sha256:cfb26445a913c5b61ee48f29c6b9247678dbac73b8b48fe56f4bee614ce20cec",
+      "datasetClass": "synthetic",
+      "approvalDigest": null,
+      "algorithmVersion": "deterministic-scheduler-v1",
+      "configVersion": "fixture-config-v1",
+      "configDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "metricDefinitionVersion": "shadow-metrics-v1",
+      "eligibilityCounts": {
+        "total": 2,
+        "ineligible": 0,
+        "levelA": 2,
+        "levelB": 1,
+        "levelC": 0
+      },
+      "exclusionCounts": [
+        {
+          "code": "RUN_CONTEXT_SNAPSHOT_MISSING",
+          "count": 1
+        },
+        {
+          "code": "SCHEDULING_INPUT_MISSING",
+          "count": 2
+        },
+        {
+          "code": "PROPOSAL_MISSING",
+          "count": 2
+        },
+        {
+          "code": "ITEM_DECISION_DIFF_MISSING",
+          "count": 2
+        },
+        {
+          "code": "OUTCOME_MISSING",
+          "count": 2
+        }
+      ],
+      "metrics": {
+        "medianAbsoluteDurationErrorMs": {
+          "status": "NOT_ENOUGH_DATA",
+          "value": null,
+          "numerator": null,
+          "denominator": 0
+        },
+        "p90OverrunMs": {
+          "status": "NOT_ENOUGH_DATA",
+          "value": null,
+          "numerator": null,
+          "denominator": 0
+        },
+        "setupBufferMissRate": {
+          "status": "NOT_ENOUGH_DATA",
+          "value": null,
+          "numerator": null,
+          "denominator": 0
+        },
+        "hardConflictCount": {
+          "status": "NOT_ENOUGH_DATA",
+          "value": null,
+          "numerator": null,
+          "denominator": 0
+        },
+        "humanOverrideRate": {
+          "status": "NOT_ENOUGH_DATA",
+          "value": null,
+          "numerator": null,
+          "denominator": 0
+        },
+        "priorityViolationCount": {
+          "status": "NOT_ENOUGH_DATA",
+          "value": null,
+          "numerator": null,
+          "denominator": 0
+        },
+        "retrospectiveDurationBaselineMedianAbsoluteErrorMs": {
+          "status": "OK",
+          "value": 100,
+          "numerator": null,
+          "denominator": 1
+        },
+        "retrospectiveDurationBaselineP90OverrunMs": {
+          "status": "OK",
+          "value": 100,
+          "numerator": null,
+          "denominator": 1
+        }
+      },
+      "generatedAt": "2026-10-03T00:00:00.000Z",
+      "resultDigest": "sha256:73da98b7d91688235da5ce3547c7e06af685532697e699aa01a589c6619c3e4c"
+    }
+  }
+}
