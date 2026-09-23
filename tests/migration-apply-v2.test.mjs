@@ -158,7 +158,9 @@ test('apply path preflight is read-only and classifies every admitted path', asy
   });
 });
 
-test('apply path preflight fails closed when the effective uid changes during admission', async () => {
+test('apply path preflight fails closed when the effective uid changes during admission', {
+  skip: typeof process.getuid === 'function' ? false : 'effective uid is not exposed on Windows',
+}, async () => {
   await withFixtureRoot(async root => {
     createSource(root);
     const originalGetuid = process.getuid;

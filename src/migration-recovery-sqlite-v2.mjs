@@ -28,6 +28,11 @@ import {
   readV1Source,
   verifyUploadManifest,
 } from './migration-sqlite-v2.mjs';
+import {
+  hasExactPermissions,
+  pathsEqual,
+  supportsDirectoryFsync,
+} from './platform-filesystem.mjs';
 
 const FIXTURE_PREFIX = 'jenn-shooting-migration-fixture-';
 const SIDECAR_SUFFIXES = Object.freeze(['-wal', '-shm', '-journal']);
@@ -103,10 +108,10 @@ function assertFixtureRoot(fixtureRoot) {
   const realRoot = realpathSync(resolved);
   const realTmp = realpathSync(tmpdir());
   const metadata = statSync(realRoot, { bigint: true });
-  if (dirname(realRoot) !== realTmp || !basename(realRoot).startsWith(FIXTURE_PREFIX)) {
+  if (!pathsEqual(dirname(realRoot), realTmp) || !basename(realRoot).startsWith(FIXTURE_PREFIX)) {
     fail('UNSAFE_DESTINATION', 'INVALID_USAGE');
   }
-  if ((metadata.mode & 0o777n) !== 0o700n
+  if (!hasExactPermissions(metadata, 0o700n)
       || (typeof process.getuid === 'function' && metadata.uid !== BigInt(process.getuid()))) {
     fail('UNSAFE_DESTINATION', 'INVALID_USAGE');
   }
@@ -132,7 +137,7 @@ function existingFixtureFile(path, root, code = 'PATH_IDENTITY_CONFLICT') {
     fail(code, 'INVALID_USAGE');
   }
   const realPath = realpathSync(candidate);
-  if (realPath !== candidate) fail(code, 'INVALID_USAGE');
+  if (!pathsEqual(realPath, candidate)) fail(code, 'INVALID_USAGE');
   const metadata = statSync(realPath, { bigint: true });
   if (metadata.nlink !== 1n) fail(code, 'INVALID_USAGE');
   return {
@@ -151,7 +156,7 @@ function existingFixtureDirectory(path, root) {
     fail('UNSAFE_DESTINATION', 'INVALID_USAGE');
   }
   const realPath = realpathSync(candidate);
-  if (realPath !== candidate) fail('UNSAFE_DESTINATION', 'INVALID_USAGE');
+  if (!pathsEqual(realPath, candidate)) fail('UNSAFE_DESTINATION', 'INVALID_USAGE');
   const metadata = statSync(realPath, { bigint: true });
   return {
     realPath,
@@ -166,12 +171,13 @@ function assertRootStable(root) {
   const current = lstatOrNull(root.realPath);
   if (!current || current.isSymbolicLink() || !current.isDirectory()
       || !sameIdentity(current, root.metadata)
-      || (current.mode & 0o777n) !== 0o700n) {
+      || !hasExactPermissions(current, 0o700n)) {
     fail('DESTINATION_PARENT_CHANGED', 'INVALID_USAGE');
   }
 }
 
 function fsyncDirectory(path, code, result) {
+  if (!supportsDirectoryFsync()) return;
   let descriptor;
   try {
     descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY);
@@ -266,7 +272,7 @@ function createExclusiveArtifact(prepared) {
     fail('UNSAFE_DESTINATION', 'INVALID_USAGE');
   }
   const created = fstatSync(descriptor, { bigint: true });
-  if (!created.isFile() || created.nlink !== 1n || (created.mode & 0o777n) !== 0o600n) {
+  if (!created.isFile() || created.nlink !== 1n || !hasExactPermissions(created, 0o600n)) {
     closeSync(descriptor);
     fail('UNSAFE_DESTINATION', 'INVALID_USAGE');
   }
@@ -278,7 +284,7 @@ function assertArtifactIdentity(prepared, created, code, result) {
   assertParentStable(prepared);
   const pathMetadata = lstatOrNull(prepared.path);
   if (!pathMetadata || pathMetadata.isSymbolicLink() || !pathMetadata.isFile()
-      || pathMetadata.nlink !== 1n || (pathMetadata.mode & 0o777n) !== 0o600n
+      || pathMetadata.nlink !== 1n || !hasExactPermissions(pathMetadata, 0o600n)
       || !sameIdentity(pathMetadata, created.metadata)) {
     fail(code, result);
   }
@@ -485,7 +491,7 @@ function sourceIdentityDigest(sourceInfo) {
 
 function assertRecoveryArtifactMode(info, code, result) {
   const metadata = lstatOrNull(info.realPath);
-  if (!metadata || (metadata.mode & 0o777n) !== 0o600n) fail(code, result);
+  if (!metadata || !hasExactPermissions(metadata, 0o600n)) fail(code, result);
 }
 
 function backupProofIdentity(receipt) {

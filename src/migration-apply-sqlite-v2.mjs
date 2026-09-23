@@ -32,6 +32,12 @@ import {
   verifyV2Target,
 } from './migration-sqlite-v2.mjs';
 import { initializeWritableSchema } from './sqlite-schema-v2.mjs';
+import {
+  hasExactPermissions,
+  IS_WINDOWS,
+  pathsEqual,
+  supportsDirectoryFsync,
+} from './platform-filesystem.mjs';
 
 const FIXTURE_PREFIX = 'jenn-shooting-migration-fixture-';
 const SIDECARS = Object.freeze(['-wal', '-shm', '-journal']);
@@ -89,9 +95,9 @@ function fixtureRootInfo(path) {
   }
   const realPath = realpathSync(resolved);
   const metadata = statSync(realPath, { bigint: true });
-  if (dirname(realPath) !== realpathSync(tmpdir())
+  if (!pathsEqual(dirname(realPath), realpathSync(tmpdir()))
       || !basename(realPath).startsWith(FIXTURE_PREFIX)
-      || (metadata.mode & 0o777n) !== 0o700n
+      || !hasExactPermissions(metadata, 0o700n)
       || (typeof process.getuid === 'function' && metadata.uid !== BigInt(process.getuid()))) {
     fail('UNSAFE_DESTINATION', 'INVALID_USAGE');
   }
@@ -116,7 +122,7 @@ function assertRootStable(root) {
       || current.dev !== root.metadata.dev || current.ino !== root.metadata.ino
       || current.uid !== root.metadata.uid
       || (typeof process.getuid === 'function' && current.uid !== BigInt(process.getuid()))
-      || (current.mode & 0o777n) !== 0o700n) {
+      || !hasExactPermissions(current, 0o700n)) {
     fail('DESTINATION_PARENT_CHANGED', 'INVALID_USAGE');
   }
 }
@@ -130,7 +136,7 @@ function assertNoSidecars(path) {
 function preflightReadableFile(path, code = 'UNSAFE_DESTINATION') {
   const metadata = lstatOrNull(path);
   if (!metadata || metadata.isSymbolicLink() || !metadata.isFile()
-      || metadata.nlink !== 1n || realpathSync(path) !== path
+      || metadata.nlink !== 1n || !pathsEqual(realpathSync(path), path)
       || (typeof process.getuid === 'function' && metadata.uid !== BigInt(process.getuid()))) {
     fail(code, 'INVALID_USAGE');
   }
@@ -140,7 +146,7 @@ function preflightReadableFile(path, code = 'UNSAFE_DESTINATION') {
 function preflightReadableDirectory(path) {
   const metadata = lstatOrNull(path);
   if (!metadata || metadata.isSymbolicLink() || !metadata.isDirectory()
-      || realpathSync(path) !== path
+      || !pathsEqual(realpathSync(path), path)
       || (typeof process.getuid === 'function' && metadata.uid !== BigInt(process.getuid()))) {
     fail('UNSAFE_DESTINATION', 'INVALID_USAGE');
   }
@@ -206,7 +212,7 @@ function existingArtifact(path, root, missingCode) {
   const linked = lstatOrNull(candidate);
   if (!linked) fail(missingCode);
   if (linked.isSymbolicLink() || !linked.isFile() || linked.nlink !== 1n
-      || (linked.mode & 0o777n) !== 0o600n || realpathSync(candidate) !== candidate) {
+      || !hasExactPermissions(linked, 0o600n) || !pathsEqual(realpathSync(candidate), candidate)) {
     fail('TARGET_IDENTITY_CHANGED');
   }
   return { path: candidate, metadata: linked };
@@ -219,12 +225,13 @@ function assertArtifactStable(artifact) {
       || current.size !== artifact.metadata.size
       || current.mtimeNs !== artifact.metadata.mtimeNs
       || current.ctimeNs !== artifact.metadata.ctimeNs
-      || (current.mode & 0o777n) !== 0o600n) {
+      || !hasExactPermissions(current, 0o600n)) {
     fail('TARGET_IDENTITY_CHANGED');
   }
 }
 
 function fsyncDirectory(path) {
+  if (!supportsDirectoryFsync()) return;
   let descriptor;
   try {
     descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY);
@@ -239,9 +246,10 @@ function fsyncDirectory(path) {
 function fsyncArtifact(path) {
   let descriptor;
   try {
-    descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    const accessMode = IS_WINDOWS ? fsConstants.O_RDWR : fsConstants.O_RDONLY;
+    descriptor = openSync(path, accessMode | fsConstants.O_NOFOLLOW);
     const metadata = fstatSync(descriptor, { bigint: true });
-    if (!metadata.isFile() || metadata.nlink !== 1n || (metadata.mode & 0o777n) !== 0o600n) {
+    if (!metadata.isFile() || metadata.nlink !== 1n || !hasExactPermissions(metadata, 0o600n)) {
       fail('TARGET_IDENTITY_CHANGED');
     }
     fsyncSync(descriptor);
@@ -298,7 +306,7 @@ function existingInput(path, root, type) {
   const candidate = insideRoot(path, root);
   const metadata = lstatOrNull(candidate);
   const valid = type === 'directory' ? metadata?.isDirectory() : metadata?.isFile();
-  if (!metadata || metadata.isSymbolicLink() || !valid || realpathSync(candidate) !== candidate) {
+  if (!metadata || metadata.isSymbolicLink() || !valid || !pathsEqual(realpathSync(candidate), candidate)) {
     fail('SOURCE_CHANGED_DURING_APPLY');
   }
   return { path: candidate, metadata };
@@ -432,7 +440,7 @@ function createProofSeal(path, root, seal) {
   const parent = dirname(candidate);
   const parentLink = lstatOrNull(parent);
   if (!parentLink || parentLink.isSymbolicLink() || !parentLink.isDirectory()
-      || realpathSync(parent) !== parent || lstatOrNull(candidate)) {
+      || !pathsEqual(realpathSync(parent), parent) || lstatOrNull(candidate)) {
     fail('PROOF_SEAL_INVALID');
   }
   for (const suffix of SIDECARS) {

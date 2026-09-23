@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -15,6 +16,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 
@@ -39,6 +41,7 @@ import {
   V1_SCHEMA_SQL,
   initializeWritableSchema,
 } from '../src/sqlite-schema-v2.mjs';
+import { IS_WINDOWS } from '../src/platform-filesystem.mjs';
 
 const fixtureRoot = new URL('../fixtures/migration-v2/', import.meta.url);
 const FIXED_NOW = '2026-09-22T12:00:00.000Z';
@@ -47,9 +50,38 @@ const VALUE_OPTIONS_FOR_TEST = new Set([
   '--target', '--fixture-root', '--backup', '--rollback-target', '--proof-seal',
 ]);
 
+function canCreateFileSymlink() {
+  const root = mkdtempSync(join(tmpdir(), 'jso-symlink-probe-'));
+  try {
+    const target = join(root, 'target');
+    const link = join(root, 'link');
+    writeFileSync(target, 'probe');
+    symlinkSync(target, link);
+    return true;
+  } catch (error) {
+    if (['EPERM', 'EACCES', 'ENOTSUP'].includes(error?.code)) return false;
+    throw error;
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+const CAN_CREATE_FILE_SYMLINK = canCreateFileSymlink();
+
 function fixture(name) {
   return JSON.parse(readFileSync(new URL(name, fixtureRoot), 'utf8'));
 }
+
+test('existing path resolution accepts native absolute paths and rejects URL input', () => (
+  withTempRoot(root => {
+    const source = createSource(root, emptySnapshot());
+    assert.equal(resolveExistingPath(source).realPath, realpathSync(source));
+    assert.throws(
+      () => resolveExistingPath(pathToFileURL(source).href),
+      error => error.code === 'INVALID_PATH',
+    );
+  })
+));
 
 function emptySnapshot(overrides = {}) {
   return {
@@ -615,7 +647,8 @@ test('attachment manifest supports no-files, fast, and hashed read-only validati
 }));
 
 test('attachment manifest rejects traversal and symlink files without disclosure', () => {
-  for (const variant of ['traversal', 'symlink']) withTempRoot(root => {
+  const variants = ['traversal', ...(CAN_CREATE_FILE_SYMLINK ? ['symlink'] : [])];
+  for (const variant of variants) withTempRoot(root => {
     const payload = Buffer.from('unsafe-manifest-fixture');
     const digest = createHash('sha256').update(payload).digest('hex');
     const uploadRoot = join(root, 'uploads');
@@ -641,7 +674,9 @@ test('attachment manifest rejects traversal and symlink files without disclosure
   });
 });
 
-test('attachment manifest rejects a symlink swap between lstat and no-follow open', () => withTempRoot(root => {
+test('attachment manifest rejects a symlink swap between lstat and no-follow open', {
+  skip: CAN_CREATE_FILE_SYMLINK ? false : 'file symlink creation is not available on this Windows host',
+}, () => withTempRoot(root => {
   const payload = Buffer.from('no-follow-race-fixture');
   const digest = createHash('sha256').update(payload).digest('hex');
   const storedName = `${digest}.bin`;
@@ -1046,7 +1081,9 @@ test('isolated apply succeeds, verifies every artifact, and replays without rewr
 
     const artifacts = ['target.sqlite', 'backup.sqlite', 'rollback.sqlite', 'proof.json'];
     const beforeReplay = Object.fromEntries(artifacts.map(name => [name, hashFile(join(root, name))]));
-    for (const name of artifacts) assert.equal(statSync(join(root, name)).mode & 0o777, 0o600, name);
+    if (!IS_WINDOWS) {
+      for (const name of artifacts) assert.equal(statSync(join(root, name)).mode & 0o777, 0o600, name);
+    }
 
     const replay = await executeMigrationCommand(args, {
       clock: clockSequence(LATER_NOW, LATER_NOW, LATER_NOW),
@@ -1072,7 +1109,7 @@ test('direct apply output remains low-disclosure', async () => (
       }],
     }));
     const command = spawnSync(process.execPath, [
-      new URL('../scripts/migrate-v1-to-v2.mjs', import.meta.url).pathname,
+      fileURLToPath(new URL('../scripts/migrate-v1-to-v2.mjs', import.meta.url)),
       ...applyArgs(root, source),
     ], { encoding: 'utf8', timeout: 15000 });
     assert.equal(command.status, 0, command.stderr || command.stdout);
@@ -1304,10 +1341,14 @@ test('relative and same-inode direct, hardlink, and symlink paths fail closed wi
   withTempRoot(root => {
     const source = createSource(root, emptySnapshot());
     const hardlink = join(root, 'source-hardlink.sqlite');
-    const symlink = join(root, 'source-symlink.sqlite');
     linkSync(source, hardlink);
-    symlinkSync(source, symlink);
-    for (const target of [source, hardlink, symlink]) {
+    const targets = [source, hardlink];
+    if (CAN_CREATE_FILE_SYMLINK) {
+      const symlink = join(root, 'source-symlink.sqlite');
+      symlinkSync(source, symlink);
+      targets.push(symlink);
+    }
+    for (const target of targets) {
       const same = executeMigration([
         '--verify-only', '--source', source, '--target', target,
         '--business-time-zone', 'UTC', '--format', 'json',

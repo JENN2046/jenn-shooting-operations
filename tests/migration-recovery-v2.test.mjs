@@ -29,8 +29,27 @@ import {
 } from '../src/migration-recovery-sqlite-v2.mjs';
 import { readV1Source, resolveExistingPath } from '../src/migration-sqlite-v2.mjs';
 import { V1_SCHEMA_SQL } from '../src/sqlite-schema-v2.mjs';
+import { IS_WINDOWS } from '../src/platform-filesystem.mjs';
 
 const FIXED_NOW = '2026-09-22T12:00:00.000Z';
+
+function canCreateFileSymlink() {
+  const root = mkdtempSync(join(tmpdir(), 'jso-symlink-probe-'));
+  try {
+    const target = join(root, 'target');
+    const link = join(root, 'link');
+    writeFileSync(target, 'probe');
+    symlinkSync(target, link);
+    return true;
+  } catch (error) {
+    if (['EPERM', 'EACCES', 'ENOTSUP'].includes(error?.code)) return false;
+    throw error;
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+const CAN_CREATE_FILE_SYMLINK = canCreateFileSymlink();
 
 function emptySnapshot(overrides = {}) {
   return {
@@ -240,7 +259,9 @@ test('new artifact gate rejects existing, symlink, sidecar, path conflict, and h
     assert.equal(hashFile(backup), before);
   }));
 
-  await t.test('symlink destination', async () => withFixtureRoot(async root => {
+  await t.test('symlink destination', {
+    skip: CAN_CREATE_FILE_SYMLINK ? false : 'file symlink creation is not available on this Windows host',
+  }, async () => withFixtureRoot(async root => {
     const source = createSource(root);
     const plan = buildPlan(source);
     const backup = join(root, 'backup.sqlite');
@@ -570,15 +591,17 @@ test('fixture root gate rejects wrong prefix, permissive mode, and paths outside
     rmSync(wrong, { recursive: true, force: true });
   }
 
-  await withFixtureRoot(async root => {
-    const source = createSource(root);
-    const plan = buildPlan(source);
-    chmodSync(root, 0o755);
-    await assert.rejects(
-      createVerifiedBackup({ fixtureRoot: root, source, backup: join(root, 'backup.sqlite'), plan }),
-      error => error.code === 'UNSAFE_DESTINATION',
-    );
-  });
+  if (!IS_WINDOWS) {
+    await withFixtureRoot(async root => {
+      const source = createSource(root);
+      const plan = buildPlan(source);
+      chmodSync(root, 0o755);
+      await assert.rejects(
+        createVerifiedBackup({ fixtureRoot: root, source, backup: join(root, 'backup.sqlite'), plan }),
+        error => error.code === 'UNSAFE_DESTINATION',
+      );
+    });
+  }
 
   await withFixtureRoot(async root => {
     const source = createSource(root);

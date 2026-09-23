@@ -59,9 +59,14 @@ function fail(code, result) {
   throw new MigrationError(code, result);
 }
 
+function hasNonFilesystemScheme(input) {
+  if (!/^[A-Za-z][A-Za-z0-9+.-]*:/u.test(input)) return false;
+  return !/^[A-Za-z]:[\\/]/u.test(input);
+}
+
 export function resolveExistingPath(input, expectedType = 'file') {
   if (typeof input !== 'string' || !input || input.includes('\0') || !isAbsolute(input)
-      || /^[A-Za-z][A-Za-z0-9+.-]*:/u.test(input)) {
+      || hasNonFilesystemScheme(input)) {
     fail('INVALID_PATH', 'INVALID_USAGE');
   }
   let realPath;
