@@ -551,9 +551,6 @@ export function buildSchedulingProposalDecisionCommandV1(input, proposalInput) {
     if (!DECISION_TYPES.has(decisionType)) fail('DECISION_TYPE_INVALID', '$.command.decisionType');
     if (input.proposalId !== proposal.proposalId) fail('PROPOSAL_ID_MISMATCH', '$.command.proposalId');
     const decisionId = identifier(input.decisionId, '$.command.decisionId');
-    if (decisionId.startsWith('spd_')) {
-      fail('DECISION_ID_RESERVED', '$.command.decisionId');
-    }
     const command = deepFreeze({
       decisionId,
       proposalId: proposal.proposalId,
