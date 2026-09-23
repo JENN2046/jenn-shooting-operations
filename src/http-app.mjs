@@ -351,12 +351,12 @@ export function createHttpApp({ store, tokens = {}, kiosk = null, scheduling = n
         if (command.proposalId !== proposalId) {
           return sendJson(response, 400, { ok: false, code: 'PROPOSAL_ID_MISMATCH' });
         }
-        if (typeof scheduling?.acceptProposal !== 'function') {
+        if (typeof scheduling?.decideProposal !== 'function') {
           return sendJson(response, 503, { ok: false, code: 'SERVICE_UNAVAILABLE' });
         }
         let result;
         try {
-          result = await scheduling.acceptProposal({
+          result = await scheduling.decideProposal({
             command,
             principal: authenticated.principal,
           });
