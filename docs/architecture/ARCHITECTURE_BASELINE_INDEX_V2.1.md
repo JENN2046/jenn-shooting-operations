@@ -1,6 +1,6 @@
 # Jenn Shooting Operations V2.1 Effective Architecture Baseline
 
-- Baseline ID：`JSO-ARCH-V2.1-R5`
+- Baseline ID：`JSO-ARCH-V2.1-R6`
 - 状态：`FROZEN_FOR_IMPLEMENTATION`
 - 生效日期：2026-09-22
 - 适用范围：WO-00 至 WO-06 的本地设计、实现、迁移演练和验证
@@ -17,8 +17,9 @@ V2.1 的有效架构基线由以下文件共同组成：
 5. [ADP-020：V1 Contract Authority and Compatibility](decisions/ADP-020_V1_CONTRACT_AUTHORITY_AND_COMPATIBILITY.md)
 6. [ADP-021：Kiosk Command Admission and Offline Replay](decisions/ADP-021_KIOSK_COMMAND_ADMISSION_AND_OFFLINE_REPLAY.md)
 7. [ADP-022：Transactional Outbox and DingTalk Boundary](decisions/ADP-022_TRANSACTIONAL_OUTBOX_AND_DINGTALK_BOUNDARY.md)
-8. [Implementation Style Guardrails V2.1](IMPLEMENTATION_STYLE_GUARDRAILS_V2.1.md)
-9. [VCP 摄制运营调度工作台升级与 Agent 协同演进实施计划书 V2.1](../VCP_SHOOTING_OPERATIONS_EVOLUTION_PLAN_V2.1.md)
+8. [ADP-023：Outbox Identifier Compatibility](decisions/ADP-023_OUTBOX_IDENTIFIER_COMPATIBILITY.md)
+9. [Implementation Style Guardrails V2.1](IMPLEMENTATION_STYLE_GUARDRAILS_V2.1.md)
+10. [VCP 摄制运营调度工作台升级与 Agent 协同演进实施计划书 V2.1](../VCP_SHOOTING_OPERATIONS_EVOLUTION_PLAN_V2.1.md)
 
 ## 2. 优先级与替代关系
 
@@ -26,7 +27,7 @@ V2.1 的有效架构基线由以下文件共同组成：
 
 ```text
 当前明确用户决定
-→ ADP-017 / ADP-018 / ADP-019 / ADP-020 / ADP-021 / ADP-022
+→ ADP-017 / ADP-018 / ADP-019 / ADP-020 / ADP-021 / ADP-022 / ADP-023
 → Architecture Decision Pack V2.1 中未被替代的条款
 → Implementation Style Guardrails V2.1
 → 实施计划书 V2.1
@@ -43,6 +44,7 @@ V2.1 的有效架构基线由以下文件共同组成：
 | ADP-020 | V1 Schema 与手写 validator 双轨；模糊历史兼容和 V1 PUT 全量覆盖 | Schema + 有限语义规则成为单入口；历史按 L0–L3 分类；V1 PUT 仅表达受控排期差异 |
 | ADP-021 | ADP-006、ADP-007、ADP-008、ADP-009、ADP-010、ADP-012、ADP-014 的 Kiosk admission 与离线重放空白 | 冻结 first-start、trusted principal、time-review、eventId 单一所有权、离线队列与 ETag 轮询语义 |
 | ADP-022 | ADP-004、ADP-006、ADP-010、ADP-011、ADP-014、ADP-016、ADP-017 的 Outbox/钉钉适配与 callback admission 空白 | 冻结本地 Outbox schema/state machine、至少一次投递、最小披露卡片、显式 Mock、callback fail-closed 与 producer admission；不授权真实钉钉集成 |
+| ADP-023 | ADP-022 第 8 节的通用 128 code-point identifier 上限 | Card/Intent 业务 identifier 与现有 V2 canonical 160 上限一致；首版 providerRef 使用 ASCII safe allowlist，未来扩展不得改写 migration v4 |
 
 原冻结 Pack 保留为完整历史基线，不通过无痕编辑覆盖原决定。实现者 `MUST` 从本索引进入架构文档，不能只读取原 Pack 后忽略 superseding 决策。
 

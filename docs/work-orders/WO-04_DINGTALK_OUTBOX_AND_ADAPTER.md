@@ -3,7 +3,7 @@
 - 状态：`IN_PROGRESS / WO-04A ARCHITECTURE_FROZEN`
 - 执行分支：`codex/v2-1-architecture-freeze`
 - 前置门：WO-00 `PASS`、WO-01 `PASS`、WO-02/03 `PASS_WITH_LIMITS`
-- 冻结决定：`ADP-022_TRANSACTIONAL_OUTBOX_AND_DINGTALK_BOUNDARY.md`
+- 冻结决定：`ADP-022_TRANSACTIONAL_OUTBOX_AND_DINGTALK_BOUNDARY.md`、`ADP-023_OUTBOX_IDENTIFIER_COMPATIBILITY.md`
 - 范围：本地 schema、纯卡片、Outbox repository/dispatcher、显式 Mock、unconfigured adapter、无网络 callback admission framework、已有权威命令 producer
 - 非范围：真实钉钉调用/SDK/凭据、环境配置、callback endpoint、服务启动、部署、生产数据、V1/V2 Switch、补造 canonical request/schedule command
 
