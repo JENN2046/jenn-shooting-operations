@@ -348,6 +348,14 @@ export function createHttpApp({ store, tokens = {}, kiosk = null, scheduling = n
         if (!command || typeof command !== 'object' || Array.isArray(command)) {
           return sendJson(response, 400, { ok: false, code: 'INVALID_REQUEST' });
         }
+        if (!validIdentifier(command.decisionId)
+          || typeof command.decisionType !== 'string'
+          || !['accept', 'partiallyAccept', 'reject'].includes(command.decisionType)) {
+          return sendMapped(response, mapSchedulingDecisionHttpResult({
+            ok: false,
+            code: 'SCHEDULING_PROPOSAL_DECISION_COMMAND_INVALID',
+          }));
+        }
         if (command.proposalId !== proposalId) {
           return sendJson(response, 400, { ok: false, code: 'PROPOSAL_ID_MISMATCH' });
         }
