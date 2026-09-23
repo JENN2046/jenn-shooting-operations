@@ -111,7 +111,8 @@ test('generation persists an immutable draft without consuming schedule revision
     assert.equal(f.db.prepare('SELECT schedule_revision FROM revision_counters WHERE id = 1').get()
       .schedule_revision, 7);
     assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
-    const replay = f.store.generate(f.command, 'scheduler:fixture');
+    const { generate } = f.store;
+    const replay = generate(f.command, 'scheduler:fixture');
     assert.equal(replay.ok, true);
     assert.equal(replay.proposal.proposalId, result.proposal.proposalId);
     assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM scheduling_proposals').get().count, 1);

@@ -166,6 +166,11 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now }
     return admitted;
   }
 
+  function readStored(proposalId) {
+    const found = admitStoredProposal(readProposalRow(db, proposalId));
+    return found ? { ok: true, ...found } : denied('PROPOSAL_NOT_FOUND');
+  }
+
   return Object.freeze({
     generate(commandInput, trustedActor) {
       const generation = buildSchedulingProposalGenerationCommandV1(commandInput);
@@ -175,7 +180,7 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now }
       const existing = db.prepare(`SELECT proposal_id, generation_command_digest
         FROM scheduling_proposals WHERE generation_operation_id = ?`).get(command.operationId);
       if (existing) return existing.generation_command_digest === generation.commandDigest
-        ? this.read(existing.proposal_id) : denied('IDEMPOTENCY_KEY_REUSE');
+        ? readStored(existing.proposal_id) : denied('IDEMPOTENCY_KEY_REUSE');
 
       const snapshot = transaction(db, 'BEGIN DEFERRED', () => {
         const active = readActiveConfig(db);
@@ -219,7 +224,7 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now }
         const replay = db.prepare(`SELECT proposal_id, generation_command_digest
           FROM scheduling_proposals WHERE generation_operation_id = ?`).get(command.operationId);
         if (replay) return replay.generation_command_digest === generation.commandDigest
-          ? this.read(replay.proposal_id) : denied('IDEMPOTENCY_KEY_REUSE');
+          ? readStored(replay.proposal_id) : denied('IDEMPOTENCY_KEY_REUSE');
         const currentActive = readActiveConfig(db);
         const currentRevision = readRevision(db);
         if (!currentActive || currentRevision !== snapshot.revision
@@ -247,8 +252,7 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now }
     },
 
     read(proposalId) {
-      const found = admitStoredProposal(readProposalRow(db, proposalId));
-      return found ? { ok: true, ...found } : denied('PROPOSAL_NOT_FOUND');
+      return readStored(proposalId);
     },
 
     reject(decisionInput, trustedActor) {
