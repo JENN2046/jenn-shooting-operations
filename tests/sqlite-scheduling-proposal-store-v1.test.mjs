@@ -430,6 +430,12 @@ test('reject is terminal, append-only, idempotent, and cannot write schedule fac
     const rejected = f.store.reject(command, 'admin:fixture');
     assert.equal(rejected.ok, true, JSON.stringify(rejected));
     assert.equal(rejected.receipt.decisionType, 'reject');
+    const operation = f.db.prepare(`SELECT kind, request_digest, response_json FROM operations
+      WHERE operation_id = ?`).get(command.decisionId);
+    assert.equal(operation.kind, 'rejectSchedulingProposal');
+    assert.equal(operation.request_digest, rejected.receipt.decisionCommandDigest);
+    assert.equal(JSON.parse(operation.response_json).decisionReceiptDigest,
+      rejected.receipt.decisionReceiptDigest);
     assert.equal(f.store.read(generated.proposal.proposalId).lifecycle.status, 'rejected');
     assert.deepEqual(f.store.reject(command, 'admin:fixture'),
       { ...rejected, exactReplay: true });
@@ -438,6 +444,30 @@ test('reject is terminal, append-only, idempotent, and cannot write schedule fac
     assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
     assert.equal(f.db.prepare('SELECT schedule_revision FROM revision_counters WHERE id = 1').get()
       .schedule_revision, 7);
+  } finally { f.db.close(); }
+});
+
+test('reject reserves the shared operation ID and fails closed on global collisions', () => {
+  const f = fixture();
+  try {
+    const generated = f.store.generate(f.command, 'scheduler:fixture');
+    assert.equal(generated.ok, true, JSON.stringify(generated));
+    f.db.prepare(`INSERT INTO operations (operation_id, kind, response_json, created_at)
+      VALUES ('DEC-REJECT-TAKEN', 'submitRequest', '{}', ?)`)
+      .run('2026-09-23T08:00:00.000Z');
+    const result = f.store.reject({
+      decisionId: 'DEC-REJECT-TAKEN',
+      proposalId: generated.proposal.proposalId,
+      decisionType: 'reject',
+      selectedProposalItemIds: null,
+      decisionNote: null,
+      reasonCode: 'HUMAN_REJECTED',
+    }, 'scheduler:fixture');
+    assert.equal(result.code, 'IDEMPOTENCY_KEY_REUSE');
+    assert.equal(f.store.read(generated.proposal.proposalId).lifecycle.status, 'draft');
+    assert.equal(f.db.prepare(`SELECT COUNT(*) AS count FROM scheduling_proposal_decisions
+      WHERE decision_id = 'DEC-REJECT-TAKEN'`).get().count, 0);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
   } finally { f.db.close(); }
 });
 
