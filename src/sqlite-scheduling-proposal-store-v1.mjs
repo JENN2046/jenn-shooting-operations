@@ -19,6 +19,9 @@ import {
 } from './scheduling-proposal-contract-v1.mjs';
 
 function denied(code) { return Object.freeze({ ok: false, code }); }
+function reservedSystemDecisionId(value) {
+  return typeof value === 'string' && value.startsWith('spd_');
+}
 const ASSEMBLER_DENIALS = new Set([
   'SCHEDULING_PLANNING_RANGE_UNSUPPORTED',
   'SCHEDULING_RESOURCE_NOT_REGISTERED',
@@ -91,6 +94,45 @@ function insertDecision(db, receipt, proposal, status) {
   if (changed !== 1) throw new Error('SCHEDULING_PROPOSAL_DECISION_CAS_FAILED');
 }
 
+function admitStoredHumanDecisionReceipt(row, proposal) {
+  if (!row) return null;
+  try {
+    const body = JSON.parse(row.receipt_json);
+    const selectedProposalItemIds = body.selectedProposalItemIdsJson === null
+      ? null : JSON.parse(body.selectedProposalItemIdsJson);
+    const adoptedItems = body.adoptedItemsJson === null
+      ? null : JSON.parse(body.adoptedItemsJson);
+    const rebuilt = buildSchedulingProposalDecisionReceiptV1({
+      decisionId: body.decisionId,
+      decisionCommandDigest: body.decisionCommandDigest,
+      proposalId: body.proposalId,
+      decisionType: body.decisionType,
+      selectedProposalItemIds,
+      selectionDigest: body.selectionDigest,
+      adoptedItems,
+      adoptionDigest: body.adoptionDigest,
+      decidedBy: body.decidedBy,
+      decidedAt: body.decidedAt,
+      decisionNote: body.decisionNote,
+      baseScheduleRevision: body.baseScheduleRevision,
+      currentScheduleRevision: body.currentScheduleRevision,
+      resultingScheduleRevision: body.resultingScheduleRevision,
+      reasonCode: body.reasonCode,
+    }, proposal);
+    if (!rebuilt.ok
+      || rebuilt.receiptJson !== row.receipt_json
+      || rebuilt.decisionReceiptDigest !== row.receipt_digest
+      || row.proposal_id !== proposal.proposalId
+      || row.decision_command_digest !== rebuilt.receipt.decisionCommandDigest
+      || row.decision_type !== rebuilt.receipt.decisionType) {
+      throw new Error('stored decision receipt mismatch');
+    }
+    return rebuilt.receipt;
+  } catch {
+    throw new Error('SCHEDULING_PROPOSAL_DECISION_STORED_FACT_INVALID');
+  }
+}
+
 function staleOneInTransaction(db, { proposalId, triggerOperationId, reasonCode, now }) {
   const found = admitStoredProposal(readProposalRow(db, proposalId));
   if (!found) return denied('PROPOSAL_NOT_FOUND');
@@ -98,11 +140,19 @@ function staleOneInTransaction(db, { proposalId, triggerOperationId, reasonCode,
     proposalId, triggerOperationId, reasonCode,
   });
   if (!derived.ok) return derived;
-  const prior = db.prepare(`SELECT receipt_json, receipt_digest FROM scheduling_proposal_decisions
+  const prior = db.prepare(`SELECT proposal_id, decision_command_digest, decision_type,
+    receipt_json, receipt_digest FROM scheduling_proposal_decisions
     WHERE decision_id = ?`).get(derived.decisionId);
-  if (prior) return { ok: true, receipt: {
-    ...JSON.parse(prior.receipt_json), decisionReceiptDigest: prior.receipt_digest,
-  }, exactReplay: true };
+  if (prior) {
+    if (prior.proposal_id !== proposalId
+      || prior.decision_command_digest !== derived.decisionCommandDigest
+      || prior.decision_type !== 'stale') {
+      return denied('IDEMPOTENCY_KEY_REUSE');
+    }
+    return { ok: true, receipt: {
+      ...JSON.parse(prior.receipt_json), decisionReceiptDigest: prior.receipt_digest,
+    }, exactReplay: true };
+  }
   if (found.lifecycle.status !== 'draft') return denied('PROPOSAL_NOT_DRAFT');
   const built = buildSchedulingProposalDecisionReceiptV1({
     decisionId: derived.decisionId,
@@ -262,9 +312,10 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
     reject(decisionInput, trustedActor) {
       if (typeof trustedActor !== 'string' || trustedActor.length === 0) return denied('TRUSTED_ACTOR_REQUIRED');
       return transaction(db, 'BEGIN IMMEDIATE', () => {
-        const reused = db.prepare(`SELECT proposal_id FROM scheduling_proposal_decisions
+        const prior = db.prepare(`SELECT proposal_id, decision_command_digest, decision_type,
+          receipt_json, receipt_digest FROM scheduling_proposal_decisions
           WHERE decision_id = ?`).get(decisionInput?.decisionId);
-        if (reused && reused.proposal_id !== decisionInput?.proposalId) {
+        if (prior && prior.proposal_id !== decisionInput?.proposalId) {
           return denied('IDEMPOTENCY_KEY_REUSE');
         }
         const found = admitStoredProposal(readProposalRow(db, decisionInput?.proposalId));
@@ -272,13 +323,41 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
         const admitted = admitSchedulingProposalDecisionV1(decisionInput, found.proposal);
         if (!admitted.ok) return admitted;
         if (admitted.command.decisionType !== 'reject') return denied('PROPOSAL_ACCEPT_NOT_WIRED');
-        const prior = db.prepare(`SELECT decision_command_digest, receipt_json, receipt_digest
-          FROM scheduling_proposal_decisions WHERE decision_id = ?`).get(admitted.command.decisionId);
-        if (prior) return prior.decision_command_digest === admitted.decisionCommandDigest
-          ? { ok: true, receipt: {
-            ...JSON.parse(prior.receipt_json), decisionReceiptDigest: prior.receipt_digest,
-          }, exactReplay: true }
+
+        if (prior) {
+          if (prior.decision_type !== 'reject'
+            || prior.decision_command_digest !== admitted.decisionCommandDigest) {
+            return denied('IDEMPOTENCY_KEY_REUSE');
+          }
+          const receipt = admitStoredHumanDecisionReceipt(prior, found.proposal);
+          const operation = db.prepare(`SELECT kind, response_json, request_digest FROM operations
+            WHERE operation_id = ?`).get(admitted.command.decisionId);
+          if (!operation) {
+            db.prepare(`INSERT INTO operations
+              (operation_id, kind, response_json, created_at, request_digest)
+              VALUES (?, 'rejectSchedulingProposal', ?, ?, ?)`).run(
+              admitted.command.decisionId, canonicalJsonSchedulingV1(receipt),
+              receipt.decidedAt, admitted.decisionCommandDigest,
+            );
+          }
+          return { ok: true, receipt, exactReplay: true };
+        }
+
+        const operation = db.prepare(`SELECT kind, response_json, request_digest FROM operations
+          WHERE operation_id = ?`).get(admitted.command.decisionId);
+        if (operation && operation.kind !== 'rejectSchedulingProposal') {
+          return denied('IDEMPOTENCY_KEY_REUSE');
+        }
+        if (operation && JSON.parse(operation.response_json).proposalId !== admitted.command.proposalId) {
+          return denied('IDEMPOTENCY_KEY_REUSE');
+        }
+        if (operation) return operation.request_digest === admitted.decisionCommandDigest
+          ? { ok: true, receipt: JSON.parse(operation.response_json), exactReplay: true }
           : denied('IDEMPOTENCY_KEY_REUSE');
+
+        if (reservedSystemDecisionId(admitted.command.decisionId)) {
+          return denied('DECISION_ID_RESERVED');
+        }
         if (found.lifecycle.status !== 'draft') return denied('PROPOSAL_NOT_DRAFT');
         const decidedAt = now().toISOString();
         const built = buildSchedulingProposalDecisionReceiptV1({
@@ -294,6 +373,12 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
           reasonCode: 'HUMAN_REJECTED',
         }, found.proposal);
         if (!built.ok) return built;
+        db.prepare(`INSERT INTO operations
+          (operation_id, kind, response_json, created_at, request_digest)
+          VALUES (?, 'rejectSchedulingProposal', ?, ?, ?)`).run(
+          admitted.command.decisionId, canonicalJsonSchedulingV1(built.receipt), decidedAt,
+          admitted.decisionCommandDigest,
+        );
         insertDecision(db, built, found.proposal, 'rejected');
         return { ok: true, receipt: built.receipt, exactReplay: false };
       });
@@ -341,6 +426,9 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
           ? { ok: true, receipt: {
             ...JSON.parse(prior.receipt_json), decisionReceiptDigest: prior.receipt_digest,
           }, exactReplay: true } : denied('IDEMPOTENCY_KEY_REUSE');
+        if (reservedSystemDecisionId(admitted.command.decisionId)) {
+          return denied('DECISION_ID_RESERVED');
+        }
         if (found.lifecycle.status !== 'draft') return denied('PROPOSAL_NOT_DRAFT');
         const proposal = found.proposal;
         const current = db.prepare(`SELECT schedule_revision, projection_revision

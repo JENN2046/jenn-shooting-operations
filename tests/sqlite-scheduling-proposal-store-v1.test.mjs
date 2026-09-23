@@ -11,6 +11,8 @@ import { canonicalJsonSchedulingV1, digestResourceCapabilitiesV1,
   SCHEDULING_TIME_ZONE_DATA_VERSION } from '../src/scheduling-contract-v1.mjs';
 import { normalizeSchedulingConfigV1 } from '../src/scheduling-admin-contract-v1.mjs';
 import { createTrustedPrincipal } from '../src/authorization-v2.mjs';
+import { admitSchedulingProposalDecisionV1, buildSchedulingProposalDecisionReceiptV1,
+  deriveSchedulingSystemStaleDecisionV1 } from '../src/scheduling-proposal-contract-v1.mjs';
 
 const schedulerPrincipal = createTrustedPrincipal({ subjectId: 'scheduler:fixture',
   role: 'scheduler', resourceIds: ['STUDIO-A'] }).principal;
@@ -430,6 +432,12 @@ test('reject is terminal, append-only, idempotent, and cannot write schedule fac
     const rejected = f.store.reject(command, 'admin:fixture');
     assert.equal(rejected.ok, true, JSON.stringify(rejected));
     assert.equal(rejected.receipt.decisionType, 'reject');
+    const operation = f.db.prepare(`SELECT kind, request_digest, response_json FROM operations
+      WHERE operation_id = ?`).get(command.decisionId);
+    assert.equal(operation.kind, 'rejectSchedulingProposal');
+    assert.equal(operation.request_digest, rejected.receipt.decisionCommandDigest);
+    assert.equal(JSON.parse(operation.response_json).decisionReceiptDigest,
+      rejected.receipt.decisionReceiptDigest);
     assert.equal(f.store.read(generated.proposal.proposalId).lifecycle.status, 'rejected');
     assert.deepEqual(f.store.reject(command, 'admin:fixture'),
       { ...rejected, exactReplay: true });
@@ -438,6 +446,263 @@ test('reject is terminal, append-only, idempotent, and cannot write schedule fac
     assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
     assert.equal(f.db.prepare('SELECT schedule_revision FROM revision_counters WHERE id = 1').get()
       .schedule_revision, 7);
+  } finally { f.db.close(); }
+});
+
+test('new human decisions cannot claim the reserved system stale ID namespace', () => {
+  const rejectFixture = fixture();
+  try {
+    const generated = rejectFixture.store.generate(rejectFixture.command, 'scheduler:fixture');
+    assert.equal(generated.ok, true, JSON.stringify(generated));
+    const reservedId = `spd_${'a'.repeat(64)}`;
+    const rejected = rejectFixture.store.reject({
+      decisionId: reservedId,
+      proposalId: generated.proposal.proposalId,
+      decisionType: 'reject',
+      selectedProposalItemIds: null,
+      decisionNote: null,
+      reasonCode: 'HUMAN_REJECTED',
+    }, 'scheduler:fixture');
+    assert.equal(rejected.code, 'DECISION_ID_RESERVED');
+    assert.equal(rejectFixture.store.read(generated.proposal.proposalId).lifecycle.status, 'draft');
+    assert.equal(rejectFixture.db.prepare(`SELECT COUNT(*) AS count
+      FROM scheduling_proposal_decisions WHERE decision_id = ?`).get(reservedId).count, 0);
+  } finally { rejectFixture.db.close(); }
+
+  const acceptFixture = acceptanceFixture();
+  try {
+    const generated = acceptFixture.store.generate(acceptFixture.command, 'scheduler:fixture');
+    assert.equal(generated.ok, true, JSON.stringify(generated));
+    const reservedId = `spd_${'b'.repeat(64)}`;
+    const accepted = acceptFixture.store.accept({
+      decisionId: reservedId,
+      proposalId: generated.proposal.proposalId,
+      decisionType: 'accept',
+      selectedProposalItemIds: JSON.parse(generated.proposal.proposedItemsJson)
+        .map(item => item.proposalItemId),
+      decisionNote: null,
+      reasonCode: null,
+    }, schedulerPrincipal);
+    assert.equal(accepted.code, 'DECISION_ID_RESERVED');
+    assert.equal(acceptFixture.store.read(generated.proposal.proposalId).lifecycle.status, 'draft');
+    assert.equal(acceptFixture.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
+  } finally { acceptFixture.db.close(); }
+});
+
+test('legacy reserved-prefix reject decision preserves exact replay across the upgrade', () => {
+  const f = fixture();
+  try {
+    const generated = f.store.generate(f.command, 'scheduler:fixture');
+    assert.equal(generated.ok, true, JSON.stringify(generated));
+    const command = {
+      decisionId: `spd_${'c'.repeat(64)}`,
+      proposalId: generated.proposal.proposalId,
+      decisionType: 'reject',
+      selectedProposalItemIds: null,
+      decisionNote: 'legacy exact replay',
+      reasonCode: 'HUMAN_REJECTED',
+    };
+    const admitted = admitSchedulingProposalDecisionV1(command, generated.proposal);
+    assert.equal(admitted.ok, true, JSON.stringify(admitted));
+    const decidedAt = '2026-09-23T08:00:00.000Z';
+    const built = buildSchedulingProposalDecisionReceiptV1({
+      decisionId: admitted.command.decisionId,
+      decisionCommandDigest: admitted.decisionCommandDigest,
+      proposalId: generated.proposal.proposalId,
+      decisionType: 'reject',
+      selectedProposalItemIds: null,
+      selectionDigest: null,
+      adoptedItems: null,
+      adoptionDigest: null,
+      decidedBy: 'scheduler:fixture',
+      decidedAt,
+      decisionNote: admitted.command.decisionNote,
+      baseScheduleRevision: generated.proposal.baseScheduleRevision,
+      currentScheduleRevision: null,
+      resultingScheduleRevision: null,
+      reasonCode: 'HUMAN_REJECTED',
+    }, generated.proposal);
+    assert.equal(built.ok, true, JSON.stringify(built));
+    f.db.prepare(`INSERT INTO scheduling_proposal_decisions
+      (decision_id, proposal_id, decision_command_digest, decision_type,
+       receipt_json, receipt_digest, decided_at)
+      VALUES (?, ?, ?, 'reject', ?, ?, ?)`).run(
+      command.decisionId,
+      command.proposalId,
+      admitted.decisionCommandDigest,
+      built.receiptJson,
+      built.decisionReceiptDigest,
+      decidedAt,
+    );
+    f.db.prepare(`UPDATE scheduling_proposals
+      SET status = 'rejected', terminal_decision_id = ?, lifecycle_updated_at = ?
+      WHERE proposal_id = ? AND status = 'draft'`).run(
+      command.decisionId, decidedAt, command.proposalId,
+    );
+
+    const replay = f.store.reject(command, 'scheduler:fixture');
+    assert.equal(replay.ok, true, JSON.stringify(replay));
+    assert.equal(replay.exactReplay, true);
+    assert.equal(replay.receipt.decisionReceiptDigest, built.decisionReceiptDigest);
+    const operation = f.db.prepare(`SELECT kind, request_digest FROM operations
+      WHERE operation_id = ?`).get(command.decisionId);
+    assert.equal(operation.kind, 'rejectSchedulingProposal');
+    assert.equal(operation.request_digest, admitted.decisionCommandDigest);
+  } finally { f.db.close(); }
+});
+
+test('legacy exact reject decision replays before an unrelated shared operation collision', () => {
+  const f = fixture();
+  try {
+    const generated = f.store.generate(f.command, 'scheduler:fixture');
+    assert.equal(generated.ok, true, JSON.stringify(generated));
+    const command = {
+      decisionId: 'LEGACY-REJECT-COLLISION-1',
+      proposalId: generated.proposal.proposalId,
+      decisionType: 'reject',
+      selectedProposalItemIds: null,
+      decisionNote: 'legacy collision replay',
+      reasonCode: 'HUMAN_REJECTED',
+    };
+    const admitted = admitSchedulingProposalDecisionV1(command, generated.proposal);
+    assert.equal(admitted.ok, true, JSON.stringify(admitted));
+    const decidedAt = '2026-09-23T08:00:00.000Z';
+    const built = buildSchedulingProposalDecisionReceiptV1({
+      decisionId: admitted.command.decisionId,
+      decisionCommandDigest: admitted.decisionCommandDigest,
+      proposalId: generated.proposal.proposalId,
+      decisionType: 'reject',
+      selectedProposalItemIds: null,
+      selectionDigest: null,
+      adoptedItems: null,
+      adoptionDigest: null,
+      decidedBy: 'scheduler:fixture',
+      decidedAt,
+      decisionNote: admitted.command.decisionNote,
+      baseScheduleRevision: generated.proposal.baseScheduleRevision,
+      currentScheduleRevision: null,
+      resultingScheduleRevision: null,
+      reasonCode: 'HUMAN_REJECTED',
+    }, generated.proposal);
+    assert.equal(built.ok, true, JSON.stringify(built));
+
+    f.db.prepare(`INSERT INTO scheduling_proposal_decisions
+      (decision_id, proposal_id, decision_command_digest, decision_type,
+       receipt_json, receipt_digest, decided_at)
+      VALUES (?, ?, ?, 'reject', ?, ?, ?)`).run(
+      command.decisionId,
+      command.proposalId,
+      admitted.decisionCommandDigest,
+      built.receiptJson,
+      built.decisionReceiptDigest,
+      decidedAt,
+    );
+    f.db.prepare(`UPDATE scheduling_proposals
+      SET status = 'rejected', terminal_decision_id = ?, lifecycle_updated_at = ?
+      WHERE proposal_id = ? AND status = 'draft'`).run(
+      command.decisionId, decidedAt, command.proposalId,
+    );
+    f.db.prepare(`INSERT INTO operations
+      (operation_id, kind, response_json, created_at, request_digest)
+      VALUES (?, 'submitRequest', '{}', ?, ?)`).run(
+      command.decisionId, decidedAt, `sha256:${'9'.repeat(64)}`,
+    );
+
+    const replay = f.store.reject(command, 'scheduler:fixture');
+    assert.equal(replay.ok, true, JSON.stringify(replay));
+    assert.equal(replay.exactReplay, true);
+    assert.equal(replay.receipt.decisionReceiptDigest, built.decisionReceiptDigest);
+
+    const operation = f.db.prepare(`SELECT kind, request_digest, response_json FROM operations
+      WHERE operation_id = ?`).get(command.decisionId);
+    assert.equal(operation.kind, 'submitRequest');
+    assert.equal(operation.request_digest, `sha256:${'9'.repeat(64)}`);
+    assert.equal(operation.response_json, '{}');
+  } finally { f.db.close(); }
+});
+
+test('reject reserves the shared operation ID and fails closed on global collisions', () => {
+  const f = fixture();
+  try {
+    const generated = f.store.generate(f.command, 'scheduler:fixture');
+    assert.equal(generated.ok, true, JSON.stringify(generated));
+    f.db.prepare(`INSERT INTO operations (operation_id, kind, response_json, created_at)
+      VALUES ('DEC-REJECT-TAKEN', 'submitRequest', '{}', ?)`)
+      .run('2026-09-23T08:00:00.000Z');
+    const result = f.store.reject({
+      decisionId: 'DEC-REJECT-TAKEN',
+      proposalId: generated.proposal.proposalId,
+      decisionType: 'reject',
+      selectedProposalItemIds: null,
+      decisionNote: null,
+      reasonCode: 'HUMAN_REJECTED',
+    }, 'scheduler:fixture');
+    assert.equal(result.code, 'IDEMPOTENCY_KEY_REUSE');
+    assert.equal(f.store.read(generated.proposal.proposalId).lifecycle.status, 'draft');
+    assert.equal(f.db.prepare(`SELECT COUNT(*) AS count FROM scheduling_proposal_decisions
+      WHERE decision_id = 'DEC-REJECT-TAKEN'`).get().count, 0);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
+  } finally { f.db.close(); }
+});
+
+test('system stale replay fails closed when its deterministic ID is occupied by another decision', () => {
+  const f = fixture();
+  try {
+    const proposalA = f.store.generate(f.command, 'scheduler:fixture');
+    const proposalB = f.store.generate({ ...f.command, operationId: 'GEN-COLLISION-B' },
+      'scheduler:fixture');
+    assert.equal(proposalA.ok && proposalB.ok, true);
+    const stale = deriveSchedulingSystemStaleDecisionV1({
+      proposalId: proposalB.proposal.proposalId,
+      triggerOperationId: 'FUTURE-TRIGGER-1',
+      reasonCode: 'RESOURCE_CHANGED',
+    });
+    assert.equal(stale.ok, true, JSON.stringify(stale));
+    f.db.prepare(`INSERT INTO scheduling_proposal_decisions
+      (decision_id, proposal_id, decision_command_digest, decision_type,
+       receipt_json, receipt_digest, decided_at)
+      VALUES (?, ?, ?, 'reject', '{}', ?, ?)`).run(
+      stale.decisionId,
+      proposalA.proposal.proposalId,
+      `sha256:${'1'.repeat(64)}`,
+      `sha256:${'2'.repeat(64)}`,
+      '2026-09-23T08:00:00.000Z',
+    );
+    const result = f.store.stale({
+      proposalId: proposalB.proposal.proposalId,
+      triggerOperationId: 'FUTURE-TRIGGER-1',
+      reasonCode: 'RESOURCE_CHANGED',
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'IDEMPOTENCY_KEY_REUSE');
+    assert.equal(f.store.read(proposalB.proposal.proposalId).lifecycle.status, 'draft');
+  } finally { f.db.close(); }
+});
+
+test('rejecting with an existing system stale decision ID returns stable idempotency denial', () => {
+  const f = fixture();
+  try {
+    const generated = f.store.generate(f.command, 'scheduler:fixture');
+    assert.equal(generated.ok, true, JSON.stringify(generated));
+    const stale = f.store.stale({
+      proposalId: generated.proposal.proposalId,
+      triggerOperationId: 'RESOURCE-CHANGE-STALE-ID',
+      reasonCode: 'RESOURCE_CHANGED',
+    });
+    assert.equal(stale.ok, true, JSON.stringify(stale));
+    assert.equal(stale.receipt.decisionType, 'stale');
+
+    const rejected = f.store.reject({
+      decisionId: stale.receipt.decisionId,
+      proposalId: generated.proposal.proposalId,
+      decisionType: 'reject',
+      selectedProposalItemIds: null,
+      decisionNote: null,
+      reasonCode: 'HUMAN_REJECTED',
+    }, 'scheduler:fixture');
+    assert.equal(rejected.ok, false);
+    assert.equal(rejected.code, 'IDEMPOTENCY_KEY_REUSE');
+    assert.equal(f.store.read(generated.proposal.proposalId).lifecycle.status, 'stale');
   } finally { f.db.close(); }
 });
 

@@ -2,10 +2,14 @@ import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHttpApp } from './http-app.mjs';
+import { authorizeCapability, validateTrustedPrincipal } from './authorization-v2.mjs';
 import { createReadKioskCurrent } from './kiosk-current-use-case-v2.mjs';
 import { createApplyKioskRunEvent } from './kiosk-run-event-use-case-v2.mjs';
 import { createSqliteKioskCurrentStore } from './sqlite-kiosk-current-store-v2.mjs';
 import { createSqliteKioskRunEventStore } from './sqlite-kiosk-run-event-store-v2.mjs';
+import { refreshSqliteSnapshotProjectionsV2 } from './sqlite-run-event-store-v2.mjs';
+import { assembleSchedulingInputFromSqliteV1 } from './sqlite-scheduling-input-assembler-v1.mjs';
+import { createSqliteSchedulingProposalStoreV1 } from './sqlite-scheduling-proposal-store-v1.mjs';
 import { ScheduleStore } from './store.mjs';
 
 export function createKioskV2Application({
@@ -37,6 +41,70 @@ export function createKioskV2Application({
   });
 }
 
+export function createSchedulingV2Application({
+  store,
+  authenticate,
+  clock = () => new Date(),
+  allowedBriefHosts = [],
+} = {}) {
+  if (!store?.db) throw new TypeError('ScheduleStore is required');
+  if (typeof authenticate !== 'function') {
+    throw new TypeError('Scheduling authenticate port is required');
+  }
+  const proposalStore = createSqliteSchedulingProposalStoreV1({
+    db: store.db,
+    assembleInput: assembleSchedulingInputFromSqliteV1,
+    now: clock,
+    authorizeAcceptance: (principal, resourceIds) => (
+      ['scheduler', 'administrator'].includes(principal?.role)
+      && Array.isArray(resourceIds)
+      && resourceIds.every(resourceId => principal.resourceIds?.includes(resourceId))
+    ),
+    refreshProjections: context => {
+      const active = store.db.prepare(`SELECT version.config_json
+        FROM scheduling_active_config AS active
+        JOIN scheduling_config_versions AS version
+          ON version.config_version = active.config_version
+        WHERE active.id = 1`).get();
+      let businessTimeZone = null;
+      try {
+        businessTimeZone = JSON.parse(active?.config_json ?? 'null')?.businessTimeZone ?? null;
+      } catch {}
+      if (typeof businessTimeZone !== 'string' || businessTimeZone.length === 0) {
+        throw new Error('SCHEDULING_CONFIG_NOT_ACTIVE');
+      }
+      return refreshSqliteSnapshotProjectionsV2({
+        ...context,
+        businessTimeZone,
+        allowedBriefHosts,
+      });
+    },
+  });
+  return Object.freeze({
+    authenticate,
+    decideProposal({ command, principal } = {}) {
+      if (command?.decisionType !== 'reject') {
+        return proposalStore.accept(command, principal);
+      }
+      if (!validateTrustedPrincipal(principal).ok
+        || !['scheduler', 'administrator'].includes(principal.role)) {
+        return Object.freeze({ ok: false, code: 'TRUSTED_SCHEDULER_REQUIRED' });
+      }
+      const found = proposalStore.read(command?.proposalId);
+      if (!found.ok) return found;
+      const authorized = found.proposal.resourceScope.every(resourceId => authorizeCapability({
+        principal,
+        capability: 'modifySchedule',
+        resourceId,
+      }).allowed);
+      if (!authorized) {
+        return Object.freeze({ ok: false, code: 'TRUSTED_SCHEDULER_REQUIRED' });
+      }
+      return proposalStore.reject(command, principal.subjectId);
+    },
+  });
+}
+
 export function createOperationsServer({
   databasePath,
   uploadRoot,
@@ -48,6 +116,8 @@ export function createOperationsServer({
   kioskAuthenticate,
   kioskBusinessTimeZone,
   kioskAllowedBriefHosts = [],
+  schedulingAuthenticate,
+  schedulingAllowedBriefHosts = [],
 }) {
   const effectiveClock = clock ?? (() => new Date());
   const store = new ScheduleStore({
@@ -67,7 +137,15 @@ export function createOperationsServer({
         clock: effectiveClock,
         allowedBriefHosts: kioskAllowedBriefHosts,
       });
-  const server = createServer(createHttpApp({ store, tokens, kiosk }));
+  const scheduling = schedulingAuthenticate === undefined
+    ? null
+    : createSchedulingV2Application({
+        store,
+        authenticate: schedulingAuthenticate,
+        clock: effectiveClock,
+        allowedBriefHosts: schedulingAllowedBriefHosts,
+      });
+  const server = createServer(createHttpApp({ store, tokens, kiosk, scheduling }));
   const cleanupTimer = cleanupIntervalMs > 0
     ? setInterval(() => {
         try {
