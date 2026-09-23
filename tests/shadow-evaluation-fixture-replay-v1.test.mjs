@@ -227,3 +227,42 @@ test('nested hostile proxies are rejected before evaluator or canonical comparis
     reason: 'FIXTURE_ENVELOPE_INVALID',
   });
 });
+
+
+test('recursive snapshot rejects enumerable unsafe object keys instead of swallowing them', async () => {
+  const value = await fixture();
+
+  for (const unsafeKey of ['__proto__', 'constructor', 'prototype']) {
+    const report = structuredClone(value.expected.report);
+    Object.defineProperty(report, unsafeKey, {
+      value: unsafeKey === '__proto__' ? 'scalar' : 1,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+    assert.deepEqual(replayShadowEvaluationFixtureV1({
+      ...value,
+      expected: { ...value.expected, report },
+    }), {
+      ok: false,
+      code: 'SHADOW_FIXTURE_REPLAY_INVALID',
+      reason: 'FIXTURE_ENVELOPE_INVALID',
+    }, unsafeKey);
+  }
+
+  const reportInput = structuredClone(value.reportInput);
+  Object.defineProperty(reportInput, '__proto__', {
+    value: false,
+    enumerable: true,
+    configurable: true,
+    writable: true,
+  });
+  assert.deepEqual(replayShadowEvaluationFixtureV1({
+    ...value,
+    reportInput,
+  }), {
+    ok: false,
+    code: 'SHADOW_FIXTURE_REPLAY_INVALID',
+    reason: 'FIXTURE_ENVELOPE_INVALID',
+  });
+});
