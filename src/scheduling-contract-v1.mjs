@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-const CONTROL_OR_LINE_SEPARATOR = /[\u0000-\u001f\u007f\u2028\u2029]/u;
+const CONTROL_OR_LINE_SEPARATOR = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u;
 const UNPAIRED_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/u;
 const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/u;
 const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/u;
@@ -11,7 +11,7 @@ const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const INPUT_KEYS = Object.freeze([
   'schemaVersion', 'planningWindowStart', 'planningWindowEnd', 'businessTimeZone',
   'baseScheduleRevision', 'algorithmVersion', 'calendarCompilerVersion',
-  'estimatePolicyVersion', 'configVersion', 'configDigest', 'resources', 'candidates',
+  'timeZoneDataVersion', 'estimatePolicyVersion', 'configVersion', 'configDigest', 'resources', 'candidates',
   'occupied', 'activeRuns', 'durationStats',
 ]);
 const RESOURCE_KEYS = Object.freeze([
@@ -52,11 +52,13 @@ const DIAGNOSTIC_INPUT_KEYS = Object.freeze([
 const DIAGNOSTIC_KEYS = Object.freeze(['severity', ...DIAGNOSTIC_INPUT_KEYS]);
 const RESULT_INPUT_KEYS = Object.freeze([
   'algorithmVersion', 'configVersion', 'configDigest', 'calendarCompilerVersion',
-  'estimatePolicyVersion', 'proposedItems', 'diagnostics',
+  'timeZoneDataVersion', 'estimatePolicyVersion', 'proposedItems', 'diagnostics',
 ]);
 
 export const SCHEDULING_INPUT_SCHEMA_V1 = 1;
 export const SCHEDULING_RESULT_SCHEMA_V1 = 1;
+export const SCHEDULING_CALENDAR_COMPILER_VERSION_V1 = 'calendar-compiler-v1';
+export const SCHEDULING_TIME_ZONE_DATA_VERSION = process.versions.tz ?? null;
 
 export const SCHEDULING_HARD_DIAGNOSTIC_CODES_V1 = Object.freeze([
   'SAMPLE_NOT_VERIFIED',
@@ -230,8 +232,14 @@ function validString(value, maxCodePoints) {
     && !UNPAIRED_SURROGATE.test(value);
 }
 
+export function isSchedulingIdentifierV1(value, maxCodePoints = 160) {
+  return Number.isSafeInteger(maxCodePoints)
+    && maxCodePoints >= 1
+    && validString(value, maxCodePoints);
+}
+
 function identifier(value, path, maxCodePoints = 160) {
-  if (!validString(value, maxCodePoints)) fail('IDENTIFIER_INVALID', path);
+  if (!isSchedulingIdentifierV1(value, maxCodePoints)) fail('IDENTIFIER_INVALID', path);
   return value;
 }
 
@@ -644,7 +652,18 @@ export function normalizeSchedulingInputV1(input) {
       businessTimeZone: businessTimeZone(input.businessTimeZone, '$.businessTimeZone'),
       baseScheduleRevision: safeInteger(input.baseScheduleRevision, '$.baseScheduleRevision'),
       algorithmVersion: controlledToken(input.algorithmVersion, '$.algorithmVersion'),
-      calendarCompilerVersion: controlledToken(input.calendarCompilerVersion, '$.calendarCompilerVersion'),
+      calendarCompilerVersion: input.calendarCompilerVersion === SCHEDULING_CALENDAR_COMPILER_VERSION_V1
+        ? input.calendarCompilerVersion
+        : fail('CALENDAR_COMPILER_VERSION_UNSUPPORTED', '$.calendarCompilerVersion'),
+      timeZoneDataVersion: SCHEDULING_TIME_ZONE_DATA_VERSION !== null
+        && input.timeZoneDataVersion === SCHEDULING_TIME_ZONE_DATA_VERSION
+        ? input.timeZoneDataVersion
+        : fail(
+          SCHEDULING_TIME_ZONE_DATA_VERSION === null
+            ? 'TIME_ZONE_DATA_UNAVAILABLE'
+            : 'TIME_ZONE_DATA_VERSION_MISMATCH',
+          '$.timeZoneDataVersion',
+        ),
       estimatePolicyVersion: controlledToken(input.estimatePolicyVersion, '$.estimatePolicyVersion'),
       configVersion: controlledToken(input.configVersion, '$.configVersion'),
       configDigest: typeof input.configDigest === 'string' && DIGEST.test(input.configDigest)
@@ -742,6 +761,16 @@ export function canonicalizeSchedulingResultV1(value) {
       value.calendarCompilerVersion,
       '$.calendarCompilerVersion',
     );
+    if (calendarCompilerVersion !== SCHEDULING_CALENDAR_COMPILER_VERSION_V1) {
+      fail('CALENDAR_COMPILER_VERSION_UNSUPPORTED', '$.calendarCompilerVersion');
+    }
+    const timeZoneDataVersion = controlledToken(value.timeZoneDataVersion, '$.timeZoneDataVersion');
+    if (SCHEDULING_TIME_ZONE_DATA_VERSION === null) {
+      fail('TIME_ZONE_DATA_UNAVAILABLE', '$.timeZoneDataVersion');
+    }
+    if (timeZoneDataVersion !== SCHEDULING_TIME_ZONE_DATA_VERSION) {
+      fail('TIME_ZONE_DATA_VERSION_MISMATCH', '$.timeZoneDataVersion');
+    }
     const estimatePolicyVersion = controlledToken(value.estimatePolicyVersion, '$.estimatePolicyVersion');
     const proposedItems = arrayValues(value.proposedItems, '$.proposedItems')
       .map((item, index) => normalizeProposedItem(item, `$.proposedItems[${index}]`))
@@ -770,6 +799,7 @@ export function canonicalizeSchedulingResultV1(value) {
       configVersion,
       configDigest,
       calendarCompilerVersion,
+      timeZoneDataVersion,
       estimatePolicyVersion,
       proposedItems,
       diagnostics,

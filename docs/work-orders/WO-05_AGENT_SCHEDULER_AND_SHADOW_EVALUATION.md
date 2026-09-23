@@ -3,7 +3,7 @@
 - 状态：`IN_PROGRESS / ARCHITECTURE_FROZEN`
 - 执行分支：`codex/v2-1-architecture-freeze`
 - 前置门：WO-00/01 `PASS`、WO-02/03/04 `PASS_WITH_LIMITS`
-- 冻结决定：`ADP-024_SCHEDULING_PROPOSAL_DETERMINISM_AND_SHADOW_EVALUATION.md`
+- 冻结决定：`ADP-024_SCHEDULING_PROPOSAL_DETERMINISM_AND_SHADOW_EVALUATION.md` + `ADP-025_SCHEDULING_CONTRACT_EXACTNESS_AND_EVIDENCE_BINDING.md`
 - 范围：本地资源/配置/Proposal 契约、纯调度核心、SQLite 增量、fixture 离线评估、可信人工决策记录
 - 非范围：真实 LLM/provider、外部 runner、生产数据、真实凭据、网络、自动采用、Switch、部署、发布
 
@@ -25,22 +25,24 @@
 
 ### WO-05A：Architecture and Contracts
 
-状态：`IN_PROGRESS`
+状态：`PASS`
 
-当前检查点：`05A-1 DETERMINISTIC_CONTRACT_CORE_PASS`
+完成检查点：`05A ARCHITECTURE_AND_CONTRACTS_PASS`
 
-- 已实现 `SchedulingInputV1`、deterministic Proposal item/result、diagnostic allowlist、canonical JSON 与 digest；
+- 已实现 resource/config commands、`SchedulingInputV1`、deterministic Proposal item/result、Proposal/Decision envelope、sample/evaluation contract、diagnostic/reason allowlist、canonical JSON 与 digest；
 - 已冻结 `resource-capabilities-v1` exact capability body/digest；
-- candidate / occupancy / active run 跨集合一致性 fail closed；
-- 目标测试 `15/15 PASS`，项目全量 `407 PASS / 0 FAIL / 1 SKIP`；
+- candidate / occupancy / active run、Proposal/input、Decision/adoption、evaluation evidence 跨集合一致性 fail closed；
+- calendar compiler/runtime tzdata fingerprint 进入 input/result/Proposal digest 链，DST transition fail closed；
+- shadow evaluator 只消费 evidence-bound facts 与 trusted replay ports；报告 gate 固定 `BLOCKED_DATA`；
+- 四组合约测试 `54/54 PASS`，项目全量 `446 PASS / 0 FAIL / 1 SKIP`；
 - 独立复核 `0 Critical / 0 Major / 0 Minor`；
 - Windows：`WINDOWS_NOT_RUN`。
 
-此检查点不代表 05A 完成；resource/config command、Proposal envelope、Decision 与 evaluation contract 仍待实现。
+05A 只关闭纯契约门；不代表 scheduler、persistence、HTTP、acceptance 或真实 shadow 数据完成。
 
 交付：
 
-- ADP-024 与 baseline R7；
+- ADP-024、ADP-025 与 baseline R8；
 - resource/config/SchedulingInput/Proposal/Decision/evaluation contract；
 - stable diagnostic/reason code；
 - canonical JSON、input/result digest golden vectors；
@@ -50,7 +52,7 @@
 
 ### WO-05B：Pure Deterministic Scheduler
 
-状态：`PENDING`
+状态：`NEXT`
 
 交付：
 
@@ -208,4 +210,4 @@ WINDOWS_NOT_RUN
 
 ## 7. 当前下一步
 
-先完成 WO-05A contract/golden vectors，再实现 WO-05B pure scheduler。migration v5 必须等 contract 稳定后追加；05D 不得在 canonical schedule command 缺失时提前接线。
+下一步实现 WO-05B pure deterministic scheduler，并保持纯核心不读取 DB、clock、filesystem、network、env 或 locale default。migration v5 必须等 WO-05B 稳定后再进入 05C；05D 不得在 canonical schedule command 缺失时提前接线。

@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   SCHEDULING_DIAGNOSTIC_FIELD_PATHS_V1,
+  SCHEDULING_TIME_ZONE_DATA_VERSION,
   SCHEDULING_HARD_DIAGNOSTIC_CODES_V1,
   SCHEDULING_SOFT_DIAGNOSTIC_CODES_V1,
   buildSchedulingDiagnosticV1,
@@ -117,6 +118,7 @@ function schedulingInput(overrides = {}) {
     baseScheduleRevision: 7,
     algorithmVersion: 'deterministic-scheduler-v1',
     calendarCompilerVersion: 'calendar-compiler-v1',
+    timeZoneDataVersion: SCHEDULING_TIME_ZONE_DATA_VERSION,
     estimatePolicyVersion: 'estimate-policy-v1',
     configVersion: 'fixture-config-v1',
     configDigest: CONFIG_DIGEST,
@@ -184,6 +186,7 @@ function schedulingResult({ proposedItems = [], diagnostics = [], ...overrides }
     configVersion: 'fixture-config-v1',
     configDigest: CONFIG_DIGEST,
     calendarCompilerVersion: 'calendar-compiler-v1',
+    timeZoneDataVersion: SCHEDULING_TIME_ZONE_DATA_VERSION,
     estimatePolicyVersion: 'estimate-policy-v1',
     proposedItems,
     diagnostics,
@@ -380,6 +383,7 @@ test('160-code-point identifiers accept astral characters and reject 161 or lone
   assert.equal(atBoundary.ok, true, JSON.stringify(atBoundary));
   assert.equal(buildSchedulingProposalItemV1(proposedItem({ requestId: '😀'.repeat(161) })).ok, false);
   assert.equal(buildSchedulingProposalItemV1(proposedItem({ requestId: '\uD800' })).ok, false);
+  assert.equal(buildSchedulingProposalItemV1(proposedItem({ requestId: 'REQ\u0085CONTROL' })).ok, false);
 });
 
 test('candidate universe retains incomplete open/unbound facts and rejects prefiltered or bound candidates', () => {
@@ -547,7 +551,7 @@ test('proposal item IDs and result digest are deterministic across input permuta
   const golden = canonicalizeSchedulingResultV1(schedulingResult({ proposedItems: [proposedItem()] }));
   assert.equal(
     golden.resultDigest,
-    'sha256:e13e1a49ec439329fc6d97556a3fc45128b307d1d31719887a2fb5214e2dc7fd',
+    'sha256:1ebdb171fef4e4ce3ec2e2996e1b382612cccd3deb6179fb6087f8b63b19fc6f',
   );
 });
 
@@ -563,7 +567,6 @@ test('result digest explicitly binds every algorithm and config version field', 
       proposedItems: [proposedItem({ configVersion: 'fixture-config-v2' })],
     },
     { ...baselineInput, configDigest: `sha256:${'b'.repeat(64)}` },
-    { ...baselineInput, calendarCompilerVersion: 'calendar-compiler-v2' },
     { ...baselineInput, estimatePolicyVersion: 'estimate-policy-v2' },
   ];
   for (const mutation of mutations) {
@@ -571,6 +574,14 @@ test('result digest explicitly binds every algorithm and config version field', 
     assert.equal(result.ok, true, JSON.stringify(result));
     assert.notEqual(result.resultDigest, baseline.resultDigest);
   }
+  assert.equal(canonicalizeSchedulingResultV1({
+    ...baselineInput,
+    calendarCompilerVersion: 'calendar-compiler-v2',
+  }).ok, false);
+  assert.equal(canonicalizeSchedulingResultV1({
+    ...baselineInput,
+    timeZoneDataVersion: 'forged-tzdata-v999',
+  }).ok, false);
 });
 
 test('proposal item and diagnostic mutations change IDs or result digest, while malformed data fails closed', () => {
