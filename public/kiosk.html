@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>Jenn 摄制现场</title>
+  <link rel="stylesheet" href="/kiosk.css?v=ui-20260922">
+</head>
+<body>
+  <a class="skip-link" href="#kiosk-main">跳至现场任务</a>
+  <header class="kiosk-header">
+    <div><p class="kicker">VCP 摄制运营</p><h1>现场控制台</h1></div>
+    <div class="status-cluster" aria-label="现场连接状态">
+      <span id="server-status" class="status-pill" data-state="stale">服务端：等待同步</span>
+      <span id="sync-status" class="status-pill" data-state="synced">队列：已同步</span>
+      <span id="lock-status" class="status-pill" data-state="readonly">控制权：只读</span>
+      <span class="pending-pill">待发送 <strong id="pending-count">0</strong></span>
+    </div>
+  </header>
+
+  <main id="kiosk-main" class="kiosk-shell">
+    <p id="live-message" class="live-message" aria-live="polite" aria-atomic="true"></p>
+    <section class="current-panel" aria-labelledby="current-title">
+      <div class="section-heading">
+        <div><p class="eyebrow">NOW / 当前场次</p><h2 id="current-title">等待服务端任务</h2></div>
+        <div class="state-stack">
+          <span id="confirmed-state" class="state-badge">服务端：—</span>
+          <span id="pending-state" class="state-badge pending" hidden>本地预计：—（未确认）</span>
+        </div>
+      </div>
+      <p id="current-time" class="time-range">—</p>
+      <ul id="current-tasks" class="task-list" aria-label="当前场次全部任务"></ul>
+      <p id="grouped-notice" class="grouped-notice" hidden>组合场次，未拆分单任务工时</p>
+      <div class="action-bar" aria-label="现场操作">
+        <button id="action-start" data-action="start" type="button" disabled>开始拍摄</button>
+        <button id="action-block" data-action="block" type="button" class="warning" disabled>暂停并记录原因</button>
+        <button id="action-resume" data-action="resume" type="button" disabled>恢复拍摄</button>
+        <button id="action-complete" data-action="complete" type="button" class="complete" disabled>完成场次</button>
+      </div>
+      <form id="block-form" class="block-form" hidden>
+        <label for="block-reason">暂停原因</label>
+        <select id="block-reason" required>
+          <option value="">请选择</option>
+          <option value="sampleWaiting">样品等待</option>
+          <option value="specConfirming">规格确认</option>
+          <option value="deviceIssue">设备问题</option>
+          <option value="talentWaiting">人员等待</option>
+          <option value="siteIssue">场地问题</option>
+          <option value="other">其他</option>
+        </select>
+        <label id="block-note-label" for="block-note" hidden>其他原因说明</label>
+        <textarea id="block-note" rows="3" maxlength="2000" hidden></textarea>
+        <div class="form-actions"><button type="submit" class="warning">确认暂停</button><button id="block-cancel" type="button" class="secondary">取消</button></div>
+      </form>
+    </section>
+
+    <aside class="next-panel" aria-labelledby="next-title">
+      <p class="eyebrow">NEXT / 下一场</p>
+      <h2 id="next-title">暂无后续任务</h2>
+      <p id="next-time" class="time-range">—</p>
+      <ul id="next-tasks" class="task-list compact" aria-label="下一场全部任务"></ul>
+      <p id="next-grouped-notice" class="grouped-notice" hidden>组合场次，未拆分单任务工时</p>
+    </aside>
+  </main>
+
+  <dialog id="complete-dialog" aria-labelledby="complete-title" aria-describedby="complete-description">
+    <h2 id="complete-title">确认完成整个场次？</h2>
+    <p id="complete-description">此操作会记录现场完成事件。组合场次不会自动拆分或完成单个任务。</p>
+    <div class="dialog-actions"><button id="complete-confirm" type="button" class="complete">确认完成</button><button id="complete-cancel" type="button" class="secondary">返回检查</button></div>
+  </dialog>
+
+  <script type="module" src="/kiosk.js?v=ui-20260922"></script>
+</body>
+</html>

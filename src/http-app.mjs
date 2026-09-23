@@ -17,10 +17,15 @@ const STATIC = new Map([
   ['/submit', 'submit.html'],
   ['/submit/print', 'submit-print.html'],
   ['/submit/video', 'submit-video.html'],
+  ['/kiosk', 'kiosk.html'],
   ['/app.css', 'app.css'],
+  ['/kiosk.css', 'kiosk.css'],
   ['/common.js', 'common.js'],
   ['/board.js', 'board.js'],
   ['/submit.js', 'submit.js'],
+  ['/kiosk.js', 'kiosk.js'],
+  ['/kiosk-control-lock.js', 'kiosk-control-lock.js'],
+  ['/kiosk-offline-queue-v2.js', 'kiosk-offline-queue-v2.js'],
 ]);
 const TYPES = new Map([
   ['.html', 'text/html; charset=utf-8'],
