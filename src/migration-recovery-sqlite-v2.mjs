@@ -223,7 +223,7 @@ function prepareNewArtifact(path, root, conflicts) {
     fail('UNSAFE_DESTINATION', 'INVALID_USAGE');
   }
   const parentRealPath = realpathSync(parentPath);
-  if (parentRealPath !== parentPath) fail('UNSAFE_DESTINATION', 'INVALID_USAGE');
+  if (!pathsEqual(parentRealPath, parentPath)) fail('UNSAFE_DESTINATION', 'INVALID_USAGE');
   const parentMetadata = statSync(parentRealPath, { bigint: true });
   const candidateMetadata = lstatOrNull(candidate);
   if (candidateMetadata) {
@@ -236,7 +236,7 @@ function prepareNewArtifact(path, root, conflicts) {
   for (const suffix of SIDECAR_SUFFIXES) {
     if (lstatOrNull(`${candidate}${suffix}`)) fail('DESTINATION_SIDECAR_EXISTS', 'INVALID_USAGE');
   }
-  if (conflicts.some(conflict => conflict.realPath === candidate)) {
+  if (conflicts.some(conflict => pathsEqual(conflict.realPath, candidate))) {
     fail('PATH_IDENTITY_CONFLICT', 'INVALID_USAGE');
   }
   return {
