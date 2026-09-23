@@ -257,7 +257,7 @@ runId, scheduleItemId, resourceId, scope, taskCount, completedAt, netDurationMs,
 | Intent | revision scope / value | 状态 |
 |---|---|---|
 | `production-run.completed.v1` | `run / runRevision` | WO-04 可接入 |
-| `schedule.confirmed.v1` | `schedule / scheduleRevision` | `NOT_WIRED` |
+| `schedule.confirmed.v1` | `schedule / scheduleRevision` | WO-05D 本地事务生产者已接入；HTTP 采用入口未接入，未进行真实投递 |
 | `request.submitted.v1` | 尚未冻结；等待 canonical request command | `NOT_WIRED` |
 
 不得用 `projectionRevision` 冒充 request aggregate revision。

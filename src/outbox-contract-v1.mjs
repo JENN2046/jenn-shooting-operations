@@ -38,7 +38,7 @@ export const OUTBOX_DISPATCH_POLICY_V1 = Object.freeze({
 
 export const NOTIFICATION_INTENT_ADMISSION_V1 = Object.freeze({
   'request.submitted.v1': Object.freeze({ status: 'NOT_WIRED', aggregateRevisionScope: null }),
-  'schedule.confirmed.v1': Object.freeze({ status: 'NOT_WIRED', aggregateRevisionScope: 'schedule' }),
+  'schedule.confirmed.v1': Object.freeze({ status: 'WIRED', aggregateRevisionScope: 'schedule' }),
   'production-run.completed.v1': Object.freeze({ status: 'WIRED', aggregateRevisionScope: 'run' }),
 });
 

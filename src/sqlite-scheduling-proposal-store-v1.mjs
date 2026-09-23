@@ -5,9 +5,11 @@ import {
 } from './scheduling-contract-v1.mjs';
 import { normalizeSchedulingConfigV1 } from './scheduling-admin-contract-v1.mjs';
 import { generateDeterministicScheduleV1 } from './deterministic-scheduler-v1.mjs';
+import { applyCanonicalScheduleAcceptanceInTransactionV2 } from './sqlite-schedule-command-v2.mjs';
 import {
   admitSchedulingProposalDecisionV1,
   buildSchedulingProposalDecisionReceiptV1,
+  buildSchedulingProposalDecisionCommandV1,
   buildSchedulingProposalEnvelopeV1,
   buildSchedulingProposalGenerationCommandV1,
   buildSchedulingProposalLifecycleV1,
@@ -132,7 +134,8 @@ export function staleDraftProposalsInTransactionV1({ db, triggerOperationId, rea
 }
 
 /** Internal-only store. The trusted assembler must read only through the supplied db transaction. */
-export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now } = {}) {
+export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
+  refreshProjections, authorizeAcceptance } = {}) {
   if (!db || typeof db.exec !== 'function' || typeof db.prepare !== 'function'
     || typeof assembleInput !== 'function' || typeof now !== 'function') {
     throw new TypeError('SQLite db, trusted input assembler, and injected clock are required');
@@ -267,6 +270,102 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now }
         }, found.proposal);
         if (!built.ok) return built;
         insertDecision(db, built, found.proposal, 'rejected');
+        return { ok: true, receipt: built.receipt, exactReplay: false };
+      });
+    },
+
+    /** Local application use case; no HTTP route or autonomous Agent caller is wired. */
+    accept(decisionInput, principal) {
+      if (typeof authorizeAcceptance !== 'function'
+        || typeof refreshProjections !== 'function') return denied('PROPOSAL_ACCEPT_NOT_WIRED');
+      if (authorizeAcceptance(principal) !== true) return denied('TRUSTED_SCHEDULER_REQUIRED');
+      return transaction(db, 'BEGIN IMMEDIATE', () => {
+        const found = admitStoredProposal(readProposalRow(db, decisionInput?.proposalId));
+        if (!found) return denied('PROPOSAL_NOT_FOUND');
+        const admitted = buildSchedulingProposalDecisionCommandV1(decisionInput, found.proposal);
+        if (!admitted.ok) return admitted;
+        if (!['accept', 'partiallyAccept'].includes(admitted.command.decisionType)) {
+          return denied('PROPOSAL_ACCEPT_DECISION_TYPE_INVALID');
+        }
+        const prior = db.prepare(`SELECT decision_command_digest, receipt_json, receipt_digest
+          FROM scheduling_proposal_decisions WHERE decision_id = ?`).get(admitted.command.decisionId);
+        if (prior) return prior.decision_command_digest === admitted.decisionCommandDigest
+          ? { ok: true, receipt: {
+            ...JSON.parse(prior.receipt_json), decisionReceiptDigest: prior.receipt_digest,
+          }, exactReplay: true } : denied('IDEMPOTENCY_KEY_REUSE');
+        if (found.lifecycle.status !== 'draft') return denied('PROPOSAL_NOT_DRAFT');
+        const proposal = found.proposal;
+        const current = db.prepare(`SELECT schedule_revision, projection_revision
+          FROM revision_counters WHERE id = 1`).get();
+        if (!current) throw new Error('SCHEDULING_COUNTERS_MISSING');
+        const active = readActiveConfig(db);
+        let staleReason = null;
+        if (current.schedule_revision !== proposal.baseScheduleRevision) {
+          staleReason = 'SCHEDULE_REVISION_CHANGED';
+        } else if (!active || active.config_version !== proposal.configVersion
+          || active.config_digest !== proposal.configDigest) {
+          staleReason = 'SCHEDULING_CONFIG_CHANGED';
+        } else if (!active.config.compatibleAlgorithmVersions.includes(proposal.algorithmVersion)
+          || active.algorithm_version !== proposal.algorithmVersion) {
+          staleReason = 'SCHEDULING_ALGORITHM_UNSUPPORTED';
+        }
+        let input = null;
+        if (!staleReason) {
+          input = readAssembled({ planningWindowStart: proposal.planningWindowStart,
+            planningWindowEnd: proposal.planningWindowEnd, resourceScope: proposal.resourceScope }, active);
+          if (!input || input.inputDigest !== proposal.inputDigest) {
+            staleReason = 'SCHEDULING_INPUT_CHANGED';
+          }
+        }
+        if (staleReason) return staleOneInTransaction(db, {
+          proposalId: proposal.proposalId,
+          triggerOperationId: admitted.command.decisionId, reasonCode: staleReason, now,
+        });
+        const recomputed = generateDeterministicScheduleV1(input.input, active.config);
+        if (!recomputed.ok || recomputed.resultDigest !== proposal.resultDigest) {
+          throw new Error('SCHEDULING_HARD_CONSTRAINT_REVALIDATION_FAILED');
+        }
+        const byId = new Map(recomputed.result.proposedItems.map(item => [item.proposalItemId, item]));
+        const selected = admitted.command.selectedProposalItemIds.map(id => byId.get(id));
+        if (selected.some(item => !item)) throw new Error('SCHEDULING_SELECTION_REVALIDATION_FAILED');
+        const decidedAt = now().toISOString();
+        const applied = applyCanonicalScheduleAcceptanceInTransactionV2({ db, proposal,
+          selectedItems: selected, decisionId: admitted.command.decisionId,
+          currentScheduleRevision: current.schedule_revision,
+          currentProjectionRevision: current.projection_revision, at: decidedAt,
+          refreshProjections });
+        const built = buildSchedulingProposalDecisionReceiptV1({
+          decisionId: admitted.command.decisionId,
+          decisionCommandDigest: admitted.decisionCommandDigest,
+          proposalId: proposal.proposalId,
+          decisionType: admitted.command.decisionType,
+          selectedProposalItemIds: admitted.command.selectedProposalItemIds,
+          selectionDigest: admitted.selectionDigest,
+          adoptedItems: applied.adoptedItems,
+          adoptionDigest: digestCanonicalJsonSchedulingV1({
+            domain: 'scheduling-proposal-adoption-v1', adoptedItems: applied.adoptedItems,
+          }),
+          decidedBy: principal.actorId, decidedAt,
+          decisionNote: admitted.command.decisionNote,
+          baseScheduleRevision: proposal.baseScheduleRevision,
+          currentScheduleRevision: current.schedule_revision,
+          resultingScheduleRevision: applied.scheduleRevision,
+          reasonCode: null,
+        }, proposal);
+        if (!built.ok) throw new Error(`SCHEDULING_ACCEPT_RECEIPT_INVALID:${built.code}`);
+        db.prepare(`INSERT INTO operations (operation_id, kind, response_json, created_at)
+          VALUES (?, 'acceptSchedulingProposal', ?, ?)`).run(
+          admitted.command.decisionId, built.receiptJson, decidedAt,
+        );
+        db.prepare(`INSERT INTO audit_log (action, role, entity_id, revision, result, created_at)
+          VALUES ('acceptSchedulingProposal', ?, ?, ?, 'accepted', ?)`).run(
+          principal.role, proposal.proposalId, applied.scheduleRevision, decidedAt,
+        );
+        insertDecision(db, built, proposal,
+          admitted.command.decisionType === 'accept' ? 'accepted' : 'partiallyAccepted');
+        staleDraftProposalsInTransactionV1({ db,
+          triggerOperationId: admitted.command.decisionId,
+          reasonCode: 'SCHEDULE_REVISION_CHANGED', now });
         return { ok: true, receipt: built.receipt, exactReplay: false };
       });
     },

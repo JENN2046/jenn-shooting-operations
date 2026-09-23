@@ -50,24 +50,21 @@ test('freezes the exact outbox-dispatch-v1 policy', () => {
   assert.equal(Object.isFrozen(OUTBOX_DISPATCH_POLICY_V1.resultRetryMs), true);
 });
 
-test('request and schedule intent admission remains explicitly NOT_WIRED', () => {
+test('request stays unwired while schedule confirmation is admitted', () => {
   assert.deepEqual(NOTIFICATION_INTENT_ADMISSION_V1, {
     'request.submitted.v1': { status: 'NOT_WIRED', aggregateRevisionScope: null },
-    'schedule.confirmed.v1': { status: 'NOT_WIRED', aggregateRevisionScope: 'schedule' },
+    'schedule.confirmed.v1': { status: 'WIRED', aggregateRevisionScope: 'schedule' },
     'production-run.completed.v1': { status: 'WIRED', aggregateRevisionScope: 'run' },
   });
 
-  for (const [intentType, aggregateRevisionScope] of [
-    ['request.submitted.v1', 'projection'],
-    ['schedule.confirmed.v1', 'schedule'],
-  ]) {
-    const result = buildNotificationIntentV1({
-      outboxId: 'OUTBOX-00000001', intentType, aggregateType: 'request', aggregateId: 'ENTITY-0001',
-      routeKey: 'shooting-operations', aggregateRevisionScope, aggregateRevision: 1,
-      cardSchemaVersion: 'unused-card-v1', payload: {}, createdAt: '2026-09-25T09:00:00.000Z',
-    });
-    assert.deepEqual(result, { ok: false, code: 'NOTIFICATION_INTENT_NOT_WIRED', intentType });
-  }
+  const result = buildNotificationIntentV1({
+    outboxId: 'OUTBOX-00000001', intentType: 'request.submitted.v1',
+    aggregateType: 'request', aggregateId: 'ENTITY-0001',
+    routeKey: 'shooting-operations', aggregateRevisionScope: 'projection', aggregateRevision: 1,
+    cardSchemaVersion: 'unused-card-v1', payload: {}, createdAt: '2026-09-25T09:00:00.000Z',
+  });
+  assert.deepEqual(result, { ok: false, code: 'NOTIFICATION_INTENT_NOT_WIRED',
+    intentType: 'request.submitted.v1' });
 });
 
 test('builds an exact canonical completion intent and deterministic dedupe key', () => {
