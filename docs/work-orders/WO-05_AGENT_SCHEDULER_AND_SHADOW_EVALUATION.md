@@ -15,7 +15,7 @@
 - 当前没有 canonical V2 schedule command 或 `/api/v2/schedule/commands`；
 - V1 whole-snapshot PUT 不能作为 Proposal acceptance 通道；
 - normalized public projection 的 resource catalog 为空；
-- checked-in fixtures 中严格 task-level completed sample 数量为 0；
+- checked-in synthetic fixtures 已包含 Level A/Level B task-level completed samples；approved/real Level C dataset 数量仍为 0；
 - migration、Kiosk、Outbox 已具有可复用的 transaction/revision/auth/idempotency 模式；
 - Windows 兼容更新已纳入当前分支，但本工作包尚无 Windows runtime 验证。
 
