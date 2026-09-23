@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { replayShadowEvaluationFixtureV1 } from '../src/shadow-evaluation-fixture-replay-v1.mjs';
+import {
+  replayShadowEvaluationFixtureJsonV1,
+  replayShadowEvaluationFixtureV1,
+} from '../src/shadow-evaluation-fixture-replay-v1.mjs';
 
 const fixtureUrl = new URL(
   '../fixtures/shadow-evaluation-v1/synthetic-level-a-b.v1.json',
@@ -87,4 +90,83 @@ test('fixture envelope rejects extra keys and keeps raw evidence out of replay o
   for (const forbidden of ['client', 'requestedBy', 'briefUrl', 'note', 'attachment', 'provider']) {
     assert.equal(serialized.includes(forbidden), false, forbidden);
   }
+});
+
+
+test('JSON fixture replay rejects falsy valid JSON instead of silently succeeding', () => {
+  for (const text of ['null', 'false', '0', '""']) {
+    assert.deepEqual(replayShadowEvaluationFixtureJsonV1(text), {
+      ok: false,
+      code: 'SHADOW_FIXTURE_REPLAY_INVALID',
+      reason: 'FIXTURE_ENVELOPE_INVALID',
+    }, text);
+  }
+  assert.deepEqual(replayShadowEvaluationFixtureJsonV1('{'), {
+    ok: false,
+    code: 'SHADOW_FIXTURE_REPLAY_INVALID',
+    reason: 'FIXTURE_JSON_INVALID',
+  });
+});
+
+test('fixture envelope rejects accessors, symbols, non-enumerables and hostile proxies', async () => {
+  const value = await fixture();
+
+  let getterReads = 0;
+  const accessor = { ...value };
+  Object.defineProperty(accessor, 'fixtureId', {
+    enumerable: true,
+    get() {
+      getterReads += 1;
+      return value.fixtureId;
+    },
+  });
+  assert.deepEqual(replayShadowEvaluationFixtureV1(accessor), {
+    ok: false,
+    code: 'SHADOW_FIXTURE_REPLAY_INVALID',
+    reason: 'FIXTURE_ENVELOPE_INVALID',
+  });
+  assert.equal(getterReads, 0);
+
+  const symbol = { ...value };
+  symbol[Symbol('hidden')] = true;
+  assert.deepEqual(replayShadowEvaluationFixtureV1(symbol), {
+    ok: false,
+    code: 'SHADOW_FIXTURE_REPLAY_INVALID',
+    reason: 'FIXTURE_ENVELOPE_INVALID',
+  });
+
+  const nonEnumerable = { ...value };
+  Object.defineProperty(nonEnumerable, 'hidden', {
+    enumerable: false,
+    value: true,
+  });
+  assert.deepEqual(replayShadowEvaluationFixtureV1(nonEnumerable), {
+    ok: false,
+    code: 'SHADOW_FIXTURE_REPLAY_INVALID',
+    reason: 'FIXTURE_ENVELOPE_INVALID',
+  });
+
+  const expectedAccessor = { ...value, expected: { ...value.expected } };
+  Object.defineProperty(expectedAccessor.expected, 'report', {
+    enumerable: true,
+    get() {
+      throw new Error('should not be invoked');
+    },
+  });
+  assert.deepEqual(replayShadowEvaluationFixtureV1(expectedAccessor), {
+    ok: false,
+    code: 'SHADOW_FIXTURE_REPLAY_INVALID',
+    reason: 'FIXTURE_ENVELOPE_INVALID',
+  });
+
+  const hostile = new Proxy({}, {
+    getPrototypeOf() {
+      throw new Error('hostile');
+    },
+  });
+  assert.deepEqual(replayShadowEvaluationFixtureV1(hostile), {
+    ok: false,
+    code: 'SHADOW_FIXTURE_REPLAY_INVALID',
+    reason: 'FIXTURE_ENVELOPE_INVALID',
+  });
 });
