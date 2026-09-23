@@ -27,6 +27,17 @@
 
 状态：`IN_PROGRESS`
 
+当前检查点：`05A-1 DETERMINISTIC_CONTRACT_CORE_PASS`
+
+- 已实现 `SchedulingInputV1`、deterministic Proposal item/result、diagnostic allowlist、canonical JSON 与 digest；
+- 已冻结 `resource-capabilities-v1` exact capability body/digest；
+- candidate / occupancy / active run 跨集合一致性 fail closed；
+- 目标测试 `15/15 PASS`，项目全量 `407 PASS / 0 FAIL / 1 SKIP`；
+- 独立复核 `0 Critical / 0 Major / 0 Minor`；
+- Windows：`WINDOWS_NOT_RUN`。
+
+此检查点不代表 05A 完成；resource/config command、Proposal envelope、Decision 与 evaluation contract 仍待实现。
+
 交付：
 
 - ADP-024 与 baseline R7；

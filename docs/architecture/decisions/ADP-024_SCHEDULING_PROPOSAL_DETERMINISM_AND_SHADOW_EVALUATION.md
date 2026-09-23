@@ -65,7 +65,7 @@ sourceOperationId
 - `resourceId` 是稳定身份，1–160 Unicode code points。WO-05 新路径必须使用单一共享 validator：以 `[...value].length` 计算 Unicode code points，拒绝空白首尾、控制字符、换行、U+2028/U+2029 和 lone surrogate；不得继续混用 JS UTF-16 `.length`；
 - `v1DisplayPlace` 是生成 V1 session `place` 的稳定受控事实，不得只存在于可切换的 scheduling config 中；
 - `v1DisplayPlace` 必须 trim 后不变、1–300 Unicode code points、拒绝控制字符/换行/U+2028/U+2029，并在整个 resource catalog 中唯一，使 active 与历史 inactive Schedule Item 的 V1 投影/反向兼容写入都不存在 label 歧义；
-- capability 的 canonical owner 是 resource catalog；`capabilityJson` exact-key、低披露且正文与 digest 同步变化，scheduling config 只能引用 `resourceId + capabilityDigest`，不能维护第二份 capability 事实；
+- capability 的 canonical owner 是 resource catalog；首批 `resource-capabilities-v1` 的 `capabilityJson` exact schema 固定为 `{ schemaVersion: 1, capabilityIds: string[] }`，`capabilityIds` 使用共享 identifier 规则、去重并按 Unicode code point 排序；`capabilityDigest` 对 domain-separated `{ domain: "resource-capabilities-v1", capabilityJson }` 的 canonical JSON 求 SHA-256。正文与 digest 必须同步变化，SchedulingInput 必须同时携带正文与 digest 并复算校验；scheduling config 只能引用 `resourceId + capabilityDigest`，不能维护第二份 capability 事实；未来扩展能力结构必须发布新的 capability schema version，不能在 v1 正文中静默加键或由 adapter 降维；
 - 新正式 Schedule Item 只能引用 active resource；
 - 资源创建、label/status/capability 变更只能通过 administrator 的 canonical application command；
 - 任何 resource 创建、status 或 capability 变化都会增加全局 `scheduleRevision`，因此与变更同事务把全部 draft Proposal 保守转为 `stale`；仅 label 改名至少将引用该 resource 的 draft 与变更同事务 stale；采用时的事务内重算仍是最终防线；
