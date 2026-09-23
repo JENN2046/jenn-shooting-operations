@@ -198,6 +198,7 @@ test('reject decision is dispatched through the same V2 decisions route', async 
 test('scheduling application denials use stable low-disclosure HTTP mappings', async () => {
   const cases = [
     ['SCHEDULING_PROPOSAL_DECISION_COMMAND_INVALID', 422],
+    ['DECISION_ID_RESERVED', 422],
     ['IDEMPOTENCY_KEY_REUSE', 409],
     ['PROPOSAL_NOT_DRAFT', 409],
     ['SCHEDULING_CALENDAR_COMPILE_FAILED', 409],
