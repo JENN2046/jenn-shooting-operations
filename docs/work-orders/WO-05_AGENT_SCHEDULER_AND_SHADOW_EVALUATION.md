@@ -145,11 +145,11 @@
 当前实现：
 
 - schema migration v6 新增 `scheduling_run_context_snapshots`，每个 run 至多一条，禁止 update/delete；
-- 当前仓库唯一 canonical run-create / first-start 路径 Kiosk 在原 `BEGIN IMMEDIATE` 事务内写 snapshot；capture 不额外增加 schedule/run/projection revision；
+- Kiosk 与 generic run-event 两条 canonical start 路径都以 `scheduled → shooting` 状态转换判定 first-start，并在各自原 `BEGIN IMMEDIATE` 事务内写 snapshot；Kiosk 是否同时 provision run 与是否 capture 完全解耦；capture 不额外增加 schedule/run/projection revision；
 - task run 在 request/resource/config/duration/buffer 事实完整时写 `contextStatus=complete`；缺 config 或规则事实诚实写 ineligible；grouped block 固定 `GROUPED_UNALLOCATED`；
 - `capturedAt` 使用 first-start 的注入事务 clock，排除在 snapshot content digest 外；snapshot content 由 `buildSchedulingRunContextSnapshotV1` canonicalize/digest；
 - exact event replay 不重复 snapshot；历史 run 不回填，不因本迁移自动升级 Level B；
-- generic `run-event-use-case-v2` 当前只更新既有 run，不创建 run，因此当前没有第二条 canonical first-start 写入口需要接线。
+- generic `run-event-use-case-v2` 虽只更新既有 run，但 `scheduled → shooting` 本身就是 first-start，因此已接入同一 capture builder/persistence port；预创建 run 与现场 provisioned run 均不会因入口差异永久失去 Level B snapshot。
 
 05E-A 尚需：fresh regression、PR independent review、post-merge verification。未通过这些门前不得标记 capture closure。
 
