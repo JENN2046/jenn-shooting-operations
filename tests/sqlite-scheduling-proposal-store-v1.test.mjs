@@ -551,6 +551,76 @@ test('legacy reserved-prefix reject decision preserves exact replay across the u
   } finally { f.db.close(); }
 });
 
+test('legacy exact reject decision replays before an unrelated shared operation collision', () => {
+  const f = fixture();
+  try {
+    const generated = f.store.generate(f.command, 'scheduler:fixture');
+    assert.equal(generated.ok, true, JSON.stringify(generated));
+    const command = {
+      decisionId: 'LEGACY-REJECT-COLLISION-1',
+      proposalId: generated.proposal.proposalId,
+      decisionType: 'reject',
+      selectedProposalItemIds: null,
+      decisionNote: 'legacy collision replay',
+      reasonCode: 'HUMAN_REJECTED',
+    };
+    const admitted = admitSchedulingProposalDecisionV1(command, generated.proposal);
+    assert.equal(admitted.ok, true, JSON.stringify(admitted));
+    const decidedAt = '2026-09-23T08:00:00.000Z';
+    const built = buildSchedulingProposalDecisionReceiptV1({
+      decisionId: admitted.command.decisionId,
+      decisionCommandDigest: admitted.decisionCommandDigest,
+      proposalId: generated.proposal.proposalId,
+      decisionType: 'reject',
+      selectedProposalItemIds: null,
+      selectionDigest: null,
+      adoptedItems: null,
+      adoptionDigest: null,
+      decidedBy: 'scheduler:fixture',
+      decidedAt,
+      decisionNote: admitted.command.decisionNote,
+      baseScheduleRevision: generated.proposal.baseScheduleRevision,
+      currentScheduleRevision: null,
+      resultingScheduleRevision: null,
+      reasonCode: 'HUMAN_REJECTED',
+    }, generated.proposal);
+    assert.equal(built.ok, true, JSON.stringify(built));
+
+    f.db.prepare(`INSERT INTO scheduling_proposal_decisions
+      (decision_id, proposal_id, decision_command_digest, decision_type,
+       receipt_json, receipt_digest, decided_at)
+      VALUES (?, ?, ?, 'reject', ?, ?, ?)`).run(
+      command.decisionId,
+      command.proposalId,
+      admitted.decisionCommandDigest,
+      built.receiptJson,
+      built.decisionReceiptDigest,
+      decidedAt,
+    );
+    f.db.prepare(`UPDATE scheduling_proposals
+      SET status = 'rejected', terminal_decision_id = ?, lifecycle_updated_at = ?
+      WHERE proposal_id = ? AND status = 'draft'`).run(
+      command.decisionId, decidedAt, command.proposalId,
+    );
+    f.db.prepare(`INSERT INTO operations
+      (operation_id, kind, response_json, created_at, request_digest)
+      VALUES (?, 'submitRequest', '{}', ?, ?)`).run(
+      command.decisionId, decidedAt, `sha256:${'9'.repeat(64)}`,
+    );
+
+    const replay = f.store.reject(command, 'scheduler:fixture');
+    assert.equal(replay.ok, true, JSON.stringify(replay));
+    assert.equal(replay.exactReplay, true);
+    assert.equal(replay.receipt.decisionReceiptDigest, built.decisionReceiptDigest);
+
+    const operation = f.db.prepare(`SELECT kind, request_digest, response_json FROM operations
+      WHERE operation_id = ?`).get(command.decisionId);
+    assert.equal(operation.kind, 'submitRequest');
+    assert.equal(operation.request_digest, `sha256:${'9'.repeat(64)}`);
+    assert.equal(operation.response_json, '{}');
+  } finally { f.db.close(); }
+});
+
 test('reject reserves the shared operation ID and fails closed on global collisions', () => {
   const f = fixture();
   try {
