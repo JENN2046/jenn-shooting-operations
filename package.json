@@ -10,7 +10,8 @@
     "backup": "node scripts/backup.mjs",
     "uploads:cleanup": "node scripts/cleanup-uploads.mjs",
     "validate:contract": "node scripts/validate-contracts.mjs",
-    "validate:planner": "node scripts/validate-current-planner.mjs"
+    "validate:planner": "node scripts/validate-current-planner.mjs",
+    "evaluate:shadow:fixtures": "node scripts/replay-shadow-evaluation.mjs"
   },
   "engines": {
     "node": ">=22.13.0"
