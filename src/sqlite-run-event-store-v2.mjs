@@ -6,6 +6,7 @@ import {
   validateV1Snapshot,
   validateV2Snapshot,
 } from './contract-validator.mjs';
+import { createSqliteOutboxRepositoryV1 } from './sqlite-outbox-repository-v1.mjs';
 
 function requireChanges(result, code) {
   if (result.changes !== 1) {
@@ -57,6 +58,7 @@ export function createSqliteRunEventStore({
   if (typeof businessTimeZone !== 'string' || !businessTimeZone) {
     throw new TypeError('businessTimeZone is required');
   }
+  const outboxRepository = createSqliteOutboxRepositoryV1({ db });
 
   const transaction = {
     getEventReceipt(eventId) {
@@ -242,6 +244,10 @@ export function createSqliteRunEventStore({
         'schedule-v2', 2, projectionRevision, scheduleRevision, updatedAt, JSON.stringify(v2),
       ), 'V2_PROJECTION_WRITE_FAILED');
       return { v1, v2 };
+    },
+
+    enqueueNotification(intent) {
+      return outboxRepository.enqueue(intent);
     },
 
     saveEventReceipt({ eventId, kind, digest, response, createdAt }) {

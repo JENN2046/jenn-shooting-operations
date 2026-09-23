@@ -8,6 +8,7 @@ import {
   transitionRequest,
 } from './domain-rules-v2.mjs';
 import { evaluateKioskEventTime } from './event-time-policy-v2.mjs';
+import { buildProductionRunCompletedNotificationV1 } from './production-run-completed-notification-v1.mjs';
 import {
   digestRunEventResponse,
   rebuildRunAtReceipt,
@@ -480,6 +481,23 @@ export function createApplyKioskRunEvent({ store, clock, eventTimePolicy = evalu
           scheduleRevision: context.counters.schedule_revision,
           updatedAt: receivedAt,
         });
+        if (command.eventType === 'complete') {
+          const notification = buildProductionRunCompletedNotificationV1({
+            eventId: command.eventId,
+            runId: run.id,
+            scheduleItemId: context.scheduleItem.id,
+            resourceId: context.scheduleItem.resource_id,
+            scope: run.scope,
+            taskCount: context.requestIds.length,
+            completedAt: folded.run.completed_at,
+            netDurationMs: folded.run.net_duration_ms,
+            runRevision: nextRunRevision,
+            createdAt: receivedAt,
+          });
+          if (!notification.ok) throw new Error(notification.code);
+          const enqueued = transaction.enqueueNotification(notification.intent);
+          if (!enqueued?.ok) throw new Error(enqueued?.code ?? 'OUTBOX_ENQUEUE_FAILED');
+        }
         transaction.saveEventReceipt({
           eventId: command.eventId,
           kind: ACCEPTED_RECEIPT_KIND,

@@ -6,6 +6,7 @@ import {
   requestEffectsForRunEvent,
   transitionRequest,
 } from './domain-rules-v2.mjs';
+import { buildProductionRunCompletedNotificationV1 } from './production-run-completed-notification-v1.mjs';
 
 const EVENT_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/u;
 const IDENTIFIER = /^\S(?:.*\S)?$/u;
@@ -362,6 +363,24 @@ export function createApplyRunEvent({ store, clock, eventTimePolicy } = {}) {
           scheduleRevision: counters.schedule_revision,
           updatedAt: receivedAt,
         });
+
+        if (command.eventType === 'complete') {
+          const notification = buildProductionRunCompletedNotificationV1({
+            eventId: command.eventId,
+            runId: run.id,
+            scheduleItemId: context.scheduleItem.id,
+            resourceId: context.scheduleItem.resource_id,
+            scope: run.scope,
+            taskCount: requestIds.length,
+            completedAt: folded.run.completed_at,
+            netDurationMs: folded.run.net_duration_ms,
+            runRevision: nextRunRevision,
+            createdAt: receivedAt,
+          });
+          if (!notification.ok) throw abort(notification.code);
+          const enqueued = transaction.enqueueNotification(notification.intent);
+          if (!enqueued?.ok) throw abort(enqueued?.code ?? 'OUTBOX_ENQUEUE_FAILED');
+        }
 
         transaction.saveEventReceipt({
           eventId: command.eventId,

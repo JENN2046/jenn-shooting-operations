@@ -74,8 +74,9 @@ function seedSchedule(db, {
   allocationMode = requestCount === 1 ? 'single' : 'grouped_unallocated',
   scheduleStatus = 'confirmed',
   resolutionStatus = 'resolved',
+  scheduleId = `SCHEDULE-${suffix}`,
+  resourceId = 'RESOURCE-A',
 } = {}) {
-  const scheduleId = `SCHEDULE-${suffix}`;
   const requestIds = Array.from({ length: requestCount }, (_, index) => `REQUEST-${suffix}-${index + 1}`);
   requestIds.forEach((id, index) => seedRequest(db, id, sourceOrdinal + index));
   db.prepare(`
@@ -84,12 +85,13 @@ function seedSchedule(db, {
       legacy_place_text, planned_start, planned_end, buffer_after_minutes, buffer_source,
       schedule_status, schedule_status_provenance, lock_status, lock_status_provenance,
       note, allocation_mode, source, source_ref, imported_at, migration_batch_id
-    ) VALUES (?, ?, 'RESOURCE-A', ?, 'resource-test', 'Studio A', ?, ?, NULL,
+    ) VALUES (?, ?, ?, ?, 'resource-test', 'Studio A', ?, ?, NULL,
       'legacy_unknown', ?, 'legacy_snapshot', NULL, 'legacy_unknown', '', ?,
       'migration', ?, ?, 'BATCH-KIOSK')
   `).run(
     scheduleId,
     sourceOrdinal,
+    resourceId,
     resolutionStatus,
     '2026-09-22T09:00:00.000Z',
     '2026-09-22T14:00:00.000Z',
@@ -180,6 +182,7 @@ function state(db) {
       WHERE action IN ('production.run-event', 'production.run-event-review')
     `).get().count,
     projections: db.prepare('SELECT COUNT(*) AS count FROM snapshot_projections').get().count,
+    notifications: db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count,
     counters: { ...db.prepare('SELECT * FROM revision_counters WHERE id = 1').get() },
   };
 }
@@ -310,6 +313,7 @@ if (!isMainThread && workerData?.mode === 'apply-kiosk-run-event') {
       assert.equal(state(db).runs, 0);
       const groupedStart = apply({ command: start, principal: principal() });
       assert.equal(groupedStart.ok, true, JSON.stringify(groupedStart));
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 0);
       assert.deepEqual(
         { ...db.prepare("SELECT scope, task_id FROM production_runs WHERE id = 'RUN-GROUPED'").get() },
         { scope: 'block', task_id: null },
@@ -332,6 +336,37 @@ if (!isMainThread && workerData?.mode === 'apply-kiosk-run-event') {
       });
       assert.equal(completed.ok, true, JSON.stringify(completed));
       assert.equal(completed.resultingState, 'completed');
+      const notification = db.prepare(`
+        SELECT outbox_id, aggregate_revision, route_key, status, payload_json
+        FROM notification_outbox
+      `).get();
+      assert.equal(notification.outbox_id, 'EVENT-GROUPED-DONE');
+      assert.equal(notification.aggregate_revision, 2);
+      assert.equal(notification.route_key, 'operations.default');
+      assert.equal(notification.status, 'pending');
+      assert.deepEqual(JSON.parse(notification.payload_json), {
+        completedAt: '2026-09-22T12:04:00.000Z',
+        netDurationMs: 4 * 60 * 1000,
+        resourceId: 'RESOURCE-A',
+        runId: 'RUN-GROUPED',
+        runRevision: 2,
+        scheduleItemId: grouped.scheduleId,
+        scope: 'block',
+        taskCount: 2,
+      });
+      const beforeReplay = state(db);
+      assert.deepEqual(
+        apply({
+          command: command({
+            eventId: 'EVENT-GROUPED-DONE', runId: 'RUN-GROUPED', scheduleId: grouped.scheduleId,
+            eventType: 'complete', expectedRunRevision: 1, occurredAt: '2026-09-22T12:04:00.000Z',
+            localSequence: 2,
+          }),
+          principal: principal(),
+        }),
+        { ...completed, replayed: true },
+      );
+      assert.deepEqual(state(db), beforeReplay);
       assert.deepEqual(
         db.prepare('SELECT request_lifecycle FROM requests_v2 ORDER BY id').all().map(row => row.request_lifecycle),
         ['open', 'open'],
@@ -347,6 +382,114 @@ if (!isMainThread && workerData?.mode === 'apply-kiosk-run-event') {
       assert.equal(state(db).runs, 1);
       assert.equal(state(db).counters.schedule_revision, 3);
       assert.equal(state(db).counters.projection_revision, 12);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('completion enqueue failure rolls back kiosk run facts, projections, receipt and outbox', () => {
+    const db = openDatabase();
+    try {
+      seedBase(db);
+      const seeded = seedSchedule(db, { suffix: 'OUTBOX-ROLLBACK', sourceOrdinal: 0 });
+      const start = command({
+        eventId: 'EVENT-KIOSK-OUTBOX-START',
+        runId: 'RUN-KIOSK-OUTBOX-ROLLBACK',
+        scheduleId: seeded.scheduleId,
+      });
+      assert.equal(makeApply(db)({ command: start, principal: principal() }).ok, true);
+      const before = state(db);
+      const projectionsBefore = db.prepare(`
+        SELECT projection_name, revision, payload_json FROM snapshot_projections ORDER BY projection_name
+      `).all().map(row => ({ ...row }));
+      const baseStore = createSqliteKioskRunEventStore({
+        db,
+        businessTimeZone: 'UTC',
+        allowedBriefHosts: [],
+      });
+      const rejectingStore = {
+        withImmediateTransaction(action) {
+          return baseStore.withImmediateTransaction(transaction => action({
+            ...transaction,
+            enqueueNotification() {
+              return { ok: false, code: 'OUTBOX_TEST_REJECTED' };
+            },
+          }));
+        },
+      };
+      const failed = createApplyKioskRunEvent({
+        store: rejectingStore,
+        clock: () => new Date('2026-09-22T12:01:00.000Z'),
+      })({
+        command: command({
+          eventId: 'EVENT-KIOSK-OUTBOX-DONE',
+          runId: 'RUN-KIOSK-OUTBOX-ROLLBACK',
+          scheduleId: seeded.scheduleId,
+          eventType: 'complete',
+          expectedRunRevision: 1,
+          occurredAt: '2026-09-22T12:01:00.000Z',
+          localSequence: 2,
+        }),
+        principal: principal(),
+      });
+      assert.equal(failed.code, 'INTERNAL_ERROR');
+      assert.deepEqual(state(db), before);
+      assert.deepEqual(
+        db.prepare(`
+          SELECT projection_name, revision, payload_json FROM snapshot_projections ORDER BY projection_name
+        `).all().map(row => ({ ...row })),
+        projectionsBefore,
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  test('kiosk completion producer preserves 160-code-point run, schedule and resource identifiers', () => {
+    const db = openDatabase();
+    try {
+      seedBase(db);
+      const runId = 'R'.repeat(160);
+      const scheduleId = 'S'.repeat(160);
+      const resourceId = 'U'.repeat(160);
+      const seeded = seedSchedule(db, {
+        suffix: 'LONG',
+        sourceOrdinal: 0,
+        scheduleId,
+        resourceId,
+      });
+      const trusted = principal('operator', [resourceId]);
+      const apply = makeApply(db);
+      assert.equal(apply({
+        command: command({
+          eventId: 'EVENT-KIOSK-LONG-START', runId, scheduleId,
+          occurredAt: '2026-09-22T11:00:00.000Z',
+        }),
+        principal: trusted,
+      }).ok, true);
+      assert.equal(apply({
+        command: command({
+          eventId: 'EVENT-KIOSK-LONG-DONE', runId, scheduleId,
+          eventType: 'complete', expectedRunRevision: 1,
+          occurredAt: '2026-09-22T12:00:00.000Z', localSequence: 2,
+        }),
+        principal: trusted,
+      }).ok, true);
+      const notification = db.prepare(`
+        SELECT aggregate_id, payload_json FROM notification_outbox
+        WHERE outbox_id = 'EVENT-KIOSK-LONG-DONE'
+      `).get();
+      assert.equal(notification.aggregate_id, runId);
+      assert.deepEqual(JSON.parse(notification.payload_json), {
+        completedAt: '2026-09-22T12:00:00.000Z',
+        netDurationMs: 60 * 60 * 1000,
+        resourceId,
+        runId,
+        runRevision: 2,
+        scheduleItemId: seeded.scheduleId,
+        scope: 'task',
+        taskCount: 1,
+      });
     } finally {
       db.close();
     }

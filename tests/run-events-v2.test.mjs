@@ -78,6 +78,7 @@ function seedSchedule(db, {
   sourceOrdinal,
   allocationMode,
   requestIds,
+  resourceId = `RESOURCE-${sourceOrdinal}`,
 }) {
   db.prepare(`
     INSERT INTO schedule_items (
@@ -92,7 +93,7 @@ function seedSchedule(db, {
   `).run(
     scheduleId,
     sourceOrdinal,
-    `RESOURCE-${sourceOrdinal}`,
+    resourceId,
     '2026-09-22T09:00:00.000Z',
     '2026-09-22T11:00:00.000Z',
     allocationMode,
@@ -198,6 +199,7 @@ function databaseState(db, runId) {
     audits: db.prepare(`
       SELECT COUNT(*) AS count FROM audit_log WHERE action = 'production.run-event'
     `).get().count,
+    notifications: db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count,
   };
 }
 
@@ -375,6 +377,41 @@ if (!isMainThread && workerData?.mode === 'apply-run-event') {
       assert.equal(state.events, 6);
       assert.equal(state.receipts, 6);
       assert.equal(state.audits, 6);
+      assert.equal(state.notifications, 1);
+      const notification = db.prepare(`
+        SELECT outbox_id, aggregate_id, aggregate_revision, route_key, status, payload_json
+        FROM notification_outbox
+      `).get();
+      assert.deepEqual({
+        outboxId: notification.outbox_id,
+        aggregateId: notification.aggregate_id,
+        aggregateRevision: notification.aggregate_revision,
+        routeKey: notification.route_key,
+        status: notification.status,
+        card: JSON.parse(notification.payload_json),
+      }, {
+        outboxId: 'EVENT-FLOW-COMPLETE',
+        aggregateId: ids.runId,
+        aggregateRevision: 6,
+        routeKey: 'operations.default',
+        status: 'pending',
+        card: {
+          completedAt: '2026-09-22T10:00:00.000Z',
+          netDurationMs: 45 * 60 * 1000,
+          resourceId: 'RESOURCE-0',
+          runId: ids.runId,
+          runRevision: 6,
+          scheduleItemId: ids.scheduleId,
+          scope: 'task',
+          taskCount: 1,
+        },
+      });
+      const completeReplay = apply(eventCommand({
+        eventId: 'EVENT-FLOW-COMPLETE', runId: ids.runId, scheduleId: ids.scheduleId,
+        expectedRunRevision: 5, eventType: 'complete', occurredAt: '2026-09-22T10:00:00.000Z',
+      }));
+      assert.equal(completeReplay.replayed, true);
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 1);
       const request = db.prepare(`
         SELECT legacy_v1_status, v1_status_mode, request_lifecycle, lifecycle_provenance
         FROM requests_v2 WHERE id = ?
@@ -396,6 +433,102 @@ if (!isMainThread && workerData?.mode === 'apply-run-event') {
         .tasks[0].status, 'completed');
       assert.equal(JSON.parse(projections.find(row => row.projection_name === 'schedule-v2').payload_json)
         .productionRuns[0].status, 'completed');
+    } finally {
+      db.close();
+    }
+  });
+
+  test('completion enqueue failure rolls back the run, projection, event, receipt and outbox together', () => {
+    const db = openDatabase(':memory:');
+    try {
+      seedBase(db);
+      const ids = seedSingle(db, 'OUTBOX-ROLLBACK');
+      const baseStore = createSqliteRunEventStore({ db, businessTimeZone: 'UTC' });
+      const normalApply = createApplyRunEvent({
+        store: baseStore,
+        clock: () => new Date('2026-09-22T12:00:00.000Z'),
+        eventTimePolicy: ALLOW_EVENT_TIME,
+      });
+      assert.equal(normalApply(eventCommand({
+        eventId: 'EVENT-OUTBOX-ROLLBACK-START', runId: ids.runId, scheduleId: ids.scheduleId,
+        expectedRunRevision: 0, eventType: 'start', occurredAt: '2026-09-22T09:00:00.000Z',
+      })).ok, true);
+      const before = databaseState(db, ids.runId);
+      const projectionsBefore = db.prepare(`
+        SELECT projection_name, revision, payload_json FROM snapshot_projections ORDER BY projection_name
+      `).all().map(row => ({ ...row }));
+      const rejectingStore = {
+        withImmediateTransaction(action) {
+          return baseStore.withImmediateTransaction(transaction => action({
+            ...transaction,
+            enqueueNotification() {
+              return { ok: false, code: 'OUTBOX_TEST_REJECTED' };
+            },
+          }));
+        },
+      };
+      const failed = createApplyRunEvent({
+        store: rejectingStore,
+        clock: () => new Date('2026-09-22T12:00:01.000Z'),
+        eventTimePolicy: ALLOW_EVENT_TIME,
+      })(eventCommand({
+        eventId: 'EVENT-OUTBOX-ROLLBACK-DONE', runId: ids.runId, scheduleId: ids.scheduleId,
+        expectedRunRevision: 1, eventType: 'complete', occurredAt: '2026-09-22T10:00:00.000Z',
+      }));
+      assert.deepEqual(failed, { ok: false, code: 'OUTBOX_TEST_REJECTED' });
+      assert.deepEqual(databaseState(db, ids.runId), before);
+      assert.deepEqual(
+        db.prepare(`
+          SELECT projection_name, revision, payload_json FROM snapshot_projections ORDER BY projection_name
+        `).all().map(row => ({ ...row })),
+        projectionsBefore,
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  test('completion producer preserves 160-code-point run, schedule and resource identifiers', () => {
+    const db = openDatabase(':memory:');
+    try {
+      seedBase(db);
+      const requestId = 'REQUEST-LONG';
+      const runId = 'R'.repeat(160);
+      const scheduleId = 'S'.repeat(160);
+      const resourceId = 'U'.repeat(160);
+      seedRequest(db, requestId, 0);
+      seedSchedule(db, {
+        scheduleId,
+        sourceOrdinal: 0,
+        allocationMode: 'single',
+        requestIds: [requestId],
+        resourceId,
+      });
+      seedRun(db, { runId, scheduleId, taskId: requestId });
+      const apply = makeApply(db);
+      assert.equal(apply(eventCommand({
+        eventId: 'EVENT-LONG-START', runId, scheduleId,
+        expectedRunRevision: 0, eventType: 'start', occurredAt: '2026-09-22T09:00:00.000Z',
+      })).ok, true);
+      assert.equal(apply(eventCommand({
+        eventId: 'EVENT-LONG-COMPLETE', runId, scheduleId,
+        expectedRunRevision: 1, eventType: 'complete', occurredAt: '2026-09-22T10:00:00.000Z',
+      })).ok, true);
+      const row = db.prepare(`
+        SELECT aggregate_id, payload_json FROM notification_outbox
+        WHERE outbox_id = 'EVENT-LONG-COMPLETE'
+      `).get();
+      assert.equal(row.aggregate_id, runId);
+      assert.deepEqual(JSON.parse(row.payload_json), {
+        completedAt: '2026-09-22T10:00:00.000Z',
+        netDurationMs: 60 * 60 * 1000,
+        resourceId,
+        runId,
+        runRevision: 2,
+        scheduleItemId: scheduleId,
+        scope: 'task',
+        taskCount: 1,
+      });
     } finally {
       db.close();
     }
@@ -668,6 +801,7 @@ if (!isMainThread && workerData?.mode === 'apply-run-event') {
       assert.equal(cancelled.resultingState, 'cancelled');
       assert.equal(cancelled.grossDurationMs, null);
       assert.equal(cancelled.netDurationMs, null);
+      assert.equal(db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 0);
       assert.equal(db.prepare('SELECT schedule_status FROM schedule_items WHERE id = ?')
         .get(cancelIds.scheduleId).schedule_status, 'confirmed');
 
