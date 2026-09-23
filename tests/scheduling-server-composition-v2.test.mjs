@@ -17,7 +17,6 @@ test('Scheduling V2 runtime composition is explicit and connects the canonical p
     const scheduling = createSchedulingV2Application({
       store,
       authenticate: () => created.principal,
-      businessTimeZone: 'UTC',
       clock: () => new Date('2026-09-23T08:00:00.000Z'),
     });
     assert.equal(scheduling.authenticate(), created.principal);
@@ -39,16 +38,12 @@ test('Scheduling V2 runtime composition is explicit and connects the canonical p
   }
 });
 
-test('Scheduling V2 runtime composition refuses implicit authentication or time-zone defaults', () => {
+test('Scheduling V2 runtime composition refuses implicit authentication', () => {
   const store = new ScheduleStore({ filename: ':memory:' });
   try {
     assert.throws(
-      () => createSchedulingV2Application({ store, businessTimeZone: 'UTC' }),
+      () => createSchedulingV2Application({ store }),
       /authenticate port/u,
-    );
-    assert.throws(
-      () => createSchedulingV2Application({ store, authenticate: () => null }),
-      /businessTimeZone/u,
     );
   } finally {
     store.close();
@@ -66,7 +61,6 @@ test('Operations server accepts explicit scheduling composition inputs without e
     databasePath: ':memory:',
     cleanupIntervalMs: 0,
     schedulingAuthenticate: () => created.principal,
-    schedulingBusinessTimeZone: 'UTC',
   });
   try {
     assert.equal(typeof server.listen, 'function');
