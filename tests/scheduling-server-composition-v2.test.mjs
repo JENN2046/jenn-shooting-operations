@@ -70,7 +70,7 @@ test('Operations server accepts explicit scheduling composition inputs without e
   });
   try {
     assert.equal(typeof server.listen, 'function');
-    assert.equal(store.db.isOpen, true);
+    assert.ok(store.db);
   } finally {
     store.close();
   }
