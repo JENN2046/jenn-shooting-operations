@@ -88,8 +88,17 @@ function digest(value) {
 }
 
 function timestamp(value) {
-  return typeof value === 'string' && RFC3339.test(value) && Number.isFinite(Date.parse(value))
-    ? value : null;
+  if (typeof value !== 'string') return null;
+  const match = RFC3339.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (month < 1 || month > 12 || day < 1 || day > days[month - 1]) return null;
+  const instant = Date.parse(value);
+  return Number.isFinite(instant) ? new Date(instant).toISOString() : null;
 }
 
 function admitEligibility(value) {
@@ -186,7 +195,8 @@ export function admitLowDisclosureShadowReportV1(value) {
     const eligibilityCounts = admitEligibility(record.eligibilityCounts);
     const exclusionCounts = admitExclusions(record.exclusionCounts);
     const metrics = admitMetrics(record.metrics);
-    if (!eligibilityCounts || !exclusionCounts || !metrics) {
+    if (!eligibilityCounts || !exclusionCounts || !metrics
+      || exclusionCounts.some(item => item.count > eligibilityCounts.total)) {
       return invalid('REPORT_CONTENT_INVALID');
     }
 
@@ -212,7 +222,7 @@ export function admitLowDisclosureShadowReportV1(value) {
 
     const report = Object.freeze({
       ...body,
-      generatedAt: record.generatedAt,
+      generatedAt: timestamp(record.generatedAt),
       resultDigest: record.resultDigest,
     });
     return Object.freeze({
