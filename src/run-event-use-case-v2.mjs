@@ -120,7 +120,7 @@ export function digestRunEventResponse(response) {
   return `sha256:${createHash('sha256').update(canonicalJson(response)).digest('hex')}`;
 }
 
-function rebuildRunAtReceipt(history, event) {
+export function rebuildRunAtReceipt(history, event) {
   if (!Array.isArray(history) || history.length !== event.resulting_run_revision) return null;
   let run = {
     status: 'scheduled',

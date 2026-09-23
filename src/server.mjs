@@ -2,7 +2,40 @@ import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHttpApp } from './http-app.mjs';
+import { createReadKioskCurrent } from './kiosk-current-use-case-v2.mjs';
+import { createApplyKioskRunEvent } from './kiosk-run-event-use-case-v2.mjs';
+import { createSqliteKioskCurrentStore } from './sqlite-kiosk-current-store-v2.mjs';
+import { createSqliteKioskRunEventStore } from './sqlite-kiosk-run-event-store-v2.mjs';
 import { ScheduleStore } from './store.mjs';
+
+export function createKioskV2Application({
+  store,
+  authenticate,
+  businessTimeZone,
+  clock = () => new Date(),
+  allowedBriefHosts = [],
+} = {}) {
+  if (!store?.db) throw new TypeError('ScheduleStore is required');
+  if (typeof authenticate !== 'function') throw new TypeError('Kiosk authenticate port is required');
+  if (typeof businessTimeZone !== 'string' || businessTimeZone.length === 0) {
+    throw new TypeError('Kiosk businessTimeZone is required');
+  }
+  return Object.freeze({
+    authenticate,
+    readCurrent: createReadKioskCurrent({
+      store: createSqliteKioskCurrentStore({ db: store.db }),
+      clock,
+    }),
+    applyRunEvent: createApplyKioskRunEvent({
+      store: createSqliteKioskRunEventStore({
+        db: store.db,
+        businessTimeZone,
+        allowedBriefHosts,
+      }),
+      clock,
+    }),
+  });
+}
 
 export function createOperationsServer({
   databasePath,
@@ -12,10 +45,29 @@ export function createOperationsServer({
   idFactory,
   orphanMaxAgeMs,
   cleanupIntervalMs = 60 * 60 * 1000,
+  kioskAuthenticate,
+  kioskBusinessTimeZone,
+  kioskAllowedBriefHosts = [],
 }) {
-  const store = new ScheduleStore({ filename: databasePath, uploadRoot, clock, idFactory, orphanMaxAgeMs });
+  const effectiveClock = clock ?? (() => new Date());
+  const store = new ScheduleStore({
+    filename: databasePath,
+    uploadRoot,
+    clock: effectiveClock,
+    idFactory,
+    orphanMaxAgeMs,
+  });
   store.cleanupOrphanUploads();
-  const server = createServer(createHttpApp({ store, tokens }));
+  const kiosk = kioskAuthenticate === undefined
+    ? null
+    : createKioskV2Application({
+        store,
+        authenticate: kioskAuthenticate,
+        businessTimeZone: kioskBusinessTimeZone,
+        clock: effectiveClock,
+        allowedBriefHosts: kioskAllowedBriefHosts,
+      });
+  const server = createServer(createHttpApp({ store, tokens, kiosk }));
   const cleanupTimer = cleanupIntervalMs > 0
     ? setInterval(() => {
         try {
