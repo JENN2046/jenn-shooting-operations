@@ -223,14 +223,39 @@ test('revision drift seals only the proposal and emits no schedule or Outbox fac
   try {
     const generated = f.store.generate(f.command, 'scheduler:fixture');
     f.db.prepare('UPDATE revision_counters SET schedule_revision = 8 WHERE id = 1').run();
-    const result = f.store.accept({ decisionId: 'DEC-STALE-1',
+    const command = { decisionId: 'DEC-STALE-1',
+      proposalId: generated.proposal.proposalId, decisionType: 'accept',
+      selectedProposalItemIds: JSON.parse(generated.proposal.proposedItemsJson)
+        .map(item => item.proposalItemId), decisionNote: null, reasonCode: null,
+    };
+    const result = f.store.accept(command, schedulerPrincipal);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.receipt.decisionType, 'stale');
+    assert.equal(result.receipt.reasonCode, 'SCHEDULE_REVISION_CHANGED');
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 0);
+    assert.deepEqual(f.store.accept(command, schedulerPrincipal), { ...result, exactReplay: true });
+    assert.equal(f.store.accept({ ...command, proposalId: 'MISSING-PROPOSAL' },
+      schedulerPrincipal).code, 'IDEMPOTENCY_KEY_REUSE');
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM operations WHERE operation_id = ?')
+      .get(command.decisionId).count, 1);
+  } finally { f.db.close(); }
+});
+
+test('global operation ID collision returns a stable denial before acceptance writes', () => {
+  const f = acceptanceFixture();
+  try {
+    const generated = f.store.generate(f.command, 'scheduler:fixture');
+    f.db.prepare(`INSERT INTO operations (operation_id, kind, response_json, created_at)
+      VALUES ('DEC-TAKEN', 'replaceSnapshot', '{}', ?)`)
+      .run('2026-09-23T08:00:00.000Z');
+    const result = f.store.accept({ decisionId: 'DEC-TAKEN',
       proposalId: generated.proposal.proposalId, decisionType: 'accept',
       selectedProposalItemIds: JSON.parse(generated.proposal.proposedItemsJson)
         .map(item => item.proposalItemId), decisionNote: null, reasonCode: null,
     }, schedulerPrincipal);
-    assert.equal(result.ok, true, JSON.stringify(result));
-    assert.equal(result.receipt.decisionType, 'stale');
-    assert.equal(result.receipt.reasonCode, 'SCHEDULE_REVISION_CHANGED');
+    assert.equal(result.code, 'IDEMPOTENCY_KEY_REUSE');
+    assert.equal(f.store.read(generated.proposal.proposalId).lifecycle.status, 'draft');
     assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
     assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 0);
   } finally { f.db.close(); }
