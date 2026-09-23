@@ -8,12 +8,29 @@ import { canonicalJsonSchedulingV1 } from './scheduling-contract-v1.mjs';
 const FIXTURE_KEYS = Object.freeze(['schemaVersion', 'fixtureId', 'reportInput', 'expected']);
 const EXPECTED_KEYS = Object.freeze(['datasetDigest', 'caseClassifications', 'report']);
 
-function exactKeys(value, expected) {
-  return value !== null
-    && typeof value === 'object'
-    && !Array.isArray(value)
-    && Object.keys(value).length === expected.length
-    && expected.every(key => Object.hasOwn(value, key));
+function ownDataRecord(value, expected) {
+  try {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)
+      || Object.getPrototypeOf(value) !== Object.prototype) {
+      return null;
+    }
+    const keys = Reflect.ownKeys(value);
+    if (keys.length !== expected.length
+      || keys.some(key => typeof key !== 'string' || !expected.includes(key))) {
+      return null;
+    }
+    const snapshot = {};
+    for (const key of expected) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || descriptor.enumerable !== true || !Object.hasOwn(descriptor, 'value')) {
+        return null;
+      }
+      snapshot[key] = descriptor.value;
+    }
+    return Object.freeze(snapshot);
+  } catch {
+    return null;
+  }
 }
 
 function invalid(reason) {
@@ -21,48 +38,60 @@ function invalid(reason) {
 }
 
 export function replayShadowEvaluationFixtureV1(value) {
-  if (!exactKeys(value, FIXTURE_KEYS) || value.schemaVersion !== 1
-    || typeof value.fixtureId !== 'string' || value.fixtureId.length === 0
-    || !exactKeys(value.expected, EXPECTED_KEYS)) {
+  try {
+    const fixture = ownDataRecord(value, FIXTURE_KEYS);
+    if (!fixture || fixture.schemaVersion !== 1
+      || typeof fixture.fixtureId !== 'string' || fixture.fixtureId.length === 0) {
+      return invalid('FIXTURE_ENVELOPE_INVALID');
+    }
+    const expected = ownDataRecord(fixture.expected, EXPECTED_KEYS);
+    if (!expected) return invalid('FIXTURE_ENVELOPE_INVALID');
+
+    const reportInput = fixture.reportInput;
+    const fixtureId = fixture.fixtureId;
+    const datasetDigest = expected.datasetDigest;
+    const expectedClassifications = expected.caseClassifications;
+    const expectedReport = expected.report;
+
+    const manifest = buildShadowDatasetManifestV1(
+      reportInput?.manifest,
+      { expectedApprovalDigest: null },
+    );
+    if (!manifest.ok) return invalid(`MANIFEST:${manifest.reason ?? manifest.code}`);
+    if (manifest.datasetDigest !== datasetDigest) {
+      return invalid('DATASET_DIGEST_MISMATCH');
+    }
+
+    const classifications = [];
+    for (const item of manifest.manifest.cases) {
+      const classified = classifySchedulingSampleV1(item.qualification);
+      if (!classified.ok) return invalid(`CLASSIFIER:${classified.reason ?? classified.code}`);
+      classifications.push(classified.classification);
+    }
+    if (canonicalJsonSchedulingV1(classifications)
+      !== canonicalJsonSchedulingV1(expectedClassifications)) {
+      return invalid('CLASSIFICATION_MISMATCH');
+    }
+
+    const evaluated = evaluateShadowMetricsV1(reportInput, {
+      replayHardConstraints: null,
+      evaluatePriorityPair: null,
+      expectedApprovalDigest: null,
+    });
+    if (!evaluated.ok) return invalid(`EVALUATOR:${evaluated.reason ?? evaluated.code}`);
+    if (canonicalJsonSchedulingV1(evaluated.report)
+      !== canonicalJsonSchedulingV1(expectedReport)) {
+      return invalid('REPORT_MISMATCH');
+    }
+
+    return Object.freeze({
+      ok: true,
+      fixtureId,
+      datasetDigest: manifest.datasetDigest,
+      caseClassifications: classifications,
+      report: evaluated.report,
+    });
+  } catch {
     return invalid('FIXTURE_ENVELOPE_INVALID');
   }
-
-  const manifest = buildShadowDatasetManifestV1(
-    value.reportInput?.manifest,
-    { expectedApprovalDigest: null },
-  );
-  if (!manifest.ok) return invalid(`MANIFEST:${manifest.reason ?? manifest.code}`);
-  if (manifest.datasetDigest !== value.expected.datasetDigest) {
-    return invalid('DATASET_DIGEST_MISMATCH');
-  }
-
-  const classifications = [];
-  for (const item of manifest.manifest.cases) {
-    const classified = classifySchedulingSampleV1(item.qualification);
-    if (!classified.ok) return invalid(`CLASSIFIER:${classified.reason ?? classified.code}`);
-    classifications.push(classified.classification);
-  }
-  if (canonicalJsonSchedulingV1(classifications)
-    !== canonicalJsonSchedulingV1(value.expected.caseClassifications)) {
-    return invalid('CLASSIFICATION_MISMATCH');
-  }
-
-  const evaluated = evaluateShadowMetricsV1(value.reportInput, {
-    replayHardConstraints: null,
-    evaluatePriorityPair: null,
-    expectedApprovalDigest: null,
-  });
-  if (!evaluated.ok) return invalid(`EVALUATOR:${evaluated.reason ?? evaluated.code}`);
-  if (canonicalJsonSchedulingV1(evaluated.report)
-    !== canonicalJsonSchedulingV1(value.expected.report)) {
-    return invalid('REPORT_MISMATCH');
-  }
-
-  return Object.freeze({
-    ok: true,
-    fixtureId: value.fixtureId,
-    datasetDigest: manifest.datasetDigest,
-    caseClassifications: classifications,
-    report: evaluated.report,
-  });
 }
