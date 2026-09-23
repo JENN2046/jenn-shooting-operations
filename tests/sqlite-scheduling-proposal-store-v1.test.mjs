@@ -10,6 +10,14 @@ import { refreshSqliteSnapshotProjectionsV2 } from '../src/sqlite-run-event-stor
 import { canonicalJsonSchedulingV1, digestResourceCapabilitiesV1,
   SCHEDULING_TIME_ZONE_DATA_VERSION } from '../src/scheduling-contract-v1.mjs';
 import { normalizeSchedulingConfigV1 } from '../src/scheduling-admin-contract-v1.mjs';
+import { createTrustedPrincipal } from '../src/authorization-v2.mjs';
+
+const schedulerPrincipal = createTrustedPrincipal({ subjectId: 'scheduler:fixture',
+  role: 'scheduler', resourceIds: ['STUDIO-A'] }).principal;
+const viewerPrincipal = createTrustedPrincipal({ subjectId: 'operator',
+  role: 'viewer', resourceIds: ['STUDIO-A'] }).principal;
+const otherStudioPrincipal = createTrustedPrincipal({ subjectId: 'scheduler:elsewhere',
+  role: 'scheduler', resourceIds: ['STUDIO-B'] }).principal;
 
 const capabilityJson = { schemaVersion: 1, capabilityIds: ['FLAT'] };
 const capabilityDigest = digestResourceCapabilitiesV1(capabilityJson);
@@ -37,7 +45,7 @@ function config() {
   };
 }
 
-function fixture({ mutateAfterFirst = false } = {}) {
+function fixture({ mutateAfterFirst = false, requestIds = ['REQ-1'] } = {}) {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON;');
   initializeWritableSchema(db);
@@ -76,13 +84,13 @@ function fixture({ mutateAfterFirst = false } = {}) {
       capabilityJson, capabilityDigest,
       businessWindows: [{ start: '2026-09-25T01:00:00.000Z', end: '2026-09-25T10:00:00.000Z' }],
     }],
-    candidates: [{ requestId: 'REQ-1', sourceOrdinal: 1, requestLifecycle: 'open',
+    candidates: requestIds.map((requestId, index) => ({ requestId, sourceOrdinal: index + 1, requestLifecycle: 'open',
       lifecycleProvenance: 'domainCommand', nonCancelledScheduleItemIds: [],
       productionType: '平面', shootingSubtype: '细节', desiredDate: '2026-09-25',
       sampleStatus: 'arrivedVerified', lightingPreset: 'LIGHT-SOFT', reflectivity: 'low',
       priority: candidatePriority, requiredCapabilityIds: ['FLAT'],
       durationEstimate: null, factProvenance: provenance,
-    }],
+    })),
     occupied: [], activeRuns: [], durationStats: [],
   });
   const store = createSqliteSchedulingProposalStoreV1({ db,
@@ -97,6 +105,248 @@ function fixture({ mutateAfterFirst = false } = {}) {
     setPriority(value) { candidatePriority = value; },
   };
 }
+
+function acceptanceFixture(requestIds = ['REQ-1']) {
+  const f = fixture({ requestIds });
+  const at = '2026-09-23T08:00:00.000Z';
+  f.db.prepare(`INSERT INTO scheduling_resources
+    (resource_id, v1_display_place, status, capability_json, capability_digest,
+     created_at, updated_at, source_operation_id)
+    VALUES ('STUDIO-A', 'Studio A', 'active', ?, ?, ?, ?, 'RESOURCE-1')`).run(
+    canonicalJsonSchedulingV1(capabilityJson), capabilityDigest, at, at,
+  );
+  for (const [index, id] of requestIds.entries()) {
+    f.db.prepare(`INSERT INTO requests_v2
+      (id, source_ordinal, sku, name, client, legacy_deliver_text, kind,
+       v1_status_mode, request_lifecycle, lifecycle_provenance, source, imported_at,
+       v1_assets_present, v1_request_present, production_type, shooting_subtype,
+       deliverable_count, aspect_ratio, requested_by, desired_date, note,
+       sample_status, lighting_preset, reflectivity, priority)
+      VALUES (?, ?, ?, ?, 'Client', 'Deliverable', '细节', 'canonical', 'open', 'domain_command',
+       'submission', ?, 1, 1, '平面', '细节', 1, '1:1', 'Planner', '2026-09-25', '',
+       'arrivedVerified', 'LIGHT-SOFT', 'low', 'p1')`).run(
+      id, index + 1, `SKU-${index + 1}`, `Product ${index + 1}`, at,
+    );
+  }
+  const store = createSqliteSchedulingProposalStoreV1({ db: f.db,
+    assembleInput: () => {
+      return {
+        schemaVersion: 1, planningWindowStart: f.command.planningWindowStart,
+        planningWindowEnd: f.command.planningWindowEnd, businessTimeZone: 'Asia/Shanghai',
+        baseScheduleRevision: f.db.prepare(`SELECT schedule_revision FROM revision_counters
+          WHERE id = 1`).get().schedule_revision,
+        algorithmVersion: 'deterministic-scheduler-v1',
+        calendarCompilerVersion: 'calendar-compiler-v1',
+        timeZoneDataVersion: SCHEDULING_TIME_ZONE_DATA_VERSION,
+        estimatePolicyVersion: 'estimate-policy-v1', configVersion: 'config-v1',
+        configDigest: f.db.prepare(`SELECT config_digest FROM scheduling_config_versions
+          WHERE config_version = 'config-v1'`).get().config_digest,
+        resources: [{ resourceId: 'STUDIO-A', v1DisplayPlace: 'Studio A', status: 'active',
+          capabilityJson, capabilityDigest,
+          businessWindows: [{ start: '2026-09-25T01:00:00.000Z', end: '2026-09-25T10:00:00.000Z' }],
+        }],
+        candidates: requestIds.map((requestId, index) => ({ requestId,
+          sourceOrdinal: index + 1, requestLifecycle: 'open', lifecycleProvenance: 'domainCommand',
+          nonCancelledScheduleItemIds: [], productionType: '平面', shootingSubtype: '细节',
+          desiredDate: '2026-09-25', sampleStatus: 'arrivedVerified',
+          lightingPreset: 'LIGHT-SOFT', reflectivity: 'low', priority: 'p1',
+          requiredCapabilityIds: ['FLAT'], durationEstimate: null, factProvenance: provenance,
+        })),
+        occupied: [], activeRuns: [], durationStats: [],
+      };
+    },
+    now: () => new Date(at),
+    authorizeAcceptance: principal => principal?.role === 'scheduler',
+    refreshProjections: context => refreshSqliteSnapshotProjectionsV2({
+      ...context, businessTimeZone: 'Asia/Shanghai',
+    }),
+  });
+  return { ...f, store };
+}
+
+test('acceptance creates canonical schedule, projections and one Outbox intent per item', () => {
+  const f = acceptanceFixture(['REQ-1', 'REQ-2']);
+  try {
+    const generated = f.store.generate(f.command, 'scheduler:fixture');
+    assert.equal(generated.ok, true, JSON.stringify(generated));
+    const ids = JSON.parse(generated.proposal.proposedItemsJson).map(item => item.proposalItemId);
+    assert.equal(ids.length, 2);
+    const command = { decisionId: 'DEC-ACCEPT-1', proposalId: generated.proposal.proposalId,
+      decisionType: 'accept', selectedProposalItemIds: ids,
+      decisionNote: null, reasonCode: null };
+    assert.equal(f.store.accept(command, viewerPrincipal).code,
+      'TRUSTED_SCHEDULER_REQUIRED');
+    assert.equal(f.store.accept(command, otherStudioPrincipal).code,
+      'TRUSTED_SCHEDULER_REQUIRED');
+    const result = f.store.accept(command, schedulerPrincipal);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.receipt.resultingScheduleRevision, 8);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 2);
+    assert.deepEqual(f.db.prepare(`SELECT DISTINCT buffer_source FROM schedule_items
+      ORDER BY buffer_source`).all().map(row => row.buffer_source), ['config-v1']);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_item_tasks').get().count, 2);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 2);
+    assert.equal(f.db.prepare(`SELECT projection_revision, schedule_revision FROM revision_counters
+      WHERE id = 1`).get().projection_revision, 1);
+    assert.equal(f.store.read(command.proposalId).lifecycle.status, 'accepted');
+    const replay = f.store.accept(command, schedulerPrincipal);
+    assert.equal(replay.ok, true);
+    assert.equal(replay.exactReplay, true);
+    assert.equal(f.store.accept({ ...command, proposalId: 'MISSING-PROPOSAL' },
+      schedulerPrincipal).code, 'IDEMPOTENCY_KEY_REUSE');
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 2);
+  } finally { f.db.close(); }
+});
+
+test('partial acceptance is one-shot and stales competing drafts in the same transaction', () => {
+  const f = acceptanceFixture(['REQ-1', 'REQ-2']);
+  try {
+    const first = f.store.generate(f.command, 'scheduler:fixture');
+    const second = f.store.generate({ ...f.command, operationId: 'GEN-2' }, 'scheduler:fixture');
+    assert.equal(first.ok && second.ok, true);
+    const selectedProposalItemIds = [JSON.parse(first.proposal.proposedItemsJson)[0].proposalItemId];
+    const adopted = f.store.accept({ decisionId: 'DEC-PARTIAL-1',
+      proposalId: first.proposal.proposalId, decisionType: 'partiallyAccept',
+      selectedProposalItemIds, decisionNote: 'Only first request', reasonCode: null,
+    }, schedulerPrincipal);
+    assert.equal(adopted.ok, true, JSON.stringify(adopted));
+    assert.equal(f.store.read(first.proposal.proposalId).lifecycle.status, 'partiallyAccepted');
+    assert.equal(f.store.read(second.proposal.proposalId).lifecycle.status, 'stale');
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 1);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 1);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM scheduling_proposal_decisions').get().count, 2);
+    assert.equal(f.db.prepare('SELECT schedule_revision FROM revision_counters WHERE id = 1')
+      .get().schedule_revision, 8);
+  } finally { f.db.close(); }
+});
+
+test('revision drift seals only the proposal and emits no schedule or Outbox facts', () => {
+  const f = acceptanceFixture();
+  try {
+    const generated = f.store.generate(f.command, 'scheduler:fixture');
+    f.db.prepare('UPDATE revision_counters SET schedule_revision = 8 WHERE id = 1').run();
+    const command = { decisionId: 'DEC-STALE-1',
+      proposalId: generated.proposal.proposalId, decisionType: 'accept',
+      selectedProposalItemIds: JSON.parse(generated.proposal.proposedItemsJson)
+        .map(item => item.proposalItemId), decisionNote: null, reasonCode: null,
+    };
+    const result = f.store.accept(command, schedulerPrincipal);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.receipt.decisionType, 'stale');
+    assert.equal(result.receipt.reasonCode, 'SCHEDULE_REVISION_CHANGED');
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 0);
+    assert.deepEqual(f.store.accept(command, schedulerPrincipal), { ...result, exactReplay: true });
+    assert.equal(f.store.accept({ ...command, proposalId: 'MISSING-PROPOSAL' },
+      schedulerPrincipal).code, 'IDEMPOTENCY_KEY_REUSE');
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM operations WHERE operation_id = ?')
+      .get(command.decisionId).count, 1);
+  } finally { f.db.close(); }
+});
+
+test('acceptance assembly failure keeps the draft retryable without decision or schedule effects', () => {
+  for (const { assembleInput, expectedCode } of [
+    { assembleInput: () => { throw new Error('TRANSIENT_ASSEMBLER_FAILURE'); },
+      expectedCode: 'SCHEDULING_INPUT_ASSEMBLY_FAILED' },
+    { assembleInput: () => ({ schemaVersion: 1 }), expectedCode: 'SCHEDULING_INPUT_INVALID' },
+  ]) {
+    const f = acceptanceFixture();
+    try {
+      const generated = f.store.generate(f.command, 'scheduler:fixture');
+      assert.equal(generated.ok, true, JSON.stringify(generated));
+      const failing = createSqliteSchedulingProposalStoreV1({ db: f.db,
+        assembleInput,
+        now: () => new Date('2026-09-23T08:00:00.000Z'),
+        authorizeAcceptance: () => true,
+        refreshProjections: () => {},
+      });
+      const command = { decisionId: 'DEC-ASSEMBLY-FAIL-1',
+        proposalId: generated.proposal.proposalId, decisionType: 'accept',
+        selectedProposalItemIds: JSON.parse(generated.proposal.proposedItemsJson)
+          .map(item => item.proposalItemId), decisionNote: null, reasonCode: null,
+      };
+      const result = failing.accept(command, schedulerPrincipal);
+      assert.equal(result.code, expectedCode);
+      assert.equal(f.store.read(command.proposalId).lifecycle.status, 'draft');
+      assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM scheduling_proposal_decisions').get().count, 0);
+      assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM operations').get().count, 0);
+      assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
+      assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 0);
+      const retry = f.store.accept(command, schedulerPrincipal);
+      assert.equal(retry.ok, true, JSON.stringify(retry));
+      assert.equal(retry.receipt.decisionType, 'accept');
+    } finally { f.db.close(); }
+  }
+});
+
+test('successfully assembled changed input still stales the proposal', () => {
+  const f = acceptanceFixture();
+  try {
+    const generated = f.store.generate(f.command, 'scheduler:fixture');
+    assert.equal(generated.ok, true, JSON.stringify(generated));
+    const changedInput = JSON.parse(generated.proposal.inputSnapshotJson);
+    changedInput.candidates[0].priority = 'p0';
+    const changed = createSqliteSchedulingProposalStoreV1({ db: f.db,
+      assembleInput: () => changedInput,
+      now: () => new Date('2026-09-23T08:00:00.000Z'),
+      authorizeAcceptance: () => true,
+      refreshProjections: () => {},
+    });
+    const result = changed.accept({ decisionId: 'DEC-INPUT-DRIFT-1',
+      proposalId: generated.proposal.proposalId, decisionType: 'accept',
+      selectedProposalItemIds: JSON.parse(generated.proposal.proposedItemsJson)
+        .map(item => item.proposalItemId), decisionNote: null, reasonCode: null,
+    }, schedulerPrincipal);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.receipt.decisionType, 'stale');
+    assert.equal(result.receipt.reasonCode, 'SCHEDULING_INPUT_CHANGED');
+    assert.equal(f.store.read(generated.proposal.proposalId).lifecycle.status, 'stale');
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
+  } finally { f.db.close(); }
+});
+
+test('global operation ID collision returns a stable denial before acceptance writes', () => {
+  const f = acceptanceFixture();
+  try {
+    const generated = f.store.generate(f.command, 'scheduler:fixture');
+    f.db.prepare(`INSERT INTO operations (operation_id, kind, response_json, created_at)
+      VALUES ('DEC-TAKEN', 'replaceSnapshot', '{}', ?)`)
+      .run('2026-09-23T08:00:00.000Z');
+    const result = f.store.accept({ decisionId: 'DEC-TAKEN',
+      proposalId: generated.proposal.proposalId, decisionType: 'accept',
+      selectedProposalItemIds: JSON.parse(generated.proposal.proposedItemsJson)
+        .map(item => item.proposalItemId), decisionNote: null, reasonCode: null,
+    }, schedulerPrincipal);
+    assert.equal(result.code, 'IDEMPOTENCY_KEY_REUSE');
+    assert.equal(f.store.read(generated.proposal.proposalId).lifecycle.status, 'draft');
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 0);
+  } finally { f.db.close(); }
+});
+
+test('projection failure rolls back every accepted item, revision, receipt and Outbox row', () => {
+  const f = acceptanceFixture(['REQ-1', 'REQ-2']);
+  try {
+    const generated = f.store.generate(f.command, 'scheduler:fixture');
+    const failing = createSqliteSchedulingProposalStoreV1({ db: f.db,
+      assembleInput: () => JSON.parse(generated.proposal.inputSnapshotJson),
+      now: () => new Date('2026-09-23T08:00:00.000Z'),
+      authorizeAcceptance: () => true,
+      refreshProjections: () => { throw new Error('PROJECTION_FAILED'); },
+    });
+    assert.throws(() => failing.accept({ decisionId: 'DEC-FAIL-1',
+      proposalId: generated.proposal.proposalId, decisionType: 'accept',
+      selectedProposalItemIds: JSON.parse(generated.proposal.proposedItemsJson)
+        .map(item => item.proposalItemId), decisionNote: null, reasonCode: null,
+    }, schedulerPrincipal), /PROJECTION_FAILED/);
+    assert.equal(f.store.read(generated.proposal.proposalId).lifecycle.status, 'draft');
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 0);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM scheduling_proposal_decisions').get().count, 0);
+    assert.equal(f.db.prepare('SELECT schedule_revision FROM revision_counters WHERE id = 1')
+      .get().schedule_revision, 7);
+  } finally { f.db.close(); }
+});
 
 test('generation persists an immutable draft without consuming schedule revision and replays exactly', () => {
   const f = fixture();

@@ -104,7 +104,14 @@
 
 ### WO-05D：Canonical Schedule Acceptance
 
-状态：`BLOCKED_PREREQUISITE`
+状态：`LOCAL_ACCEPTANCE_PASS / HTTP_PRINCIPAL_NOT_WIRED`
+
+本地完成检查点：
+
+- 独立 canonical V2 schedule transaction kernel 接受调用方已开启的 `BEGIN IMMEDIATE`，一次性创建 selected Schedule Items 与单一 request binding；Proposal handler 不直接写排班表，也不调用 V1 whole-snapshot PUT；
+- 采用命令对 revision、active config、完整 input digest、algorithm 和重算结果做同事务复核；revision/config/input 漂移只留下 stale receipt，不创建正式排班；普通约束或投影失败整笔回滚；
+- 全选/部分采用只增加一次 schedule/projection revision，同事务刷新 V1/V2 投影、保存 decision/operation/audit，并为每个正式场次入队一条 `schedule.confirmed.v1` Outbox intent；不启动外部通知执行器；
+- 本地可信 principal 授权 port 未配置时失败关闭；没有 HTTP 路由或真实鉴权绑定，因此此状态不代表网页端可采用或生产就绪。
 
 前置：
 
@@ -214,6 +221,7 @@
 ```text
 LOCAL_ENGINE_PASS
 LOCAL_PROPOSAL_PASS_WITH_ACCEPTANCE_NOT_WIRED
+LOCAL_ACCEPTANCE_PASS_WITH_HTTP_PRINCIPAL_NOT_WIRED
 SHADOW_EVALUATOR_PASS_WITH_BLOCKED_DATA
 WINDOWS_NOT_RUN
 ```
@@ -229,4 +237,4 @@ WINDOWS_NOT_RUN
 
 ## 7. 当前下一步
 
-下一步实现 WO-05D 所需的 canonical V2 schedule application command、可信 principal 边界、resource → V1 display projection 与 transaction-bound schedule.confirmed Outbox producer；不得借 V1 PUT 或直接 SQL 绕过这些门。05E 的真实 shadow 指标仍为 `BLOCKED_DATA`。
+下一步需独立复核 WO-05D 的本地采用链路，并在单独授权下把 trusted scheduler/admin HTTP principal adapter 接入；当前 `accept` 仅可通过内部显式授权 port 调用，不是可公开使用的 API。05E 的真实 shadow 指标仍为 `BLOCKED_DATA`。
