@@ -97,7 +97,7 @@ test('body role claims cannot upgrade an unprivileged principal', async () => {
     store: fakeStore(),
     scheduling: {
       authenticate: () => principal('viewer'),
-      acceptProposal: () => { calls += 1; return { ok: true, receipt: {} }; },
+      decideProposal: () => { calls += 1; return { ok: true, receipt: {} }; },
     },
   });
   const response = await invoke(app, {
@@ -112,7 +112,7 @@ test('proposal path is authoritative and query parameters are rejected', async (
   let calls = 0;
   const scheduling = {
     authenticate: () => principal(),
-    acceptProposal: () => { calls += 1; return { ok: true, receipt: {} }; },
+    decideProposal: () => { calls += 1; return { ok: true, receipt: {} }; },
   };
   const app = createHttpApp({ store: fakeStore(), scheduling });
 
@@ -131,7 +131,7 @@ test('proposal path is authoritative and query parameters are rejected', async (
   assert.equal(calls, 0);
 });
 
-test('trusted scheduler/admin principals reach the acceptance application unchanged', async () => {
+test('trusted scheduler/admin principals reach the proposal decision application unchanged', async () => {
   for (const role of ['scheduler', 'administrator']) {
     const expectedPrincipal = principal(role, ['STUDIO-A', 'STUDIO-B']);
     let received = null;
@@ -139,7 +139,7 @@ test('trusted scheduler/admin principals reach the acceptance application unchan
       store: fakeStore(),
       scheduling: {
         authenticate: () => expectedPrincipal,
-        acceptProposal: input => {
+        decideProposal: input => {
           received = input;
           return {
             ok: true,
@@ -162,6 +162,39 @@ test('trusted scheduler/admin principals reach the acceptance application unchan
   }
 });
 
+test('reject decision is dispatched through the same V2 decisions route', async () => {
+  const expectedPrincipal = principal('scheduler', ['STUDIO-A']);
+  let received = null;
+  const app = createHttpApp({
+    store: fakeStore(),
+    scheduling: {
+      authenticate: () => expectedPrincipal,
+      decideProposal: input => {
+        received = input;
+        return {
+          ok: true,
+          receipt: {
+            decisionId: input.command.decisionId,
+            proposalId: input.command.proposalId,
+            decisionType: 'reject',
+          },
+          exactReplay: false,
+        };
+      },
+    },
+  });
+  const expectedCommand = command({
+    decisionId: 'DEC-REJECT-0001',
+    decisionType: 'reject',
+    selectedProposalItemIds: null,
+    reasonCode: 'HUMAN_REJECTED',
+  });
+  const response = await invoke(app, { body: JSON.stringify(expectedCommand) });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.receipt.decisionType, 'reject');
+  assert.deepEqual(received, { command: expectedCommand, principal: expectedPrincipal });
+});
+
 test('scheduling application denials use stable low-disclosure HTTP mappings', async () => {
   const cases = [
     ['SCHEDULING_PROPOSAL_DECISION_COMMAND_INVALID', 422],
@@ -178,7 +211,7 @@ test('scheduling application denials use stable low-disclosure HTTP mappings', a
       store: fakeStore(),
       scheduling: {
         authenticate: () => principal(),
-        acceptProposal: () => ({ ok: false, code, internalDetail: 'must-not-leak' }),
+        decideProposal: () => ({ ok: false, code, internalDetail: 'must-not-leak' }),
       },
     });
     const response = await invoke(app, { body: JSON.stringify(command()) });
@@ -192,7 +225,7 @@ test('unexpected scheduling failures are reduced to INTERNAL_ERROR', async () =>
     store: fakeStore(),
     scheduling: {
       authenticate: () => principal(),
-      acceptProposal: () => { throw new Error('SQLITE SECRET PATH'); },
+      decideProposal: () => { throw new Error('SQLITE SECRET PATH'); },
     },
   });
   const thrown = await invoke(throwing, { body: JSON.stringify(command()) });
@@ -203,7 +236,7 @@ test('unexpected scheduling failures are reduced to INTERNAL_ERROR', async () =>
     store: fakeStore(),
     scheduling: {
       authenticate: () => principal(),
-      acceptProposal: () => ({ ok: false, code: 'UNRECOGNIZED_INTERNAL_FAILURE' }),
+      decideProposal: () => ({ ok: false, code: 'UNRECOGNIZED_INTERNAL_FAILURE' }),
     },
   });
   const mapped = await invoke(invalid, { body: JSON.stringify(command()) });
