@@ -112,7 +112,7 @@
 - 采用命令对 revision、active config、完整 input digest、algorithm 和重算结果做同事务复核；revision/config/input 漂移只留下 stale receipt，不创建正式排班；普通约束或投影失败整笔回滚；
 - 全选/部分采用只增加一次 schedule/projection revision，同事务刷新 V1/V2 投影、保存 decision/operation/audit，并为每个正式场次入队一条 `schedule.confirmed.v1` Outbox intent；不启动外部通知执行器；
 - `ba16abe` 已完成 post-merge independent code/evidence verification，结果为 `PASS_TO_HTTP_WIRING`；reviewer 环境因无法 clone GitHub，fresh runtime re-execution 记录为 `NOT_RUN_ENVIRONMENT_LIMIT`，不得冒充 fresh PASS；
-- 已实现本地 HTTP principal adapter：`POST /api/v2/proposals/:id/decisions` 只接受注入 Auth Port 产生的 trusted `scheduler` / `administrator` principal；`accept/partiallyAccept` 路由到 canonical acceptance，`reject` 路由到 canonical rejection use case；所有 decision ID 共享 `operations` 全局幂等命名空间，跨命令复用失败关闭；URL proposal ID 为路由权威，body actor/role/subject 不构成身份，所有 decision 的 resource scope 与 `modifySchedule` 均失败关闭；
+- 已实现本地 HTTP principal adapter：`POST /api/v2/proposals/:id/decisions` 只接受注入 Auth Port 产生的 trusted `scheduler` / `administrator` principal；`accept/partiallyAccept` 路由到 canonical acceptance，`reject` 路由到 canonical rejection use case；所有 human decision ID 共享 `operations` 全局幂等命名空间并禁止占用 `spd_` system-stale 保留命名空间，system stale exact replay 必须同时匹配 proposal/digest/type；URL proposal ID 为路由权威，body actor/role/subject 不构成身份，所有 decision 的 resource scope 与 `modifySchedule` 均失败关闭；
 - runtime composition 仍不读取或猜测真实凭据、真实用户映射或 resource scope；未显式注入 scheduling Auth Port 时保持 `AUTH_NOT_CONFIGURED`，direct server env 未启用该能力；projection 的 `businessTimeZone` 从当前 active scheduling config 读取，不建立第二份部署级时区事实；
 - HTTP adapter 不启动外部通知执行器、不允许 Agent/LLM/background worker 自动采用，也不代表生产鉴权、部署或公开服务完成。
 
