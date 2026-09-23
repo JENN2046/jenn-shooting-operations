@@ -280,6 +280,39 @@ test('compute-time input change saves no draft', () => {
   } finally { f.db.close(); }
 });
 
+test('missing active config and expected assembler failures return stable denials', () => {
+  const empty = new DatabaseSync(':memory:');
+  empty.exec('PRAGMA foreign_keys = ON;');
+  initializeWritableSchema(empty);
+  empty.prepare(`INSERT INTO revision_counters
+    (id, projection_revision, schedule_revision, updated_at) VALUES (1, 0, 0, ?)`)
+    .run('2026-09-22T08:00:00.000Z');
+  try {
+    const store = createSqliteSchedulingProposalStoreV1({ db: empty,
+      assembleInput: assembleSchedulingInputFromSqliteV1,
+      now: () => new Date('2026-09-23T08:00:00.000Z'),
+    });
+    assert.equal(store.generate({ operationId: 'GEN-NO-CONFIG',
+      planningWindowStart: '2026-09-25T00:00:00.000Z',
+      planningWindowEnd: '2026-09-26T00:00:00.000Z',
+      resourceScope: ['STUDIO-A'],
+    }, 'scheduler:fixture').code, 'SCHEDULING_CONFIG_NOT_ACTIVE');
+  } finally { empty.close(); }
+  const f = fixture();
+  try {
+    const store = createSqliteSchedulingProposalStoreV1({ db: f.db,
+      assembleInput: assembleSchedulingInputFromSqliteV1,
+      now: () => new Date('2026-09-23T08:00:00.000Z'),
+    });
+    assert.equal(store.generate(f.command, 'scheduler:fixture').code,
+      'SCHEDULING_RESOURCE_NOT_REGISTERED');
+    assert.equal(store.generate({ ...f.command, operationId: 'GEN-LONG',
+      planningWindowEnd: '2027-10-01T00:00:00.000Z',
+    }, 'scheduler:fixture').code, 'SCHEDULING_PLANNING_RANGE_UNSUPPORTED');
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM scheduling_proposals').get().count, 0);
+  } finally { f.db.close(); }
+});
+
 test('reject is terminal, append-only, idempotent, and cannot write schedule facts', () => {
   const f = fixture();
   try {
