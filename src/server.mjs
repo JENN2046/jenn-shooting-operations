@@ -6,6 +6,9 @@ import { createReadKioskCurrent } from './kiosk-current-use-case-v2.mjs';
 import { createApplyKioskRunEvent } from './kiosk-run-event-use-case-v2.mjs';
 import { createSqliteKioskCurrentStore } from './sqlite-kiosk-current-store-v2.mjs';
 import { createSqliteKioskRunEventStore } from './sqlite-kiosk-run-event-store-v2.mjs';
+import { refreshSqliteSnapshotProjectionsV2 } from './sqlite-run-event-store-v2.mjs';
+import { assembleSchedulingInputFromSqliteV1 } from './sqlite-scheduling-input-assembler-v1.mjs';
+import { createSqliteSchedulingProposalStoreV1 } from './sqlite-scheduling-proposal-store-v1.mjs';
 import { ScheduleStore } from './store.mjs';
 
 export function createKioskV2Application({
@@ -34,6 +37,44 @@ export function createKioskV2Application({
       }),
       clock,
     }),
+  });
+}
+
+
+export function createSchedulingV2Application({
+  store,
+  authenticate,
+  businessTimeZone,
+  clock = () => new Date(),
+  allowedBriefHosts = [],
+} = {}) {
+  if (!store?.db) throw new TypeError('ScheduleStore is required');
+  if (typeof authenticate !== 'function') {
+    throw new TypeError('Scheduling authenticate port is required');
+  }
+  if (typeof businessTimeZone !== 'string' || businessTimeZone.length === 0) {
+    throw new TypeError('Scheduling businessTimeZone is required');
+  }
+  const proposalStore = createSqliteSchedulingProposalStoreV1({
+    db: store.db,
+    assembleInput: assembleSchedulingInputFromSqliteV1,
+    now: clock,
+    authorizeAcceptance: (principal, resourceIds) => (
+      ['scheduler', 'administrator'].includes(principal?.role)
+      && Array.isArray(resourceIds)
+      && resourceIds.every(resourceId => principal.resourceIds?.includes(resourceId))
+    ),
+    refreshProjections: context => refreshSqliteSnapshotProjectionsV2({
+      ...context,
+      businessTimeZone,
+      allowedBriefHosts,
+    }),
+  });
+  return Object.freeze({
+    authenticate,
+    acceptProposal({ command, principal } = {}) {
+      return proposalStore.accept(command, principal);
+    },
   });
 }
 
@@ -67,7 +108,16 @@ export function createOperationsServer({
         clock: effectiveClock,
         allowedBriefHosts: kioskAllowedBriefHosts,
       });
-  const server = createServer(createHttpApp({ store, tokens, kiosk }));
+  const scheduling = schedulingAuthenticate === undefined
+    ? null
+    : createSchedulingV2Application({
+        store,
+        authenticate: schedulingAuthenticate,
+        businessTimeZone: schedulingBusinessTimeZone,
+        clock: effectiveClock,
+        allowedBriefHosts: schedulingAllowedBriefHosts,
+      });
+  const server = createServer(createHttpApp({ store, tokens, kiosk, scheduling }));
   const cleanupTimer = cleanupIntervalMs > 0
     ? setInterval(() => {
         try {
