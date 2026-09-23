@@ -321,6 +321,235 @@ const V1_COMPATIBILITY_SQL = `
     WHERE claimed_task_id IS NOT NULL AND claimed_order IS NOT NULL;
 `;
 
+const KIOSK_REVIEW_SQL = `
+  CREATE TABLE run_event_id_owners (
+    event_id TEXT PRIMARY KEY
+      REFERENCES operations(operation_id) DEFERRABLE INITIALLY DEFERRED,
+    owner_kind TEXT NOT NULL CHECK (owner_kind IN ('accepted', 'review')),
+    created_at TEXT NOT NULL
+  ) STRICT;
+
+  CREATE TABLE run_event_reviews (
+    event_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    schedule_item_id TEXT NOT NULL REFERENCES schedule_items(id) ON DELETE RESTRICT,
+    command_digest TEXT NOT NULL,
+    response_digest TEXT NOT NULL,
+    event_type TEXT NOT NULL CHECK (event_type IN ('start', 'block', 'resume', 'complete')),
+    expected_run_revision INTEGER NOT NULL
+      CHECK (expected_run_revision BETWEEN 0 AND ${MAX_SAFE_INTEGER}),
+    occurred_at TEXT NOT NULL,
+    received_at TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    actor_role TEXT NOT NULL CHECK (actor_role IN ('operator', 'scheduler', 'administrator')),
+    reason_code TEXT CHECK (reason_code IN (
+      'sampleWaiting', 'specConfirming', 'deviceIssue', 'talentWaiting', 'siteIssue', 'other'
+    )),
+    note TEXT,
+    time_policy_version TEXT NOT NULL CHECK (time_policy_version = 'kiosk-event-time-local-v1'),
+    review_reason TEXT NOT NULL CHECK (review_reason IN ('tooFarFuture', 'tooOld')),
+    review_status TEXT NOT NULL CHECK (review_status = 'pending'),
+    response_json TEXT NOT NULL CHECK (json_valid(response_json)),
+    created_at TEXT NOT NULL,
+    CHECK (
+      (event_type = 'block' AND reason_code IS NOT NULL) OR
+      (event_type <> 'block' AND reason_code IS NULL)
+    ),
+    CHECK (reason_code <> 'other' OR (note IS NOT NULL AND length(trim(note)) > 0))
+  ) STRICT;
+
+  CREATE INDEX run_event_reviews_run_created_idx
+    ON run_event_reviews(run_id, created_at);
+  CREATE INDEX run_event_reviews_pending_created_idx
+    ON run_event_reviews(review_status, created_at);
+
+  CREATE TRIGGER production_events_no_replace
+  BEFORE INSERT ON production_events
+  WHEN EXISTS (
+    SELECT 1 FROM production_events
+    WHERE event_id = NEW.event_id
+       OR (run_id = NEW.run_id AND resulting_run_revision = NEW.resulting_run_revision)
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'production_events are append-only');
+  END;
+
+  CREATE TRIGGER run_event_reviews_no_replace
+  BEFORE INSERT ON run_event_reviews
+  WHEN EXISTS (
+    SELECT 1 FROM run_event_reviews WHERE event_id = NEW.event_id
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'run event reviews are append-only');
+  END;
+
+  CREATE TRIGGER run_event_id_owners_no_replace
+  BEFORE INSERT ON run_event_id_owners
+  WHEN EXISTS (
+    SELECT 1 FROM run_event_id_owners WHERE event_id = NEW.event_id
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'run event id ownership is immutable');
+  END;
+
+  CREATE TRIGGER operations_no_replace_owned_run_event
+  BEFORE INSERT ON operations
+  WHEN EXISTS (
+    SELECT 1 FROM run_event_id_owners WHERE event_id = NEW.operation_id
+  ) AND EXISTS (
+    SELECT 1 FROM operations WHERE operation_id = NEW.operation_id
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'run event operation is immutable');
+  END;
+
+  CREATE TRIGGER run_event_id_owners_validate_insert
+  BEFORE INSERT ON run_event_id_owners
+  BEGIN
+    SELECT RAISE(ABORT, 'accepted event owner requires an accepted event')
+    WHERE NEW.owner_kind = 'accepted'
+      AND NOT EXISTS (SELECT 1 FROM production_events WHERE event_id = NEW.event_id);
+    SELECT RAISE(ABORT, 'review owner requires a review fact')
+    WHERE NEW.owner_kind = 'review'
+      AND NOT EXISTS (SELECT 1 FROM run_event_reviews WHERE event_id = NEW.event_id);
+    SELECT RAISE(ABORT, 'run event id ownership conflict')
+    WHERE NEW.owner_kind = 'accepted' AND EXISTS (
+      SELECT 1 FROM run_event_reviews WHERE event_id = NEW.event_id
+    );
+    SELECT RAISE(ABORT, 'run event id ownership conflict')
+    WHERE NEW.owner_kind = 'review' AND EXISTS (
+      SELECT 1 FROM production_events WHERE event_id = NEW.event_id
+    );
+    SELECT RAISE(ABORT, 'run event operation ownership conflict')
+    WHERE NEW.owner_kind = 'accepted' AND EXISTS (
+      SELECT 1 FROM operations
+      WHERE operation_id = NEW.event_id
+        AND kind <> 'production.run-event'
+    );
+    SELECT RAISE(ABORT, 'run event operation ownership conflict')
+    WHERE NEW.owner_kind = 'review' AND EXISTS (
+      SELECT 1 FROM operations
+      WHERE operation_id = NEW.event_id
+        AND kind <> 'production.run-event-review'
+    );
+  END;
+
+  CREATE TRIGGER production_events_claim_event_id
+  AFTER INSERT ON production_events
+  BEGIN
+    INSERT INTO run_event_id_owners (event_id, owner_kind, created_at)
+    VALUES (NEW.event_id, 'accepted', NEW.received_at);
+  END;
+
+  CREATE TRIGGER run_event_reviews_claim_event_id
+  AFTER INSERT ON run_event_reviews
+  BEGIN
+    INSERT INTO run_event_id_owners (event_id, owner_kind, created_at)
+    VALUES (NEW.event_id, 'review', NEW.created_at);
+  END;
+
+  CREATE TRIGGER run_event_id_owners_no_update
+  BEFORE UPDATE ON run_event_id_owners
+  BEGIN
+    SELECT RAISE(ABORT, 'run event id ownership is immutable');
+  END;
+
+  CREATE TRIGGER run_event_id_owners_no_delete
+  BEFORE DELETE ON run_event_id_owners
+  BEGIN
+    SELECT RAISE(ABORT, 'run event id ownership is immutable');
+  END;
+
+  CREATE TRIGGER run_event_reviews_no_update
+  BEFORE UPDATE ON run_event_reviews
+  BEGIN
+    SELECT RAISE(ABORT, 'run event reviews are append-only');
+  END;
+
+  CREATE TRIGGER run_event_reviews_no_delete
+  BEFORE DELETE ON run_event_reviews
+  BEGIN
+    SELECT RAISE(ABORT, 'run event reviews are append-only');
+  END;
+
+  CREATE TRIGGER operations_validate_run_event_owner_insert
+  BEFORE INSERT ON operations
+  WHEN
+    (NEW.kind = 'production.run-event' AND (
+      NOT EXISTS (SELECT 1 FROM production_events WHERE event_id = NEW.operation_id) OR
+      NOT EXISTS (
+        SELECT 1 FROM run_event_id_owners
+        WHERE event_id = NEW.operation_id AND owner_kind = 'accepted'
+      )
+    )) OR
+    (NEW.kind = 'production.run-event-review' AND (
+      NOT EXISTS (SELECT 1 FROM run_event_reviews WHERE event_id = NEW.operation_id) OR
+      NOT EXISTS (
+        SELECT 1 FROM run_event_id_owners
+        WHERE event_id = NEW.operation_id AND owner_kind = 'review'
+      )
+    )) OR
+    (NEW.kind NOT IN ('production.run-event', 'production.run-event-review') AND EXISTS (
+      SELECT 1 FROM run_event_id_owners WHERE event_id = NEW.operation_id
+    ))
+  BEGIN
+    SELECT RAISE(ABORT, 'run event operation ownership conflict');
+  END;
+
+  CREATE TRIGGER operations_protect_run_event_owner_update
+  BEFORE UPDATE ON operations
+  WHEN EXISTS (
+    SELECT 1 FROM run_event_id_owners WHERE event_id = OLD.operation_id
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'run event operation is immutable');
+  END;
+
+  CREATE TRIGGER operations_validate_run_event_owner_update
+  BEFORE UPDATE ON operations
+  WHEN
+    OLD.kind IN ('production.run-event', 'production.run-event-review') OR
+    NEW.kind IN ('production.run-event', 'production.run-event-review') OR
+    EXISTS (SELECT 1 FROM run_event_id_owners WHERE event_id = OLD.operation_id) OR
+    EXISTS (SELECT 1 FROM run_event_id_owners WHERE event_id = NEW.operation_id)
+  BEGIN
+    SELECT RAISE(ABORT, 'run event operation ownership conflict');
+  END;
+
+  CREATE TRIGGER operations_protect_run_event_owner_delete
+  BEFORE DELETE ON operations
+  WHEN EXISTS (
+    SELECT 1 FROM run_event_id_owners WHERE event_id = OLD.operation_id
+  )
+  BEGIN
+    SELECT RAISE(ABORT, 'run event operation ownership is immutable');
+  END;
+
+  INSERT INTO run_event_id_owners (event_id, owner_kind, created_at)
+  SELECT event_id, 'accepted', received_at
+  FROM production_events
+  ORDER BY event_id;
+
+  INSERT INTO run_event_id_owners (event_id, owner_kind, created_at)
+  SELECT operation_id, 'accepted', created_at
+  FROM operations
+  WHERE kind = 'production.run-event'
+    AND NOT EXISTS (
+      SELECT 1 FROM run_event_id_owners AS owner
+      WHERE owner.event_id = operations.operation_id
+    );
+
+  INSERT INTO run_event_id_owners (event_id, owner_kind, created_at)
+  SELECT operation_id, 'review', created_at
+  FROM operations
+  WHERE kind = 'production.run-event-review'
+    AND NOT EXISTS (
+      SELECT 1 FROM run_event_id_owners AS owner
+      WHERE owner.event_id = operations.operation_id
+    );
+`;
+
 function normalizeSchemaSql(sql) {
   return String(sql || '').replace(/\s+/g, ' ').trim().replace(/;$/, '');
 }
@@ -339,6 +568,9 @@ function schemaDefinitions(sql, type) {
 const V2_INDEX_DEFINITIONS = schemaDefinitions(`${V2_CORE_SQL}\n${V1_COMPATIBILITY_SQL}`, 'index');
 const V2_TRIGGER_DEFINITIONS = schemaDefinitions(V2_CORE_SQL, 'trigger');
 const V2_TABLE_DEFINITIONS = schemaDefinitions(V2_CORE_SQL, 'table');
+const KIOSK_REVIEW_INDEX_DEFINITIONS = schemaDefinitions(KIOSK_REVIEW_SQL, 'index');
+const KIOSK_REVIEW_TRIGGER_DEFINITIONS = schemaDefinitions(KIOSK_REVIEW_SQL, 'trigger');
+const KIOSK_REVIEW_TABLE_DEFINITIONS = schemaDefinitions(KIOSK_REVIEW_SQL, 'table');
 const V2_COMPAT_TABLE_DEFINITIONS = Object.freeze({
   uploads: normalizeSchemaSql(`
     CREATE TABLE uploads (
@@ -372,6 +604,7 @@ function checksum(sql) {
 export const MIGRATIONS = Object.freeze([
   Object.freeze({ version: 1, name: 'v2_normalized_core', sql: V2_CORE_SQL, checksum: checksum(V2_CORE_SQL) }),
   Object.freeze({ version: 2, name: 'v1_compatibility_columns', sql: V1_COMPATIBILITY_SQL, checksum: checksum(V1_COMPATIBILITY_SQL) }),
+  Object.freeze({ version: 3, name: 'kiosk_run_event_review_ownership', sql: KIOSK_REVIEW_SQL, checksum: checksum(KIOSK_REVIEW_SQL) }),
 ]);
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1).version;
@@ -480,6 +713,26 @@ const V2_INDEXES = Object.freeze([
   'production_runs_task_idx',
   'production_runs_one_active_per_item_uq',
   'production_events_run_occurred_idx',
+]);
+
+const KIOSK_REVIEW_TABLES = Object.freeze([
+  'run_event_id_owners',
+  'run_event_reviews',
+]);
+
+const KIOSK_REVIEW_COLUMNS = Object.freeze({
+  run_event_id_owners: ['event_id', 'owner_kind', 'created_at'],
+  run_event_reviews: [
+    'event_id', 'run_id', 'schedule_item_id', 'command_digest', 'response_digest', 'event_type',
+    'expected_run_revision', 'occurred_at', 'received_at', 'device_id', 'actor_id', 'actor_role',
+    'reason_code', 'note', 'time_policy_version', 'review_reason', 'review_status', 'response_json',
+    'created_at',
+  ],
+});
+
+const KIOSK_REVIEW_INDEXES = Object.freeze([
+  'run_event_reviews_run_created_idx',
+  'run_event_reviews_pending_created_idx',
 ]);
 
 function schemaError(code, message, cause) {
@@ -646,6 +899,19 @@ function assertCoreStructure(db) {
   }
 }
 
+function assertKioskReviewStructure(db) {
+  for (const table of KIOSK_REVIEW_TABLES) {
+    assertExactColumns(db, table, KIOSK_REVIEW_COLUMNS[table]);
+    assertObjectDefinition(db, 'table', table, KIOSK_REVIEW_TABLE_DEFINITIONS[table]);
+  }
+  for (const index of KIOSK_REVIEW_INDEXES) {
+    assertObjectDefinition(db, 'index', index, KIOSK_REVIEW_INDEX_DEFINITIONS[index]);
+  }
+  for (const trigger of Object.keys(KIOSK_REVIEW_TRIGGER_DEFINITIONS)) {
+    assertObjectDefinition(db, 'trigger', trigger, KIOSK_REVIEW_TRIGGER_DEFINITIONS[trigger]);
+  }
+}
+
 function assertNoUnknownSchemaObjects(db, version) {
   const allowed = new Set([
     ...Object.keys(V1_COLUMNS).map(name => `table:${name}`),
@@ -661,6 +927,11 @@ function assertNoUnknownSchemaObjects(db, version) {
   if (version >= 2) {
     allowed.add('index:uploads_claimed_task_idx');
     allowed.add('index:uploads_claimed_order_uq');
+  }
+  if (version >= 3) {
+    for (const name of KIOSK_REVIEW_TABLES) allowed.add(`table:${name}`);
+    for (const name of KIOSK_REVIEW_INDEXES) allowed.add(`index:${name}`);
+    for (const name of Object.keys(KIOSK_REVIEW_TRIGGER_DEFINITIONS)) allowed.add(`trigger:${name}`);
   }
 
   const unknown = db.prepare(`
@@ -690,6 +961,7 @@ function assertStructureForVersion(db, version) {
   assertV1Schema(db);
   if (version >= 1) assertCoreStructure(db);
   if (version >= 2) assertCompatibilityStructure(db);
+  if (version >= 3) assertKioskReviewStructure(db);
 }
 
 function assertNoPendingArtifacts(db, nextVersion) {
@@ -707,6 +979,14 @@ function assertNoPendingArtifacts(db, nextVersion) {
     ) {
       throw schemaError('SCHEMA_PARTIAL_MIGRATION', 'unmarked V1 compatibility schema objects are present');
     }
+  }
+  if (nextVersion === 3 && (
+    KIOSK_REVIEW_TABLES.some(table => objectExists(db, 'table', table))
+    || KIOSK_REVIEW_INDEXES.some(index => objectExists(db, 'index', index))
+    || Object.keys(KIOSK_REVIEW_TRIGGER_DEFINITIONS)
+      .some(trigger => objectExists(db, 'trigger', trigger))
+  )) {
+    throw schemaError('SCHEMA_PARTIAL_MIGRATION', 'unmarked Kiosk review schema objects are present');
   }
 }
 

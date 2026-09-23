@@ -473,6 +473,11 @@ if (!isMainThread && workerData?.mode === 'apply-run-event') {
         metricsAlgorithmVersion: 'forged-algorithm',
       };
 
+      // Simulate a legacy/corrupted store after explicitly removing the v3
+      // receipt immutability guard; the application must still fail closed.
+      db.exec('DROP TRIGGER operations_protect_run_event_owner_update');
+      db.exec('DROP TRIGGER operations_validate_run_event_owner_update');
+
       for (const [field, forgedValue] of Object.entries(forgeries)) {
         const forged = { ...original, [field]: forgedValue };
         db.prepare('UPDATE operations SET response_json = ? WHERE operation_id = ?')
@@ -515,6 +520,10 @@ if (!isMainThread && workerData?.mode === 'apply-run-event') {
         startedAt: '2026-09-22T09:00:01.000Z',
       };
       const forgedDigest = digestRunEventResponse(forged);
+      // Bypass the v3 database guard only inside this isolated corruption
+      // fixture so the application integrity anchor remains defense in depth.
+      db.exec('DROP TRIGGER operations_protect_run_event_owner_update');
+      db.exec('DROP TRIGGER operations_validate_run_event_owner_update');
       db.prepare('UPDATE operations SET response_json = ? WHERE operation_id = ?')
         .run(JSON.stringify(forged), command.eventId);
       db.prepare(`
@@ -704,6 +713,9 @@ if (!isMainThread && workerData?.mode === 'apply-run-event') {
       assert.equal(apply(stale).code, 'REVISION_CONFLICT');
       assert.deepEqual(databaseState(db, ids.runId), beforeReuse);
 
+      // A valid v3 database rejects receipt-only state. Remove the insert
+      // guard only to preserve the application-level legacy-corruption test.
+      db.exec('DROP TRIGGER operations_validate_run_event_owner_insert');
       db.prepare(`
         INSERT INTO operations (operation_id, kind, response_json, created_at, request_digest)
         VALUES ('EVENT-INTEGRITY-ONLY', 'production.run-event', '{}', ?, ?)
@@ -757,6 +769,7 @@ if (!isMainThread && workerData?.mode === 'apply-run-event') {
         netDurationMs: null,
         metricsAlgorithmVersion: null,
       };
+      db.exec('BEGIN IMMEDIATE');
       db.prepare(`
         INSERT INTO production_events (
           event_id, run_id, command_digest, response_digest, event_type, occurred_at,
@@ -778,6 +791,7 @@ if (!isMainThread && workerData?.mode === 'apply-run-event') {
         INSERT INTO operations (operation_id, kind, response_json, created_at, request_digest)
         VALUES (?, 'production.run-event', ?, ?, ?)
       `).run(command.eventId, JSON.stringify(response), T0, digest);
+      db.exec('COMMIT');
       const before = databaseState(db, ids.runId);
       const result = makeApply(db)(command);
       assert.equal(result.code, 'EVENT_RECEIPT_INTEGRITY_ERROR');
@@ -815,6 +829,7 @@ if (!isMainThread && workerData?.mode === 'apply-run-event') {
         netDurationMs: null,
         metricsAlgorithmVersion: null,
       };
+      db.exec('BEGIN IMMEDIATE');
       db.prepare(`
         INSERT INTO production_events (
           event_id, run_id, command_digest, response_digest, event_type, occurred_at,
@@ -836,6 +851,7 @@ if (!isMainThread && workerData?.mode === 'apply-run-event') {
         INSERT INTO operations (operation_id, kind, response_json, created_at, request_digest)
         VALUES (?, 'production.run-event', ?, ?, ?)
       `).run(command.eventId, JSON.stringify(response), '2026-09-22T12:00:01.000Z', digest);
+      db.exec('COMMIT');
       const before = databaseState(db, ids.runId);
       const result = makeApply(db)(command);
       assert.equal(result.code, 'EVENT_RECEIPT_INTEGRITY_ERROR');

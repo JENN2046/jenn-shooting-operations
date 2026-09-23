@@ -38,6 +38,8 @@ const NORMALIZED_TABLES = Object.freeze([
   'legacy_compat_fragments',
   'production_runs',
   'production_events',
+  'run_event_id_owners',
+  'run_event_reviews',
   'snapshot_projections',
 ]);
 
@@ -150,6 +152,100 @@ function assertNormalizedEmpty(db) {
   }
 }
 
+function normalizedCounts(db) {
+  return Object.fromEntries(NORMALIZED_TABLES.map(table => [
+    table,
+    db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count,
+  ]));
+}
+
+function insertHumanScheduleItem(db, scheduleItemId) {
+  db.prepare(`
+    INSERT INTO schedule_items (
+      id, source_ordinal, resource_id, resource_resolution_status,
+      planned_start, planned_end, buffer_source, schedule_status,
+      schedule_status_provenance, lock_status_provenance, note, allocation_mode,
+      source, imported_at
+    ) VALUES (?, 0, 'STUDIO-PRESEEDED', 'resolved', ?, ?, 'domain_default', 'confirmed',
+      'domain_command', 'domain_command', '', 'grouped_unallocated', 'human', ?)
+  `).run(
+    scheduleItemId,
+    '2026-09-22T09:00:00.000Z',
+    '2026-09-22T10:00:00.000Z',
+    FIXED_STARTED,
+  );
+}
+
+function insertAcceptedEventReceipt(db, eventId) {
+  const scheduleItemId = 'SCHEDULE-PRESEEDED-ACCEPTED';
+  const runId = 'RUN-PRESEEDED-ACCEPTED';
+  db.exec('BEGIN');
+  try {
+    insertHumanScheduleItem(db, scheduleItemId);
+    db.prepare(`
+      INSERT INTO production_runs (
+        id, schedule_item_id, scope, task_id, status, run_revision,
+        blocked_duration_ms, created_at, updated_at
+      ) VALUES (?, ?, 'block', NULL, 'shooting', 1, 0, ?, ?)
+    `).run(runId, scheduleItemId, FIXED_STARTED, FIXED_STARTED);
+    db.prepare(`
+      INSERT INTO production_events (
+        event_id, run_id, command_digest, response_digest, event_type, occurred_at,
+        received_at, device_id, actor_id, previous_state, resulting_state,
+        resulting_run_revision, resulting_projection_revision, resulting_schedule_revision
+      ) VALUES (?, ?, 'command-digest', 'response-digest', 'start', ?, ?,
+        'DEVICE-PRESEEDED', 'ACTOR-PRESEEDED', 'scheduled', 'shooting', 1, 1, 0)
+    `).run(eventId, runId, FIXED_STARTED, FIXED_STARTED);
+    db.prepare(`
+      INSERT INTO operations (operation_id, kind, response_json, created_at, request_digest)
+      VALUES (?, 'production.run-event', '{}', ?, 'command-digest')
+    `).run(eventId, FIXED_STARTED);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+  const owner = db.prepare(`
+    SELECT event_id, owner_kind FROM run_event_id_owners WHERE event_id = ?
+  `).get(eventId);
+  assert.equal(owner.event_id, eventId);
+  assert.equal(owner.owner_kind, 'accepted');
+}
+
+function insertPendingEventReviewReceipt(db, eventId) {
+  const scheduleItemId = 'SCHEDULE-PRESEEDED-REVIEW';
+  db.exec('BEGIN');
+  try {
+    insertHumanScheduleItem(db, scheduleItemId);
+    db.prepare(`
+      INSERT INTO run_event_reviews (
+        event_id, run_id, schedule_item_id, command_digest, response_digest,
+        event_type, expected_run_revision, occurred_at, received_at, device_id,
+        actor_id, actor_role, reason_code, note, time_policy_version,
+        review_reason, review_status, response_json, created_at
+      ) VALUES (
+        ?, 'RUN-PRESEEDED-REVIEW', ?, 'command-digest', 'response-digest',
+        'start', 0, ?, ?, 'DEVICE-PRESEEDED',
+        'ACTOR-PRESEEDED', 'operator', NULL, NULL, 'kiosk-event-time-local-v1',
+        'tooOld', 'pending', '{}', ?
+      )
+    `).run(eventId, scheduleItemId, FIXED_STARTED, FIXED_STARTED, FIXED_STARTED);
+    db.prepare(`
+      INSERT INTO operations (operation_id, kind, response_json, created_at, request_digest)
+      VALUES (?, 'production.run-event-review', '{}', ?, 'command-digest')
+    `).run(eventId, FIXED_STARTED);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+  const owner = db.prepare(`
+    SELECT event_id, owner_kind FROM run_event_id_owners WHERE event_id = ?
+  `).get(eventId);
+  assert.equal(owner.event_id, eventId);
+  assert.equal(owner.owner_kind, 'review');
+}
+
 function applyAndVerify(prepared, label = 'case') {
   const result = materializeMigrationPlan({
     db: prepared.db,
@@ -159,6 +255,8 @@ function applyAndVerify(prepared, label = 'case') {
   });
   assert.equal(result.status, 'APPLIED');
   assert.match(result.batchId, /^MIG-[A-F0-9]{32}$/u);
+  assert.equal(prepared.db.prepare('SELECT COUNT(*) AS count FROM run_event_id_owners').get().count, 0);
+  assert.equal(prepared.db.prepare('SELECT COUNT(*) AS count FROM run_event_reviews').get().count, 0);
   prepared.db.close();
   let verified;
   try {
@@ -392,6 +490,40 @@ test('rejects nonempty normalized or batch state without adding materialization 
       completedAt: FIXED_COMPLETED,
     }), error => error.code === 'TARGET_NOT_EMPTY');
     assert.equal(prepared.db.prepare('SELECT COUNT(*) AS count FROM migration_batches').get().count, 1);
+    prepared.db.close();
+  });
+
+  withTempRoot(root => {
+    const prepared = prepareTarget(root, emptySnapshot(), { prefix: 'event-owner-extra' });
+    insertAcceptedEventReceipt(prepared.db, 'EVENT-PRESEEDED-OWNER');
+    const before = normalizedCounts(prepared.db);
+    assert.throws(() => materializeMigrationPlan({
+      db: prepared.db,
+      plan: prepared.plan,
+      startedAt: FIXED_STARTED,
+      completedAt: FIXED_COMPLETED,
+    }), error => error.code === 'TARGET_NOT_EMPTY');
+    assert.deepEqual(normalizedCounts(prepared.db), before);
+    assert.equal(prepared.db.prepare('SELECT COUNT(*) AS count FROM migration_batches').get().count, 0);
+    assert.equal(prepared.db.prepare('SELECT COUNT(*) AS count FROM run_event_id_owners').get().count, 1);
+    assert.equal(prepared.db.prepare('SELECT COUNT(*) AS count FROM run_event_reviews').get().count, 0);
+    prepared.db.close();
+  });
+
+  withTempRoot(root => {
+    const prepared = prepareTarget(root, emptySnapshot(), { prefix: 'event-review-extra' });
+    insertPendingEventReviewReceipt(prepared.db, 'EVENT-PRESEEDED-REVIEW');
+    const before = normalizedCounts(prepared.db);
+    assert.throws(() => materializeMigrationPlan({
+      db: prepared.db,
+      plan: prepared.plan,
+      startedAt: FIXED_STARTED,
+      completedAt: FIXED_COMPLETED,
+    }), error => error.code === 'TARGET_NOT_EMPTY');
+    assert.deepEqual(normalizedCounts(prepared.db), before);
+    assert.equal(prepared.db.prepare('SELECT COUNT(*) AS count FROM migration_batches').get().count, 0);
+    assert.equal(prepared.db.prepare('SELECT COUNT(*) AS count FROM run_event_id_owners').get().count, 1);
+    assert.equal(prepared.db.prepare('SELECT COUNT(*) AS count FROM run_event_reviews').get().count, 1);
     prepared.db.close();
   });
 });

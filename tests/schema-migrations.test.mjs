@@ -72,12 +72,12 @@ function columns(db, table) {
   return db.prepare(`PRAGMA table_info(${JSON.stringify(table)})`).all().map(row => row.name);
 }
 
-test('fresh schema applies a continuous migration prefix and only the WO-02A tables', () => {
+test('fresh schema applies the continuous migration prefix and known tables', () => {
   const db = memoryDatabase();
   try {
     const result = initializeWritableSchema(db, { now: () => new Date('2026-09-22T08:00:00.000Z') });
     assert.deepEqual(result, { version: LATEST_SCHEMA_VERSION, latestVersion: LATEST_SCHEMA_VERSION });
-    assert.equal(LATEST_SCHEMA_VERSION, 2);
+    assert.equal(LATEST_SCHEMA_VERSION, 3);
     assert.deepEqual(
       db.prepare('SELECT version, name, checksum FROM schema_migrations ORDER BY version').all().map(row => ({ ...row })),
       MIGRATIONS.map(({ version, name, checksum }) => ({ version, name, checksum })),
@@ -88,7 +88,8 @@ test('fresh schema applies a continuous migration prefix and only the WO-02A tab
       'schedule_state', 'operations', 'audit_log', 'uploads', 'schema_migrations',
       'migration_batches', 'revision_counters', 'product_catalog_entries', 'requests_v2',
       'schedule_items', 'schedule_item_tasks', 'legacy_asset_entries', 'legacy_compat_fragments',
-      'production_runs', 'production_events', 'snapshot_projections',
+      'production_runs', 'production_events', 'snapshot_projections', 'run_event_id_owners',
+      'run_event_reviews',
     ]) assert.ok(tables.includes(table), `expected ${table}`);
     for (const deferred of ['notification_outbox', 'scheduling_proposals', 'scheduling_config_versions']) {
       assert.equal(tables.includes(deferred), false);
@@ -228,7 +229,7 @@ test('name/checksum drift, an unknown higher version, and a marker hole fail clo
     try {
       initializeWritableSchema(db);
       db.prepare('INSERT INTO schema_migrations VALUES (?, ?, ?, ?)')
-        .run(3, 'unknown_future', 'sha256:' + 'f'.repeat(64), '2026-09-22T08:00:00.000Z');
+        .run(LATEST_SCHEMA_VERSION + 1, 'unknown_future', 'sha256:' + 'f'.repeat(64), '2026-09-22T08:00:00.000Z');
       assert.throws(() => applySchemaMigrations(db), error => error.code === 'SCHEMA_VERSION_TOO_NEW');
     } finally {
       db.close();
@@ -517,6 +518,7 @@ test('marker rows and production events are append-only, and foreign keys remain
         id, schedule_item_id, scope, task_id, status, run_revision, blocked_duration_ms, created_at, updated_at
       ) VALUES ('RUN-1', 'SCHEDULE-1', 'block', NULL, 'shooting', 1, 0, ?, ?)
     `).run('2026-09-22T08:00:00.000Z', '2026-09-22T08:00:00.000Z');
+    db.exec('BEGIN IMMEDIATE');
     db.prepare(`
       INSERT INTO production_events (
         event_id, run_id, command_digest, response_digest, event_type, occurred_at, received_at,
@@ -530,6 +532,11 @@ test('marker rows and production events are append-only, and foreign keys remain
       '2026-09-22T08:00:00.000Z',
       '2026-09-22T08:00:01.000Z',
     );
+    db.prepare(`
+      INSERT INTO operations (operation_id, kind, response_json, created_at, request_digest)
+      VALUES ('EVENT-1', 'production.run-event', '{"ok":true}', ?, ?)
+    `).run('2026-09-22T08:00:01.000Z', 'sha256:' + 'c'.repeat(64));
+    db.exec('COMMIT');
     assert.throws(() => db.exec(`UPDATE production_events SET note = 'changed' WHERE event_id = 'EVENT-1';`), /append-only/);
     assert.throws(() => db.exec(`DELETE FROM production_events WHERE event_id = 'EVENT-1';`), /append-only/);
   } finally {
@@ -589,7 +596,7 @@ test('concurrent independent processes safely initialize and migrate the same da
     }
   });
 
-  await t.test('partial migration prefix lets concurrent processes resume at migration two', async () => {
+  await t.test('partial migration prefix lets concurrent processes resume through the latest migration', async () => {
     const root = mkdtempSync(join(tmpdir(), 'jenn-shooting-schema-concurrent-prefix-'));
     const databasePath = join(root, 'prefix.sqlite');
     const bootstrap = new DatabaseSync(databasePath);
@@ -618,7 +625,7 @@ test('concurrent independent processes safely initialize and migrate the same da
         });
         assert.deepEqual(
           db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(row => row.version),
-          [1, 2],
+          [1, 2, 3],
         );
       } finally {
         db.close();

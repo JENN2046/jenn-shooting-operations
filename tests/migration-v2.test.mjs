@@ -879,6 +879,62 @@ function createVerifiedTarget(root, plan) {
   return target;
 }
 
+function insertAcceptedEventReceipt(db, scheduleItemId, eventId) {
+  const runId = 'RUN-PRESEEDED-ACCEPTED';
+  db.exec('BEGIN');
+  try {
+    db.prepare(`
+      INSERT INTO production_runs (
+        id, schedule_item_id, scope, task_id, status, run_revision,
+        blocked_duration_ms, created_at, updated_at
+      ) VALUES (?, ?, 'block', NULL, 'shooting', 1, 0, ?, ?)
+    `).run(runId, scheduleItemId, FIXED_NOW, FIXED_NOW);
+    db.prepare(`
+      INSERT INTO production_events (
+        event_id, run_id, command_digest, response_digest, event_type, occurred_at,
+        received_at, device_id, actor_id, previous_state, resulting_state,
+        resulting_run_revision, resulting_projection_revision, resulting_schedule_revision
+      ) VALUES (?, ?, 'command-digest', 'response-digest', 'start', ?, ?,
+        'DEVICE-PRESEEDED', 'ACTOR-PRESEEDED', 'scheduled', 'shooting', 1, 1, 0)
+    `).run(eventId, runId, FIXED_NOW, FIXED_NOW);
+    db.prepare(`
+      INSERT INTO operations (operation_id, kind, response_json, created_at, request_digest)
+      VALUES (?, 'production.run-event', '{}', ?, 'command-digest')
+    `).run(eventId, FIXED_NOW);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+function insertPendingEventReviewReceipt(db, scheduleItemId, eventId) {
+  db.exec('BEGIN');
+  try {
+    db.prepare(`
+      INSERT INTO run_event_reviews (
+        event_id, run_id, schedule_item_id, command_digest, response_digest,
+        event_type, expected_run_revision, occurred_at, received_at, device_id,
+        actor_id, actor_role, reason_code, note, time_policy_version,
+        review_reason, review_status, response_json, created_at
+      ) VALUES (
+        ?, 'RUN-PRESEEDED-REVIEW', ?, 'command-digest', 'response-digest',
+        'start', 0, ?, ?, 'DEVICE-PRESEEDED',
+        'ACTOR-PRESEEDED', 'operator', NULL, NULL, 'kiosk-event-time-local-v1',
+        'tooOld', 'pending', '{}', ?
+      )
+    `).run(eventId, scheduleItemId, FIXED_NOW, FIXED_NOW, FIXED_NOW);
+    db.prepare(`
+      INSERT INTO operations (operation_id, kind, response_json, created_at, request_digest)
+      VALUES (?, 'production.run-event-review', '{}', ?, 'command-digest')
+    `).run(eventId, FIXED_NOW);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
 test('async migration command preserves dry-run and verify-only compatibility', async () => (
   withApplyFixture(async root => {
     const sourcePath = createSource(root, emptySnapshot({ revision: 4 }));
@@ -1148,6 +1204,74 @@ test('verify-only rejects canonical fact tampering even when counts and stored p
   assert.equal(result.report.issues[0].code, 'TARGET_FACT_MISMATCH');
   assert.equal(result.output.includes('tampered-but-count-preserved'), false);
 }));
+
+test('verify-only rejects nonempty run-event owner and review facts without modifying the target', () => {
+  withTempRoot(root => {
+    const snapshot = fixture('v1-single-session.json');
+    const sourcePath = createSource(root, snapshot);
+    const resourceMapPath = createResourceMap(root);
+    const source = readV1Source(resolveExistingPath(sourcePath));
+    const plan = buildMigrationPlan({
+      source,
+      businessTimeZone: 'Asia/Shanghai',
+      resourceMap: parseResourceMap(readFileSync(resourceMapPath, 'utf8'), 'Asia/Shanghai'),
+      importedAt: FIXED_NOW,
+    });
+    const target = createVerifiedTarget(root, plan);
+    const writable = new DatabaseSync(target);
+    writable.exec('PRAGMA foreign_keys = ON');
+    insertAcceptedEventReceipt(
+      writable,
+      plan.records.schedule_items[0].id,
+      'EVENT-PRESEEDED-OWNER',
+    );
+    writable.close();
+    const before = hashFile(target);
+
+    const result = executeMigration([
+      '--verify-only', '--source', sourcePath, '--target', target,
+      '--business-time-zone', 'Asia/Shanghai', '--resource-map', resourceMapPath,
+      '--format', 'json',
+    ], { clock: () => new Date(FIXED_NOW) });
+
+    assert.equal(result.report.result, 'INVALID_TARGET');
+    assert.equal(result.report.issues[0].code, 'TARGET_BATCH_MISMATCH');
+    assert.equal(hashFile(target), before);
+  });
+
+  withTempRoot(root => {
+    const snapshot = fixture('v1-single-session.json');
+    const sourcePath = createSource(root, snapshot);
+    const resourceMapPath = createResourceMap(root);
+    const source = readV1Source(resolveExistingPath(sourcePath));
+    const plan = buildMigrationPlan({
+      source,
+      businessTimeZone: 'Asia/Shanghai',
+      resourceMap: parseResourceMap(readFileSync(resourceMapPath, 'utf8'), 'Asia/Shanghai'),
+      importedAt: FIXED_NOW,
+    });
+    const target = createVerifiedTarget(root, plan);
+    const writable = new DatabaseSync(target);
+    writable.exec('PRAGMA foreign_keys = ON');
+    insertPendingEventReviewReceipt(
+      writable,
+      plan.records.schedule_items[0].id,
+      'EVENT-PRESEEDED-REVIEW',
+    );
+    writable.close();
+    const before = hashFile(target);
+
+    const result = executeMigration([
+      '--verify-only', '--source', sourcePath, '--target', target,
+      '--business-time-zone', 'Asia/Shanghai', '--resource-map', resourceMapPath,
+      '--format', 'json',
+    ], { clock: () => new Date(FIXED_NOW) });
+
+    assert.equal(result.report.result, 'INVALID_TARGET');
+    assert.equal(result.report.issues[0].code, 'TARGET_BATCH_MISMATCH');
+    assert.equal(hashFile(target), before);
+  });
+});
 
 test('verify-only rejects a partial target and never repairs it', () => withTempRoot(root => {
   const source = createSource(root, emptySnapshot());

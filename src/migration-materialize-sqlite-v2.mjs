@@ -5,6 +5,8 @@ import {
 import { assertKnownSchema } from './sqlite-schema-v2.mjs';
 
 const EMPTY_TARGET_QUERIES = Object.freeze([
+  ['run_event_reviews', 'SELECT COUNT(*) AS count FROM run_event_reviews'],
+  ['run_event_id_owners', 'SELECT COUNT(*) AS count FROM run_event_id_owners'],
   ['migration_batches', 'SELECT COUNT(*) AS count FROM migration_batches'],
   ['revision_counters', 'SELECT COUNT(*) AS count FROM revision_counters'],
   ['product_catalog_entries', 'SELECT COUNT(*) AS count FROM product_catalog_entries'],
@@ -16,6 +18,13 @@ const EMPTY_TARGET_QUERIES = Object.freeze([
   ['production_runs', 'SELECT COUNT(*) AS count FROM production_runs'],
   ['production_events', 'SELECT COUNT(*) AS count FROM production_events'],
   ['snapshot_projections', 'SELECT COUNT(*) AS count FROM snapshot_projections'],
+]);
+
+const EMPTY_RUNTIME_FACT_QUERIES = Object.freeze([
+  'SELECT COUNT(*) AS count FROM production_runs',
+  'SELECT COUNT(*) AS count FROM production_events',
+  'SELECT COUNT(*) AS count FROM run_event_id_owners',
+  'SELECT COUNT(*) AS count FROM run_event_reviews',
 ]);
 
 function fail(code, result = 'INVALID_TARGET') {
@@ -142,6 +151,12 @@ function assertV1Facts(db, plan, { materialized = false } = {}) {
 function assertEmptyNormalizedTarget(db) {
   for (const [, sql] of EMPTY_TARGET_QUERIES) {
     if (db.prepare(sql).get().count !== 0) fail('TARGET_NOT_EMPTY');
+  }
+}
+
+function assertRuntimeFactsRemainEmpty(db) {
+  for (const sql of EMPTY_RUNTIME_FACT_QUERIES) {
+    if (db.prepare(sql).get().count !== 0) fail('TARGET_APPLY_INVARIANT_FAILED');
   }
 }
 
@@ -397,6 +412,7 @@ export function materializeMigrationPlan({
     runFaultInjector(faultInjector, 'after_projections');
 
     assertV1Facts(db, plan, { materialized: true });
+    assertRuntimeFactsRemainEmpty(db);
     runFaultInjector(faultInjector, 'after_v1_recheck');
     requireOne(db.prepare(`
       UPDATE migration_batches
