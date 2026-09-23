@@ -141,11 +141,12 @@ function insertReviewFactAndReceipt(db, options = {}) {
 test('migration three creates the canonical review and event-id ownership schema', () => {
   const db = memoryDatabase();
   try {
-    assert.deepEqual(initializeWritableSchema(db), {
-      version: LATEST_SCHEMA_VERSION,
-      latestVersion: LATEST_SCHEMA_VERSION,
+    const migrationThreePrefix = MIGRATIONS.slice(0, 3);
+    assert.deepEqual(initializeWritableSchema(db, { migrations: migrationThreePrefix }), {
+      version: 3,
+      latestVersion: 3,
     });
-    assert.equal(LATEST_SCHEMA_VERSION, 3);
+    assert.equal(LATEST_SCHEMA_VERSION, 4);
     assert.deepEqual(
       db.prepare('SELECT version, name FROM schema_migrations ORDER BY version').all().map(row => ({ ...row })),
       [
@@ -157,7 +158,10 @@ test('migration three creates the canonical review and event-id ownership schema
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM run_event_reviews').get().count, 0);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM run_event_id_owners').get().count, 0);
     assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
-    assert.deepEqual(assertKnownSchema(db), { version: 3, latestVersion: 3 });
+    assert.deepEqual(
+      assertKnownSchema(db, { migrations: migrationThreePrefix }),
+      { version: 3, latestVersion: 3 },
+    );
   } finally {
     db.close();
   }
@@ -204,7 +208,10 @@ test('migration three backfills old accepted event ownership without breaking re
     insertAcceptedEvent(db);
     insertOperation(db, 'EVENT-ACCEPTED-01', 'production.run-event');
 
-    assert.deepEqual(applySchemaMigrations(db), { version: 3, latestVersion: 3 });
+    assert.deepEqual(
+      applySchemaMigrations(db, { migrations: MIGRATIONS.slice(0, 3) }),
+      { version: 3, latestVersion: 3 },
+    );
     assert.deepEqual({ ...db.prepare('SELECT * FROM run_event_id_owners').get() }, {
       event_id: 'EVENT-ACCEPTED-01',
       owner_kind: 'accepted',
