@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHttpApp } from './http-app.mjs';
+import { authorizeCapability, validateTrustedPrincipal } from './authorization-v2.mjs';
 import { createReadKioskCurrent } from './kiosk-current-use-case-v2.mjs';
 import { createApplyKioskRunEvent } from './kiosk-run-event-use-case-v2.mjs';
 import { createSqliteKioskCurrentStore } from './sqlite-kiosk-current-store-v2.mjs';
@@ -81,8 +82,25 @@ export function createSchedulingV2Application({
   });
   return Object.freeze({
     authenticate,
-    acceptProposal({ command, principal } = {}) {
-      return proposalStore.accept(command, principal);
+    decideProposal({ command, principal } = {}) {
+      if (command?.decisionType !== 'reject') {
+        return proposalStore.accept(command, principal);
+      }
+      if (!validateTrustedPrincipal(principal).ok
+        || !['scheduler', 'administrator'].includes(principal.role)) {
+        return Object.freeze({ ok: false, code: 'TRUSTED_SCHEDULER_REQUIRED' });
+      }
+      const found = proposalStore.read(command?.proposalId);
+      if (!found.ok) return found;
+      const authorized = found.proposal.resourceScope.every(resourceId => authorizeCapability({
+        principal,
+        capability: 'modifySchedule',
+        resourceId,
+      }).allowed);
+      if (!authorized) {
+        return Object.freeze({ ok: false, code: 'TRUSTED_SCHEDULER_REQUIRED' });
+      }
+      return proposalStore.reject(command, principal.subjectId);
     },
   });
 }
