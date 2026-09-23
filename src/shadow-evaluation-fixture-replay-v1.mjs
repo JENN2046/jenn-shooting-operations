@@ -7,6 +7,7 @@ import { canonicalJsonSchedulingV1 } from './scheduling-contract-v1.mjs';
 
 const FIXTURE_KEYS = Object.freeze(['schemaVersion', 'fixtureId', 'reportInput', 'expected']);
 const EXPECTED_KEYS = Object.freeze(['datasetDigest', 'caseClassifications', 'report']);
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 function ownDataRecord(value, expected) {
   try {
@@ -75,7 +76,9 @@ function deepOwnDataSnapshot(value, ancestors = new WeakSet()) {
 
       if (Object.getPrototypeOf(value) !== Object.prototype) return { ok: false };
       const keys = Reflect.ownKeys(value);
-      if (keys.some(key => typeof key !== 'string')) return { ok: false };
+      if (keys.some(key => typeof key !== 'string' || UNSAFE_KEYS.has(key))) {
+        return { ok: false };
+      }
       const snapshot = {};
       for (const key of keys) {
         const descriptor = Object.getOwnPropertyDescriptor(value, key);
@@ -83,7 +86,12 @@ function deepOwnDataSnapshot(value, ancestors = new WeakSet()) {
           || !Object.hasOwn(descriptor, 'value')) return { ok: false };
         const nested = deepOwnDataSnapshot(descriptor.value, ancestors);
         if (!nested.ok) return nested;
-        snapshot[key] = nested.value;
+        Object.defineProperty(snapshot, key, {
+          value: nested.value,
+          enumerable: true,
+          configurable: false,
+          writable: false,
+        });
       }
       return { ok: true, value: Object.freeze(snapshot) };
     } finally {
