@@ -216,6 +216,27 @@ export function admitLowDisclosureShadowReportV1(value) {
       return invalid('REPORT_CONTENT_INVALID');
     }
 
+    const agentMetricNames = [
+      'medianAbsoluteDurationErrorMs',
+      'p90OverrunMs',
+      'setupBufferMissRate',
+      'hardConflictCount',
+      'humanOverrideRate',
+      'priorityViolationCount',
+    ];
+    const baselineMetricNames = [
+      'retrospectiveDurationBaselineMedianAbsoluteErrorMs',
+      'retrospectiveDurationBaselineP90OverrunMs',
+    ];
+    if (eligibilityCounts.levelC === 0
+      && agentMetricNames.some(name => metrics[name].status !== 'NOT_ENOUGH_DATA')) {
+      return invalid('REPORT_CONTENT_INVALID');
+    }
+    if (eligibilityCounts.levelB === 0
+      && baselineMetricNames.some(name => metrics[name].status !== 'NOT_ENOUGH_DATA')) {
+      return invalid('REPORT_CONTENT_INVALID');
+    }
+
     const body = Object.freeze({
       schemaVersion: 1,
       gateStatus: 'BLOCKED_DATA',
