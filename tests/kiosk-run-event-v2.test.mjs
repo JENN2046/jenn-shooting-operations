@@ -19,6 +19,8 @@ import {
 import { digestRunEventResponse } from '../src/run-event-use-case-v2.mjs';
 import { createSqliteKioskRunEventStore } from '../src/sqlite-kiosk-run-event-store-v2.mjs';
 import { initializeWritableSchema } from '../src/sqlite-schema-v2.mjs';
+import { normalizeSchedulingConfigV1 } from '../src/scheduling-admin-contract-v1.mjs';
+import { canonicalJsonSchedulingV1, digestResourceCapabilitiesV1 } from '../src/scheduling-contract-v1.mjs';
 
 const T0 = '2026-09-22T09:00:00.000Z';
 const RECEIVED_AT = '2026-09-22T12:00:00.000Z';
@@ -108,6 +110,85 @@ function seedSchedule(db, {
   return { scheduleId, requestIds };
 }
 
+function seedCompleteRunContextFacts(db, { requestId, scheduleId, resourceId = 'RESOURCE-A' }) {
+  const capabilityJson = { schemaVersion: 1, capabilityIds: ['FLAT'] };
+  const capabilityDigest = digestResourceCapabilitiesV1(capabilityJson);
+  const config = {
+    schemaVersion: 1,
+    businessTimeZone: 'UTC',
+    resourceCalendars: [{
+      resourceId,
+      capabilityDigest,
+      weeklyWindows: [{ weekday: 2, start: '00:00', end: '23:59' }],
+      dateOverrides: [],
+    }],
+    durationFallbackRules: [{
+      ruleId: 'duration-flat',
+      productionType: '平面',
+      shootingSubtype: '细节',
+      durationMs: 3_600_000,
+    }],
+    bufferRules: [{
+      ruleId: 'buffer-flat',
+      productionType: '平面',
+      shootingSubtype: '细节',
+      bufferAfterMinutes: 15,
+    }],
+    softScoringWeights: {
+      LIGHTING_SWITCH: 1,
+      REFLECTIVITY_SEQUENCE: 1,
+      IDLE_GAP: 1,
+      EXPECTED_OVERRUN: 1,
+      DESIRED_DATE_MISS: 1,
+    },
+    compatibleAlgorithmVersions: ['deterministic-scheduler-v1'],
+  };
+  const admitted = normalizeSchedulingConfigV1(config);
+  assert.equal(admitted.ok, true, JSON.stringify(admitted));
+
+  db.prepare(`UPDATE requests_v2 SET production_type = '平面', shooting_subtype = '细节',
+    aspect_ratio = '1:1', deliverable_count = 1, lighting_preset = 'LIGHT-SOFT',
+    reflectivity = 'low' WHERE id = ?`).run(requestId);
+  db.prepare(`UPDATE schedule_items SET buffer_after_minutes = 15, buffer_source = 'config-v1'
+    WHERE id = ?`).run(scheduleId);
+  db.prepare(`INSERT INTO scheduling_resources
+    (resource_id, v1_display_place, status, capability_json, capability_digest,
+     created_at, updated_at, source_operation_id)
+    VALUES (?, 'Studio A', 'active', ?, ?, ?, ?, 'RESOURCE-CAPTURE-1')`).run(
+    resourceId,
+    canonicalJsonSchedulingV1(capabilityJson),
+    capabilityDigest,
+    T0,
+    T0,
+  );
+  db.prepare(`INSERT INTO scheduling_request_requirements
+    (request_id, required_capability_ids_json, duration_estimate_json, updated_at, source_operation_id)
+    VALUES (?, ?, ?, ?, 'REQ-CAPTURE-1')`).run(
+    requestId,
+    canonicalJsonSchedulingV1(['FLAT']),
+    canonicalJsonSchedulingV1({
+      durationMs: 1_800_000,
+      source: 'explicit',
+      sourceVersion: 'fixture-v1',
+    }),
+    T0,
+  );
+  db.prepare(`INSERT INTO scheduling_config_versions
+    (config_version, schema_version, algorithm_version, calendar_compiler_version,
+     estimate_policy_version, config_json, config_digest, published_by, published_at,
+     publish_operation_id)
+    VALUES ('config-v1', 1, 'deterministic-scheduler-v1', 'calendar-compiler-v1',
+      'estimate-policy-v1', ?, ?, 'admin:fixture', ?, 'CONFIG-PUBLISH-1')`).run(
+    admitted.configJson,
+    admitted.configDigest,
+    T0,
+  );
+  db.prepare(`INSERT INTO scheduling_active_config
+    (id, config_version, activated_at, activation_operation_id, projection_revision)
+    VALUES (1, 'config-v1', ?, 'CONFIG-ACTIVATE-1', 10)`).run(T0);
+  return { capabilityDigest, configDigest: admitted.configDigest };
+}
+
 function seedRun(db, {
   runId,
   scheduleId,
@@ -183,6 +264,7 @@ function state(db) {
     `).get().count,
     projections: db.prepare('SELECT COUNT(*) AS count FROM snapshot_projections').get().count,
     notifications: db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count,
+    runContextSnapshots: db.prepare('SELECT COUNT(*) AS count FROM scheduling_run_context_snapshots').get().count,
     counters: { ...db.prepare('SELECT * FROM revision_counters WHERE id = 1').get() },
   };
 }
@@ -227,6 +309,10 @@ if (!isMainThread && workerData?.mode === 'apply-kiosk-run-event') {
     try {
       seedBase(db);
       const seeded = seedSchedule(db, { suffix: 'FIRST', sourceOrdinal: 0 });
+      const captureFacts = seedCompleteRunContextFacts(db, {
+        requestId: seeded.requestIds[0],
+        scheduleId: seeded.scheduleId,
+      });
       const apply = makeApply(db);
       const input = command({
         eventId: 'EVENT-KIOSK-FIRST',
@@ -262,6 +348,28 @@ if (!isMainThread && workerData?.mode === 'apply-kiosk-run-event') {
       assert.equal(db.prepare(`
         SELECT role FROM audit_log WHERE action = 'production.run-event'
       `).get().role, 'operator');
+      const snapshotRow = db.prepare(`
+        SELECT schema_version, context_status, snapshot_json, snapshot_digest, captured_at
+        FROM scheduling_run_context_snapshots WHERE run_id = 'RUN-KIOSK-FIRST'
+      `).get();
+      assert.equal(snapshotRow.schema_version, 1);
+      assert.equal(snapshotRow.context_status, 'complete');
+      assert.equal(snapshotRow.captured_at, RECEIVED_AT);
+      assert.equal(snapshotRow.snapshot_digest.startsWith('sha256:'), true);
+      const snapshot = JSON.parse(snapshotRow.snapshot_json);
+      assert.equal(snapshot.runId, 'RUN-KIOSK-FIRST');
+      assert.equal(snapshot.requestId, seeded.requestIds[0]);
+      assert.equal(snapshot.resourceId, 'RESOURCE-A');
+      assert.deepEqual(snapshot.durationEstimate, {
+        durationMs: 1_800_000,
+        provenance: 'explicit',
+        version: 'fixture-v1',
+      });
+      assert.equal(snapshot.bufferAfterMinutes, 15);
+      assert.equal(snapshot.bufferSource, 'config-v1');
+      assert.equal(snapshot.resourceCapabilityDigest, captureFacts.capabilityDigest);
+      assert.equal(snapshot.configDigest, captureFacts.configDigest);
+      assert.equal(state(db).runContextSnapshots, 1);
       assert.equal(
         event.command_digest,
         digestKioskRunEventCommand({
@@ -318,6 +426,12 @@ if (!isMainThread && workerData?.mode === 'apply-kiosk-run-event') {
         { ...db.prepare("SELECT scope, task_id FROM production_runs WHERE id = 'RUN-GROUPED'").get() },
         { scope: 'block', task_id: null },
       );
+      const groupedSnapshot = db.prepare(`
+        SELECT context_status, snapshot_json FROM scheduling_run_context_snapshots
+        WHERE run_id = 'RUN-GROUPED'
+      `).get();
+      assert.equal(groupedSnapshot.context_status, 'ineligible');
+      assert.equal(JSON.parse(groupedSnapshot.snapshot_json).ineligibleReason, 'GROUPED_UNALLOCATED');
       const mismatch = apply({
         command: command({
           eventId: 'EVENT-GROUPED-WRONG', runId: 'RUN-WRONG', scheduleId: grouped.scheduleId,
