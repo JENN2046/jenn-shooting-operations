@@ -10,6 +10,14 @@ import { refreshSqliteSnapshotProjectionsV2 } from '../src/sqlite-run-event-stor
 import { canonicalJsonSchedulingV1, digestResourceCapabilitiesV1,
   SCHEDULING_TIME_ZONE_DATA_VERSION } from '../src/scheduling-contract-v1.mjs';
 import { normalizeSchedulingConfigV1 } from '../src/scheduling-admin-contract-v1.mjs';
+import { createTrustedPrincipal } from '../src/authorization-v2.mjs';
+
+const schedulerPrincipal = createTrustedPrincipal({ subjectId: 'scheduler:fixture',
+  role: 'scheduler', resourceIds: ['STUDIO-A'] }).principal;
+const viewerPrincipal = createTrustedPrincipal({ subjectId: 'operator',
+  role: 'viewer', resourceIds: ['STUDIO-A'] }).principal;
+const otherStudioPrincipal = createTrustedPrincipal({ subjectId: 'scheduler:elsewhere',
+  role: 'scheduler', resourceIds: ['STUDIO-B'] }).principal;
 
 const capabilityJson = { schemaVersion: 1, capabilityIds: ['FLAT'] };
 const capabilityDigest = digestResourceCapabilitiesV1(capabilityJson);
@@ -148,8 +156,7 @@ function acceptanceFixture(requestIds = ['REQ-1']) {
       };
     },
     now: () => new Date(at),
-    authorizeAcceptance: principal => principal?.role === 'scheduler'
-      && principal.actorId === 'scheduler:fixture',
+    authorizeAcceptance: principal => principal?.role === 'scheduler',
     refreshProjections: context => refreshSqliteSnapshotProjectionsV2({
       ...context, businessTimeZone: 'Asia/Shanghai',
     }),
@@ -167,9 +174,11 @@ test('acceptance creates canonical schedule, projections and one Outbox intent p
     const command = { decisionId: 'DEC-ACCEPT-1', proposalId: generated.proposal.proposalId,
       decisionType: 'accept', selectedProposalItemIds: ids,
       decisionNote: null, reasonCode: null };
-    assert.equal(f.store.accept(command, { actorId: 'operator', role: 'viewer' }).code,
+    assert.equal(f.store.accept(command, viewerPrincipal).code,
       'TRUSTED_SCHEDULER_REQUIRED');
-    const result = f.store.accept(command, { actorId: 'scheduler:fixture', role: 'scheduler' });
+    assert.equal(f.store.accept(command, otherStudioPrincipal).code,
+      'TRUSTED_SCHEDULER_REQUIRED');
+    const result = f.store.accept(command, schedulerPrincipal);
     assert.equal(result.ok, true, JSON.stringify(result));
     assert.equal(result.receipt.resultingScheduleRevision, 8);
     assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 2);
@@ -178,7 +187,7 @@ test('acceptance creates canonical schedule, projections and one Outbox intent p
     assert.equal(f.db.prepare(`SELECT projection_revision, schedule_revision FROM revision_counters
       WHERE id = 1`).get().projection_revision, 1);
     assert.equal(f.store.read(command.proposalId).lifecycle.status, 'accepted');
-    const replay = f.store.accept(command, { actorId: 'scheduler:fixture', role: 'scheduler' });
+    const replay = f.store.accept(command, schedulerPrincipal);
     assert.equal(replay.ok, true);
     assert.equal(replay.exactReplay, true);
     assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 2);
@@ -195,7 +204,7 @@ test('partial acceptance is one-shot and stales competing drafts in the same tra
     const adopted = f.store.accept({ decisionId: 'DEC-PARTIAL-1',
       proposalId: first.proposal.proposalId, decisionType: 'partiallyAccept',
       selectedProposalItemIds, decisionNote: 'Only first request', reasonCode: null,
-    }, { actorId: 'scheduler:fixture', role: 'scheduler' });
+    }, schedulerPrincipal);
     assert.equal(adopted.ok, true, JSON.stringify(adopted));
     assert.equal(f.store.read(first.proposal.proposalId).lifecycle.status, 'partiallyAccepted');
     assert.equal(f.store.read(second.proposal.proposalId).lifecycle.status, 'stale');
@@ -216,7 +225,7 @@ test('revision drift seals only the proposal and emits no schedule or Outbox fac
       proposalId: generated.proposal.proposalId, decisionType: 'accept',
       selectedProposalItemIds: JSON.parse(generated.proposal.proposedItemsJson)
         .map(item => item.proposalItemId), decisionNote: null, reasonCode: null,
-    }, { actorId: 'scheduler:fixture', role: 'scheduler' });
+    }, schedulerPrincipal);
     assert.equal(result.ok, true, JSON.stringify(result));
     assert.equal(result.receipt.decisionType, 'stale');
     assert.equal(result.receipt.reasonCode, 'SCHEDULE_REVISION_CHANGED');
@@ -239,7 +248,7 @@ test('projection failure rolls back every accepted item, revision, receipt and O
       proposalId: generated.proposal.proposalId, decisionType: 'accept',
       selectedProposalItemIds: JSON.parse(generated.proposal.proposedItemsJson)
         .map(item => item.proposalItemId), decisionNote: null, reasonCode: null,
-    }, { actorId: 'scheduler:fixture', role: 'scheduler' }), /PROJECTION_FAILED/);
+    }, schedulerPrincipal), /PROJECTION_FAILED/);
     assert.equal(f.store.read(generated.proposal.proposalId).lifecycle.status, 'draft');
     assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
     assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count, 0);

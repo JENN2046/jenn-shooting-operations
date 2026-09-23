@@ -6,6 +6,7 @@ import {
 import { normalizeSchedulingConfigV1 } from './scheduling-admin-contract-v1.mjs';
 import { generateDeterministicScheduleV1 } from './deterministic-scheduler-v1.mjs';
 import { applyCanonicalScheduleAcceptanceInTransactionV2 } from './sqlite-schedule-command-v2.mjs';
+import { authorizeCapability, validateTrustedPrincipal } from './authorization-v2.mjs';
 import {
   admitSchedulingProposalDecisionV1,
   buildSchedulingProposalDecisionReceiptV1,
@@ -293,7 +294,7 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
     accept(decisionInput, principal) {
       if (typeof authorizeAcceptance !== 'function'
         || typeof refreshProjections !== 'function') return denied('PROPOSAL_ACCEPT_NOT_WIRED');
-      if (authorizeAcceptance(principal) !== true) return denied('TRUSTED_SCHEDULER_REQUIRED');
+      if (!validateTrustedPrincipal(principal).ok) return denied('TRUSTED_SCHEDULER_REQUIRED');
       return transaction(db, 'BEGIN IMMEDIATE', () => {
         const found = admitStoredProposal(readProposalRow(db, decisionInput?.proposalId));
         if (!found) return denied('PROPOSAL_NOT_FOUND');
@@ -302,6 +303,14 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
         if (!['accept', 'partiallyAccept'].includes(admitted.command.decisionType)) {
           return denied('PROPOSAL_ACCEPT_DECISION_TYPE_INVALID');
         }
+        const allItems = JSON.parse(found.proposal.proposedItemsJson);
+        const bySelectedId = new Map(allItems.map(item => [item.proposalItemId, item]));
+        const selectedResourceIds = [...new Set(admitted.command.selectedProposalItemIds
+          .map(id => bySelectedId.get(id).resourceId))];
+        if (authorizeAcceptance(principal, selectedResourceIds) !== true
+          || selectedResourceIds.some(resourceId => !authorizeCapability({
+            principal, capability: 'modifySchedule', resourceId,
+          }).allowed)) return denied('TRUSTED_SCHEDULER_REQUIRED');
         const prior = db.prepare(`SELECT decision_command_digest, receipt_json, receipt_digest
           FROM scheduling_proposal_decisions WHERE decision_id = ?`).get(admitted.command.decisionId);
         if (prior) return prior.decision_command_digest === admitted.decisionCommandDigest
@@ -360,7 +369,7 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
           adoptionDigest: digestCanonicalJsonSchedulingV1({
             domain: 'scheduling-proposal-adoption-v1', adoptedItems: applied.adoptedItems,
           }),
-          decidedBy: principal.actorId, decidedAt,
+          decidedBy: principal.subjectId, decidedAt,
           decisionNote: admitted.command.decisionNote,
           baseScheduleRevision: proposal.baseScheduleRevision,
           currentScheduleRevision: current.schedule_revision,
