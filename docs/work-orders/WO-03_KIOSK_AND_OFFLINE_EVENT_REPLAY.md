@@ -1,6 +1,6 @@
 # WO-03：Kiosk 与离线事件重放
 
-- 状态：`IN_PROGRESS / WO-03A PASS_WITH_LIMITS; WO-03B–03D NOT_STARTED`
+- 状态：`PASS_WITH_LIMITS / BROWSER_AND_DEVICE_NOT_RUN`
 - 执行分支：`codex/v2-1-architecture-freeze`
 - 架构基线：`JSO-ARCH-V2.1-R4`
 - 前置门：WO-00 `PASS`、WO-01 `PASS`、WO-02 `PASS_WITH_LIMITS`
@@ -24,7 +24,7 @@
 - ADP-021 `ACCEPTED_AND_FROZEN`：首次 start provisioning、trusted principal、time-review、离线重放与有限轮询语义；
 - Implementation Style Guardrails：保持普通 ESM、明确 Application Use Case 和 SQLite transaction，不增加无业务价值的 Controller/Manager/Repository 层级。
 
-ADP-021 已冻结，WO-03B 可以在相同授权边界内开始后端实现；HTTP 发布、UI 完成或生产可用仍必须分别满足 03B–03D 的验收门。
+ADP-021 已冻结；03B 已在本地注入式 Auth Port 与临时 SQLite 边界内完成，03C 已完成纯离线队列和并发重放防线，03D 已完成零构建 Kiosk UI 与静态接线。生产身份、真实凭据、浏览器/真机验收、服务启动和生产可用仍受各自门禁约束。
 
 ## 2. 冻结语义摘要
 
@@ -179,7 +179,7 @@ trusted principal 的 resource scope 校验。
 
 ### WO-03B：Backend HTTP、Read Model 与 Run Provisioning
 
-状态：`NOT_STARTED`
+状态：`PASS_WITH_LIMITS`
 
 交付：
 
@@ -194,19 +194,23 @@ trusted principal 的 resource scope 校验。
 
 验收：
 
-- [ ] `viewer/submitter` 不能提交事件，`operator/scheduler/administrator` 可以；
-- [ ] `operator` 不获得 `modifySchedule`；
-- [ ] 客户端伪造 actor/role/state 被 Schema 拒绝，持久化身份只来自 principal；
-- [ ] first start 仅在 confirmed + resolved + zero-history 条件下原子创建并应用；
-- [ ] 双连接并发 first start 只有一个事实结果；
-- [ ] exact replay 不重复计时、建 run、写 event 或增加 revision；
-- [ ] active run 必须 exact `runId`；terminal/history 返回 `RUN_PREPARATION_REQUIRED`；
-- [ ] start → block → resume → complete 的净工时正确；
-- [ ] grouped complete 不自动 fulfill 每个 request，也不产生 task-level 工时；
-- [ ] time-review 产生 pending receipt 且零业务事实、零业务 revision；
-- [ ] run event 只增加对应 `runRevision + projectionRevision`，`scheduleRevision` 不变；
-- [ ] current GET、ETag/304 和失败路径均零写入；
-- [ ] V1 service、上传清理、migration 和 WO-02 run-event 测试继续通过。
+- [x] `viewer/submitter` 不能提交事件，`operator/scheduler/administrator` 可以；
+- [x] `operator` 不获得 `modifySchedule`；
+- [x] 客户端伪造 actor/role/state 被 Schema 拒绝，持久化身份只来自 principal；
+- [x] first start 仅在 confirmed + resolved + zero-history 条件下原子创建并应用；
+- [x] 双连接并发 first start 只有一个事实结果；
+- [x] exact replay 不重复计时、建 run、写 event 或增加 revision；
+- [x] active run 必须 exact `runId`；terminal/history 返回 `RUN_PREPARATION_REQUIRED`；
+- [x] start → block → resume → complete 的净工时正确；
+- [x] grouped complete 不自动 fulfill 每个 request，也不产生 task-level 工时；
+- [x] time-review 产生 pending receipt 且零业务事实、零业务 revision；
+- [x] run event 只增加对应 `runRevision + projectionRevision`，`scheduleRevision` 不变；
+- [x] current GET、ETag/304 和失败路径均零写入；
+- [x] V1 service、上传清理、migration 和 WO-02 run-event 测试继续通过。
+
+资源存在性由通过 `validateTrustedPrincipal` 的 `principal.resourceIds` 权威声明；排期行只是可变工作负载事实，不能兼任资源目录。因此已授权但暂时没有任何 Schedule Item 的资源返回合法空 DTO，而未进入 principal scope 的资源在读取前返回 `FORBIDDEN`。03B 没有配置真实身份提供方或生产 token，运行时只提供显式 `kioskAuthenticate` 注入接缝；未注入时 V2 Kiosk 路由以 `AUTH_NOT_CONFIGURED` 失败关闭。
+
+03B 的 `PASS_WITH_LIMITS` 表示本地 HTTP、read model、provisioning、review、receipt integrity、ETag 与 runtime composition 已通过测试和独立审查；它不表示真实鉴权、现有业务库、服务启动、Kiosk UI、浏览器或生产已就绪。
 
 实现目标应接近：
 
@@ -221,7 +225,7 @@ HTTP Interface
 
 ### WO-03C：Pure Offline Queue and Replay
 
-状态：`NOT_STARTED`
+状态：`PASS_WITH_LIMITS`
 
 交付：
 
@@ -237,20 +241,22 @@ HTTP Interface
 
 验收：
 
-- [ ] 连点、重复 enqueue 和重复 replay 不制造重复事实；
-- [ ] 队列顺序稳定，删除只能发生在明确 success 或 exact replay 后；
-- [ ] 首 conflict 停止，后续事件不越过冲突发送；
-- [ ] reviewRequired 停止，且不修改 occurredAt、eventId 或 expectedRunRevision 后重试；
-- [ ] 刷新/崩溃后 pending 队列可恢复；清空浏览器缓存不改变服务端事实；
-- [ ] localStorage 不保存 token、trusted actor/role 或完整业务数据库；
-- [ ] server status 与 sync status 为两个独立维度；
-- [ ] 多标签页/重复 worker 场景依赖服务端幂等仍保持单一事实结果。
+- [x] 连点、重复 enqueue 和重复 replay 不制造重复事实；
+- [x] 队列顺序稳定，删除只能发生在明确 success 或 exact replay 后；
+- [x] 首 conflict 停止，后续事件不越过冲突发送；
+- [x] reviewRequired 停止，且不修改 occurredAt、eventId 或 expectedRunRevision 后重试；
+- [x] 刷新/崩溃后 pending 队列可恢复；清空浏览器缓存不改变服务端事实；
+- [x] localStorage 不保存 token、trusted actor/role 或完整业务数据库；
+- [x] server status 与 sync status 为两个独立维度；
+- [x] 多标签页/重复 worker 场景依赖服务端幂等仍保持单一事实结果。
 
-03C 的单元测试使用 fake storage/transport，不调用真实服务、不启动持久进程、不读取真实数据库。
+03C 使用与 DOM、真实网络解耦的 queue core，并提供 browser storage/fetch adapters。持久层采用不可变 item、永久 sequence marker 和按事件单调 terminal marker：陈旧的 cache/pending commit 不能覆盖 concurrent conflict/reviewRequired；只有 exact applied/replayed head removal 可以清除对应终态。完整 browser-safe response validation 在任何 `<500` 状态变更前执行，且 refresh 只接受冻结的 `200/304`。
+
+03C 的测试使用 fake storage/transport 和内存 localStorage surface，不调用真实服务、不启动持久进程、不读取真实数据库。`PASS_WITH_LIMITS` 不表示 Safari/Chromium 真实存储配额、设备生命周期或清缓存体验已完成真机验证。
 
 ### WO-03D：Kiosk UI、Polling、Browser and Device Acceptance
 
-状态：`NOT_STARTED / SEPARATE_EXECUTION_BOUNDARY`
+状态：`PASS_WITH_LIMITS / BROWSER_AND_DEVICE_NOT_RUN`
 
 交付：
 
@@ -265,14 +271,14 @@ HTTP Interface
 
 验收：
 
-- [ ] Kiosk UI 不调用 V1 写接口，也没有正式排期编辑入口；
-- [ ] 本地乐观状态不会伪装为服务端确认状态；
-- [ ] 页面刷新、断网恢复、连点、冲突、reviewRequired 和幂等重放可见且可恢复；
-- [ ] grouped 场次显示全部任务和“未拆分单任务工时”提示；
-- [ ] HTML/JS 不嵌入 token、actorId、真实 endpoint credential 或环境配置；
-- [ ] 静态路由继续使用白名单、CSP、HTML `no-store`；
-- [ ] 桌面/平板/手机可访问性结果有可复核证据；
-- [ ] 真机验收未执行时不得宣称 WO-03 或 Kiosk production-ready。
+- [x] Kiosk UI 不调用 V1 写接口，也没有正式排期编辑入口；
+- [x] 本地乐观状态不会伪装为服务端确认状态；
+- [x] 页面刷新、断网恢复、连点、冲突、reviewRequired 和幂等重放具有明确本地状态与恢复逻辑；
+- [x] grouped 场次显示全部任务和“未拆分单任务工时”提示；
+- [x] HTML/JS 不嵌入 token、actorId、真实 endpoint credential 或环境配置；
+- [x] 静态路由继续使用白名单、CSP、HTML `no-store`；
+- [x] 桌面/平板/手机的静态可访问性证据与未执行浏览器项目已分别记录；
+- [x] 真机验收未执行状态已明确记录，未宣称 WO-03 或 Kiosk production-ready。
 
 Playwright 不在 03A–03C 自动引入。进入 03D 时必须单独判断：
 
@@ -283,6 +289,8 @@ Playwright 不在 03A–03C 自动引入。进入 03D 时必须单独判断：
 - 替代方案能否覆盖关键验收。
 
 未经该判断，不修改 `package.json/package-lock.json`，不下载浏览器。当前工作包不授权持久或对外服务启动；需要 loopback/browser/真机服务面时必须另行建立有界执行条件。
+
+03D 判断结果：不引入 Playwright，不修改依赖或 lockfile，不下载浏览器。理由、静态证据、桌面/平板/手机计划和摄影棚真机 `NOT RUN` 清单见 `docs/acceptance/WO-03_KIOSK_BROWSER_AND_DEVICE_ACCEPTANCE.md`。
 
 ## 4. 文件所有权
 
@@ -307,17 +315,17 @@ Playwright 不在 03A–03C 自动引入。进入 03D 时必须单独判断：
 
 - [x] ADP-021 已独立复核并冻结；
 - [x] 03A contract、Schema、capability 和 time-review 全部门禁通过；
-- [ ] 03B HTTP/read/provisioning/review 全部门禁通过；
-- [ ] 03C queue/replay 全部门禁通过；
-- [ ] 03D UI/轮询/浏览器验收达到其已授权范围；
-- [ ] V1 四个保留接口的契约和行为未改变；
-- [ ] 当前 V1 board/submit/upload cleanup 与 crash recovery 回归未退化；
-- [ ] 无任何真实/现有业务库读取或写入；
-- [ ] 无 `.env`、active auth config、真实 token、credential 或 provider 配置读取/修改；
-- [ ] 无持久/对外服务启动、生产调用、外部通知、Switch、部署或发布；
-- [ ] `npm run check`、targeted tests、`npm audit --omit=dev`、`git diff --check` 通过；
-- [ ] 独立终审无 Critical/Major，且所有未执行浏览器/真机项目被明确标为限制；
-- [ ] 未以 local fixture、mock、静态页面或未执行真机验收宣称 production-ready。
+- [x] 03B HTTP/read/provisioning/review 全部门禁通过；
+- [x] 03C queue/replay 全部门禁通过；
+- [x] 03D UI/轮询/浏览器验收达到其已授权范围；
+- [x] V1 四个保留接口的契约和行为未改变；
+- [x] 当前 V1 board/submit/upload cleanup 与 crash recovery 回归未退化；
+- [x] 无任何真实/现有业务库读取或写入；
+- [x] 无 `.env`、active auth config、真实 token、credential 或 provider 配置读取/修改；
+- [x] 无持久/对外服务启动、生产调用、外部通知、Switch、部署或发布；
+- [x] `npm run check`、targeted tests、`npm audit --omit=dev`、`git diff --check` 通过；
+- [x] 独立终审无 Critical/Major，且所有未执行浏览器/真机项目被明确标为限制；
+- [x] 未以 local fixture、mock、静态页面或未执行真机验收宣称 production-ready。
 
 ## 6. 明确非范围
 
@@ -341,16 +349,14 @@ Playwright 不在 03A–03C 自动引入。进入 03D 时必须单独判断：
 
 ### 当前风险
 
-- ADP-021 已冻结，HTTP status map、review Schema 和 eventId ownership 已通过独立复核；对应 HTTP/use case 尚未实现；
-- 当前 `auth.mjs` 缺少 `operator` 且线性 role level 不能表达 capability matrix；
-- 当前 run-event use case 接受客户端 `actorId`、审计 role 固定为 `system`，尚未接入 trusted principal；
-- 当前迁移结果为零 run，首次 start provisioning 是 Kiosk 可用性的必要路径；
-- `run_event_reviews`、deferred receipt closure 和跨 accepted/review 的 `eventId` 单一归属已进入 migration v3；pending review intake/replay use case 尚未实现；
-- 多资源 current selection 需要显式 resource scope，不能默认取第一条；
-- V2 snapshot 的 run 投影不含完整 live duration 字段，Kiosk current 需要专用 read model；
+- 真实身份提供方、token/cookie/session、操作者映射和设备交接尚未配置；未注入 Auth Port 时 Kiosk API 失败关闭；
+- 浏览器、iPad/平板、手机、真实断网恢复、存储配额和清缓存体验均未执行，详见 acceptance checklist；
+- localStorage adapter 保留小型永久 sequence marker 以避免并发清空后的序号回退；真实设备上的长期容量和维护策略尚未验证；
+- 同 projection revision 的并发 cache meta 写可能使非权威 `lastSyncedAt` 回退；它不改变队列 item、terminal marker、server fact 或 revision，也不能重新开放已停止的队首；
+- 多资源部署仍要求调用方显式传 `resourceId` 并通过 trusted principal resource scope，不存在默认资源选择；
 - 受控封面尚无安全读取路由；本工作包不得用任意外部 URL 抓取补齐；
-- 浏览器/真机验收需要服务面，但当前工作包不授权服务启动，03D 完成状态受单独执行边界限制；
-- Playwright 会引入依赖、浏览器二进制和缓存成本，必须在 03D 单独决策。
+- 本批没有启动服务、接触真实业务库或执行真实身份链路，因此不能从本地测试推导部署/生产就绪；
+- 本批已决定不引入 Playwright；真实浏览器自动化需在后续有界工作包中重新判断。
 
 ### 停止条件
 
@@ -367,6 +373,6 @@ Playwright 不在 03A–03C 自动引入。进入 03D 时必须单独判断：
 
 ## 8. 当前结论
 
-结论：`IN_PROGRESS / WO-03A PASS_WITH_LIMITS; WO-03B–03D NOT_STARTED`。
+结论：`PASS_WITH_LIMITS / BROWSER_AND_DEVICE_NOT_RUN`。
 
-WO-03A 已完成契约、Schema、capability、time policy、迁移闭环与独立终审；`npm run check` 为 231/232 通过、1 个既有外部 VCP adapter skip，WO-00 fixtures 13/13，`npm audit --omit=dev` 为 0 vulnerabilities。03B–03D 均未开始；本状态不代表 Kiosk HTTP、离线重放、浏览器验收、服务启动、Switch、部署或生产可用。
+WO-03 已完成冻结契约、Kiosk backend admission、current/updates、首次 run provisioning、time review、纯离线重放队列、静态 UI、轮询和浏览器资源接线。Queue 与 UI 两个独立终审均无 Critical/Major；`npm run check` 为 317/318 通过、1 个既有 external VCP adapter skip，WO-00 fixtures 13/13，`npm audit --omit=dev` 为 0 vulnerabilities，`git diff --check` 通过。浏览器/真机和真实身份链路为明确未执行限制。本状态不代表服务启动、Switch、部署或生产可用。
