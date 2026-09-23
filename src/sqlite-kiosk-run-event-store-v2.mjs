@@ -48,8 +48,26 @@ function scheduleContext(db, scheduleItemId) {
     WHERE schedule_item_id = ? ORDER BY display_order
   `).all(scheduleItemId);
   const requests = bindings.map(binding => db.prepare(`
-    SELECT id, request_lifecycle FROM requests_v2 WHERE id = ?
+    SELECT id, request_lifecycle, production_type, shooting_subtype,
+      lighting_preset, reflectivity
+    FROM requests_v2 WHERE id = ?
   `).get(binding.task_id)).filter(Boolean);
+  const requestRequirements = bindings.length === 1 ? db.prepare(`
+    SELECT required_capability_ids_json, duration_estimate_json
+    FROM scheduling_request_requirements WHERE request_id = ?
+  `).get(bindings[0].task_id) ?? null : null;
+  const resource = scheduleItem.resource_id === null ? null : db.prepare(`
+    SELECT resource_id, status, capability_digest
+    FROM scheduling_resources WHERE resource_id = ?
+  `).get(scheduleItem.resource_id) ?? null;
+  const activeConfig = db.prepare(`
+    SELECT version.config_version, version.config_json, version.config_digest,
+      version.algorithm_version, version.calendar_compiler_version,
+      version.estimate_policy_version
+    FROM scheduling_active_config AS active
+    JOIN scheduling_config_versions AS version ON version.config_version = active.config_version
+    WHERE active.id = 1
+  `).get() ?? null;
   const runs = db.prepare(`
     SELECT * FROM production_runs
     WHERE schedule_item_id = ? ORDER BY created_at, id
@@ -61,6 +79,9 @@ function scheduleContext(db, scheduleItemId) {
     scheduleItem,
     requestIds: bindings.map(binding => binding.task_id),
     requests,
+    requestRequirements,
+    resource,
+    activeConfig,
     runs,
     counters,
   };
@@ -105,6 +126,28 @@ export function createSqliteKioskRunEventStore({
               blocked_duration_ms, created_at, updated_at
             ) VALUES (?, ?, ?, ?, 'scheduled', 0, 0, ?, ?)
           `).run(runId, scheduleItemId, scope, taskId, createdAt, createdAt);
+        },
+
+        insertRunContextSnapshot({ snapshot, snapshotJson, snapshotDigest }) {
+          return db.prepare(`
+            INSERT INTO scheduling_run_context_snapshots (
+              run_id, schema_version, context_status, snapshot_json, snapshot_digest, captured_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+          `).run(
+            snapshot.runId,
+            snapshot.schemaVersion,
+            snapshot.contextStatus,
+            snapshotJson,
+            snapshotDigest,
+            snapshot.capturedAt,
+          ).changes;
+        },
+
+        getRunContextSnapshot(runId) {
+          return db.prepare(`
+            SELECT run_id, schema_version, context_status, snapshot_json, snapshot_digest, captured_at
+            FROM scheduling_run_context_snapshots WHERE run_id = ?
+          `).get(runId) ?? null;
         },
 
         insertReview({ command, digest, responseDigest, response, receivedAt, reviewDecision }) {
