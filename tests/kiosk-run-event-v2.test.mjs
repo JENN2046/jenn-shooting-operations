@@ -110,7 +110,8 @@ function seedSchedule(db, {
   return { scheduleId, requestIds };
 }
 
-function seedCompleteRunContextFacts(db, { requestId, scheduleId, resourceId = 'RESOURCE-A' }) {
+function seedCompleteRunContextFacts(db, { requestId, scheduleId, resourceId = 'RESOURCE-A',
+  durationSourceVersion = 'fixture-v1' }) {
   const capabilityJson = { schemaVersion: 1, capabilityIds: ['FLAT'] };
   const capabilityDigest = digestResourceCapabilitiesV1(capabilityJson);
   const config = {
@@ -169,7 +170,7 @@ function seedCompleteRunContextFacts(db, { requestId, scheduleId, resourceId = '
     canonicalJsonSchedulingV1({
       durationMs: 1_800_000,
       source: 'explicit',
-      sourceVersion: 'fixture-v1',
+      sourceVersion: durationSourceVersion,
     }),
     T0,
   );
@@ -442,6 +443,45 @@ if (!isMainThread && workerData?.mode === 'apply-kiosk-run-event') {
       assert.equal(db.prepare(`SELECT COUNT(*) AS count
         FROM scheduling_run_context_snapshots
         WHERE run_id = 'RUN-KIOSK-PREPROVISIONED'`).get().count, 1);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('Kiosk start stays successful when valid duration sourceVersion is not an evaluation token', () => {
+    const db = openDatabase();
+    try {
+      seedBase(db);
+      const seeded = seedSchedule(db, { suffix: 'WIDE-VERSION', sourceOrdinal: 0 });
+      seedCompleteRunContextFacts(db, {
+        requestId: seeded.requestIds[0],
+        scheduleId: seeded.scheduleId,
+        durationSourceVersion: '版本 1',
+      });
+      seedRun(db, {
+        runId: 'RUN-KIOSK-WIDE-VERSION',
+        scheduleId: seeded.scheduleId,
+        taskId: seeded.requestIds[0],
+      });
+      const apply = makeApply(db);
+      const response = apply({
+        command: command({
+          eventId: 'EVENT-KIOSK-WIDE-VERSION',
+          runId: 'RUN-KIOSK-WIDE-VERSION',
+          scheduleId: seeded.scheduleId,
+        }),
+        principal: principal(),
+      });
+      assert.equal(response.ok, true, JSON.stringify(response));
+      assert.equal(response.resultingState, 'shooting');
+
+      const row = db.prepare(`SELECT context_status, snapshot_json
+        FROM scheduling_run_context_snapshots
+        WHERE run_id = 'RUN-KIOSK-WIDE-VERSION'`).get();
+      assert.equal(row.context_status, 'ineligible');
+      const snapshot = JSON.parse(row.snapshot_json);
+      assert.equal(snapshot.ineligibleReason, 'RULE_FACT_MISSING');
+      assert.equal(snapshot.durationEstimate, null);
     } finally {
       db.close();
     }
