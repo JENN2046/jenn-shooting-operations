@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createAuthorizer } from './auth.mjs';
 import { authorizeCapability, validateTrustedPrincipal } from './authorization-v2.mjs';
 import { validateKioskRunEvent } from './kiosk-contract-validator-v2.mjs';
+import { mapSchedulingDecisionHttpResult } from './scheduling-http-result-v2.mjs';
 import {
   mapKioskCurrentHttpResult,
   mapKioskRunEventHttpResult,
@@ -118,6 +119,25 @@ async function authenticateKiosk(kiosk, request) {
     : { ok: false, code: 'UNAUTHENTICATED' };
 }
 
+async function authenticateScheduling(scheduling, request) {
+  if (!scheduling || typeof scheduling.authenticate !== 'function') {
+    return { ok: false, code: 'AUTH_NOT_CONFIGURED' };
+  }
+  let principal;
+  try {
+    principal = await scheduling.authenticate(request);
+  } catch {
+    return { ok: false, code: 'UNAUTHENTICATED' };
+  }
+  if (!validateTrustedPrincipal(principal).ok) {
+    return { ok: false, code: 'UNAUTHENTICATED' };
+  }
+  if (!['scheduler', 'administrator'].includes(principal.role)) {
+    return { ok: false, code: 'FORBIDDEN' };
+  }
+  return { ok: true, principal };
+}
+
 function readProjectionCondition(request) {
   const candidate = request.headers['if-none-match'];
   if (candidate === undefined) return { ok: true, candidate: null };
@@ -195,7 +215,7 @@ function requireRole(authorize, request, response, role) {
   return auth;
 }
 
-export function createHttpApp({ store, tokens = {}, kiosk = null }) {
+export function createHttpApp({ store, tokens = {}, kiosk = null, scheduling = null }) {
   const authorize = createAuthorizer(tokens);
 
   return async function app(request, response) {
@@ -293,6 +313,57 @@ export function createHttpApp({ store, tokens = {}, kiosk = null }) {
           return sendMapped(response, kioskFailure('INTERNAL_ERROR'));
         }
         return sendMapped(response, mapKioskRunEventHttpResult(result));
+      }
+
+      const proposalDecisionRoute = request.method === 'POST'
+        ? /^\/api\/v2\/proposals\/([^/]+)\/decisions$/u.exec(url.pathname)
+        : null;
+      if (proposalDecisionRoute) {
+        if ([...url.searchParams].length !== 0) {
+          return sendJson(response, 400, { ok: false, code: 'INVALID_REQUEST' });
+        }
+        let proposalId;
+        try {
+          proposalId = decodeURIComponent(proposalDecisionRoute[1]);
+        } catch {
+          return sendJson(response, 400, { ok: false, code: 'INVALID_REQUEST' });
+        }
+        if (!validIdentifier(proposalId)) {
+          return sendJson(response, 400, { ok: false, code: 'INVALID_REQUEST' });
+        }
+        const authenticated = await authenticateScheduling(scheduling, request);
+        if (!authenticated.ok) {
+          const status = authenticated.code === 'FORBIDDEN' ? 403 : 401;
+          return sendJson(response, status, { ok: false, code: authenticated.code });
+        }
+        let command;
+        try {
+          command = await readJson(request);
+        } catch (error) {
+          return sendJson(response, 400, {
+            ok: false,
+            code: error?.message === 'invalid JSON' ? 'INVALID_JSON' : 'INVALID_REQUEST',
+          });
+        }
+        if (!command || typeof command !== 'object' || Array.isArray(command)) {
+          return sendJson(response, 400, { ok: false, code: 'INVALID_REQUEST' });
+        }
+        if (command.proposalId !== proposalId) {
+          return sendJson(response, 400, { ok: false, code: 'PROPOSAL_ID_MISMATCH' });
+        }
+        if (typeof scheduling?.acceptProposal !== 'function') {
+          return sendJson(response, 503, { ok: false, code: 'SERVICE_UNAVAILABLE' });
+        }
+        let result;
+        try {
+          result = await scheduling.acceptProposal({
+            command,
+            principal: authenticated.principal,
+          });
+        } catch {
+          return sendJson(response, 500, { ok: false, code: 'INTERNAL_ERROR' });
+        }
+        return sendMapped(response, mapSchedulingDecisionHttpResult(result));
       }
 
       if (request.method === 'POST' && url.pathname === '/api/v1/requests') {
