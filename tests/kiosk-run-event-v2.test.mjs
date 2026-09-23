@@ -398,6 +398,55 @@ if (!isMainThread && workerData?.mode === 'apply-kiosk-run-event') {
     }
   });
 
+  test('Kiosk start of a pre-provisioned scheduled run captures context on the state transition', () => {
+    const db = openDatabase();
+    try {
+      seedBase(db);
+      const seeded = seedSchedule(db, { suffix: 'PREPROVISIONED', sourceOrdinal: 0 });
+      const captureFacts = seedCompleteRunContextFacts(db, {
+        requestId: seeded.requestIds[0],
+        scheduleId: seeded.scheduleId,
+      });
+      seedRun(db, {
+        runId: 'RUN-KIOSK-PREPROVISIONED',
+        scheduleId: seeded.scheduleId,
+        taskId: seeded.requestIds[0],
+      });
+      const apply = makeApply(db);
+      const input = command({
+        eventId: 'EVENT-KIOSK-PREPROVISIONED',
+        runId: 'RUN-KIOSK-PREPROVISIONED',
+        scheduleId: seeded.scheduleId,
+      });
+      const response = apply({ command: input, principal: principal() });
+      assert.equal(response.ok, true, JSON.stringify(response));
+      assert.equal(response.previousState, 'scheduled');
+      assert.equal(response.resultingState, 'shooting');
+
+      const row = db.prepare(`
+        SELECT context_status, snapshot_json, snapshot_digest, captured_at
+        FROM scheduling_run_context_snapshots
+        WHERE run_id = 'RUN-KIOSK-PREPROVISIONED'
+      `).get();
+      assert.equal(row.context_status, 'complete');
+      assert.equal(row.captured_at, RECEIVED_AT);
+      const snapshot = JSON.parse(row.snapshot_json);
+      assert.equal(snapshot.requestId, seeded.requestIds[0]);
+      assert.equal(snapshot.resourceCapabilityDigest, captureFacts.capabilityDigest);
+      assert.equal(snapshot.configDigest, captureFacts.configDigest);
+
+      assert.deepEqual(
+        apply({ command: input, principal: principal() }),
+        { ...response, replayed: true },
+      );
+      assert.equal(db.prepare(`SELECT COUNT(*) AS count
+        FROM scheduling_run_context_snapshots
+        WHERE run_id = 'RUN-KIOSK-PREPROVISIONED'`).get().count, 1);
+    } finally {
+      db.close();
+    }
+  });
+
   test('authorization, active run identity, terminal history, and grouped completion fail closed', () => {
     const db = openDatabase();
     try {
