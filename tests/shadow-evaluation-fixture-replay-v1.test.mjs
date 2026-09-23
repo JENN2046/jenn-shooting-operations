@@ -170,3 +170,60 @@ test('fixture envelope rejects accessors, symbols, non-enumerables and hostile p
     reason: 'FIXTURE_ENVELOPE_INVALID',
   });
 });
+
+
+test('nested expected report proxy cannot spoof canonical comparison through get traps', async () => {
+  const value = await fixture();
+  const tamperedReport = structuredClone(value.expected.report);
+  tamperedReport.gateStatus = 'PASS';
+  const proxiedReport = new Proxy(tamperedReport, {
+    get(target, key, receiver) {
+      if (key === 'gateStatus') return 'BLOCKED_DATA';
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  const candidate = {
+    ...value,
+    expected: {
+      ...value.expected,
+      report: proxiedReport,
+    },
+  };
+
+  assert.deepEqual(replayShadowEvaluationFixtureV1(candidate), {
+    ok: false,
+    code: 'SHADOW_FIXTURE_REPLAY_INVALID',
+    reason: 'REPORT_MISMATCH',
+  });
+});
+
+test('nested hostile proxies are rejected before evaluator or canonical comparison', async () => {
+  const value = await fixture();
+  const hostileReport = new Proxy({}, {
+    ownKeys() {
+      throw new Error('hostile nested proxy');
+    },
+  });
+  assert.deepEqual(replayShadowEvaluationFixtureV1({
+    ...value,
+    expected: { ...value.expected, report: hostileReport },
+  }), {
+    ok: false,
+    code: 'SHADOW_FIXTURE_REPLAY_INVALID',
+    reason: 'FIXTURE_ENVELOPE_INVALID',
+  });
+
+  const hostileReportInput = new Proxy({}, {
+    getPrototypeOf() {
+      throw new Error('hostile report input');
+    },
+  });
+  assert.deepEqual(replayShadowEvaluationFixtureV1({
+    ...value,
+    reportInput: hostileReportInput,
+  }), {
+    ok: false,
+    code: 'SHADOW_FIXTURE_REPLAY_INVALID',
+    reason: 'FIXTURE_ENVELOPE_INVALID',
+  });
+});
