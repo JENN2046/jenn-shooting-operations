@@ -4,6 +4,8 @@ import {
   RUN_CONTEXT_SNAPSHOT_SCHEMA_V1,
 } from './scheduling-evaluation-contract-v1.mjs';
 
+const EVALUATION_TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+
 function matchingRule(rules, request) {
   return rules.find(rule => (
     (rule.productionType === null || rule.productionType === request.production_type)
@@ -16,7 +18,9 @@ function resolveDurationEstimate(requirements, request, config) {
     try {
       const value = JSON.parse(requirements.duration_estimate_json);
       if (value && Number.isSafeInteger(value.durationMs) && value.durationMs > 0
-        && typeof value.source === 'string' && typeof value.sourceVersion === 'string') {
+        && value.source === 'explicit'
+        && typeof value.sourceVersion === 'string'
+        && EVALUATION_TOKEN.test(value.sourceVersion)) {
         return {
           durationMs: value.durationMs,
           provenance: value.source,
@@ -27,7 +31,7 @@ function resolveDurationEstimate(requirements, request, config) {
     return null;
   }
   const fallback = matchingRule(config.durationFallbackRules, request);
-  return fallback ? {
+  return fallback && EVALUATION_TOKEN.test(fallback.ruleId) ? {
     durationMs: fallback.durationMs,
     provenance: 'fallback',
     version: fallback.ruleId,
