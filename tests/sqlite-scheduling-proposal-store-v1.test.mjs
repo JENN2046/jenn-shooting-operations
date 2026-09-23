@@ -342,6 +342,8 @@ test('reject is terminal, append-only, idempotent, and cannot write schedule fac
     assert.equal(f.store.read(generated.proposal.proposalId).lifecycle.status, 'rejected');
     assert.deepEqual(f.store.reject(command, 'admin:fixture'),
       { ...rejected, exactReplay: true });
+    assert.equal(f.store.reject({ ...command, proposalId: 'MISSING-PROPOSAL' },
+      'admin:fixture').code, 'IDEMPOTENCY_KEY_REUSE');
     assert.equal(f.db.prepare('SELECT COUNT(*) AS count FROM schedule_items').get().count, 0);
     assert.equal(f.db.prepare('SELECT schedule_revision FROM revision_counters WHERE id = 1').get()
       .schedule_revision, 7);
@@ -462,7 +464,8 @@ test('explicit request requirements let the SQLite assembler produce one eligibl
       requestId: 'REQ-DB-1', requiredCapabilityIds: ['FLAT'], durationEstimate: null,
     }, 'admin:fixture');
     assert.equal(set.ok, true, JSON.stringify(set));
-    assert.equal(set.scheduleRevision, 8);
+    assert.equal(set.scheduleRevision, 7);
+    assert.equal(set.projectionRevision, 1);
     const store = createSqliteSchedulingProposalStoreV1({ db: f.db,
       assembleInput: assembleSchedulingInputFromSqliteV1,
       now: () => new Date('2026-09-23T08:00:00.000Z'),

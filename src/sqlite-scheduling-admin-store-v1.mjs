@@ -251,7 +251,7 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
             source_operation_id = excluded.source_operation_id`).run(
               command.requestId, capabilityJson, durationJson, at, command.operationId,
             );
-        const next = advanceRevisions(db, current, { schedule: 1, projection: 1, at });
+        const next = advanceRevisions(db, current, { schedule: 0, projection: 1, at });
         if (!next) throw new Error('SCHEDULING_REVISION_ADVANCE_FAILED');
         staleDraftProposalsInTransactionV1({ db, triggerOperationId: command.operationId,
           reasonCode: 'REQUEST_FACTS_CHANGED', now });

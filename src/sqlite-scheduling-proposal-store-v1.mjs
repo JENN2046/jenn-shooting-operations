@@ -258,6 +258,11 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
     reject(decisionInput, trustedActor) {
       if (typeof trustedActor !== 'string' || trustedActor.length === 0) return denied('TRUSTED_ACTOR_REQUIRED');
       return transaction(db, 'BEGIN IMMEDIATE', () => {
+        const reused = db.prepare(`SELECT proposal_id FROM scheduling_proposal_decisions
+          WHERE decision_id = ?`).get(decisionInput?.decisionId);
+        if (reused && reused.proposal_id !== decisionInput?.proposalId) {
+          return denied('IDEMPOTENCY_KEY_REUSE');
+        }
         const found = admitStoredProposal(readProposalRow(db, decisionInput?.proposalId));
         if (!found) return denied('PROPOSAL_NOT_FOUND');
         const admitted = admitSchedulingProposalDecisionV1(decisionInput, found.proposal);
