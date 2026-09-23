@@ -20,7 +20,7 @@ test('Scheduling V2 runtime composition is explicit and connects the canonical p
       clock: () => new Date('2026-09-23T08:00:00.000Z'),
     });
     assert.equal(scheduling.authenticate(), created.principal);
-    const result = scheduling.acceptProposal({
+    const result = scheduling.decideProposal({
       command: {
         decisionId: 'DEC-COMPOSE-0001',
         proposalId: 'sp_missing',
@@ -33,6 +33,19 @@ test('Scheduling V2 runtime composition is explicit and connects the canonical p
     });
     assert.equal(result.ok, false);
     assert.equal(result.code, 'PROPOSAL_NOT_FOUND');
+    const reject = scheduling.decideProposal({
+      command: {
+        decisionId: 'DEC-COMPOSE-REJECT-0001',
+        proposalId: 'sp_missing',
+        decisionType: 'reject',
+        selectedProposalItemIds: null,
+        decisionNote: null,
+        reasonCode: 'HUMAN_REJECTED',
+      },
+      principal: created.principal,
+    });
+    assert.equal(reject.ok, false);
+    assert.equal(reject.code, 'PROPOSAL_NOT_FOUND');
   } finally {
     store.close();
   }
