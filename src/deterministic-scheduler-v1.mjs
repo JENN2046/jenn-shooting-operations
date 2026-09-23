@@ -12,6 +12,8 @@ export const DETERMINISTIC_SCHEDULER_VERSION_V1 = 'deterministic-scheduler-v1';
 
 const PRIORITY = Object.freeze({ p0: 0, p1: 1, p2: 2 });
 const MINUTE_MS = 60_000;
+const DAY_MS = 86_400_000;
+const MAX_PLANNING_CALENDAR_DAYS = 366;
 
 function codePointCompare(left, right) {
   const a = Array.from(left, character => character.codePointAt(0));
@@ -107,6 +109,18 @@ function sameV1Date(formatter, start, end) {
   return localDate(formatter, start) === localDate(formatter, end);
 }
 
+function planningCalendarDates(formatter, planningStart, planningEnd) {
+  const first = Date.parse(`${localDate(formatter, planningStart)}T00:00:00.000Z`);
+  const last = Date.parse(`${localDate(formatter, planningEnd - 1)}T00:00:00.000Z`);
+  if (!Number.isFinite(first) || !Number.isFinite(last) || last < first
+    || Math.floor((last - first) / DAY_MS) + 1 > MAX_PLANNING_CALENDAR_DAYS) return null;
+  const dates = [];
+  for (let day = first; day <= last; day += DAY_MS) {
+    dates.push(new Date(day).toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
 function sortCandidates(left, right) {
   return (PRIORITY[left.priority] ?? 3) - (PRIORITY[right.priority] ?? 3)
     || codePointCompare(left.desiredDate ?? '9999-12-31', right.desiredDate ?? '9999-12-31')
@@ -171,16 +185,31 @@ export function generateDeterministicScheduleV1(inputValue, configValue) {
   });
   const planningStart = Date.parse(input.planningWindowStart);
   const planningEnd = Date.parse(input.planningWindowEnd);
+  const dates = planningCalendarDates(formatter, planningStart, planningEnd);
+  if (dates === null) return failure('PLANNING_CALENDAR_RANGE_UNSUPPORTED');
   for (const resource of input.resources) {
-    for (const window of resource.businessWindows) {
-      const date = localDate(formatter, Date.parse(window.start));
+    const expectedWindows = [];
+    for (const date of dates) {
       const compiled = compileSchedulingCalendarDateV1({
         configJson: config, resourceId: resource.resourceId, date,
         calendarCompilerVersion: input.calendarCompilerVersion,
         timeZoneDataVersion: input.timeZoneDataVersion,
       });
-      if (!compiled.ok || !compiled.windows.some(item => item.start === window.start
-        && item.end === window.end)) return failure('BUSINESS_WINDOW_CONFIG_MISMATCH');
+      if (!compiled.ok) return failure('BUSINESS_WINDOW_CONFIG_MISMATCH');
+      for (const window of compiled.windows) {
+        const start = Math.max(Date.parse(window.start), planningStart);
+        const end = Math.min(Date.parse(window.end), planningEnd);
+        if (start < end) expectedWindows.push({
+          start: new Date(start).toISOString(), end: new Date(end).toISOString(),
+        });
+      }
+    }
+    expectedWindows.sort((left, right) => codePointCompare(left.start, right.start)
+      || codePointCompare(left.end, right.end));
+    if (resource.businessWindows.length !== expectedWindows.length
+      || resource.businessWindows.some((window, index) => window.start !== expectedWindows[index].start
+        || window.end !== expectedWindows[index].end)) {
+      return failure('BUSINESS_WINDOW_CONFIG_MISMATCH');
     }
   }
   const globalUnknown = input.occupied.some(item => item.resourceResolutionStatus === 'unresolved');

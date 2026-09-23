@@ -176,6 +176,33 @@ test('the engine rejects a business window that was not compiled from active con
     'BUSINESS_WINDOW_CONFIG_MISMATCH');
 });
 
+test('partial-day planning uses exact clipped windows and rejects omitted capacity', () => {
+  const settings = config();
+  const scope = {
+    planningWindowStart: '2026-09-25T02:30:00.000Z',
+    planningWindowEnd: '2026-09-25T05:00:00.000Z',
+  };
+  const clipped = input(settings, scope);
+  clipped.resources[0].businessWindows = [{
+    start: scope.planningWindowStart, end: scope.planningWindowEnd,
+  }];
+  const result = generateDeterministicScheduleV1(clipped, settings);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.result.proposedItems[0].plannedStart, scope.planningWindowStart);
+
+  const omitted = input(settings, scope);
+  omitted.resources[0].businessWindows = [];
+  assert.equal(generateDeterministicScheduleV1(omitted, settings).reason,
+    'BUSINESS_WINDOW_CONFIG_MISMATCH');
+
+  const shortened = input(settings, scope);
+  shortened.resources[0].businessWindows = [{
+    start: '2026-09-25T03:00:00.000Z', end: scope.planningWindowEnd,
+  }];
+  assert.equal(generateDeterministicScheduleV1(shortened, settings).reason,
+    'BUSINESS_WINDOW_CONFIG_MISMATCH');
+});
+
 test('explicit duration remains authoritative while a longer matched statistic reports overrun risk', () => {
   const settings = config();
   const scheduled = generateDeterministicScheduleV1(input(settings, {
