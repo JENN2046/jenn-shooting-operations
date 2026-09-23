@@ -679,6 +679,33 @@ test('system stale replay fails closed when its deterministic ID is occupied by 
   } finally { f.db.close(); }
 });
 
+test('rejecting with an existing system stale decision ID returns stable idempotency denial', () => {
+  const f = fixture();
+  try {
+    const generated = f.store.generate(f.command, 'scheduler:fixture');
+    assert.equal(generated.ok, true, JSON.stringify(generated));
+    const stale = f.store.stale({
+      proposalId: generated.proposal.proposalId,
+      triggerOperationId: 'RESOURCE-CHANGE-STALE-ID',
+      reasonCode: 'RESOURCE_CHANGED',
+    });
+    assert.equal(stale.ok, true, JSON.stringify(stale));
+    assert.equal(stale.receipt.decisionType, 'stale');
+
+    const rejected = f.store.reject({
+      decisionId: stale.receipt.decisionId,
+      proposalId: generated.proposal.proposalId,
+      decisionType: 'reject',
+      selectedProposalItemIds: null,
+      decisionNote: null,
+      reasonCode: 'HUMAN_REJECTED',
+    }, 'scheduler:fixture');
+    assert.equal(rejected.ok, false);
+    assert.equal(rejected.code, 'IDEMPOTENCY_KEY_REUSE');
+    assert.equal(f.store.read(generated.proposal.proposalId).lifecycle.status, 'stale');
+  } finally { f.db.close(); }
+});
+
 test('system stale seals a draft with one deterministic receipt', () => {
   const f = fixture();
   try {
