@@ -8,14 +8,16 @@ const fixtureUrl = new URL(
 );
 
 let fixture;
+let parsed = false;
 try {
   fixture = JSON.parse(await readFile(fixtureUrl, 'utf8'));
+  parsed = true;
 } catch {
   process.stderr.write('SHADOW_FIXTURE_READ_FAILED\n');
   process.exitCode = 1;
-} 
+}
 
-if (fixture) {
+if (parsed) {
   const replay = replayShadowEvaluationFixtureV1(fixture);
   if (!replay.ok) {
     process.stderr.write(`${replay.code}:${replay.reason}\n`);
