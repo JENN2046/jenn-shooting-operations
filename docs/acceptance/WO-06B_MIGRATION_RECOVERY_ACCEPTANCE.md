@@ -2,7 +2,7 @@
 
 - Authority base: `b66c6e0377531064b4e1db03dbc2067d4457acf0`
 - Branch: `codex/wo-06b-migration-recovery-acceptance`
-- Current result: `FRESH_ACCEPTANCE_RUNNING`
+- Current result: `WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS`
 - Deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
 
 ## Scope
@@ -48,12 +48,13 @@ V1 source
 
 Required status codes:
 
+- dry-run: exit 0 with `PASS` or `PASS_WITH_WARNINGS`, and `switchReadiness=NOT_RUN`;
 - initial apply: `APPLIED_VERIFIED`;
 - backup: `BACKUP_VERIFIED`;
 - rollback restore: `ROLLBACK_VERIFIED`;
 - target proof: `ALREADY_APPLIED_VERIFIED`;
 - completed replay: `ALREADY_APPLIED_VERIFIED`;
-- `switchReadiness`: always `BLOCKED`.
+- apply/replay `switchReadiness`: `BLOCKED`.
 
 The source must remain byte-identical and completed replay must not rewrite backup, rollback, target or proof-seal artifacts.
 
@@ -104,3 +105,43 @@ Frozen semantics:
 - verified isolated apply/replay must remain `switchReadiness=BLOCKED`.
 
 Run 1 is preserved as non-PASS evidence. A fresh rerun on the corrected harness is required.
+
+
+### Run 3 — FRESH_PASS
+
+- Head: `15f5b905d09ce842883a03ba76cbc629f88a822d`
+- GitHub Actions run: `35975920061`
+- Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
+- `npm run check`: 530 tests / 529 pass / 0 fail / 1 expected external-VCP skip
+- targeted migration/recovery suite: `126/126 PASS`
+- full-chain harness: PASS
+
+Machine-readable harness result:
+
+```json
+{
+  "status": "WO_06B_FRESH_ACCEPTANCE_PASS",
+  "dryRunResult": "PASS",
+  "applyResult": "APPLIED_VERIFIED",
+  "backupStatus": "BACKUP_VERIFIED",
+  "rollbackStatus": "ROLLBACK_VERIFIED",
+  "targetStatus": "ALREADY_APPLIED_VERIFIED",
+  "replayResult": "ALREADY_APPLIED_VERIFIED",
+  "switchReadiness": "BLOCKED",
+  "sourceUnchanged": true,
+  "artifactsStableOnReplay": true
+}
+```
+
+Existing targeted tests in the same exact-head run also covered backup tamper, non-SQLite backup, sidecar injection, partial restore preservation, source changes during scan/apply, target tamper, path identity conflicts and schema drift.
+
+## Closure
+
+The WO-06B implementation/runtime evidence gate is satisfied on isolated fixtures:
+
+```text
+WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS
+BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
+```
+
+This result does not authorize production migration, restore, cutover or deployment.
