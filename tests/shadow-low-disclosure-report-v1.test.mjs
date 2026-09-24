@@ -277,6 +277,14 @@ test('Level C and Level B denominators must match frozen evaluator cohorts', asy
   possibleLevelC.metrics.humanOverrideRate = {
     status: 'OK', value: 0, numerator: 0, denominator: 1,
   };
+  for (const item of possibleLevelC.exclusionCounts) {
+    if ([
+      'SCHEDULING_INPUT_MISSING',
+      'PROPOSAL_MISSING',
+      'ITEM_DECISION_DIFF_MISSING',
+      'OUTCOME_MISSING',
+    ].includes(item.code)) item.count = 1;
+  }
   possibleLevelC.resultDigest = recomputeResultDigest(possibleLevelC);
   assert.equal(admitLowDisclosureShadowReportV1(possibleLevelC).ok, true);
 
@@ -480,6 +488,33 @@ test('event-after-cutoff exclusions are a subset of outside-window exclusions', 
     { code: 'EVENT_AFTER_CUTOFF', count: 2 },
   );
   impossible.resultDigest = recomputeResultDigest(impossible);
+  assert.deepEqual(admitLowDisclosureShadowReportV1(impossible), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_CONTENT_INVALID',
+  });
+});
+
+
+test('outside-window cases cannot inflate Level B/C exclusion upper bounds', async () => {
+  const report = await replayReport();
+
+  const impossible = structuredClone(report);
+  impossible.eligibilityCounts.ineligible = 1;
+  impossible.eligibilityCounts.levelA = 1;
+  impossible.exclusionCounts.unshift({ code: 'EVENT_OUTSIDE_DATASET_WINDOW', count: 1 });
+  impossible.exclusionCounts = impossible.exclusionCounts.map(item => {
+    if (item.code === 'RUN_CONTEXT_SNAPSHOT_MISSING') return { ...item, count: 1 };
+    if ([
+      'SCHEDULING_INPUT_MISSING',
+      'PROPOSAL_MISSING',
+      'ITEM_DECISION_DIFF_MISSING',
+      'OUTCOME_MISSING',
+    ].includes(item.code)) return { ...item, count: 2 };
+    return item;
+  });
+  impossible.resultDigest = recomputeResultDigest(impossible);
+
   assert.deepEqual(admitLowDisclosureShadowReportV1(impossible), {
     ok: false,
     code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
