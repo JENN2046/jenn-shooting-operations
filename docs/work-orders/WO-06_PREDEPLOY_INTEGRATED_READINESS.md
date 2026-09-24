@@ -1,7 +1,7 @@
 # WO-06：部署前综合预检
 
 - Authority base: `8d5747439ccdfb29dd78ae294c1df82cba6476a3`
-- 状态：`IN_PROGRESS / WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS / WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS / WO-06C_LOCAL_EXTERNAL_BOUNDARY_PASS / WO-06C_EXTERNAL_VALIDATION_PENDING / BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
+- 状态：`IN_PROGRESS / WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS / WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS / WO-06C_LOCAL_EXTERNAL_BOUNDARY_PASS / WO-06C_EXTERNAL_VALIDATION_PENDING / WO-06D_MANIFEST_VALIDATION_RUNNING / BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
 - 目标：证明系统是否具备进入“申请部署授权”的条件，不执行部署。
 - 硬边界：不接生产 DB、不写真实凭据、不调用真实钉钉/VCP provider、不发布、不切流、不做 Switch。
 
@@ -203,3 +203,62 @@ WO-06C remains open until required external evidence is recorded:
 No VCP runtime access, device operation, DingTalk credential/provider call, public callback endpoint, production identity mapping, deployment or cutover is authorized by this local PASS.
 
 The global deployment gate remains `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
+
+
+## WO-06D：PRODUCTION_CHANGE_MANIFEST_AND_AUTHORIZATION_PACKET
+
+- Authority base: `56f18930b8a89b19cdbfdde24d090649329d50c9`
+- 状态：`WO-06D_MANIFEST_VALIDATION_RUNNING / DEPLOYMENT_AUTHORIZATION_REQUEST_BLOCKED`
+
+### Authority candidate
+
+`docs/operations/production-change-manifest.v1.json`
+
+This manifest freezes:
+
+- unresolved production target facts instead of guessing them;
+- four secret classes without storing any secret values;
+- prerequisite gates from WO-06A/B/C;
+- exact production action IDs, risk, side effects and authority targets;
+- per-action evidence requirements and rollback bindings;
+- a rollback-first/no-data-deletion rule;
+- an embedded human authorization packet with exact-action-only semantics.
+
+### Authorization semantics
+
+```text
+approvalModel = EXACT_ACTION_IDS_AND_TARGETS_ONLY
+blanketApprovalAllowed = false
+requestedActionIds = []
+approvedActionIds = []
+deploymentAuthorizationRequest = BLOCKED_PREREQUISITES
+deploymentGate = BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
+```
+
+The packet currently blocks a deployment authorization request on:
+
+- `WO06C_VCP_EXTERNAL`;
+- `WO06C_KIOSK_DEVICE`;
+- `PRODUCTION_TARGET_FACTS`;
+- `PRODUCTION_DATA_MIGRATION`;
+- `PRODUCTION_DEPLOYMENT_GATE`.
+
+The only definitions marked requestable for separate explicit authorization are:
+
+- `PROD-01-TARGET-READONLY-PREFLIGHT`;
+- `PROD-12-DINGTALK-PROVIDER-INTEGRATION`.
+
+“Requestable” does not mean requested or approved.
+
+### Hard boundary
+
+WO-06D performs no production host access, credential generation, provider call, migration, container start, reverse-proxy change, firewall/security-group mutation, VCP/Kiosk enablement, cutover or deployment.
+
+A validated packet may still remain:
+
+```text
+DEPLOYMENT_AUTHORIZATION_REQUEST = BLOCKED_PREREQUISITES
+BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
+```
+
+until all required external/target/data prerequisites are separately closed and the human gives exact current authorization.
