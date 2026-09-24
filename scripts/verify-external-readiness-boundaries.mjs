@@ -93,7 +93,7 @@ async function verifyKioskBoundary(root) {
     localHttpBoundary: 'PASS',
     defaultAuth: 'AUTH_NOT_CONFIGURED',
     explicitTrustedPrincipal: 'PASS',
-    realBrowserDevice: 'EXTERNAL_BLOCKED_DEVICE',
+    realBrowserDevice: 'BLOCKED_DEVICE',
   };
 }
 
