@@ -227,12 +227,23 @@ test('SQLite backup includes committed WAL data and remains self-contained', asy
       const backup = join(root, 'wal-backup.sqlite');
       const sourceHash = hashFile(source);
       const sourceMtime = statSync(source, { bigint: true }).mtimeNs;
+      const sourceWal = `${source}-wal`;
+      const sourceWalHash = hashFile(sourceWal);
+      const sourceWalStat = statSync(sourceWal, { bigint: true });
+
       const receipt = await createVerifiedBackup({ fixtureRoot: root, source, backup, plan });
       assert.equal(receipt.auditSummary.count, 1);
       assert.equal(existsSync(`${backup}-wal`), false);
       assert.equal(existsSync(`${backup}-shm`), false);
       assert.equal(hashFile(source), sourceHash);
       assert.equal(statSync(source, { bigint: true }).mtimeNs, sourceMtime);
+
+      const afterWalStat = statSync(sourceWal, { bigint: true });
+      assert.equal(hashFile(sourceWal), sourceWalHash);
+      assert.equal(afterWalStat.dev, sourceWalStat.dev);
+      assert.equal(afterWalStat.ino, sourceWalStat.ino);
+      assert.equal(afterWalStat.size, sourceWalStat.size);
+      assert.equal(afterWalStat.mtimeNs, sourceWalStat.mtimeNs);
       const copy = new DatabaseSync(backup, { readOnly: true });
       try {
         assert.equal(copy.prepare('SELECT COUNT(*) AS count FROM audit_log').get().count, 1);
