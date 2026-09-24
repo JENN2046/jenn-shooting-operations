@@ -333,8 +333,19 @@ test('source family remains stable for an idle WAL reader and detects a real WAL
       INSERT INTO audit_log (action, role, entity_id, revision, result, created_at)
       VALUES ('fixture.start', 'test', NULL, 0, 'ok', ?)
     `).run(FIXED_NOW);
+    const wal = `${source}-wal`;
+    const beforeWalHash = hashFile(wal);
+    const beforeWalStat = statSync(wal, { bigint: true });
+
     const stable = readV1Source(resolveExistingPath(source));
     assert.equal(stable.queryOnly, true);
+
+    const afterWalStat = statSync(wal, { bigint: true });
+    assert.equal(hashFile(wal), beforeWalHash);
+    assert.equal(afterWalStat.dev, beforeWalStat.dev);
+    assert.equal(afterWalStat.ino, beforeWalStat.ino);
+    assert.equal(afterWalStat.size, beforeWalStat.size);
+    assert.equal(afterWalStat.mtimeNs, beforeWalStat.mtimeNs);
 
     assert.throws(() => readV1Source(resolveExistingPath(source), {
       duringScan: () => {
