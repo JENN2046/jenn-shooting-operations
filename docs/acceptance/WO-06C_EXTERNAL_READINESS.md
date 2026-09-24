@@ -2,7 +2,7 @@
 
 - Authority base: `e2a8de4a0f388e3322bd6c14eb223ba04ce2cb64`
 - Branch: `codex/wo-06c-external-readiness`
-- Current result: `LOCAL_READINESS_RUNNING / EXTERNAL_VALIDATION_PENDING`
+- Current result: `WO-06C_LOCAL_EXTERNAL_BOUNDARY_PASS / EXTERNAL_VALIDATION_PENDING`
 - Deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
 
 ## Purpose
@@ -180,3 +180,57 @@ Root cause: the harness used a newly initialized database without the revision-c
 Classification: harness persistence-precondition mismatch, not a Kiosk implementation failure.
 
 Correction: seed only the frozen revision-counter bootstrap fact in the isolated harness database before the configured loopback read. No application code or production path is changed.
+
+
+### Run 5 — LOCAL_FRESH_PASS
+
+- Final implementation-bearing head: `e0f3d3fea7c0906f0365272243c149d9b808ca1b`
+- GitHub Actions run: `35979065391`
+- Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
+- `npm run check`: 530 tests / 529 pass / 0 fail / 1 expected external-VCP skip
+- Kiosk targeted suite: `118/118 PASS`
+- DingTalk/Outbox/Callback targeted suite: `64/64 PASS`
+- VCP integration classification: `0 pass / 0 fail / 1 skipped`, reason `external VCP sync adapter is not present in this workspace`
+- local external-boundary harness: PASS
+
+Machine result:
+
+```json
+{
+  "status": "WO_06C_LOCAL_EXTERNAL_BOUNDARY_PASS",
+  "vcp": {
+    "externalAdapterPresent": false,
+    "compatibility": "EXTERNAL_BLOCKED_RUNTIME"
+  },
+  "kiosk": {
+    "localHttpBoundary": "PASS",
+    "defaultAuth": "AUTH_NOT_CONFIGURED",
+    "explicitTrustedPrincipal": "PASS",
+    "realBrowserDevice": "EXTERNAL_BLOCKED_DEVICE"
+  },
+  "dingtalk": {
+    "localBoundary": "PASS",
+    "readinessCode": "DINGTALK_NOT_CONFIGURED",
+    "networkCalls": 0,
+    "providerIntegration": "READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION",
+    "callbackRuntime": "NOT_WIRED"
+  },
+  "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
+  "overallExternalClosure": "PENDING"
+}
+```
+
+This is the final implementation-bearing local-readiness run. Any later docs-only status/evidence commit must itself pass the unchanged WO-06C workflow before merge; that final-head run is attached to the PR/check record rather than replacing the implementation-bearing evidence above.
+
+## Current closure state
+
+```text
+WO-06C_LOCAL_EXTERNAL_BOUNDARY_PASS
+VCP_EXTERNAL_COMPATIBILITY = BLOCKED_EXTERNAL_RUNTIME
+KIOSK_REAL_DEVICE = BLOCKED_DEVICE
+DINGTALK_PROVIDER = READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION
+WO-06C_EXTERNAL_VALIDATION = PENDING
+BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
+```
+
+The local repository boundary is ready. The external validation gate is intentionally still open.
