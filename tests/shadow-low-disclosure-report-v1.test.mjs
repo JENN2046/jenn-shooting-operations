@@ -366,3 +366,38 @@ test('validate:shadow check output names synthetic implementation validation and
   assert.match(output, /gateStatus=BLOCKED_DATA/u);
   assert.doesNotMatch(output, /^PASS /u);
 });
+
+
+test('Level-A-disqualifying exclusions are bound to the ineligible cohort', async () => {
+  const report = await replayReport();
+
+  const impossibleZero = structuredClone(report);
+  impossibleZero.exclusionCounts.unshift({ code: 'NOT_TASK_SCOPE', count: 1 });
+  impossibleZero.resultDigest = recomputeResultDigest(impossibleZero);
+  assert.deepEqual(admitLowDisclosureShadowReportV1(impossibleZero), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_CONTENT_INVALID',
+  });
+
+  const missingCause = structuredClone(report);
+  missingCause.eligibilityCounts.ineligible = 1;
+  missingCause.eligibilityCounts.levelA = missingCause.eligibilityCounts.total - 1;
+  missingCause.resultDigest = recomputeResultDigest(missingCause);
+  assert.deepEqual(admitLowDisclosureShadowReportV1(missingCause), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_CONTENT_INVALID',
+  });
+
+  const tooMany = structuredClone(report);
+  tooMany.eligibilityCounts.ineligible = 1;
+  tooMany.eligibilityCounts.levelA = tooMany.eligibilityCounts.total - 1;
+  tooMany.exclusionCounts.unshift({ code: 'NOT_TASK_SCOPE', count: 2 });
+  tooMany.resultDigest = recomputeResultDigest(tooMany);
+  assert.deepEqual(admitLowDisclosureShadowReportV1(tooMany), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_CONTENT_INVALID',
+  });
+});
