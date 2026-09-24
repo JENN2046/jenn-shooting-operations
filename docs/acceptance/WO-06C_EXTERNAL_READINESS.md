@@ -184,8 +184,8 @@ Correction: seed only the frozen revision-counter bootstrap fact in the isolated
 
 ### Canonical-status implementation run — LOCAL_FRESH_PASS
 
-- Final implementation-bearing head: `2282af589280de94f2d517b6cd1c221ebfe9d5fc`
-- GitHub Actions run: `35980565090`
+- Final implementation-bearing head: `775b6072687c53d2135be8d069b650bb37771090`
+- GitHub Actions run: `35981030282`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 - `npm run check`: 530 tests / 529 pass / 0 fail / 1 expected external-VCP skip
 - Kiosk targeted suite: `118/118 PASS`
