@@ -161,7 +161,7 @@ function verifyVcpBoundary() {
     externalAdapterPresent: present,
     compatibility: present
       ? 'EXTERNAL_ADAPTER_PRESENT_REQUIRES_COMPATIBILITY_RUN'
-      : 'EXTERNAL_BLOCKED_RUNTIME',
+      : 'BLOCKED_EXTERNAL_RUNTIME',
   };
 }
 
