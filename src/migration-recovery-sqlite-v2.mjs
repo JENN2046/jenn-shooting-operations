@@ -82,7 +82,7 @@ function databaseFamily(path, code, result) {
       : (({ ctimeNs: _ctimeNs, ...withoutCtime }) => withoutCtime)(stat);
     if (!includeDigest) return normalized;
 
-    const digest = hashFileStable(candidate, code, result);
+    const digest = hashFileStable(candidate, code, result, metadata);
     const after = lstatOrNull(candidate);
     if (!after || after.isSymbolicLink() || !after.isFile() || after.nlink !== 1n
         || after.dev !== metadata.dev || after.ino !== metadata.ino
@@ -307,12 +307,16 @@ function assertArtifactIdentity(prepared, created, code, result) {
   return pathMetadata;
 }
 
-function hashFileStable(path, invalidCode, invalidResult) {
+export function hashFileStable(path, invalidCode, invalidResult, expectedIdentity = null) {
   let descriptor;
   try {
     descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
     const before = fstatSync(descriptor, { bigint: true });
-    if (!before.isFile()) fail(invalidCode, invalidResult);
+    if (!before.isFile()
+        || (expectedIdentity !== null
+          && (before.dev !== expectedIdentity.dev || before.ino !== expectedIdentity.ino))) {
+      fail(invalidCode, invalidResult);
+    }
     const hash = createHash('sha256');
     const buffer = Buffer.allocUnsafe(COPY_BUFFER_SIZE);
     while (true) {
