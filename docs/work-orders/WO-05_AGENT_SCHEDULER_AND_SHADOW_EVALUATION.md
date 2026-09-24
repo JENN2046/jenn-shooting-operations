@@ -136,11 +136,11 @@
 
 ### WO-05E：Sample Capture and Offline Evaluation
 
-状态：`SHADOW_EVALUATOR_PASS_WITH_BLOCKED_DATA`
+状态：`BLOCKED_DATA / FINAL_HEAD_RUNTIME_PASS / MERGE_PENDING`
 
 #### WO-05E-A：Future Run-Context Capture
 
-状态：`POST_MERGE_CODE_EVIDENCE_VERIFIED / FRESH_RUNTIME_PASS`
+状态：`POST_MERGE_CODE_EVIDENCE_VERIFIED / FINAL_HEAD_RUNTIME_PASS / MERGE_PENDING`
 
 当前实现：
 
@@ -155,7 +155,7 @@
 
 #### WO-05E-B：Checked-in Fixture Dataset + Offline Replay
 
-状态：`POST_MERGE_CODE_EVIDENCE_VERIFIED / FRESH_RUNTIME_PENDING`
+状态：`POST_MERGE_CODE_EVIDENCE_VERIFIED / FINAL_HEAD_RUNTIME_PASS / MERGE_PENDING`
 
 当前实现：
 
@@ -171,7 +171,7 @@
 
 #### WO-05E-C：Low-Disclosure Report Integration Closure
 
-状态：`POST_MERGE_CODE_EVIDENCE_VERIFIED_WITH_VERIFICATION_FIX / FRESH_RUNTIME_PASS`
+状态：`POST_MERGE_CODE_EVIDENCE_VERIFIED_WITH_VERIFICATION_FIX / FINAL_HEAD_RUNTIME_PASS / MERGE_PENDING`
 
 当前实现：
 
@@ -183,7 +183,7 @@
 - `npm check` 已串入 `validate:shadow`，使 report schema widening、digest drift、zero-denominator 伪成功或不稳定 exclusion 直接阻断主检查；
 - regression 覆盖 root/nested disclosure widening、`NOT_ENOUGH_DATA + value:null`、metric-specific numerator/denominator semantics、resultDigest、generatedAt-outside-digest 与 exclusion allowlist/order/bounds。
 
-05E-C post-merge independent review 发现并修复 aggregate exclusion/cohort consistency gaps；PR #11 Phase 1 exact-head full runtime 已通过。WO-05E implementation state 可在 PR #11 final-head runtime gate 再次全绿并合并后记为 `SHADOW_EVALUATOR_PASS_WITH_BLOCKED_DATA`；真实 shadow acceptance 仍不得声称通过。
+05E-C post-merge independent review 发现并修复 aggregate exclusion/cohort consistency gaps；PR #11 最新 exact-head runtime 已通过，但在 PR #11 合并前 WO-05E 仍保持 pending。只有 merge 后的 authority closure 才可把状态切为 `SHADOW_EVALUATOR_PASS_WITH_BLOCKED_DATA`；真实 shadow acceptance 仍不得声称通过。
 
 真实 Level C 数据与真实 shadow threshold gate 继续保持 `BLOCKED_DATA`。
 
@@ -289,4 +289,4 @@ WINDOWS_NOT_RUN
 
 ## 7. 当前下一步
 
-WO-05E A/B/C post-merge independent code/evidence verification 已完成。PR #11 Phase 1 exact-head GitHub Actions 已在 Node 22.22.2 / npm 11.4.2 上通过 `npm ci`、`npm run validate:contract`、`npm run validate:shadow`、`npm test`、`npm run check`，统计为 527 tests / 526 pass / 0 fail / 1 skip。当前只允许在 PR #11 final docs/status head 的同一 workflow 再次全绿后合并；approved/real Level C dataset 仍为 0，真实 shadow acceptance gate 继续保持 `BLOCKED_DATA`。
+WO-05E A/B/C post-merge independent code/evidence verification 已完成。PR #11 最新 exact-head GitHub Actions 已在 Node 22.22.2 / npm 11.4.2 上通过 `npm ci`、`npm run validate:contract`、`npm run validate:shadow`、`npm test`、`npm run check`；当前 PR 分支只记录 `FINAL_HEAD_RUNTIME_PASS / MERGE_PENDING`，不得提前把 authority 标记为 `SHADOW_EVALUATOR_PASS_WITH_BLOCKED_DATA`。PR #11 merge 后需单独执行 docs-only authority closure；approved/real Level C dataset 仍为 0，真实 shadow acceptance gate 继续保持 `BLOCKED_DATA`。
