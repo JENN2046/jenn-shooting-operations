@@ -143,6 +143,16 @@ Focused regressions were added using recomputed result digests so the tests exer
 
 After this verification fix is merged, no known code/evidence finding remains open for WO-05E-C.
 
+### PR #9 closure-review refinements
+
+Codex review of the verification branch found two additional correctness details and one documentation inconsistency:
+
+- snapshot/shadow/outcome exclusion upper bounds must use the processed cohort `total - EVENT_OUTSIDE_DATASET_WINDOW`, because outside-window cases are skipped before classification and cannot contribute those exclusions;
+- the positive Level-C regression must decrement the shadow-evidence/outcome exclusions for the promoted case, otherwise the test itself describes an impossible evaluator output;
+- the WO-05E-B status header must match its already verified code/evidence state and retain `FRESH_RUNTIME_PENDING`.
+
+The verification branch now applies these refinements and adds isolated processed-cohort regressions for both Level B and Level C/outcome bounds.
+
 ## 5. Scope and authority audit
 
 Comparing the pre-WO-05E authority point `f344e7ec830457605b98bc043c279ee48b9bc1f1` to the reviewed HEAD shows WO-05E changes are confined to:
