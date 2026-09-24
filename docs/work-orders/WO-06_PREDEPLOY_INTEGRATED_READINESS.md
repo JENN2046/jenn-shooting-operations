@@ -1,7 +1,7 @@
 # WO-06：部署前综合预检
 
 - Authority base: `8d5747439ccdfb29dd78ae294c1df82cba6476a3`
-- 状态：`IN_PROGRESS / WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS / WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS / WO-06C_LOCAL_EXTERNAL_BOUNDARY_PASS / WO-06C_EXTERNAL_VALIDATION_PENDING / WO-06D_MANIFEST_VALIDATION_RUNNING / BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
+- 状态：`IN_PROGRESS / WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS / WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS / WO-06C_LOCAL_EXTERNAL_BOUNDARY_PASS / WO-06C_EXTERNAL_VALIDATION_PENDING / WO-06D_MANIFEST_PACKET_VALID / MERGE_PENDING / BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
 - 目标：证明系统是否具备进入“申请部署授权”的条件，不执行部署。
 - 硬边界：不接生产 DB、不写真实凭据、不调用真实钉钉/VCP provider、不发布、不切流、不做 Switch。
 
@@ -208,7 +208,7 @@ The global deployment gate remains `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
 ## WO-06D：PRODUCTION_CHANGE_MANIFEST_AND_AUTHORIZATION_PACKET
 
 - Authority base: `56f18930b8a89b19cdbfdde24d090649329d50c9`
-- 状态：`WO-06D_MANIFEST_VALIDATION_RUNNING / DEPLOYMENT_AUTHORIZATION_REQUEST_BLOCKED`
+- 状态：`WO-06D_MANIFEST_PACKET_VALID / MERGE_PENDING / DEPLOYMENT_AUTHORIZATION_REQUEST_BLOCKED`
 
 ### Authority candidate
 
@@ -262,3 +262,18 @@ BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 ```
 
 until all required external/target/data prerequisites are separately closed and the human gives exact current authorization.
+
+
+### WO-06D fresh evidence
+
+GitHub Actions run `35983250646` on implementation-bearing head `01425c24d1ccc4c0901734a73076da37c8884eba` passed:
+
+- full `npm run check`: 535 tests / 534 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 5/5 PASS;
+- manifest validator: `WO_06D_MANIFEST_VALID`;
+- manifest digest: `sha256:b03782756107194f5edf7fa624abf0223f5628e7316134d91b312b79962e05f1`;
+- authorization packet: `FROZEN_NOT_REQUESTED`;
+- deployment request: `BLOCKED_PREREQUISITES`;
+- deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
+
+This PR branch remains `MERGE_PENDING`. It does not publish authority PASS before merge and does not request or approve any production action.
