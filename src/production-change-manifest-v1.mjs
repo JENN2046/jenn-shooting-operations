@@ -98,13 +98,37 @@ const EXPECTED_DEPLOYMENT_BLOCKERS = Object.freeze([
 const EXPECTED_REVALIDATION_CHECKLIST = Object.freeze([
   "AUTHORITY_HEAD",
   "TARGET_HOST_IDENTITY",
-  "IMAGE_DIGEST",
   "DISK_PORT_ROUTE_CONFLICTS",
   "BACKUP_ROLLBACK_PROOF",
   "SECRET_STORAGE",
   "EXTERNAL_READINESS_GATES",
   "ROLLBACK_TARGETS"
 ]);
+
+const EXPECTED_ACTION_REVALIDATION = Object.freeze({
+  "PROD-04-BUILD-IMAGE": Object.freeze([
+    "BUILD_SOURCE_AUTHORITY_COMMIT",
+    "BUILD_BASE_IMAGE_DIGEST"
+  ]),
+  "PROD-05-START-ISOLATED-CONTAINER": Object.freeze([
+    "BUILT_IMAGE_DIGEST"
+  ]),
+  "PROD-06-LOOPBACK-HEALTH-SMOKE": Object.freeze([
+    "BUILT_IMAGE_DIGEST"
+  ]),
+  "PROD-07-CONFIGURE-REVERSE-PROXY-TLS": Object.freeze([
+    "BUILT_IMAGE_DIGEST"
+  ]),
+  "PROD-10-ENABLE-VCP-REMOTE-SYNC": Object.freeze([
+    "BUILT_IMAGE_DIGEST"
+  ]),
+  "PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE": Object.freeze([
+    "BUILT_IMAGE_DIGEST"
+  ]),
+  "PROD-13-CUTOVER-SWITCH": Object.freeze([
+    "BUILT_IMAGE_DIGEST"
+  ])
+});
 
 const EXPECTED_TARGET_UNRESOLVED_FACTS = Object.freeze([
   "TARGET_HOST_IDENTITY",
@@ -131,7 +155,9 @@ const EXPECTED_INVARIANTS = Object.freeze([
   "PRODUCTION_IMPORT_REQUIRES_VERIFIED_STORAGE_PREPARATION",
   "EXTERNAL_WRITE_INTEGRATIONS_REQUIRE_VERIFIED_DEPLOYMENT_CHAIN",
   "INTEGRATION_ROLLBACK_AUTHORITY_IS_SOURCE_ACTION_SCOPED",
-  "CREATED_STORAGE_IS_INTENTIONALLY_RETAINED_ON_ROLLBACK"
+  "CREATED_STORAGE_IS_INTENTIONALLY_RETAINED_ON_ROLLBACK",
+  "BUILD_OUTPUT_DIGEST_IS_NOT_A_GLOBAL_PRE_REQUEST_PREREQUISITE",
+  "BUILD_REQUEST_REVALIDATES_SOURCE_AND_BASE_DIGEST_SEPARATELY"
 ]);
 
 const EXPECTED_ROLLBACK_ORDER = Object.freeze([
@@ -896,6 +922,25 @@ export function createProductionChangeManifestValidator(schema) {
         'REVALIDATION_CHECKLIST_INVALID',
         '/authorizationPacket/mustRevalidateBeforeRequest',
       ));
+    }
+
+    const actionRevalidation = value.authorizationPacket.actionSpecificRevalidation;
+    if (!sameSet(
+      Object.keys(actionRevalidation),
+      Object.keys(EXPECTED_ACTION_REVALIDATION),
+    )) {
+      issues.push(issue(
+        'ACTION_REVALIDATION_SET_INVALID',
+        '/authorizationPacket/actionSpecificRevalidation',
+      ));
+    }
+    for (const [actionId, expectedChecks] of Object.entries(EXPECTED_ACTION_REVALIDATION)) {
+      if (!sameSet(actionRevalidation[actionId], expectedChecks)) {
+        issues.push(issue(
+          'ACTION_REVALIDATION_INVALID',
+          '/authorizationPacket/actionSpecificRevalidation/' + actionId,
+        ));
+      }
     }
 
     if (value.authorizationPacket.requestedActionIds.length !== 0

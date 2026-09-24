@@ -345,17 +345,76 @@ test('critical action risk, side effect and evidence contract cannot be understa
   }
 });
 
-test('pre-request revalidation checklist cannot be reduced or replaced', () => {
+test('global and action-specific pre-request revalidation are frozen without an image-digest cycle', () => {
+  assert.equal(base.authorizationPacket.mustRevalidateBeforeRequest.includes('IMAGE_DIGEST'), false);
+  assert.equal(
+    base.authorizationPacket.mustRevalidateBeforeRequest.includes('BUILT_IMAGE_DIGEST'),
+    false,
+  );
+  assert.equal(
+    Object.hasOwn(
+      base.authorizationPacket.actionSpecificRevalidation,
+      'PROD-01-TARGET-READONLY-PREFLIGHT',
+    ),
+    false,
+  );
+  assert.deepEqual(
+    base.authorizationPacket.actionSpecificRevalidation['PROD-04-BUILD-IMAGE'],
+    ['BUILD_SOURCE_AUTHORITY_COMMIT', 'BUILD_BASE_IMAGE_DIGEST'],
+  );
+  for (const actionId of [
+    'PROD-05-START-ISOLATED-CONTAINER',
+    'PROD-06-LOOPBACK-HEALTH-SMOKE',
+    'PROD-07-CONFIGURE-REVERSE-PROXY-TLS',
+    'PROD-10-ENABLE-VCP-REMOTE-SYNC',
+    'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE',
+    'PROD-13-CUTOVER-SWITCH',
+  ]) {
+    assert.deepEqual(
+      base.authorizationPacket.actionSpecificRevalidation[actionId],
+      ['BUILT_IMAGE_DIGEST'],
+      actionId,
+    );
+  }
+
   const reduced = structuredClone(base);
   reduced.authorizationPacket.mustRevalidateBeforeRequest = ['AUTHORITY_HEAD'];
   expectRejected(reduced, 'REVALIDATION_CHECKLIST_INVALID', 'reduced checklist');
 
-  const replaced = structuredClone(base);
-  replaced.authorizationPacket.mustRevalidateBeforeRequest = [
-    ...base.authorizationPacket.mustRevalidateBeforeRequest.slice(0, -1),
-    'TRUST_ME',
-  ];
-  expectRejected(replaced, 'REVALIDATION_CHECKLIST_INVALID', 'replaced checklist');
+  const globalOutputDigest = structuredClone(base);
+  globalOutputDigest.authorizationPacket.mustRevalidateBeforeRequest.push('IMAGE_DIGEST');
+  expectRejected(
+    globalOutputDigest,
+    'REVALIDATION_CHECKLIST_INVALID',
+    'build output digest cannot become a global prerequisite',
+  );
+
+  const buildCycle = structuredClone(base);
+  buildCycle.authorizationPacket.actionSpecificRevalidation['PROD-04-BUILD-IMAGE'] =
+    ['BUILT_IMAGE_DIGEST'];
+  expectRejected(
+    buildCycle,
+    'ACTION_REVALIDATION_INVALID',
+    'build cannot require its own output digest',
+  );
+
+  const missingBaseDigest = structuredClone(base);
+  missingBaseDigest.authorizationPacket.actionSpecificRevalidation['PROD-04-BUILD-IMAGE'] =
+    ['BUILD_SOURCE_AUTHORITY_COMMIT'];
+  expectRejected(
+    missingBaseDigest,
+    'ACTION_REVALIDATION_INVALID',
+    'build base digest cannot be dropped',
+  );
+
+  const earlyDigest = structuredClone(base);
+  earlyDigest.authorizationPacket.actionSpecificRevalidation['PROD-01-TARGET-READONLY-PREFLIGHT'] =
+    ['BUILT_IMAGE_DIGEST'];
+  expectRejected(
+    earlyDigest,
+    'ACTION_REVALIDATION_SET_INVALID',
+    'preflight cannot require a not-yet-built image digest',
+  );
 });
 
 test('target unresolved-fact set and global invariants are frozen', () => {
@@ -392,6 +451,8 @@ test('action title, category and effects remain bound to the frozen operation me
 test('hostile combined semantic widening still fails closed after schema admission', () => {
   const changed = structuredClone(base);
   changed.authorizationPacket.mustRevalidateBeforeRequest = ['AUTHORITY_HEAD'];
+  changed.authorizationPacket.actionSpecificRevalidation['PROD-04-BUILD-IMAGE'] =
+    ['BUILT_IMAGE_DIGEST'];
   changed.target.unresolvedFacts = ['TARGET_HOST_IDENTITY'];
 
   const importAction = action(changed, 'PROD-09-PRODUCTION-DATA-IMPORT');
@@ -405,6 +466,7 @@ test('hostile combined semantic widening still fails closed after schema admissi
   const codes = issueCodes(result);
   for (const code of [
     'REVALIDATION_CHECKLIST_INVALID',
+    'ACTION_REVALIDATION_INVALID',
     'TARGET_UNRESOLVED_FACTS_INVALID',
     'ACTION_RISK_INVALID',
     'ACTION_SIDE_EFFECT_INVALID',

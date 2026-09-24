@@ -171,6 +171,7 @@
         "blockingGateIds",
         "deploymentBlockingGateIds",
         "mustRevalidateBeforeRequest",
+        "actionSpecificRevalidation",
         "rollbackAuthorizationModel",
         "separateRollbackApprovalRequired",
         "derivedRollbackActionIds"
@@ -242,6 +243,18 @@
           "uniqueItems": true,
           "items": {
             "type": "string"
+          }
+        },
+        "actionSpecificRevalidation": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_]+$"
+            }
           }
         }
       }
