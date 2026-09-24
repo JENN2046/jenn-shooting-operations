@@ -345,12 +345,17 @@ test('critical action risk, side effect and evidence contract cannot be understa
   }
 });
 
-test('global and action-specific pre-request revalidation are frozen without an image-digest cycle', () => {
+test('pre-request revalidation moves preflight-produced conflict facts out of the global checklist', () => {
   assert.equal(base.authorizationPacket.mustRevalidateBeforeRequest.includes('IMAGE_DIGEST'), false);
   assert.equal(
     base.authorizationPacket.mustRevalidateBeforeRequest.includes('BUILT_IMAGE_DIGEST'),
     false,
   );
+  assert.equal(
+    base.authorizationPacket.mustRevalidateBeforeRequest.includes('DISK_PORT_ROUTE_CONFLICTS'),
+    false,
+  );
+
   assert.equal(
     Object.hasOwn(
       base.authorizationPacket.actionSpecificRevalidation,
@@ -358,10 +363,44 @@ test('global and action-specific pre-request revalidation are frozen without an 
     ),
     false,
   );
+  assert.equal(
+    Object.hasOwn(
+      base.authorizationPacket.actionSpecificRevalidation,
+      'PROD-12-DINGTALK-PROVIDER-INTEGRATION',
+    ),
+    false,
+  );
+
   assert.deepEqual(
     base.authorizationPacket.actionSpecificRevalidation['PROD-04-BUILD-IMAGE'],
-    ['BUILD_SOURCE_AUTHORITY_COMMIT', 'BUILD_BASE_IMAGE_DIGEST'],
+    [
+      'BUILD_SOURCE_AUTHORITY_COMMIT',
+      'BUILD_BASE_IMAGE_DIGEST',
+      'DISK_PORT_ROUTE_CONFLICTS',
+    ],
   );
+
+  for (const actionId of [
+    'PROD-02-CREATE-ISOLATED-APP-STORAGE',
+    'PROD-03-GENERATE-INSTALL-TOKENS',
+    'PROD-04-BUILD-IMAGE',
+    'PROD-05-START-ISOLATED-CONTAINER',
+    'PROD-06-LOOPBACK-HEALTH-SMOKE',
+    'PROD-07-CONFIGURE-REVERSE-PROXY-TLS',
+    'PROD-08-FIREWALL-SECURITY-GROUP',
+    'PROD-09-PRODUCTION-DATA-IMPORT',
+    'PROD-10-ENABLE-VCP-REMOTE-SYNC',
+    'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE',
+    'PROD-13-CUTOVER-SWITCH',
+  ]) {
+    assert.equal(
+      base.authorizationPacket.actionSpecificRevalidation[actionId]
+        .includes('DISK_PORT_ROUTE_CONFLICTS'),
+      true,
+      actionId,
+    );
+  }
+
   for (const actionId of [
     'PROD-05-START-ISOLATED-CONTAINER',
     'PROD-06-LOOPBACK-HEALTH-SMOKE',
@@ -370,9 +409,10 @@ test('global and action-specific pre-request revalidation are frozen without an 
     'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE',
     'PROD-13-CUTOVER-SWITCH',
   ]) {
-    assert.deepEqual(
-      base.authorizationPacket.actionSpecificRevalidation[actionId],
-      ['BUILT_IMAGE_DIGEST'],
+    assert.equal(
+      base.authorizationPacket.actionSpecificRevalidation[actionId]
+        .includes('BUILT_IMAGE_DIGEST'),
+      true,
       actionId,
     );
   }
@@ -381,17 +421,38 @@ test('global and action-specific pre-request revalidation are frozen without an 
   reduced.authorizationPacket.mustRevalidateBeforeRequest = ['AUTHORITY_HEAD'];
   expectRejected(reduced, 'REVALIDATION_CHECKLIST_INVALID', 'reduced checklist');
 
-  const globalOutputDigest = structuredClone(base);
-  globalOutputDigest.authorizationPacket.mustRevalidateBeforeRequest.push('IMAGE_DIGEST');
+  const globalConflictFacts = structuredClone(base);
+  globalConflictFacts.authorizationPacket.mustRevalidateBeforeRequest
+    .push('DISK_PORT_ROUTE_CONFLICTS');
   expectRejected(
-    globalOutputDigest,
+    globalConflictFacts,
     'REVALIDATION_CHECKLIST_INVALID',
-    'build output digest cannot become a global prerequisite',
+    'preflight-produced conflict facts cannot be global prerequisites',
+  );
+
+  const earlyConflictFacts = structuredClone(base);
+  earlyConflictFacts.authorizationPacket.actionSpecificRevalidation[
+    'PROD-01-TARGET-READONLY-PREFLIGHT'
+  ] = ['DISK_PORT_ROUTE_CONFLICTS'];
+  expectRejected(
+    earlyConflictFacts,
+    'ACTION_REVALIDATION_SET_INVALID',
+    'preflight cannot require its own conflict-fact outputs',
+  );
+
+  const missingConflictFacts = structuredClone(base);
+  missingConflictFacts.authorizationPacket.actionSpecificRevalidation[
+    'PROD-02-CREATE-ISOLATED-APP-STORAGE'
+  ] = [];
+  expectRejected(
+    missingConflictFacts,
+    'ACTION_REVALIDATION_INVALID',
+    'post-preflight storage action cannot drop conflict revalidation',
   );
 
   const buildCycle = structuredClone(base);
   buildCycle.authorizationPacket.actionSpecificRevalidation['PROD-04-BUILD-IMAGE'] =
-    ['BUILT_IMAGE_DIGEST'];
+    ['BUILT_IMAGE_DIGEST', 'DISK_PORT_ROUTE_CONFLICTS'];
   expectRejected(
     buildCycle,
     'ACTION_REVALIDATION_INVALID',
@@ -400,20 +461,11 @@ test('global and action-specific pre-request revalidation are frozen without an 
 
   const missingBaseDigest = structuredClone(base);
   missingBaseDigest.authorizationPacket.actionSpecificRevalidation['PROD-04-BUILD-IMAGE'] =
-    ['BUILD_SOURCE_AUTHORITY_COMMIT'];
+    ['BUILD_SOURCE_AUTHORITY_COMMIT', 'DISK_PORT_ROUTE_CONFLICTS'];
   expectRejected(
     missingBaseDigest,
     'ACTION_REVALIDATION_INVALID',
     'build base digest cannot be dropped',
-  );
-
-  const earlyDigest = structuredClone(base);
-  earlyDigest.authorizationPacket.actionSpecificRevalidation['PROD-01-TARGET-READONLY-PREFLIGHT'] =
-    ['BUILT_IMAGE_DIGEST'];
-  expectRejected(
-    earlyDigest,
-    'ACTION_REVALIDATION_SET_INVALID',
-    'preflight cannot require a not-yet-built image digest',
   );
 });
 
@@ -452,7 +504,7 @@ test('hostile combined semantic widening still fails closed after schema admissi
   const changed = structuredClone(base);
   changed.authorizationPacket.mustRevalidateBeforeRequest = ['AUTHORITY_HEAD'];
   changed.authorizationPacket.actionSpecificRevalidation['PROD-04-BUILD-IMAGE'] =
-    ['BUILT_IMAGE_DIGEST'];
+    ['BUILT_IMAGE_DIGEST', 'DISK_PORT_ROUTE_CONFLICTS'];
   changed.target.unresolvedFacts = ['TARGET_HOST_IDENTITY'];
 
   const importAction = action(changed, 'PROD-09-PRODUCTION-DATA-IMPORT');
