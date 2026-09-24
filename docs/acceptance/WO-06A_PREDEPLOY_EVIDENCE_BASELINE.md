@@ -2,7 +2,7 @@
 
 - Authority base: `8d5747439ccdfb29dd78ae294c1df82cba6476a3`
 - Branch: `codex/wo-06a-predeploy-evidence-baseline`
-- Current result: `BASELINE_RUNNING`
+- Current result: `BASELINE_FIX_IN_PROGRESS`
 - Deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
 
 ## Frozen baseline assertions
@@ -81,3 +81,36 @@ BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 ```
 
 No 06A result may authorize deployment or close real external-integration gates.
+
+
+## Baseline run history
+
+### Run 1 — BLOCKED_LOCAL
+
+- Head: `4a62c1adf307f9f389455401a14fd75da6e44c79`
+- GitHub Actions run: `35973334636`
+- Node host runtime: `24.21.0`
+- `npm ci`: PASS
+- `npm run check`: PASS
+- Docker build: PASS
+- image non-root contract: PASS
+- no `--experimental-sqlite`: PASS
+- empty-volume startup: FAIL
+
+Failure evidence:
+
+```text
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'ajv'
+imported from /app/src/kiosk-contract-validator-v2.mjs
+```
+
+Root cause: the image copied `package.json` and application sources but did not copy `package-lock.json` or install declared runtime dependencies.
+
+Minimal correction on this branch:
+
+- pin Docker base to `node:24.21.0-alpine`;
+- copy `package.json + package-lock.json`;
+- run `npm ci --omit=dev --ignore-scripts`;
+- keep non-root user, data volume, healthcheck and application command unchanged.
+
+Run 1 is not a PASS and is preserved as failure evidence. A fresh rerun is required.
