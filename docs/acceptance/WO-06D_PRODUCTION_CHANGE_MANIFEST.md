@@ -106,8 +106,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `a9f80f38b2745ee739f6d35fae708172840cdefa`
-- GitHub Actions run: `36016721973`
+- Head: `11c172f50d6cf843eed391de400f473f43db1f04`
+- GitHub Actions run: `36020032853`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -116,8 +116,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          555
-pass                           554
+tests                          556
+pass                           555
 fail                           0
 skipped                        1
 ```
@@ -127,8 +127,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  25
-pass   25
+tests  26
+pass   26
 fail   0
 ```
 
@@ -137,7 +137,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:f3d912fa3afeb94473bee8d75583516a0899e45f69374d7754b8d0389e0f3575",
+  "manifestDigest": "sha256:91d0fd5fb681e402fd0fda67f211d6abc6002eab4eff3976e8c5c441d483de3e",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -381,3 +381,39 @@ manifest digest  sha256:f3d912fa3afeb94473bee8d75583516a0899e45f69374d7754b8d038
 ```
 
 The current packet still carries no requested, approved, requestable, or derived rollback action IDs. No deployment or rollback action was executed.
+
+
+## Post-Switch authority recovery blocker
+
+The latest P1 correctly distinguishes pre-Switch deployment rollback from post-Switch business recovery. The existing migration authority states that after Switch, recovery requires a separately designed dual-read / compatible-write path plus a switch record; WO-06D must not infer that capability from pre-Switch backup/restore evidence.
+
+The current manifest therefore freezes:
+
+```text
+CUTOVER_SWITCH_RECOVERY = BLOCKED
+evidence = POST_SWITCH_DUAL_READ_COMPATIBLE_WRITE_AND_SWITCH_RECORD_NOT_DESIGNED
+
+PROD-13.preconditions += CUTOVER_SWITCH_RECOVERY
+PROD-13.rollbackActionIds += ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH
+
+ROLLBACK-07.status = BLOCKED_PREREQUISITE
+ROLLBACK-07.authorityTarget = UNRESOLVED_POST_SWITCH_AUTHORITY_RECOVERY_CAPABILITY
+ROLLBACK-07.preconditions = [CUTOVER_SWITCH_RECOVERY]
+```
+
+`ROLLBACK-07` is deliberately **not** in the executable global rollback order and is not derived as co-authorized rollback authority while blocked. It is a structural recovery requirement, not a claim that post-Switch reversal already exists.
+
+`PROD-13` now also requires `POST_SWITCH_RECOVERY_DESIGN`, `DUAL_READ_COMPATIBLE_WRITE_RECOVERY_PROOF`, and `SWITCH_RECORD` evidence. Regression proves the recovery gate cannot be self-promoted, the switch-restore rollback cannot be dropped from the cutover binding, and the blocked rollback cannot be activated without a new reviewed authority revision.
+
+Exact implementation-bearing evidence:
+
+```text
+head             11c172f50d6cf843eed391de400f473f43db1f04
+run              36020032853
+result           success
+full suite       556 tests / 555 pass / 0 fail / 1 expected VCP skip
+manifest suite   26 / 26 PASS
+manifest digest  sha256:91d0fd5fb681e402fd0fda67f211d6abc6002eab4eff3976e8c5c441d483de3e
+```
+
+No Switch, route mutation, client remap, migration, provider call, or production rollback was executed.

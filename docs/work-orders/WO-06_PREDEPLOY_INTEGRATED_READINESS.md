@@ -267,12 +267,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36016721973` on implementation-bearing head `a9f80f38b2745ee739f6d35fae708172840cdefa` passed:
+GitHub Actions run `36020032853` on implementation-bearing head `11c172f50d6cf843eed391de400f473f43db1f04` passed:
 
-- full `npm run check`: 555 tests / 554 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 25/25 PASS;
+- full `npm run check`: 556 tests / 555 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 26/26 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:f3d912fa3afeb94473bee8d75583516a0899e45f69374d7754b8d0389e0f3575`;
+- manifest digest: `sha256:91d0fd5fb681e402fd0fda67f211d6abc6002eab4eff3976e8c5c441d483de3e`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -394,3 +394,25 @@ derivedRollbackActionIds = []
 Forward actions still require explicit human authorization. Rollback-only actions are authorized only as the exact rollback IDs bound to an approved forward action; the validator derives that set and rejects forged rollback authority.
 
 Implementation evidence: head `a9f80f38b2745ee739f6d35fae708172840cdefa`, run `36016721973`, 555/554/0/1 full suite, 25/25 manifest suite, digest `sha256:f3d912fa3afeb94473bee8d75583516a0899e45f69374d7754b8d0389e0f3575`.
+
+
+### WO-06D post-Switch authority recovery blocker
+
+The migration authority explicitly separates pre-Switch rollback from post-Switch business recovery. Post-Switch reversal requires a separately designed dual-read / compatible-write path and switch record.
+
+WO-06D now freezes:
+
+```text
+CUTOVER_SWITCH_RECOVERY = BLOCKED
+evidence = POST_SWITCH_DUAL_READ_COMPATIBLE_WRITE_AND_SWITCH_RECORD_NOT_DESIGNED
+
+PROD-13.preconditions += CUTOVER_SWITCH_RECOVERY
+PROD-13.rollbackActionIds += ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH
+
+ROLLBACK-07.status = BLOCKED_PREREQUISITE
+ROLLBACK-07.authorityTarget = UNRESOLVED_POST_SWITCH_AUTHORITY_RECOVERY_CAPABILITY
+```
+
+Rollback 07 is not executable, not in the global rollback order, and not derivable as rollback authority while blocked. It becomes a real rollback capability only through a later reviewed authority revision that provides the dual-read/compatible-write recovery proof and switch-record contract.
+
+Implementation evidence: head `11c172f50d6cf843eed391de400f473f43db1f04`, run `36020032853`, full suite 556/555/0/1, manifest suite 26/26, digest `sha256:91d0fd5fb681e402fd0fda67f211d6abc6002eab4eff3976e8c5c441d483de3e`.
