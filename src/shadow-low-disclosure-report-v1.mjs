@@ -296,26 +296,28 @@ export function admitLowDisclosureShadowReportV1(value, context = {
     const eventAfter = exclusionCounts.find(item => item.code === 'EVENT_AFTER_CUTOFF')?.count ?? 0;
     if (eventAfter > eventOutside) return invalid('REPORT_CONTENT_INVALID');
 
+    const processedCohort = eligibilityCounts.total - eventOutside;
+
     const levelBExclusions = exclusionCounts
       .filter(item => LEVEL_B_EXCLUSION_CODES.has(item.code));
     const levelBExclusionTotal = levelBExclusions.reduce((sum, item) => sum + item.count, 0);
     const levelBShortfall = eligibilityCounts.levelA - eligibilityCounts.levelB;
     if (levelBExclusionTotal < levelBShortfall
-      || levelBExclusionTotal > eligibilityCounts.total - eligibilityCounts.levelB) {
+      || levelBExclusionTotal > processedCohort - eligibilityCounts.levelB) {
       return invalid('REPORT_CONTENT_INVALID');
     }
 
     const levelCExclusions = exclusionCounts
       .filter(item => LEVEL_C_EXCLUSION_CODES.has(item.code));
     const levelCShortfall = eligibilityCounts.levelB - eligibilityCounts.levelC;
-    if (levelCExclusions.some(item => item.count > eligibilityCounts.total - eligibilityCounts.levelC)
+    if (levelCExclusions.some(item => item.count > processedCohort - eligibilityCounts.levelC)
       || levelCExclusions.reduce((sum, item) => sum + item.count, 0) < levelCShortfall) {
       return invalid('REPORT_CONTENT_INVALID');
     }
     const outcomeExclusionTotal = levelCExclusions
       .filter(item => OUTCOME_EXCLUSION_CODES.has(item.code))
       .reduce((sum, item) => sum + item.count, 0);
-    if (outcomeExclusionTotal > eligibilityCounts.total - eligibilityCounts.levelC) {
+    if (outcomeExclusionTotal > processedCohort - eligibilityCounts.levelC) {
       return invalid('REPORT_CONTENT_INVALID');
     }
 
