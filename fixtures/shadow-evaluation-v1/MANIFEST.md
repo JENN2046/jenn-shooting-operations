@@ -16,3 +16,26 @@ npm run evaluate:shadow:fixtures
 ```
 
 The runner reads only this checked-in fixture and invokes the frozen classifier/evaluator with no network, provider, environment credential, or production database access.
+
+
+## Integration surfaces
+
+Diagnostic fixture replay, including per-case classifications for local tests:
+
+```sh
+npm run evaluate:shadow:fixtures
+```
+
+Low-disclosure aggregate report only:
+
+```sh
+npm run evaluate:shadow:report
+```
+
+Main validation gate:
+
+```sh
+npm run validate:shadow
+```
+
+The low-disclosure surface intentionally omits fixture identifiers, per-case sample/request/run identifiers, classifications, raw events, Brief/note/provider content, and production database details.

@@ -6,12 +6,14 @@
   "scripts": {
     "start": "node src/server.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "npm run validate:contract && npm test",
+    "check": "npm run validate:contract && npm run validate:shadow && npm test",
     "backup": "node scripts/backup.mjs",
     "uploads:cleanup": "node scripts/cleanup-uploads.mjs",
     "validate:contract": "node scripts/validate-contracts.mjs",
     "validate:planner": "node scripts/validate-current-planner.mjs",
-    "evaluate:shadow:fixtures": "node scripts/replay-shadow-evaluation.mjs"
+    "evaluate:shadow:fixtures": "node scripts/replay-shadow-evaluation.mjs",
+    "evaluate:shadow:report": "node scripts/verify-shadow-low-disclosure.mjs",
+    "validate:shadow": "node scripts/verify-shadow-low-disclosure.mjs --check"
   },
   "engines": {
     "node": ">=22.13.0"
