@@ -4,7 +4,7 @@
 - Authority base: `79cff08aff2b17ee28b506377966087fd962d5a3`
 - Reconstruction branch: `codex/wo-05e-fresh-runtime-closure`
 - Scope: fresh-runtime failure reproduction evidence, minimal WAL physical-family correction, focused regression, final exact-head rerun gate
-- Current result: `FINAL_HEAD_GATE / MERGE_PENDING`
+- Current result: `SHADOW_EVALUATOR_PASS_WITH_BLOCKED_DATA`
 - Real shadow-data gate: `BLOCKED_DATA`
 
 ## 1. Initial fresh-runtime evidence
@@ -150,27 +150,46 @@ The final-head workflow must continue to prove:
 - no unqualified real shadow-acceptance PASS;
 - complete test/pass/fail/skip counts with zero failures.
 
-## 6. Closure rule
+## 6. Authority closure
 
-PR #11 must remain non-authoritative while it is open, even when its exact-head GitHub Actions runtime gate is green.
-
-The strongest PR-branch state is:
+PR #11 merged into `codex/v2-1-architecture-freeze` as:
 
 ```text
-BLOCKED_DATA
-FINAL_HEAD_RUNTIME_PASS
-MERGE_PENDING
+2f0e1266e0c1d6dd43c7ca18bde47e4c61daee82
 ```
 
-PR #11 itself must not publish `SHADOW_EVALUATOR_PASS_WITH_BLOCKED_DATA` as the current work-order status.
+The final tested PR head was:
 
-After PR #11 is merged into the authority branch, a separate docs-only authority-closure PR may publish:
+```text
+623e8eac956bccc80e642ae89652a90eb910750e
+```
+
+The merge commit and tested head have the same Git tree:
+
+```text
+04f949dd6e8a5d389afab925076374af3d76523c
+```
+
+Therefore the merged implementation tree is byte-for-byte the tested tree for repository content.
+
+The final exact-head GitHub Actions gate on `623e8eac956bccc80e642ae89652a90eb910750e` passed with:
+
+```text
+530 tests
+529 passed
+0 failed
+1 skipped
+0 cancelled
+0 todo
+```
+
+The authoritative WO-05E implementation state is now:
 
 ```text
 SHADOW_EVALUATOR_PASS_WITH_BLOCKED_DATA
 ```
 
-That closure PR must preserve the real-data gate and must not change implementation code.
+This closes only the implementation/runtime evidence gate.
 
 The real data gate remains separate and unchanged:
 
