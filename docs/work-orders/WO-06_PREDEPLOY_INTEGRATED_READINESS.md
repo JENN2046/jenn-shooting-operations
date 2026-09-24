@@ -266,10 +266,10 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `35985335257` on implementation-bearing head `f746a408c5d689a1667f6a887740572010719b66` passed:
+GitHub Actions run `35986269431` on implementation-bearing head `38453503ade5b276735097e59d17bb44959e20ca` passed:
 
-- full `npm run check`: 542 tests / 541 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 12/12 PASS;
+- full `npm run check`: 549 tests / 548 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 19/19 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
 - manifest digest: `sha256:b03782756107194f5edf7fa624abf0223f5628e7316134d91b312b79962e05f1`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
@@ -291,6 +291,30 @@ The production authorization validator now freezes, for every one of the 18 acti
 The requestable status set is additionally checked bidirectionally against the two frozen requestable action IDs. Unknown/replaced action IDs are rejected. Secret scanning now rejects ordinary Bearer material in schema-valid free text.
 
 The exact-head hostile regressions cover all 4×P1 + 1×P2 review findings plus combined multi-axis widening. The authorization packet remains:
+
+```text
+FROZEN_NOT_REQUESTED
+requestedActionIds = []
+approvedActionIds = []
+DEPLOYMENT_AUTHORIZATION_REQUEST = BLOCKED_PREREQUISITES
+BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
+```
+
+
+### WO-06D complete semantic freeze
+
+After re-review, the packet additionally freezes:
+
+- exact `authorityBase`;
+- target unresolved-fact set;
+- gate evidence;
+- global invariant set;
+- per-action title/category/risk/sideEffect/effects/evidenceRequired;
+- exact pre-request revalidation checklist.
+
+Together with the prior target/precondition/status/rollback hardening, this makes the production authorization definition fail closed across lineage, scope, risk, prerequisites, evidence and recovery semantics.
+
+Current packet state remains unchanged:
 
 ```text
 FROZEN_NOT_REQUESTED
