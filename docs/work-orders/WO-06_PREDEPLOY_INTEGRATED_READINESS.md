@@ -235,7 +235,7 @@ deploymentAuthorizationRequest = BLOCKED_PREREQUISITES
 deploymentGate = BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 ```
 
-Pre-request revalidation is intentionally split: the global checklist contains only facts that can exist before the first production action, while `actionSpecificRevalidation` binds source/base digest checks to PROD-04 and the built-image digest only to downstream actions that depend on the produced image.
+Pre-request revalidation is intentionally split: global checks exclude facts that are produced by earlier production actions. `actionSpecificRevalidation` binds source/base digest checks to PROD-04, host-conflict facts to PROD-02 and later host-dependent actions only after PROD-01, and the built-image digest only to downstream actions that depend on the produced image.
 
 The packet's deployment-level blocker subset is frozen as:
 
@@ -273,12 +273,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36032380591` on implementation-bearing head `7cb0597171846f56f060d8289b147602dd6b8f1f` passed:
+GitHub Actions run `36033799141` on implementation-bearing head `efe576d66d9b2802cd5a81d2ca5ef0008dbafb18` passed:
 
 - full `npm run check`: 564 tests / 563 pass / 0 fail / 1 expected external-VCP skip;
 - production-manifest targeted tests: 34/34 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:cd6f28259bff04abb06a7bc6c91f176ae3814e47bd9dcfd12fce3ce0341acdfc`;
+- manifest digest: `sha256:c1b08096be43f98d0f791ee15419c3b22f9b57a6df880e87f18477fa353f2492`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -578,3 +578,20 @@ PROD-05 / PROD-06 / PROD-07 / PROD-10 / PROD-11 / PROD-13:
 PROD-01 has no built-image revalidation requirement. The validator freezes both the global checklist and the exact action-specific map, so the build cannot require its own output digest and downstream actions cannot silently drop their built-image identity check.
 
 Implementation evidence: head `7cb0597171846f56f060d8289b147602dd6b8f1f`, run `36032380591`, full suite 564/563/0/1, manifest suite 34/34, digest `sha256:cd6f28259bff04abb06a7bc6c91f176ae3814e47bd9dcfd12fce3ce0341acdfc`.
+
+
+### WO-06D host-conflict revalidation after preflight
+
+`DISK_PORT_ROUTE_CONFLICTS` is no longer in the global pre-request checklist.
+
+After PROD-01 has discovered the host facts, the check is required only for later host-dependent actions:
+
+```text
+PROD-02 / PROD-03 / PROD-04 / PROD-05 / PROD-06 / PROD-07
+PROD-08 / PROD-09 / PROD-10 / PROD-11 / PROD-13
+→ DISK_PORT_ROUTE_CONFLICTS
+```
+
+PROD-01 therefore cannot depend on its own outputs, while later host mutations still fail closed if the preflight conflict facts are missing or stale. PROD-12 remains outside this host-specific revalidation path.
+
+Implementation evidence: head `efe576d66d9b2802cd5a81d2ca5ef0008dbafb18`, run `36033799141`, full suite 564/563/0/1, manifest suite 34/34, digest `sha256:c1b08096be43f98d0f791ee15419c3b22f9b57a6df880e87f18477fa353f2492`.

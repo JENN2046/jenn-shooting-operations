@@ -35,7 +35,7 @@ Validator:
 
 The authorization packet is nested inside the manifest so it cannot drift from the change list it governs.
 
-Pre-request revalidation is split into a global checklist plus action-specific checks. Build-output identity is not a global prerequisite: PROD-04 revalidates its bound source commit and base-image digest before build, while downstream runtime/cutover actions revalidate the built-image digest only after PROD-04 has produced it.
+Pre-request revalidation is split into a global checklist plus action-specific checks. Neither build-output identity nor host-conflict facts discovered by PROD-01 are global prerequisites. PROD-04 revalidates its bound source commit and base-image digest before build; PROD-02 and later host-dependent actions revalidate `DISK_PORT_ROUTE_CONFLICTS` only after PROD-01 has produced those facts; downstream runtime/cutover actions revalidate the built-image digest only after PROD-04 has produced it.
 
 ## Frozen authorization semantics
 
@@ -115,8 +115,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `7cb0597171846f56f060d8289b147602dd6b8f1f`
-- GitHub Actions run: `36032380591`
+- Head: `efe576d66d9b2802cd5a81d2ca5ef0008dbafb18`
+- GitHub Actions run: `36033799141`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -146,7 +146,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:cd6f28259bff04abb06a7bc6c91f176ae3814e47bd9dcfd12fce3ce0341acdfc",
+  "manifestDigest": "sha256:c1b08096be43f98d0f791ee15419c3b22f9b57a6df880e87f18477fa353f2492",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -751,3 +751,41 @@ manifest digest  sha256:cd6f28259bff04abb06a7bc6c91f176ae3814e47bd9dcfd12fce3ce0
 ```
 
 No image build, host preflight, deployment request, or production mutation was executed.
+
+
+## Host-conflict revalidation after target preflight
+
+Exact-current review on `df4b9be...` identified the remaining preflight cycle: `DISK_PORT_ROUTE_CONFLICTS` was still global even though PROD-01 is the action that discovers those facts.
+
+The global checklist now excludes `DISK_PORT_ROUTE_CONFLICTS`.
+
+The conflict check is action-specific only for later host-dependent actions:
+
+```text
+PROD-02 / PROD-03 / PROD-04 / PROD-05 / PROD-06 / PROD-07
+PROD-08 / PROD-09 / PROD-10 / PROD-11 / PROD-13
+→ DISK_PORT_ROUTE_CONFLICTS
+```
+
+PROD-01 is deliberately absent from `actionSpecificRevalidation`, so after an exact candidate host is bound, the read-only preflight can run and produce the disk/port/container/proxy/TLS facts. PROD-12 is also absent because its DingTalk provider target is separately bound and does not depend on production-host conflict facts.
+
+Hostile regression rejects:
+
+- moving `DISK_PORT_ROUTE_CONFLICTS` back into the global checklist;
+- adding it to PROD-01;
+- replacing it with an unrelated revalidation item on a post-preflight host action.
+
+Exact implementation-bearing evidence:
+
+```text
+head             efe576d66d9b2802cd5a81d2ca5ef0008dbafb18
+run              36033799141
+result           success
+full suite       564 tests / 563 pass / 0 fail / 1 expected VCP skip
+manifest suite   34 / 34 PASS
+manifest digest  sha256:c1b08096be43f98d0f791ee15419c3b22f9b57a6df880e87f18477fa353f2492
+```
+
+Run `36033670866` on the immediately prior implementation head failed only because the new hostile regression used an empty array and was rejected by schema before reaching the intended semantic error code. The regression was corrected to use a schema-valid but semantically wrong replacement; no production contract weakening was needed.
+
+No host inspection, deployment request, or production mutation was executed.
