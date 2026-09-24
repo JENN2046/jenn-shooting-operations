@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import {
@@ -211,4 +213,144 @@ test('metric-specific count and rate semantics reject impossible OK values', asy
     code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
     reason: 'REPORT_CONTENT_INVALID',
   });
+});
+
+
+test('approved low-disclosure reports require trusted expected approval context', async () => {
+  const report = await replayReport();
+  const approvalDigest = `sha256:${'9'.repeat(64)}`;
+  const approved = structuredClone(report);
+  approved.datasetClass = 'approvedLowDisclosure';
+  approved.approvalDigest = approvalDigest;
+  approved.resultDigest = recomputeResultDigest(approved);
+
+  assert.deepEqual(admitLowDisclosureShadowReportV1(approved), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_APPROVAL_UNVERIFIED',
+  });
+  assert.deepEqual(admitLowDisclosureShadowReportV1(approved, {
+    expectedApprovalDigest: `sha256:${'8'.repeat(64)}`,
+  }), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_APPROVAL_UNVERIFIED',
+  });
+
+  const admitted = admitLowDisclosureShadowReportV1(approved, {
+    expectedApprovalDigest: approvalDigest,
+  });
+  assert.equal(admitted.ok, true, JSON.stringify(admitted));
+
+  assert.deepEqual(admitLowDisclosureShadowReportV1(report, {
+    expectedApprovalDigest: approvalDigest,
+  }), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_APPROVAL_MATRIX_INVALID',
+  });
+});
+
+test('Level C and Level B denominators must match frozen evaluator cohorts', async () => {
+  const report = await replayReport();
+
+  const possibleLevelC = structuredClone(report);
+  possibleLevelC.eligibilityCounts.levelC = 1;
+  possibleLevelC.metrics.medianAbsoluteDurationErrorMs = {
+    status: 'OK', value: 100, numerator: null, denominator: 1,
+  };
+  possibleLevelC.metrics.p90OverrunMs = {
+    status: 'OK', value: 100, numerator: null, denominator: 1,
+  };
+  possibleLevelC.metrics.humanOverrideRate = {
+    status: 'OK', value: 0, numerator: 0, denominator: 1,
+  };
+  possibleLevelC.resultDigest = recomputeResultDigest(possibleLevelC);
+  assert.equal(admitLowDisclosureShadowReportV1(possibleLevelC).ok, true);
+
+  const wrongDurationDenominator = structuredClone(possibleLevelC);
+  wrongDurationDenominator.metrics.medianAbsoluteDurationErrorMs.denominator = 2;
+  wrongDurationDenominator.resultDigest = recomputeResultDigest(wrongDurationDenominator);
+  assert.deepEqual(admitLowDisclosureShadowReportV1(wrongDurationDenominator), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_CONTENT_INVALID',
+  });
+
+  const missingRequiredLevelCMetric = structuredClone(possibleLevelC);
+  missingRequiredLevelCMetric.metrics.humanOverrideRate = {
+    status: 'NOT_ENOUGH_DATA', value: null, numerator: null, denominator: 0,
+  };
+  missingRequiredLevelCMetric.resultDigest = recomputeResultDigest(missingRequiredLevelCMetric);
+  assert.deepEqual(admitLowDisclosureShadowReportV1(missingRequiredLevelCMetric), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_CONTENT_INVALID',
+  });
+
+  const wrongBaselineDenominator = structuredClone(report);
+  wrongBaselineDenominator.metrics.retrospectiveDurationBaselineP90OverrunMs.denominator = 2;
+  wrongBaselineDenominator.resultDigest = recomputeResultDigest(wrongBaselineDenominator);
+  assert.deepEqual(admitLowDisclosureShadowReportV1(wrongBaselineDenominator), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_CONTENT_INVALID',
+  });
+});
+
+test('report timestamp rejects impossible calendar dates instead of normalizing them', async () => {
+  const report = await replayReport();
+  const impossible = structuredClone(report);
+  impossible.generatedAt = '2026-02-29T00:00:00Z';
+  assert.deepEqual(admitLowDisclosureShadowReportV1(impossible), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_SHAPE_INVALID',
+  });
+
+  const leap = structuredClone(report);
+  leap.generatedAt = '2028-02-29T08:00:00+08:00';
+  const admitted = admitLowDisclosureShadowReportV1(leap);
+  assert.equal(admitted.ok, true, JSON.stringify(admitted));
+  assert.equal(admitted.report.generatedAt, '2028-02-29T00:00:00.000Z');
+});
+
+test('duration statistics enforce frozen integer P90 and median half-millisecond precision', async () => {
+  const report = await replayReport();
+
+  const fractionalP90 = structuredClone(report);
+  fractionalP90.metrics.retrospectiveDurationBaselineP90OverrunMs.value = 0.1;
+  fractionalP90.resultDigest = recomputeResultDigest(fractionalP90);
+  assert.deepEqual(admitLowDisclosureShadowReportV1(fractionalP90), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_CONTENT_INVALID',
+  });
+
+  const quarterMedian = structuredClone(report);
+  quarterMedian.metrics.retrospectiveDurationBaselineMedianAbsoluteErrorMs.value = 100.25;
+  quarterMedian.resultDigest = recomputeResultDigest(quarterMedian);
+  assert.deepEqual(admitLowDisclosureShadowReportV1(quarterMedian), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_CONTENT_INVALID',
+  });
+
+  const oddDenominatorHalfMedian = structuredClone(report);
+  oddDenominatorHalfMedian.metrics.retrospectiveDurationBaselineMedianAbsoluteErrorMs.value = 100.5;
+  oddDenominatorHalfMedian.resultDigest = recomputeResultDigest(oddDenominatorHalfMedian);
+  assert.deepEqual(admitLowDisclosureShadowReportV1(oddDenominatorHalfMedian), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_CONTENT_INVALID',
+  });
+});
+
+test('validate:shadow check output names synthetic implementation validation and blocked gate', () => {
+  const script = fileURLToPath(new URL('../scripts/verify-shadow-low-disclosure.mjs', import.meta.url));
+  const output = execFileSync(process.execPath, [script, '--check'], { encoding: 'utf8' });
+  assert.match(output, /^VALID synthetic low-disclosure implementation;/u);
+  assert.match(output, /datasetClass=synthetic/u);
+  assert.match(output, /gateStatus=BLOCKED_DATA/u);
+  assert.doesNotMatch(output, /^PASS /u);
 });
