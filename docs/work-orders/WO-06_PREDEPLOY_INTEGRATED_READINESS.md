@@ -266,12 +266,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `35986269431` on implementation-bearing head `38453503ade5b276735097e59d17bb44959e20ca` passed:
+GitHub Actions run `35987184987` on implementation-bearing head `097800f17df598d02b0c7f51d893cbe69b2d1d9b` passed:
 
-- full `npm run check`: 549 tests / 548 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 19/19 PASS;
+- full `npm run check`: 550 tests / 549 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 20/20 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:b03782756107194f5edf7fa624abf0223f5628e7316134d91b312b79962e05f1`;
+- manifest digest: `sha256:99c7c6c6f2477d1c256879bb14ccc964122232a9d032b070c084b727c37938a7`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -323,3 +323,18 @@ approvedActionIds = []
 DEPLOYMENT_AUTHORIZATION_REQUEST = BLOCKED_PREREQUISITES
 BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 ```
+
+
+### WO-06D firewall rollback-order hardening
+
+The global rollback plan now explicitly includes `ROLLBACK-05-REVERT-FIREWALL-RULE` immediately after removing the newly added reverse-proxy route:
+
+```text
+remove new route
+→ revert new firewall/security-group rule
+→ stop new container
+→ disable newly enabled external config
+→ preserve data volume
+```
+
+This closes the gap where a future authorized firewall mutation could otherwise survive a rollback sequence. Omission or misplacement of rollback 05 is covered by hostile regression and fails closed.
