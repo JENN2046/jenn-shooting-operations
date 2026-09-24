@@ -107,10 +107,10 @@ Frozen semantics:
 Run 1 is preserved as non-PASS evidence. A fresh rerun on the corrected harness is required.
 
 
-### Run 3 — FRESH_PASS
+### Final implementation-head run — FRESH_PASS
 
-- Head: `15f5b905d09ce842883a03ba76cbc629f88a822d`
-- GitHub Actions run: `35975920061`
+- Final implementation-bearing head: `b10a2ff8fac20d6ba892a5a8bfc3232c4189c73d`
+- GitHub Actions run: `35976098214`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 - `npm run check`: 530 tests / 529 pass / 0 fail / 1 expected external-VCP skip
 - targeted migration/recovery suite: `126/126 PASS`
@@ -134,6 +134,8 @@ Machine-readable harness result:
 ```
 
 Existing targeted tests in the same exact-head run also covered backup tamper, non-SQLite backup, sidecar injection, partial restore preservation, source changes during scan/apply, target tamper, path identity conflicts and schema drift.
+
+This record cites the final implementation-bearing exact-head run. Any later commit that changes only this evidence text must itself pass the unchanged WO-06B workflow before merge; that docs-only run is attached to the PR/check record and does not replace the implementation-head acceptance run above.
 
 ## Closure
 
