@@ -44,8 +44,10 @@ async function verifyKioskBoundary(root) {
     );
     assert.equal(blocked.status, 401);
     assert.deepEqual(await blocked.json(), {
+      schemaVersion: 2,
       ok: false,
       code: 'AUTH_NOT_CONFIGURED',
+      replayed: false,
     });
   } finally {
     await close(defaultRuntime.server);
