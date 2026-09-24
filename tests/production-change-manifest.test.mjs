@@ -97,6 +97,8 @@ test('manifest rejects blanket approval and incomplete blocker surfaces', () => 
     'CONTAINER_START_READINESS',
     'HEALTH_SMOKE_READINESS',
     'PROXY_BACKEND_READINESS',
+    'PRODUCTION_IMPORT_STORAGE_READINESS',
+    'INTEGRATION_DEPLOYMENT_READINESS',
   ]) {
     const missing = structuredClone(base);
     missing.authorizationPacket.blockingGateIds =
@@ -496,6 +498,89 @@ test('proxy exposure remains blocked until build, start, and health verification
   const forgedGate = structuredClone(base);
   forgedGate.gates.find(candidate => candidate.id === 'PROXY_BACKEND_READINESS').status = 'SATISFIED';
   expectRejected(forgedGate, 'GATE_STATUS_INVALID', 'proxy backend gate cannot self-promote');
+});
+
+
+test('production import remains blocked until isolated storage preparation completes', () => {
+  const gate = base.gates.find(
+    candidate => candidate.id === 'PRODUCTION_IMPORT_STORAGE_READINESS',
+  );
+  assert.ok(gate);
+  assert.equal(gate.status, 'BLOCKED');
+  assert.equal(gate.evidence, 'REQUIRES_VERIFIED_PROD_02');
+
+  const dataImport = action(base, 'PROD-09-PRODUCTION-DATA-IMPORT');
+  assert.equal(
+    dataImport.preconditions.includes('PRODUCTION_IMPORT_STORAGE_READINESS'),
+    true,
+  );
+  assert.equal(
+    dataImport.evidenceRequired.includes('STORAGE_PREPARATION_COMPLETION_PROOF'),
+    true,
+  );
+
+  const droppedGate = structuredClone(base);
+  action(droppedGate, 'PROD-09-PRODUCTION-DATA-IMPORT').preconditions =
+    action(droppedGate, 'PROD-09-PRODUCTION-DATA-IMPORT').preconditions
+      .filter(id => id !== 'PRODUCTION_IMPORT_STORAGE_READINESS');
+  expectRejected(droppedGate, 'ACTION_PRECONDITIONS_INVALID', 'import storage gate removed');
+
+  const droppedProof = structuredClone(base);
+  action(droppedProof, 'PROD-09-PRODUCTION-DATA-IMPORT').evidenceRequired =
+    action(droppedProof, 'PROD-09-PRODUCTION-DATA-IMPORT').evidenceRequired
+      .filter(id => id !== 'STORAGE_PREPARATION_COMPLETION_PROOF');
+  expectRejected(
+    droppedProof,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'import storage completion proof removed',
+  );
+
+  const forgedGate = structuredClone(base);
+  forgedGate.gates.find(
+    candidate => candidate.id === 'PRODUCTION_IMPORT_STORAGE_READINESS',
+  ).status = 'SATISFIED';
+  expectRejected(forgedGate, 'GATE_STATUS_INVALID', 'import storage gate cannot self-promote');
+});
+
+test('VCP and Kiosk enablement remain blocked until the deployment chain is complete', () => {
+  const gate = base.gates.find(candidate => candidate.id === 'INTEGRATION_DEPLOYMENT_READINESS');
+  assert.ok(gate);
+  assert.equal(gate.status, 'BLOCKED');
+  assert.equal(
+    gate.evidence,
+    'REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_AND_PROD_08_IF_USED',
+  );
+
+  for (const actionId of [
+    'PROD-10-ENABLE-VCP-REMOTE-SYNC',
+    'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE',
+  ]) {
+    const candidate = action(base, actionId);
+    assert.equal(candidate.preconditions.includes('INTEGRATION_DEPLOYMENT_READINESS'), true);
+    assert.equal(candidate.evidenceRequired.includes('DEPLOYMENT_CHAIN_COMPLETION_PROOF'), true);
+
+    const droppedGate = structuredClone(base);
+    action(droppedGate, actionId).preconditions =
+      action(droppedGate, actionId).preconditions
+        .filter(id => id !== 'INTEGRATION_DEPLOYMENT_READINESS');
+    expectRejected(droppedGate, 'ACTION_PRECONDITIONS_INVALID', `${actionId} deployment gate removed`);
+
+    const droppedProof = structuredClone(base);
+    action(droppedProof, actionId).evidenceRequired =
+      action(droppedProof, actionId).evidenceRequired
+        .filter(id => id !== 'DEPLOYMENT_CHAIN_COMPLETION_PROOF');
+    expectRejected(
+      droppedProof,
+      'ACTION_EVIDENCE_REQUIRED_INVALID',
+      `${actionId} deployment proof removed`,
+    );
+  }
+
+  const forgedGate = structuredClone(base);
+  forgedGate.gates.find(
+    candidate => candidate.id === 'INTEGRATION_DEPLOYMENT_READINESS',
+  ).status = 'SATISFIED';
+  expectRejected(forgedGate, 'GATE_STATUS_INVALID', 'integration readiness cannot self-promote');
 });
 
 
