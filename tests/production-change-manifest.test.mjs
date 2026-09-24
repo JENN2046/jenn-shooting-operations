@@ -180,3 +180,99 @@ test('hostile combined mutation cannot widen target, requestability and rollback
     'SECRET_MATERIAL_DETECTED',
   ]) assert.equal(codes.has(code), true, code);
 });
+
+
+test('authority lineage is frozen to the declared base commit', () => {
+  const changed = structuredClone(base);
+  changed.authorityBase = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const result = validate(changed);
+  assert.equal(result.ok, false);
+  assert.equal(
+    issueCodes(result).has('SCHEMA_INVALID') || issueCodes(result).has('AUTHORITY_BASE_INVALID'),
+    true,
+    JSON.stringify(result.issues),
+  );
+});
+
+test('critical action risk, side effect and evidence contract cannot be understated', () => {
+  const cases = [
+    ['risk', 'LOW', 'ACTION_RISK_INVALID'],
+    ['sideEffect', 'READ_ONLY', 'ACTION_SIDE_EFFECT_INVALID'],
+    ['evidenceRequired', ['OK'], 'ACTION_EVIDENCE_REQUIRED_INVALID'],
+  ];
+  for (const [field, replacement, code] of cases) {
+    const changed = structuredClone(base);
+    action(changed, 'PROD-09-PRODUCTION-DATA-IMPORT')[field] = replacement;
+    expectRejected(changed, code, `PROD-09 ${field}`);
+  }
+});
+
+test('pre-request revalidation checklist cannot be reduced or replaced', () => {
+  const reduced = structuredClone(base);
+  reduced.authorizationPacket.mustRevalidateBeforeRequest = ['AUTHORITY_HEAD'];
+  expectRejected(reduced, 'REVALIDATION_CHECKLIST_INVALID', 'reduced checklist');
+
+  const replaced = structuredClone(base);
+  replaced.authorizationPacket.mustRevalidateBeforeRequest = [
+    ...base.authorizationPacket.mustRevalidateBeforeRequest.slice(0, -1),
+    'TRUST_ME',
+  ];
+  expectRejected(replaced, 'REVALIDATION_CHECKLIST_INVALID', 'replaced checklist');
+});
+
+test('target unresolved-fact set and global invariants are frozen', () => {
+  const targetFacts = structuredClone(base);
+  targetFacts.target.unresolvedFacts = targetFacts.target.unresolvedFacts
+    .filter(value => value !== 'TARGET_HOST_IDENTITY');
+  expectRejected(targetFacts, 'TARGET_UNRESOLVED_FACTS_INVALID', 'target fact removal');
+
+  const invariants = structuredClone(base);
+  invariants.invariants = invariants.invariants
+    .filter(value => value !== 'NO_SECRET_IN_GIT_LOGS_CHAT');
+  expectRejected(invariants, 'INVARIANT_SET_INVALID', 'invariant removal');
+});
+
+test('gate evidence cannot be rewritten to weaken the documented blocker', () => {
+  const changed = structuredClone(base);
+  const gate = changed.gates.find(candidate => candidate.id === 'WO06C_VCP_EXTERNAL');
+  gate.evidence = 'PASS';
+  expectRejected(changed, 'GATE_EVIDENCE_INVALID', 'gate evidence drift');
+});
+
+test('action title, category and effects remain bound to the frozen operation meaning', () => {
+  for (const [field, replacement, code] of [
+    ['title', 'Harmless read-only check', 'ACTION_TITLE_INVALID'],
+    ['category', 'TARGET', 'ACTION_CATEGORY_INVALID'],
+    ['effects', ['No meaningful effect'], 'ACTION_EFFECTS_INVALID'],
+  ]) {
+    const changed = structuredClone(base);
+    action(changed, 'PROD-13-CUTOVER-SWITCH')[field] = replacement;
+    expectRejected(changed, code, `PROD-13 ${field}`);
+  }
+});
+
+test('hostile combined lineage and risk understatement still fails closed', () => {
+  const changed = structuredClone(base);
+  changed.authorityBase = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+  changed.authorizationPacket.mustRevalidateBeforeRequest = ['AUTHORITY_HEAD'];
+  changed.target.unresolvedFacts = ['TARGET_HOST_IDENTITY'];
+
+  const importAction = action(changed, 'PROD-09-PRODUCTION-DATA-IMPORT');
+  importAction.risk = 'LOW';
+  importAction.sideEffect = 'READ_ONLY';
+  importAction.evidenceRequired = ['OK'];
+  importAction.authorityTarget = 'any database';
+
+  const result = validate(changed);
+  assert.equal(result.ok, false);
+  const codes = issueCodes(result);
+  assert.equal(codes.has('SCHEMA_INVALID') || codes.has('AUTHORITY_BASE_INVALID'), true);
+  for (const code of [
+    'REVALIDATION_CHECKLIST_INVALID',
+    'TARGET_UNRESOLVED_FACTS_INVALID',
+    'ACTION_RISK_INVALID',
+    'ACTION_SIDE_EFFECT_INVALID',
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'AUTHORITY_TARGET_INVALID',
+  ]) assert.equal(codes.has(code), true, code);
+});
