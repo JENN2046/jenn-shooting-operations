@@ -1,129 +1,298 @@
 import { createHash } from 'node:crypto';
 import Ajv2020 from 'ajv/dist/2020.js';
 
+const EXPECTED_AUTHORITY_BASE = "56f18930b8a89b19cdbfdde24d090649329d50c9";
+
 const EXPECTED_SECRET_IDS = Object.freeze([
-  'VIEWER_TOKEN',
-  'SUBMITTER_TOKEN',
-  'SCHEDULER_TOKEN',
-  'ADMIN_TOKEN',
+  "VIEWER_TOKEN",
+  "SUBMITTER_TOKEN",
+  "SCHEDULER_TOKEN",
+  "ADMIN_TOKEN"
 ]);
 
-const EXPECTED_GATE_STATUS = new Map([
-  ['WO06A_LOCAL_BASELINE', 'SATISFIED'],
-  ['WO06B_MIGRATION_RECOVERY', 'SATISFIED'],
-  ['WO06C_LOCAL_BOUNDARY', 'SATISFIED'],
-  ['WO06C_VCP_EXTERNAL', 'BLOCKED'],
-  ['WO06C_KIOSK_DEVICE', 'BLOCKED'],
-  ['WO06C_DINGTALK_PROVIDER', 'READY_FOR_AUTHORIZATION'],
-  ['PRODUCTION_TARGET_FACTS', 'BLOCKED'],
-  ['PRODUCTION_DATA_MIGRATION', 'BLOCKED'],
-  ['PRODUCTION_DEPLOYMENT_GATE', 'BLOCKED'],
-]);
+const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
+  "WO06A_LOCAL_BASELINE": {
+    "status": "SATISFIED",
+    "evidence": "WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS"
+  },
+  "WO06B_MIGRATION_RECOVERY": {
+    "status": "SATISFIED",
+    "evidence": "WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS"
+  },
+  "WO06C_LOCAL_BOUNDARY": {
+    "status": "SATISFIED",
+    "evidence": "WO-06C_LOCAL_EXTERNAL_BOUNDARY_PASS"
+  },
+  "WO06C_VCP_EXTERNAL": {
+    "status": "BLOCKED",
+    "evidence": "BLOCKED_EXTERNAL_RUNTIME"
+  },
+  "WO06C_KIOSK_DEVICE": {
+    "status": "BLOCKED",
+    "evidence": "BLOCKED_DEVICE"
+  },
+  "WO06C_DINGTALK_PROVIDER": {
+    "status": "READY_FOR_AUTHORIZATION",
+    "evidence": "READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION"
+  },
+  "PRODUCTION_TARGET_FACTS": {
+    "status": "BLOCKED",
+    "evidence": "UNRESOLVED_OUTSIDE_REPOSITORY"
+  },
+  "PRODUCTION_DATA_MIGRATION": {
+    "status": "BLOCKED",
+    "evidence": "REAL_PRODUCTION_INPUT_NOT_VALIDATED"
+  },
+  "PRODUCTION_DEPLOYMENT_GATE": {
+    "status": "BLOCKED",
+    "evidence": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE"
+  }
+}));
 
 const EXPECTED_REQUESTABLE = Object.freeze([
-  'PROD-01-TARGET-READONLY-PREFLIGHT',
-  'PROD-12-DINGTALK-PROVIDER-INTEGRATION',
+  "PROD-01-TARGET-READONLY-PREFLIGHT",
+  "PROD-12-DINGTALK-PROVIDER-INTEGRATION"
 ]);
 
 const EXPECTED_BLOCKERS = Object.freeze([
-  'WO06C_VCP_EXTERNAL',
-  'WO06C_KIOSK_DEVICE',
-  'PRODUCTION_TARGET_FACTS',
-  'PRODUCTION_DATA_MIGRATION',
-  'PRODUCTION_DEPLOYMENT_GATE',
+  "WO06C_VCP_EXTERNAL",
+  "WO06C_KIOSK_DEVICE",
+  "PRODUCTION_TARGET_FACTS",
+  "PRODUCTION_DATA_MIGRATION",
+  "PRODUCTION_DEPLOYMENT_GATE"
+]);
+
+const EXPECTED_REVALIDATION_CHECKLIST = Object.freeze([
+  "AUTHORITY_HEAD",
+  "TARGET_HOST_IDENTITY",
+  "IMAGE_DIGEST",
+  "DISK_PORT_ROUTE_CONFLICTS",
+  "BACKUP_ROLLBACK_PROOF",
+  "SECRET_STORAGE",
+  "EXTERNAL_READINESS_GATES",
+  "ROLLBACK_TARGETS"
+]);
+
+const EXPECTED_TARGET_UNRESOLVED_FACTS = Object.freeze([
+  "TARGET_HOST_IDENTITY",
+  "DISK_CAPACITY",
+  "PORT_CONFLICT_CHECK",
+  "CONTAINER_NAME",
+  "REVERSE_PROXY_ROUTE",
+  "TLS_CERTIFICATE_BINDING"
+]);
+
+const EXPECTED_INVARIANTS = Object.freeze([
+  "NO_EXISTING_ROUTE_OR_CONTAINER_OVERWRITE",
+  "APP_PORT_LOOPBACK_ONLY",
+  "NO_SECRET_IN_GIT_LOGS_CHAT",
+  "NO_PRODUCTION_DATA_MUTATION_WITHOUT_SEPARATE_AUTHORIZATION",
+  "NO_SWITCH_OR_CUTOVER_FROM_PREDEPLOY_APPROVAL",
+  "NO_AGENT_AUTO_ADOPTION_PERMISSION_EXPANSION",
+  "ROLLBACK_PRESERVES_DATA_VOLUME"
 ]);
 
 const EXPECTED_ROLLBACK_ORDER = Object.freeze([
-  'ROLLBACK-01-REMOVE-NEW-ROUTE',
-  'ROLLBACK-02-STOP-NEW-CONTAINER',
-  'ROLLBACK-03-DISABLE-EXTERNAL-CONFIG',
-  'ROLLBACK-04-PRESERVE-DATA-VOLUME',
+  "ROLLBACK-01-REMOVE-NEW-ROUTE",
+  "ROLLBACK-02-STOP-NEW-CONTAINER",
+  "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG",
+  "ROLLBACK-04-PRESERVE-DATA-VOLUME"
 ]);
 
-// This is the authority surface of the production packet. The manifest may
-// carry human-readable effects/evidence text, but an action ID cannot widen
-// its requestability, target, prerequisite gates, or rollback binding.
+// Full authority contract per action ID. Human-readable and machine-relevant
+// fields are frozen together so a production operation cannot be made to look
+// safer, narrower, or easier to authorize without invalidating the packet.
 const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
   "PROD-01-TARGET-READONLY-PREFLIGHT": {
+    "title": "Read-only target host preflight",
+    "category": "TARGET",
+    "risk": "LOW",
+    "sideEffect": "READ_ONLY",
     "status": "REQUESTABLE_EXPLICIT_AUTHORIZATION",
     "authorityTarget": "One identified production host; read-only disk/port/container/proxy inspection only",
     "preconditions": [],
-    "rollbackActionIds": []
+    "effects": [
+      "Resolve target host identity and deployment conflicts without mutation"
+    ],
+    "rollbackActionIds": [],
+    "evidenceRequired": [
+      "HOST_IDENTITY",
+      "DISK_CAPACITY",
+      "PORT_CONFLICTS",
+      "CONTAINER_CONFLICTS",
+      "REVERSE_PROXY_ROUTE_CONFLICTS"
+    ]
   },
   "PROD-02-CREATE-ISOLATED-APP-STORAGE": {
+    "title": "Create isolated application directory and persistent volume",
+    "category": "FILESYSTEM",
+    "risk": "MEDIUM",
+    "sideEffect": "REVERSIBLE",
     "status": "BLOCKED_PREREQUISITE",
     "authorityTarget": "Resolved production host; new isolated application directory and data volume only",
     "preconditions": [
       "PRODUCTION_TARGET_FACTS",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
+    "effects": [
+      "Create new application storage without modifying existing application data"
+    ],
     "rollbackActionIds": [
       "ROLLBACK-04-PRESERVE-DATA-VOLUME"
+    ],
+    "evidenceRequired": [
+      "TARGET_PATH",
+      "VOLUME_NAME",
+      "OWNER_MODE",
+      "FREE_SPACE"
     ]
   },
   "PROD-03-GENERATE-INSTALL-TOKENS": {
+    "title": "Generate and install four role tokens",
+    "category": "SECRET",
+    "risk": "HIGH",
+    "sideEffect": "REVERSIBLE",
     "status": "BLOCKED_PREREQUISITE",
     "authorityTarget": "Resolved production host restricted runtime configuration for four role tokens",
     "preconditions": [
       "PRODUCTION_TARGET_FACTS",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
+    "effects": [
+      "Generate independent secret values and install them outside Git/logs/chat"
+    ],
     "rollbackActionIds": [
       "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG"
+    ],
+    "evidenceRequired": [
+      "SECRET_STORAGE_PATH",
+      "FILE_OWNER_MODE",
+      "NO_SECRET_OUTPUT_PROOF"
     ]
   },
   "PROD-04-BUILD-IMAGE": {
+    "title": "Build production image from approved authority source",
+    "category": "BUILD",
+    "risk": "MEDIUM",
+    "sideEffect": "REVERSIBLE",
     "status": "BLOCKED_PREREQUISITE",
     "authorityTarget": "Resolved production host image store; exact approved authority commit only",
     "preconditions": [
       "PRODUCTION_TARGET_FACTS",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
-    "rollbackActionIds": []
+    "effects": [
+      "Create a new application image without replacing running services"
+    ],
+    "rollbackActionIds": [],
+    "evidenceRequired": [
+      "AUTHORITY_COMMIT",
+      "IMAGE_ID_OR_DIGEST",
+      "NODE_BASE_DIGEST",
+      "BUILD_LOG_LOW_DISCLOSURE"
+    ]
   },
   "PROD-05-START-ISOLATED-CONTAINER": {
+    "title": "Start isolated application container",
+    "category": "RUNTIME",
+    "risk": "HIGH",
+    "sideEffect": "REVERSIBLE",
     "status": "BLOCKED_PREREQUISITE",
     "authorityTarget": "Resolved production host; one new loopback-only container and dedicated data volume",
     "preconditions": [
       "PRODUCTION_TARGET_FACTS",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
+    "effects": [
+      "Start new service bound to host loopback only"
+    ],
     "rollbackActionIds": [
       "ROLLBACK-02-STOP-NEW-CONTAINER"
+    ],
+    "evidenceRequired": [
+      "CONTAINER_NAME",
+      "IMAGE_DIGEST",
+      "LOOPBACK_BIND",
+      "HEALTH_STATUS",
+      "RUNTIME_UID"
     ]
   },
   "PROD-06-LOOPBACK-HEALTH-SMOKE": {
+    "title": "Run production-host loopback health smoke",
+    "category": "RUNTIME",
+    "risk": "LOW",
+    "sideEffect": "READ_ONLY",
     "status": "BLOCKED_PREREQUISITE",
     "authorityTarget": "New isolated container on resolved production host",
     "preconditions": [
       "PRODUCTION_TARGET_FACTS",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
-    "rollbackActionIds": []
+    "effects": [
+      "Read health endpoint and verify local runtime facts only"
+    ],
+    "rollbackActionIds": [],
+    "evidenceRequired": [
+      "HEALTHZ_STATUS",
+      "CONTAINER_UID",
+      "DATABASE_PATH",
+      "VOLUME_MOUNT"
+    ]
   },
   "PROD-07-CONFIGURE-REVERSE-PROXY-TLS": {
+    "title": "Add isolated reverse-proxy route and HTTPS binding",
+    "category": "NETWORK",
+    "risk": "HIGH",
+    "sideEffect": "REVERSIBLE",
     "status": "BLOCKED_PREREQUISITE",
     "authorityTarget": "Exact resolved reverse-proxy route and TLS binding only",
     "preconditions": [
       "PRODUCTION_TARGET_FACTS",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
+    "effects": [
+      "Expose the new loopback service through one approved HTTPS route"
+    ],
     "rollbackActionIds": [
       "ROLLBACK-01-REMOVE-NEW-ROUTE"
+    ],
+    "evidenceRequired": [
+      "ROUTE",
+      "HOSTNAME",
+      "TLS_BINDING",
+      "CONFIG_TEST",
+      "NO_EXISTING_ROUTE_OVERWRITE"
     ]
   },
   "PROD-08-FIREWALL-SECURITY-GROUP": {
+    "title": "Change firewall or security group only if required",
+    "category": "NETWORK",
+    "risk": "CRITICAL",
+    "sideEffect": "REVERSIBLE",
     "status": "CONDITIONAL_NOT_REQUESTED",
     "authorityTarget": "Exact named firewall/security-group rule only",
     "preconditions": [
       "PRODUCTION_TARGET_FACTS",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
+    "effects": [
+      "Potentially change network reachability; no action unless necessity is separately proven"
+    ],
     "rollbackActionIds": [
       "ROLLBACK-05-REVERT-FIREWALL-RULE"
+    ],
+    "evidenceRequired": [
+      "NECESSITY_PROOF",
+      "CURRENT_RULE",
+      "PROPOSED_RULE",
+      "IMPACT_RADIUS"
     ]
   },
   "PROD-09-PRODUCTION-DATA-IMPORT": {
+    "title": "Import or migrate real production workbench data",
+    "category": "DATA",
+    "risk": "CRITICAL",
+    "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
     "status": "BLOCKED_PREREQUISITE",
     "authorityTarget": "Exact approved production source database/upload set to a new isolated target",
     "preconditions": [
@@ -131,11 +300,26 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "PRODUCTION_TARGET_FACTS",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
+    "effects": [
+      "Create migrated production facts in an isolated target only after separate real-input validation"
+    ],
     "rollbackActionIds": [
       "ROLLBACK-04-PRESERVE-DATA-VOLUME"
+    ],
+    "evidenceRequired": [
+      "SOURCE_IDENTITY",
+      "BACKUP_PROOF",
+      "ROLLBACK_PROOF",
+      "TARGET_DIGEST",
+      "PROOF_SEAL",
+      "MAINTENANCE_WINDOW"
     ]
   },
   "PROD-10-ENABLE-VCP-REMOTE-SYNC": {
+    "title": "Enable VCP remote synchronization",
+    "category": "INTEGRATION",
+    "risk": "HIGH",
+    "sideEffect": "REVERSIBLE",
     "status": "BLOCKED_PREREQUISITE",
     "authorityTarget": "Exact VCP runtime adapter configuration and one approved service endpoint",
     "preconditions": [
@@ -143,11 +327,24 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "PRODUCTION_TARGET_FACTS",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
+    "effects": [
+      "Allow VCP to pull and guarded-push against the deployed service"
+    ],
     "rollbackActionIds": [
       "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG"
+    ],
+    "evidenceRequired": [
+      "VCP_ADAPTER_REVISION",
+      "SERVICE_ENDPOINT",
+      "PRINCIPAL_SCOPE",
+      "PULL_PUSH_VERIFY_RESULT"
     ]
   },
   "PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE": {
+    "title": "Enable real Kiosk device and identity mapping",
+    "category": "INTEGRATION",
+    "risk": "HIGH",
+    "sideEffect": "REVERSIBLE",
     "status": "BLOCKED_PREREQUISITE",
     "authorityTarget": "Exact approved Kiosk device/browser and trusted identity mapping",
     "preconditions": [
@@ -155,21 +352,48 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "PRODUCTION_TARGET_FACTS",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
+    "effects": [
+      "Allow real device to read and submit authorized run events"
+    ],
     "rollbackActionIds": [
       "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG"
+    ],
+    "evidenceRequired": [
+      "DEVICE_IDENTITY",
+      "RESOURCE_SCOPE",
+      "REAL_DEVICE_ACCEPTANCE",
+      "OFFLINE_REPLAY_RESULT"
     ]
   },
   "PROD-12-DINGTALK-PROVIDER-INTEGRATION": {
+    "title": "Configure and validate DingTalk provider integration",
+    "category": "INTEGRATION",
+    "risk": "HIGH",
+    "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
     "status": "REQUESTABLE_EXPLICIT_AUTHORIZATION",
     "authorityTarget": "Exact DingTalk app/provider configuration and bounded test destination",
     "preconditions": [
       "WO06C_DINGTALK_PROVIDER"
     ],
+    "effects": [
+      "May perform real provider authentication and bounded integration traffic only after explicit authorization"
+    ],
     "rollbackActionIds": [
       "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG"
+    ],
+    "evidenceRequired": [
+      "PROVIDER_CONFIG_SCOPE",
+      "TEST_DESTINATION",
+      "SEND_RESULT",
+      "CALLBACK_POLICY",
+      "SECRET_STORAGE_PROOF"
     ]
   },
   "PROD-13-CUTOVER-SWITCH": {
+    "title": "Perform production cutover or Switch",
+    "category": "CUTOVER",
+    "risk": "CRITICAL",
+    "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
     "status": "BLOCKED_PREREQUISITE",
     "authorityTarget": "Exact approved production route/data/client switch only",
     "preconditions": [
@@ -179,42 +403,106 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "PRODUCTION_DATA_MIGRATION",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
+    "effects": [
+      "Change which production endpoint/data/client path is authoritative"
+    ],
     "rollbackActionIds": [
       "ROLLBACK-01-REMOVE-NEW-ROUTE",
       "ROLLBACK-02-STOP-NEW-CONTAINER",
       "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG",
       "ROLLBACK-04-PRESERVE-DATA-VOLUME"
+    ],
+    "evidenceRequired": [
+      "CUTOVER_PLAN",
+      "PRE_CUTOVER_BACKUP",
+      "CLIENT_SWITCH_LIST",
+      "ROLLBACK_TRIGGER",
+      "POST_CUTOVER_VERIFICATION"
     ]
   },
   "ROLLBACK-01-REMOVE-NEW-ROUTE": {
+    "title": "Remove newly added reverse-proxy route",
+    "category": "ROLLBACK",
+    "risk": "HIGH",
+    "sideEffect": "REVERSIBLE",
     "status": "ROLLBACK_ONLY",
     "authorityTarget": "Only the newly added route from this deployment",
     "preconditions": [],
-    "rollbackActionIds": []
+    "effects": [
+      "Remove exposure of the new service without modifying old routes"
+    ],
+    "rollbackActionIds": [],
+    "evidenceRequired": [
+      "ROUTE_REMOVED",
+      "OLD_ROUTES_UNCHANGED"
+    ]
   },
   "ROLLBACK-02-STOP-NEW-CONTAINER": {
+    "title": "Stop newly started application container",
+    "category": "ROLLBACK",
+    "risk": "MEDIUM",
+    "sideEffect": "REVERSIBLE",
     "status": "ROLLBACK_ONLY",
     "authorityTarget": "Only the newly started container from this deployment",
     "preconditions": [],
-    "rollbackActionIds": []
+    "effects": [
+      "Stop new runtime; preserve data volume"
+    ],
+    "rollbackActionIds": [],
+    "evidenceRequired": [
+      "CONTAINER_STOPPED",
+      "DATA_VOLUME_PRESERVED"
+    ]
   },
   "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG": {
+    "title": "Disable newly enabled external integration configuration",
+    "category": "ROLLBACK",
+    "risk": "HIGH",
+    "sideEffect": "REVERSIBLE",
     "status": "ROLLBACK_ONLY",
     "authorityTarget": "Only new VCP/Kiosk/DingTalk configuration introduced by an approved action",
     "preconditions": [],
-    "rollbackActionIds": []
+    "effects": [
+      "Disable new external integrations without deleting data"
+    ],
+    "rollbackActionIds": [],
+    "evidenceRequired": [
+      "INTEGRATION_DISABLED",
+      "SECRET_VALUES_NOT_LOGGED"
+    ]
   },
   "ROLLBACK-04-PRESERVE-DATA-VOLUME": {
+    "title": "Preserve new data volume and stop mutation",
+    "category": "ROLLBACK",
+    "risk": "LOW",
+    "sideEffect": "READ_ONLY",
     "status": "ROLLBACK_ONLY",
     "authorityTarget": "New deployment data volume only",
     "preconditions": [],
-    "rollbackActionIds": []
+    "effects": [
+      "Preserve evidence/data; do not delete or overwrite the volume"
+    ],
+    "rollbackActionIds": [],
+    "evidenceRequired": [
+      "VOLUME_PRESERVED",
+      "MUTATION_STOPPED"
+    ]
   },
   "ROLLBACK-05-REVERT-FIREWALL-RULE": {
+    "title": "Revert only the newly changed firewall/security-group rule",
+    "category": "ROLLBACK",
+    "risk": "CRITICAL",
+    "sideEffect": "REVERSIBLE",
     "status": "ROLLBACK_ONLY",
     "authorityTarget": "Exact firewall/security-group rule changed by PROD-08 only",
     "preconditions": [],
-    "rollbackActionIds": []
+    "effects": [
+      "Restore the previous rule exactly"
+    ],
+    "rollbackActionIds": [],
+    "evidenceRequired": [
+      "PREVIOUS_RULE_RESTORED"
+    ]
   }
 }));
 
@@ -266,20 +554,36 @@ export function createProductionChangeManifestValidator(schema) {
       return Object.freeze({ ok: false, issues: Object.freeze(issues) });
     }
 
+    if (value.authorityBase !== EXPECTED_AUTHORITY_BASE) {
+      issues.push(issue('AUTHORITY_BASE_INVALID', '/authorityBase'));
+    }
+
     if (!sameSet(value.secrets.map(entry => entry.id), EXPECTED_SECRET_IDS)) {
       issues.push(issue('SECRET_SET_INVALID', '/secrets'));
+    }
+
+    if (!sameSet(value.target.unresolvedFacts, EXPECTED_TARGET_UNRESOLVED_FACTS)) {
+      issues.push(issue('TARGET_UNRESOLVED_FACTS_INVALID', '/target/unresolvedFacts'));
+    }
+
+    if (!sameSet(value.invariants, EXPECTED_INVARIANTS)) {
+      issues.push(issue('INVARIANT_SET_INVALID', '/invariants'));
     }
 
     const gateMap = new Map(value.gates.map(gate => [gate.id, gate]));
     if (gateMap.size !== value.gates.length) {
       issues.push(issue('DUPLICATE_GATE_ID', '/gates'));
     }
-    if (!sameSet([...gateMap.keys()], [...EXPECTED_GATE_STATUS.keys()])) {
+    if (!sameSet([...gateMap.keys()], [...EXPECTED_GATE_BINDINGS.keys()])) {
       issues.push(issue('GATE_SET_INVALID', '/gates'));
     }
-    for (const [id, status] of EXPECTED_GATE_STATUS) {
-      if (gateMap.get(id)?.status !== status) {
-        issues.push(issue('GATE_STATUS_INVALID', '/gates/' + id));
+    for (const [id, expected] of EXPECTED_GATE_BINDINGS) {
+      const gate = gateMap.get(id);
+      if (gate?.status !== expected.status) {
+        issues.push(issue('GATE_STATUS_INVALID', '/gates/' + id + '/status'));
+      }
+      if (gate?.evidence !== expected.evidence) {
+        issues.push(issue('GATE_EVIDENCE_INVALID', '/gates/' + id + '/evidence'));
       }
     }
 
@@ -297,18 +601,31 @@ export function createProductionChangeManifestValidator(schema) {
         issues.push(issue('ACTION_BINDING_MISSING', '/actions/' + actionId));
         continue;
       }
-      if (action.status !== expected.status) {
-        issues.push(issue('ACTION_STATUS_INVALID', '/actions/' + actionId + '/status'));
+
+      for (const [field, code] of [
+        ['title', 'ACTION_TITLE_INVALID'],
+        ['category', 'ACTION_CATEGORY_INVALID'],
+        ['risk', 'ACTION_RISK_INVALID'],
+        ['sideEffect', 'ACTION_SIDE_EFFECT_INVALID'],
+        ['status', 'ACTION_STATUS_INVALID'],
+        ['authorityTarget', 'AUTHORITY_TARGET_INVALID'],
+      ]) {
+        if (action[field] !== expected[field]) {
+          issues.push(issue(code, '/actions/' + actionId + '/' + field));
+        }
       }
-      if (action.authorityTarget !== expected.authorityTarget) {
-        issues.push(issue('AUTHORITY_TARGET_INVALID', '/actions/' + actionId + '/authorityTarget'));
+
+      for (const [field, code] of [
+        ['preconditions', 'ACTION_PRECONDITIONS_INVALID'],
+        ['effects', 'ACTION_EFFECTS_INVALID'],
+        ['rollbackActionIds', 'ROLLBACK_BINDING_INVALID'],
+        ['evidenceRequired', 'ACTION_EVIDENCE_REQUIRED_INVALID'],
+      ]) {
+        if (!sameSet(action[field], expected[field])) {
+          issues.push(issue(code, '/actions/' + actionId + '/' + field));
+        }
       }
-      if (!sameSet(action.preconditions, expected.preconditions)) {
-        issues.push(issue('ACTION_PRECONDITIONS_INVALID', '/actions/' + actionId + '/preconditions'));
-      }
-      if (!sameSet(action.rollbackActionIds, expected.rollbackActionIds)) {
-        issues.push(issue('ROLLBACK_BINDING_INVALID', '/actions/' + actionId + '/rollbackActionIds'));
-      }
+
       for (const rollbackId of action.rollbackActionIds) {
         if (actionMap.get(rollbackId)?.category !== 'ROLLBACK') {
           issues.push(issue('ROLLBACK_REFERENCE_INVALID', '/actions/' + actionId + '/rollbackActionIds'));
@@ -330,6 +647,17 @@ export function createProductionChangeManifestValidator(schema) {
     if (!sameSet(value.authorizationPacket.blockingGateIds, EXPECTED_BLOCKERS)) {
       issues.push(issue('AUTHORIZATION_BLOCKER_SET_INVALID', '/authorizationPacket/blockingGateIds'));
     }
+
+    if (!sameSet(
+      value.authorizationPacket.mustRevalidateBeforeRequest,
+      EXPECTED_REVALIDATION_CHECKLIST,
+    )) {
+      issues.push(issue(
+        'REVALIDATION_CHECKLIST_INVALID',
+        '/authorizationPacket/mustRevalidateBeforeRequest',
+      ));
+    }
+
     if (value.authorizationPacket.requestedActionIds.length !== 0
         || value.authorizationPacket.approvedActionIds.length !== 0) {
       issues.push(issue('AUTHORIZATION_MUST_BE_EMPTY', '/authorizationPacket'));
