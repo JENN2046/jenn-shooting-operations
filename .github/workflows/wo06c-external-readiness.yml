@@ -1,0 +1,74 @@
+name: WO-06C External Readiness
+
+on:
+  push:
+    branches:
+      - codex/wo-06c-external-readiness
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  readiness:
+    name: VCP Kiosk DingTalk local boundaries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v4
+
+      - name: Set up fixed Node 24 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: npm
+
+      - name: Record runtime facts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          uname -a
+          node --version
+          npm --version
+          node -p "JSON.stringify({node: process.versions.node, tz: process.versions.tz ?? null, icu: process.versions.icu ?? null})"
+
+      - name: Install declared dependencies
+        run: npm ci
+
+      - name: Run repository check
+        run: npm run check
+
+      - name: Run Kiosk targeted suite
+        run: >-
+          node --test
+          tests/kiosk-contract-v2.test.mjs
+          tests/kiosk-current-v2.test.mjs
+          tests/kiosk-http-result-v2.test.mjs
+          tests/kiosk-http-v2.test.mjs
+          tests/kiosk-offline-queue-v2.test.mjs
+          tests/kiosk-review-schema-v2.test.mjs
+          tests/kiosk-run-event-v2.test.mjs
+          tests/kiosk-server-composition-v2.test.mjs
+          tests/kiosk-ui-v2.test.mjs
+
+      - name: Run DingTalk Outbox callback targeted suite
+        run: >-
+          node --test
+          tests/dingtalk-card-builders-v1.test.mjs
+          tests/dingtalk-port-v1.test.mjs
+          tests/outbox-contract-v1.test.mjs
+          tests/outbox-dispatcher-v1.test.mjs
+          tests/outbox-worker-v1.test.mjs
+          tests/production-run-completed-notification-v1.test.mjs
+          tests/sqlite-outbox-repository-v1.test.mjs
+          tests/callback-admission-v1.test.mjs
+          tests/callback-ports-v1.test.mjs
+
+      - name: Run VCP integration classification
+        run: node --test tests/vcp-sync-integration.test.mjs
+
+      - name: Run local external-boundary harness
+        run: node scripts/verify-external-readiness-boundaries.mjs

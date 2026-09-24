@@ -1,7 +1,7 @@
 # WO-06：部署前综合预检
 
 - Authority base: `8d5747439ccdfb29dd78ae294c1df82cba6476a3`
-- 状态：`IN_PROGRESS / WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS / WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS / BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
+- 状态：`IN_PROGRESS / WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS / WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS / WO-06C_LOCAL_EXTERNAL_BOUNDARY_PASS / WO-06C_EXTERNAL_VALIDATION_PENDING / BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
 - 目标：证明系统是否具备进入“申请部署授权”的条件，不执行部署。
 - 硬边界：不接生产 DB、不写真实凭据、不调用真实钉钉/VCP provider、不发布、不切流、不做 Switch。
 
@@ -136,3 +136,70 @@ This PASS applies only to fresh isolated fixture paths under the frozen WO-02D c
 - deployment/release.
 
 WO-06C still owns VCP/Kiosk/DingTalk external readiness. WO-06D still owns the production change and authorization packet. The global deployment gate remains `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
+
+
+## WO-06C：VCP_KIOSK_DINGTALK_EXTERNAL_READINESS
+
+- Authority base: `e2a8de4a0f388e3322bd6c14eb223ba04ce2cb64`
+- 本地状态：`WO-06C_LOCAL_EXTERNAL_BOUNDARY_PASS`
+- 外部状态：`WO-06C_EXTERNAL_VALIDATION_PENDING`
+
+### Fresh local evidence
+
+GitHub Actions run `35981030282` on final implementation-bearing head `775b6072687c53d2135be8d069b650bb37771090` completed successfully with:
+
+- Ubuntu 24.04 / Linux `6.17.0-1022-azure`;
+- Node `24.21.0`;
+- npm `11.19.0`;
+- tzdata `2026c`;
+- ICU `78.3`;
+- full `npm run check`: 530 tests / 529 pass / 0 fail / 1 expected external-VCP skip;
+- Kiosk targeted suite: 118/118 PASS;
+- DingTalk/Outbox/Callback targeted suite: 64/64 PASS;
+- VCP integration test: 1 skipped because the external adapter is absent;
+- local external-boundary harness: PASS.
+
+Machine verdict:
+
+```text
+WO-06C_LOCAL_EXTERNAL_BOUNDARY_PASS
+VCP_EXTERNAL_COMPATIBILITY = BLOCKED_EXTERNAL_RUNTIME
+KIOSK_REAL_DEVICE = BLOCKED_DEVICE
+DINGTALK_PROVIDER = READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION
+WO-06C_EXTERNAL_VALIDATION = PENDING
+BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
+```
+
+### Boundary facts
+
+VCP:
+
+- the repository still contains only the integration consumer/test;
+- external `ShootingPlannerSyncService` is absent in this workspace;
+- therefore no real VCP compatibility PASS is claimed.
+
+Kiosk:
+
+- static `/kiosk` entry serves locally;
+- default runtime remains fail-closed with `AUTH_NOT_CONFIGURED`;
+- explicit trusted-principal injection reaches the empty-resource current read path;
+- real tablet/browser scenarios remain unexecuted and must not be inferred from local tests.
+
+DingTalk:
+
+- unconfigured adapter deterministically returns `DINGTALK_NOT_CONFIGURED`;
+- local harness proves zero provider network calls;
+- callback runtime remains `NOT_WIRED`;
+- local Outbox/card/dispatcher/worker/callback boundaries are ready for a separately authorized provider-integration step.
+
+### External closure still required
+
+WO-06C remains open until required external evidence is recorded:
+
+1. VCP real adapter compatibility run: pull → guarded push → verification pull;
+2. Kiosk real browser/device acceptance against the frozen WO-03 checklist;
+3. if authorized, DingTalk provider integration evidence without widening callback/domain authority.
+
+No VCP runtime access, device operation, DingTalk credential/provider call, public callback endpoint, production identity mapping, deployment or cutover is authorized by this local PASS.
+
+The global deployment gate remains `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
