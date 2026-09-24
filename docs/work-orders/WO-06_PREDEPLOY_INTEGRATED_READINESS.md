@@ -245,11 +245,11 @@ The packet's deployment-level blocker subset is frozen as:
 
 This is emitted as `deploymentBlockingGateIds`.
 
-Separately, `blockingGateIds` is exhaustive across **every current `BLOCKED` gate**, including action-specific gates such as `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, and `PROXY_BACKEND_READINESS`. The validator derives this exhaustive set from gate statuses.
+Separately, `blockingGateIds` is exhaustive across **every current `BLOCKED` gate**, including action-specific gates such as `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, and `PROXY_BACKEND_READINESS`. The validator derives this exhaustive set from gate statuses.
 
 No action definition is currently marked requestable. The frozen requestable set is empty.
 
-`PROD-01-TARGET-READONLY-PREFLIGHT` is `BLOCKED_PREREQUISITE` because the concrete production host identity is still unresolved.
+`PROD-01-TARGET-READONLY-PREFLIGHT` is `BLOCKED_PREREQUISITE` behind `TARGET_HOST_BINDING`. It no longer depends on `PRODUCTION_TARGET_FACTS`, because those are the facts the read-only preflight is responsible for discovering after one exact candidate host has been bound.
 
 `PROD-12-DINGTALK-PROVIDER-INTEGRATION` remains externally provider-ready at the WO-06C local boundary, but is `BLOCKED_PREREQUISITE` in WO-06D because `DINGTALK_TARGET_BINDING = BLOCKED`. No concrete app/provider identity or bounded test destination is present, so it is not requestable.
 
@@ -271,12 +271,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36022131601` on implementation-bearing head `3440cf3efdc6c5fa5a0ea1667ea21f43a99a7260` passed:
+GitHub Actions run `36024210771` on implementation-bearing head `5ea293522846b9be2b6e82803c0df3b56826d591` passed:
 
-- full `npm run check`: 557 tests / 556 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 27/27 PASS;
+- full `npm run check`: 559 tests / 558 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 29/29 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:c10a179016e15aac94614fa6588e772b67b6f0dc533e1454603c6c98ef3cabbb`;
+- manifest digest: `sha256:7de680a5e8b748faddc9cea087914acc5b26a22229c7e508c9f7c0bd492f01c3`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -432,6 +432,9 @@ Current action-specific blocked gates include:
 DINGTALK_TARGET_BINDING
 CUTOVER_FORWARD_CHAIN
 CUTOVER_SWITCH_RECOVERY
+TARGET_HOST_BINDING
+CONTAINER_START_READINESS
+HEALTH_SMOKE_READINESS
 PROXY_BACKEND_READINESS
 ```
 
@@ -446,3 +449,41 @@ BACKEND_BUILD_START_HEALTH_PROOF
 Therefore route/TLS exposure cannot be authorized before build, isolated-container start, and loopback health verification have completed successfully.
 
 Implementation evidence: head `3440cf3efdc6c5fa5a0ea1667ea21f43a99a7260`, run `36022131601`, full suite 557/556/0/1, manifest suite 27/27, digest `sha256:c10a179016e15aac94614fa6588e772b67b6f0dc533e1454603c6c98ef3cabbb`.
+
+
+### WO-06D target-preflight cycle + runtime predecessor chain
+
+The target preflight no longer depends on the facts it is meant to discover:
+
+```text
+TARGET_HOST_BINDING = BLOCKED
+evidence = EXACT_CANDIDATE_PRODUCTION_HOST_UNRESOLVED
+
+PROD-01.preconditions = [TARGET_HOST_BINDING]
+```
+
+After an exact candidate host is structurally bound, PROD-01 may verify that identity and discover the remaining target facts.
+
+Runtime startup is now sequenced by explicit predecessor gates:
+
+```text
+CONTAINER_START_READINESS = BLOCKED
+evidence = REQUIRES_VERIFIED_PROD_02_03_04
+
+HEALTH_SMOKE_READINESS = BLOCKED
+evidence = REQUIRES_VERIFIED_PROD_05
+```
+
+So the frozen path is:
+
+```text
+target binding
+→ preflight
+→ target facts
+→ storage/tokens/image
+→ container start
+→ loopback health
+→ proxy/TLS
+```
+
+Implementation evidence: head `5ea293522846b9be2b6e82803c0df3b56826d591`, run `36024210771`, full suite 559/558/0/1, manifest suite 29/29, digest `sha256:7de680a5e8b748faddc9cea087914acc5b26a22229c7e508c9f7c0bd492f01c3`.

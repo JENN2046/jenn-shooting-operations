@@ -60,7 +60,7 @@ The deployment authorization request remains blocked by the dedicated deployment
 
 This subset is frozen separately as `deploymentBlockingGateIds`.
 
-`blockingGateIds` has a different, exhaustive meaning: it must equal **every gate whose current status is `BLOCKED`**. It therefore also contains the action-specific blockers `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, and `PROXY_BACKEND_READINESS`. The validator derives the expected exhaustive set from the gate statuses, so a newly blocked gate cannot be omitted from the CLI checklist.
+`blockingGateIds` has a different, exhaustive meaning: it must equal **every gate whose current status is `BLOCKED`**. It therefore also contains the action-specific blockers `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, and `PROXY_BACKEND_READINESS`. The validator derives the expected exhaustive set from the gate statuses, so a newly blocked gate cannot be omitted from the CLI checklist.
 
 WO-06C still classifies the local DingTalk provider boundary as `READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION`, but WO-06D separately freezes `DINGTALK_TARGET_BINDING = BLOCKED` because no concrete app/provider identity plus bounded test destination has been supplied. Provider readiness therefore does not make `PROD-12` requestable.
 
@@ -68,7 +68,7 @@ WO-06C still classifies the local DingTalk provider boundary as `READY_FOR_EXTER
 
 No action definition is currently requestable. The frozen requestable set is empty.
 
-`PROD-01-TARGET-READONLY-PREFLIGHT` is now `BLOCKED_PREREQUISITE` with `authorityTarget = UNRESOLVED_PRODUCTION_HOST_IDENTITY` and prerequisite `PRODUCTION_TARGET_FACTS`. It cannot become requestable until a concrete production host identity is structurally recorded.
+`PROD-01-TARGET-READONLY-PREFLIGHT` is `BLOCKED_PREREQUISITE` behind `TARGET_HOST_BINDING`, not `PRODUCTION_TARGET_FACTS`. This breaks the prerequisite cycle: one exact candidate host must be structurally bound first, then PROD-01 may verify that binding and discover the disk/port/container/proxy/TLS facts that later close `PRODUCTION_TARGET_FACTS`.
 
 `PROD-12-DINGTALK-PROVIDER-INTEGRATION` remains `BLOCKED_PREREQUISITE` with `authorityTarget = UNRESOLVED_DINGTALK_TARGET_BINDING` and prerequisite `DINGTALK_TARGET_BINDING`. It cannot become requestable until a concrete DingTalk app/provider identity and one bounded test destination are structurally bound in a separately reviewed authority revision.
 
@@ -110,8 +110,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `3440cf3efdc6c5fa5a0ea1667ea21f43a99a7260`
-- GitHub Actions run: `36022131601`
+- Head: `5ea293522846b9be2b6e82803c0df3b56826d591`
+- GitHub Actions run: `36024210771`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -120,8 +120,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          557
-pass                           556
+tests                          559
+pass                           558
 fail                           0
 skipped                        1
 ```
@@ -131,8 +131,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  27
-pass   27
+tests  29
+pass   29
 fail   0
 ```
 
@@ -141,7 +141,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:c10a179016e15aac94614fa6588e772b67b6f0dc533e1454603c6c98ef3cabbb",
+  "manifestDigest": "sha256:7de680a5e8b748faddc9cea087914acc5b26a22229c7e508c9f7c0bd492f01c3",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -152,6 +152,9 @@ Machine verdict:
     "DINGTALK_TARGET_BINDING",
     "CUTOVER_FORWARD_CHAIN",
     "CUTOVER_SWITCH_RECOVERY",
+    "TARGET_HOST_BINDING",
+    "CONTAINER_START_READINESS",
+    "HEALTH_SMOKE_READINESS",
     "PROXY_BACKEND_READINESS",
     "PRODUCTION_TARGET_FACTS",
     "PRODUCTION_DATA_MIGRATION",
@@ -490,3 +493,67 @@ manifest digest  sha256:c10a179016e15aac94614fa6588e772b67b6f0dc533e1454603c6c98
 ```
 
 No proxy route, TLS binding, container, provider, migration, cutover, or deployment action was executed.
+
+
+## Target-preflight cycle + runtime predecessor correction
+
+Exact-current review on `fc13553c...` identified two issues, and adjacent inspection found the same predecessor gap one step later at health smoke.
+
+The preflight cycle is now broken explicitly:
+
+```text
+TARGET_HOST_BINDING = BLOCKED
+evidence = EXACT_CANDIDATE_PRODUCTION_HOST_UNRESOLVED
+
+PROD-01.preconditions = [TARGET_HOST_BINDING]
+PROD-01.preconditions does NOT include PRODUCTION_TARGET_FACTS
+```
+
+This separates **authority to inspect one exact candidate host** from **facts learned by that inspection**. PROD-01 verifies the bound host identity and discovers disk, port, container, proxy-route, and TLS facts; those outputs are what later close `PRODUCTION_TARGET_FACTS`.
+
+Container startup now has a frozen predecessor gate:
+
+```text
+CONTAINER_START_READINESS = BLOCKED
+evidence = REQUIRES_VERIFIED_PROD_02_03_04
+
+PROD-05.preconditions += CONTAINER_START_READINESS
+PROD-05.evidenceRequired += STORAGE_TOKEN_IMAGE_PREDECESSOR_PROOF
+```
+
+The adjacent health-smoke step is also fail-closed:
+
+```text
+HEALTH_SMOKE_READINESS = BLOCKED
+evidence = REQUIRES_VERIFIED_PROD_05
+
+PROD-06.preconditions += HEALTH_SMOKE_READINESS
+PROD-06.evidenceRequired += CONTAINER_START_COMPLETION_PROOF
+```
+
+Together with the existing proxy gate, the frozen dependency path is:
+
+```text
+exact candidate host binding
+→ PROD-01 read-only preflight
+→ production target facts
+→ PROD-02 storage / PROD-03 tokens / PROD-04 image
+→ PROD-05 isolated container start
+→ PROD-06 loopback health
+→ PROD-07 reverse proxy/TLS
+```
+
+Hostile regressions reject restoring the target-facts cycle, removing the candidate-host binding, dropping startup/health predecessor gates or evidence, and self-promoting those gates.
+
+Exact implementation-bearing evidence:
+
+```text
+head             5ea293522846b9be2b6e82803c0df3b56826d591
+run              36024210771
+result           success
+full suite       559 tests / 558 pass / 0 fail / 1 expected VCP skip
+manifest suite   29 / 29 PASS
+manifest digest  sha256:7de680a5e8b748faddc9cea087914acc5b26a22229c7e508c9f7c0bd492f01c3
+```
+
+No host inspection, storage creation, token generation, image build, container start, health request, proxy change, or production mutation was executed.
