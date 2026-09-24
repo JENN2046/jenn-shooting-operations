@@ -200,7 +200,7 @@ Machine result:
   "status": "WO_06C_LOCAL_EXTERNAL_BOUNDARY_PASS",
   "vcp": {
     "externalAdapterPresent": false,
-    "compatibility": "EXTERNAL_BLOCKED_RUNTIME"
+    "compatibility": "BLOCKED_EXTERNAL_RUNTIME"
   },
   "kiosk": {
     "localHttpBoundary": "PASS",
