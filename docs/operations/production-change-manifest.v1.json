@@ -1,0 +1,600 @@
+{
+  "schemaVersion": 1,
+  "manifestId": "WO-06D-PRODUCTION-CHANGE-MANIFEST-V1",
+  "authorityBase": "56f18930b8a89b19cdbfdde24d090649329d50c9",
+  "purpose": "PREDEPLOY_AUTHORIZATION_DEFINITION",
+  "currentState": {
+    "manifestDefinitionStatus": "FROZEN_DEFINITION",
+    "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
+    "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE"
+  },
+  "target": {
+    "provider": "TENCENT_CLOUD_CVM",
+    "osFamily": "UBUNTU",
+    "hostIdentityStatus": "UNRESOLVED_OUTSIDE_REPOSITORY",
+    "hostIdentifier": null,
+    "publicHostname": null,
+    "applicationBind": "127.0.0.1:3800",
+    "reverseProxyRoute": null,
+    "containerName": null,
+    "dataVolumeLogicalName": "shooting_data",
+    "publicExposurePolicy": "HTTPS_REVERSE_PROXY_ONLY",
+    "unresolvedFacts": [
+      "TARGET_HOST_IDENTITY",
+      "DISK_CAPACITY",
+      "PORT_CONFLICT_CHECK",
+      "CONTAINER_NAME",
+      "REVERSE_PROXY_ROUTE",
+      "TLS_CERTIFICATE_BINDING"
+    ]
+  },
+  "secrets": [
+    {
+      "id": "VIEWER_TOKEN",
+      "valuePresent": false,
+      "generation": "DEPLOYMENT_TIME_RANDOM",
+      "destination": "SERVER_RESTRICTED_CONFIG",
+      "repositoryAllowed": false,
+      "logsAllowed": false
+    },
+    {
+      "id": "SUBMITTER_TOKEN",
+      "valuePresent": false,
+      "generation": "DEPLOYMENT_TIME_RANDOM",
+      "destination": "SERVER_RESTRICTED_CONFIG",
+      "repositoryAllowed": false,
+      "logsAllowed": false
+    },
+    {
+      "id": "SCHEDULER_TOKEN",
+      "valuePresent": false,
+      "generation": "DEPLOYMENT_TIME_RANDOM",
+      "destination": "SERVER_RESTRICTED_CONFIG",
+      "repositoryAllowed": false,
+      "logsAllowed": false
+    },
+    {
+      "id": "ADMIN_TOKEN",
+      "valuePresent": false,
+      "generation": "DEPLOYMENT_TIME_RANDOM",
+      "destination": "SERVER_RESTRICTED_CONFIG",
+      "repositoryAllowed": false,
+      "logsAllowed": false
+    }
+  ],
+  "gates": [
+    {
+      "id": "WO06A_LOCAL_BASELINE",
+      "status": "SATISFIED",
+      "evidence": "WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS"
+    },
+    {
+      "id": "WO06B_MIGRATION_RECOVERY",
+      "status": "SATISFIED",
+      "evidence": "WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS"
+    },
+    {
+      "id": "WO06C_LOCAL_BOUNDARY",
+      "status": "SATISFIED",
+      "evidence": "WO-06C_LOCAL_EXTERNAL_BOUNDARY_PASS"
+    },
+    {
+      "id": "WO06C_VCP_EXTERNAL",
+      "status": "BLOCKED",
+      "evidence": "BLOCKED_EXTERNAL_RUNTIME"
+    },
+    {
+      "id": "WO06C_KIOSK_DEVICE",
+      "status": "BLOCKED",
+      "evidence": "BLOCKED_DEVICE"
+    },
+    {
+      "id": "WO06C_DINGTALK_PROVIDER",
+      "status": "READY_FOR_AUTHORIZATION",
+      "evidence": "READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION"
+    },
+    {
+      "id": "PRODUCTION_TARGET_FACTS",
+      "status": "BLOCKED",
+      "evidence": "UNRESOLVED_OUTSIDE_REPOSITORY"
+    },
+    {
+      "id": "PRODUCTION_DATA_MIGRATION",
+      "status": "BLOCKED",
+      "evidence": "REAL_PRODUCTION_INPUT_NOT_VALIDATED"
+    },
+    {
+      "id": "PRODUCTION_DEPLOYMENT_GATE",
+      "status": "BLOCKED",
+      "evidence": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE"
+    }
+  ],
+  "actions": [
+    {
+      "id": "PROD-01-TARGET-READONLY-PREFLIGHT",
+      "title": "Read-only target host preflight",
+      "category": "TARGET",
+      "risk": "LOW",
+      "sideEffect": "READ_ONLY",
+      "status": "REQUESTABLE_EXPLICIT_AUTHORIZATION",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "One identified production host; read-only disk/port/container/proxy inspection only",
+      "preconditions": [],
+      "effects": [
+        "Resolve target host identity and deployment conflicts without mutation"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "HOST_IDENTITY",
+        "DISK_CAPACITY",
+        "PORT_CONFLICTS",
+        "CONTAINER_CONFLICTS",
+        "REVERSE_PROXY_ROUTE_CONFLICTS"
+      ]
+    },
+    {
+      "id": "PROD-02-CREATE-ISOLATED-APP-STORAGE",
+      "title": "Create isolated application directory and persistent volume",
+      "category": "FILESYSTEM",
+      "risk": "MEDIUM",
+      "sideEffect": "REVERSIBLE",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Resolved production host; new isolated application directory and data volume only",
+      "preconditions": [
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Create new application storage without modifying existing application data"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-04-PRESERVE-DATA-VOLUME"
+      ],
+      "evidenceRequired": [
+        "TARGET_PATH",
+        "VOLUME_NAME",
+        "OWNER_MODE",
+        "FREE_SPACE"
+      ]
+    },
+    {
+      "id": "PROD-03-GENERATE-INSTALL-TOKENS",
+      "title": "Generate and install four role tokens",
+      "category": "SECRET",
+      "risk": "HIGH",
+      "sideEffect": "REVERSIBLE",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Resolved production host restricted runtime configuration for four role tokens",
+      "preconditions": [
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Generate independent secret values and install them outside Git/logs/chat"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG"
+      ],
+      "evidenceRequired": [
+        "SECRET_STORAGE_PATH",
+        "FILE_OWNER_MODE",
+        "NO_SECRET_OUTPUT_PROOF"
+      ]
+    },
+    {
+      "id": "PROD-04-BUILD-IMAGE",
+      "title": "Build production image from approved authority source",
+      "category": "BUILD",
+      "risk": "MEDIUM",
+      "sideEffect": "REVERSIBLE",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Resolved production host image store; exact approved authority commit only",
+      "preconditions": [
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Create a new application image without replacing running services"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "AUTHORITY_COMMIT",
+        "IMAGE_ID_OR_DIGEST",
+        "NODE_BASE_DIGEST",
+        "BUILD_LOG_LOW_DISCLOSURE"
+      ]
+    },
+    {
+      "id": "PROD-05-START-ISOLATED-CONTAINER",
+      "title": "Start isolated application container",
+      "category": "RUNTIME",
+      "risk": "HIGH",
+      "sideEffect": "REVERSIBLE",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Resolved production host; one new loopback-only container and dedicated data volume",
+      "preconditions": [
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Start new service bound to host loopback only"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-02-STOP-NEW-CONTAINER"
+      ],
+      "evidenceRequired": [
+        "CONTAINER_NAME",
+        "IMAGE_DIGEST",
+        "LOOPBACK_BIND",
+        "HEALTH_STATUS",
+        "RUNTIME_UID"
+      ]
+    },
+    {
+      "id": "PROD-06-LOOPBACK-HEALTH-SMOKE",
+      "title": "Run production-host loopback health smoke",
+      "category": "RUNTIME",
+      "risk": "LOW",
+      "sideEffect": "READ_ONLY",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "New isolated container on resolved production host",
+      "preconditions": [
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Read health endpoint and verify local runtime facts only"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "HEALTHZ_STATUS",
+        "CONTAINER_UID",
+        "DATABASE_PATH",
+        "VOLUME_MOUNT"
+      ]
+    },
+    {
+      "id": "PROD-07-CONFIGURE-REVERSE-PROXY-TLS",
+      "title": "Add isolated reverse-proxy route and HTTPS binding",
+      "category": "NETWORK",
+      "risk": "HIGH",
+      "sideEffect": "REVERSIBLE",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Exact resolved reverse-proxy route and TLS binding only",
+      "preconditions": [
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Expose the new loopback service through one approved HTTPS route"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-01-REMOVE-NEW-ROUTE"
+      ],
+      "evidenceRequired": [
+        "ROUTE",
+        "HOSTNAME",
+        "TLS_BINDING",
+        "CONFIG_TEST",
+        "NO_EXISTING_ROUTE_OVERWRITE"
+      ]
+    },
+    {
+      "id": "PROD-08-FIREWALL-SECURITY-GROUP",
+      "title": "Change firewall or security group only if required",
+      "category": "NETWORK",
+      "risk": "CRITICAL",
+      "sideEffect": "REVERSIBLE",
+      "status": "CONDITIONAL_NOT_REQUESTED",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Exact named firewall/security-group rule only",
+      "preconditions": [
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Potentially change network reachability; no action unless necessity is separately proven"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-05-REVERT-FIREWALL-RULE"
+      ],
+      "evidenceRequired": [
+        "NECESSITY_PROOF",
+        "CURRENT_RULE",
+        "PROPOSED_RULE",
+        "IMPACT_RADIUS"
+      ]
+    },
+    {
+      "id": "PROD-09-PRODUCTION-DATA-IMPORT",
+      "title": "Import or migrate real production workbench data",
+      "category": "DATA",
+      "risk": "CRITICAL",
+      "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Exact approved production source database/upload set to a new isolated target",
+      "preconditions": [
+        "PRODUCTION_DATA_MIGRATION",
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Create migrated production facts in an isolated target only after separate real-input validation"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-04-PRESERVE-DATA-VOLUME"
+      ],
+      "evidenceRequired": [
+        "SOURCE_IDENTITY",
+        "BACKUP_PROOF",
+        "ROLLBACK_PROOF",
+        "TARGET_DIGEST",
+        "PROOF_SEAL",
+        "MAINTENANCE_WINDOW"
+      ]
+    },
+    {
+      "id": "PROD-10-ENABLE-VCP-REMOTE-SYNC",
+      "title": "Enable VCP remote synchronization",
+      "category": "INTEGRATION",
+      "risk": "HIGH",
+      "sideEffect": "REVERSIBLE",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Exact VCP runtime adapter configuration and one approved service endpoint",
+      "preconditions": [
+        "WO06C_VCP_EXTERNAL",
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Allow VCP to pull and guarded-push against the deployed service"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG"
+      ],
+      "evidenceRequired": [
+        "VCP_ADAPTER_REVISION",
+        "SERVICE_ENDPOINT",
+        "PRINCIPAL_SCOPE",
+        "PULL_PUSH_VERIFY_RESULT"
+      ]
+    },
+    {
+      "id": "PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE",
+      "title": "Enable real Kiosk device and identity mapping",
+      "category": "INTEGRATION",
+      "risk": "HIGH",
+      "sideEffect": "REVERSIBLE",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Exact approved Kiosk device/browser and trusted identity mapping",
+      "preconditions": [
+        "WO06C_KIOSK_DEVICE",
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Allow real device to read and submit authorized run events"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG"
+      ],
+      "evidenceRequired": [
+        "DEVICE_IDENTITY",
+        "RESOURCE_SCOPE",
+        "REAL_DEVICE_ACCEPTANCE",
+        "OFFLINE_REPLAY_RESULT"
+      ]
+    },
+    {
+      "id": "PROD-12-DINGTALK-PROVIDER-INTEGRATION",
+      "title": "Configure and validate DingTalk provider integration",
+      "category": "INTEGRATION",
+      "risk": "HIGH",
+      "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+      "status": "REQUESTABLE_EXPLICIT_AUTHORIZATION",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Exact DingTalk app/provider configuration and bounded test destination",
+      "preconditions": [
+        "WO06C_DINGTALK_PROVIDER"
+      ],
+      "effects": [
+        "May perform real provider authentication and bounded integration traffic only after explicit authorization"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG"
+      ],
+      "evidenceRequired": [
+        "PROVIDER_CONFIG_SCOPE",
+        "TEST_DESTINATION",
+        "SEND_RESULT",
+        "CALLBACK_POLICY",
+        "SECRET_STORAGE_PROOF"
+      ]
+    },
+    {
+      "id": "PROD-13-CUTOVER-SWITCH",
+      "title": "Perform production cutover or Switch",
+      "category": "CUTOVER",
+      "risk": "CRITICAL",
+      "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Exact approved production route/data/client switch only",
+      "preconditions": [
+        "WO06C_VCP_EXTERNAL",
+        "WO06C_KIOSK_DEVICE",
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_DATA_MIGRATION",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Change which production endpoint/data/client path is authoritative"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-01-REMOVE-NEW-ROUTE",
+        "ROLLBACK-02-STOP-NEW-CONTAINER",
+        "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG",
+        "ROLLBACK-04-PRESERVE-DATA-VOLUME"
+      ],
+      "evidenceRequired": [
+        "CUTOVER_PLAN",
+        "PRE_CUTOVER_BACKUP",
+        "CLIENT_SWITCH_LIST",
+        "ROLLBACK_TRIGGER",
+        "POST_CUTOVER_VERIFICATION"
+      ]
+    },
+    {
+      "id": "ROLLBACK-01-REMOVE-NEW-ROUTE",
+      "title": "Remove newly added reverse-proxy route",
+      "category": "ROLLBACK",
+      "risk": "HIGH",
+      "sideEffect": "REVERSIBLE",
+      "status": "ROLLBACK_ONLY",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Only the newly added route from this deployment",
+      "preconditions": [],
+      "effects": [
+        "Remove exposure of the new service without modifying old routes"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "ROUTE_REMOVED",
+        "OLD_ROUTES_UNCHANGED"
+      ]
+    },
+    {
+      "id": "ROLLBACK-02-STOP-NEW-CONTAINER",
+      "title": "Stop newly started application container",
+      "category": "ROLLBACK",
+      "risk": "MEDIUM",
+      "sideEffect": "REVERSIBLE",
+      "status": "ROLLBACK_ONLY",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Only the newly started container from this deployment",
+      "preconditions": [],
+      "effects": [
+        "Stop new runtime; preserve data volume"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "CONTAINER_STOPPED",
+        "DATA_VOLUME_PRESERVED"
+      ]
+    },
+    {
+      "id": "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG",
+      "title": "Disable newly enabled external integration configuration",
+      "category": "ROLLBACK",
+      "risk": "HIGH",
+      "sideEffect": "REVERSIBLE",
+      "status": "ROLLBACK_ONLY",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Only new VCP/Kiosk/DingTalk configuration introduced by an approved action",
+      "preconditions": [],
+      "effects": [
+        "Disable new external integrations without deleting data"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "INTEGRATION_DISABLED",
+        "SECRET_VALUES_NOT_LOGGED"
+      ]
+    },
+    {
+      "id": "ROLLBACK-04-PRESERVE-DATA-VOLUME",
+      "title": "Preserve new data volume and stop mutation",
+      "category": "ROLLBACK",
+      "risk": "LOW",
+      "sideEffect": "READ_ONLY",
+      "status": "ROLLBACK_ONLY",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "New deployment data volume only",
+      "preconditions": [],
+      "effects": [
+        "Preserve evidence/data; do not delete or overwrite the volume"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "VOLUME_PRESERVED",
+        "MUTATION_STOPPED"
+      ]
+    },
+    {
+      "id": "ROLLBACK-05-REVERT-FIREWALL-RULE",
+      "title": "Revert only the newly changed firewall/security-group rule",
+      "category": "ROLLBACK",
+      "risk": "CRITICAL",
+      "sideEffect": "REVERSIBLE",
+      "status": "ROLLBACK_ONLY",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Exact firewall/security-group rule changed by PROD-08 only",
+      "preconditions": [],
+      "effects": [
+        "Restore the previous rule exactly"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "PREVIOUS_RULE_RESTORED"
+      ]
+    }
+  ],
+  "rollbackPlan": {
+    "strategy": "ROUTE_FIRST_STOP_RUNTIME_PRESERVE_DATA",
+    "orderedActionIds": [
+      "ROLLBACK-01-REMOVE-NEW-ROUTE",
+      "ROLLBACK-02-STOP-NEW-CONTAINER",
+      "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG",
+      "ROLLBACK-04-PRESERVE-DATA-VOLUME"
+    ],
+    "destructiveDataDeletionAllowed": false
+  },
+  "authorizationPacket": {
+    "packetId": "WO-06D-AUTHORIZATION-PACKET-V1",
+    "status": "FROZEN_NOT_REQUESTED",
+    "approvalModel": "EXACT_ACTION_IDS_AND_TARGETS_ONLY",
+    "humanApprovalRequired": true,
+    "blanketApprovalAllowed": false,
+    "requestedActionIds": [],
+    "approvedActionIds": [],
+    "requestableActionIds": [
+      "PROD-01-TARGET-READONLY-PREFLIGHT",
+      "PROD-12-DINGTALK-PROVIDER-INTEGRATION"
+    ],
+    "blockingGateIds": [
+      "WO06C_VCP_EXTERNAL",
+      "WO06C_KIOSK_DEVICE",
+      "PRODUCTION_TARGET_FACTS",
+      "PRODUCTION_DATA_MIGRATION",
+      "PRODUCTION_DEPLOYMENT_GATE"
+    ],
+    "mustRevalidateBeforeRequest": [
+      "AUTHORITY_HEAD",
+      "TARGET_HOST_IDENTITY",
+      "IMAGE_DIGEST",
+      "DISK_PORT_ROUTE_CONFLICTS",
+      "BACKUP_ROLLBACK_PROOF",
+      "SECRET_STORAGE",
+      "EXTERNAL_READINESS_GATES",
+      "ROLLBACK_TARGETS"
+    ]
+  },
+  "invariants": [
+    "NO_EXISTING_ROUTE_OR_CONTAINER_OVERWRITE",
+    "APP_PORT_LOOPBACK_ONLY",
+    "NO_SECRET_IN_GIT_LOGS_CHAT",
+    "NO_PRODUCTION_DATA_MUTATION_WITHOUT_SEPARATE_AUTHORIZATION",
+    "NO_SWITCH_OR_CUTOVER_FROM_PREDEPLOY_APPROVAL",
+    "NO_AGENT_AUTO_ADOPTION_PERMISSION_EXPANSION",
+    "ROLLBACK_PRESERVES_DATA_VOLUME"
+  ]
+}
