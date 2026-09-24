@@ -24,6 +24,7 @@ import test from 'node:test';
 import { buildMigrationPlan } from '../src/migration-v2.mjs';
 import {
   createVerifiedBackup,
+  hashFileStable,
   restoreVerifiedBackup,
   verifyExistingBackup,
   verifyExistingRestore,
@@ -130,6 +131,30 @@ async function withFixtureRoot(action) {
     rmSync(root, { recursive: true, force: true });
   }
 }
+
+test('stable file hash rejects a descriptor inode different from the inspected identity', async () => {
+  await withFixtureRoot(async root => {
+    const inspected = join(root, 'inspected.bin');
+    const swapped = join(root, 'swapped.bin');
+    writeFileSync(inspected, Buffer.from('same'), { mode: 0o600 });
+    writeFileSync(swapped, Buffer.from('diff'), { mode: 0o600 });
+
+    const expectedIdentity = statSync(inspected, { bigint: true });
+    const swappedIdentity = statSync(swapped, { bigint: true });
+    assert.equal(expectedIdentity.size, swappedIdentity.size);
+    assert.notEqual(expectedIdentity.ino, swappedIdentity.ino);
+
+    assert.throws(
+      () => hashFileStable(
+        swapped,
+        'BACKUP_EVIDENCE_MISMATCH',
+        'INVALID_SOURCE',
+        expectedIdentity,
+      ),
+      error => error.code === 'BACKUP_EVIDENCE_MISMATCH',
+    );
+  });
+});
 
 test('verified backup and restore bind database, artifact, and hashed attachment evidence', async () => {
   await withFixtureRoot(async root => {
