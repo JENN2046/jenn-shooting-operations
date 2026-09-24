@@ -43,7 +43,7 @@ The WAL comparison still includes:
 - `mtimeNs`;
 - SHA-256 content digest.
 
-The digest is computed through a read-only descriptor with before/after file-stat stability checks, so dropping the long-lived WAL `ctimeNs` comparison does not allow an in-place content rewrite with restored `mtime` to pass.
+The digest is computed through a read-only descriptor with before/after file-stat stability checks. Recovery/backup hashing also binds the descriptor's `dev/ino` to the inode inspected by the surrounding `lstat`, preventing pathname ABA swaps from pairing one inode's metadata with another inode's digest. Dropping the long-lived WAL `ctimeNs` comparison therefore does not allow an in-place content rewrite with restored `mtime`, or a transient WAL inode swap, to pass.
 
 The main database, SHM and journal comparisons retain their previous `ctimeNs` checks.
 
