@@ -1,13 +1,13 @@
 # WO-06：部署前综合预检
 
 - Authority base: `8d5747439ccdfb29dd78ae294c1df82cba6476a3`
-- 状态：`IN_PROGRESS / WO-06A_BASELINE_RUNNING / BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
+- 状态：`IN_PROGRESS / WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS / BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
 - 目标：证明系统是否具备进入“申请部署授权”的条件，不执行部署。
 - 硬边界：不接生产 DB、不写真实凭据、不调用真实钉钉/VCP provider、不发布、不切流、不做 Switch。
 
 ## WO-06A：PREDEPLOY_EVIDENCE_BASELINE
 
-状态：`IN_PROGRESS / BASELINE_RUNNING`
+状态：`WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS`
 
 ### 目标
 
@@ -52,11 +52,11 @@
 
 | Area | Current evidence | WO-06A classification | Owner |
 | --- | --- | --- | --- |
-| Contract + full local tests | `npm run check` 已接 contract + shadow + full tests | `FRESH_RERUN_REQUIRED` → CI | 06A |
-| Container build/start | Dockerfile + compose 已存在 | `FRESH_RERUN_REQUIRED` → CI | 06A |
-| Container non-root | Dockerfile `USER node` | `FRESH_RERUN_REQUIRED` → CI | 06A |
-| Empty DB startup | server/container contract exists | `FRESH_RERUN_REQUIRED` → CI | 06A |
-| Same-volume restart | volume contract exists | `FRESH_RERUN_REQUIRED` → CI | 06A |
+| Contract + full local tests | Run #3: Node 24.21.0, `npm run check`, 530 tests / 529 pass / 0 fail / 1 skip | `FRESH_PASS` | 06A |
+| Container build/start | Run #3: locked runtime deps, image build, empty-volume start, `/healthz` | `FRESH_PASS` | 06A |
+| Container non-root | Run #3: image user=`node`, container uid != 0 | `FRESH_PASS` | 06A |
+| Empty DB startup | Run #3 created `/app/data/shooting-operations.sqlite` and became healthy | `FRESH_PASS` | 06A |
+| Same-volume restart | Run #3 removed first container and restarted healthy on same named volume | `FRESH_PASS` | 06A |
 | Historical migration | migration v1-v6 code/tests exist | `EVIDENCE_PRESENT / FRESH_RERUN_REQUIRED` | 06B |
 | Backup/restore/rollback | recovery code + WAL hardening/tests exist | `EVIDENCE_PRESENT / FRESH_RERUN_REQUIRED` | 06B |
 | VCP compatibility | integration test expects external `ShootingPlannerSyncService`; adapter absent in repo | `EXTERNAL_BLOCKED` | 06C |
