@@ -84,7 +84,9 @@ remove new route
 → stop new container
 → remove the exact PROD-04 image digest after proving it is unused
 → revoke/remove role-token runtime bindings created by PROD-03
-→ disable newly enabled external config
+→ disable only VCP configuration introduced by PROD-10
+→ disable only Kiosk configuration introduced by PROD-11
+→ disable only DingTalk configuration introduced by PROD-12
 → preserve data volume and stop mutation
 ```
 
@@ -111,8 +113,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `450fba3eb6a7d6fbdbdf5b76f6245c59e62ed004`
-- GitHub Actions run: `36027812496`
+- Head: `e864db2360c66dff91054df2e601614e37e0d885`
+- GitHub Actions run: `36030322588`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -121,8 +123,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          562
-pass                           561
+tests                          564
+pass                           563
 fail                           0
 skipped                        1
 ```
@@ -132,8 +134,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  32
-pass   32
+tests  34
+pass   34
 fail   0
 ```
 
@@ -142,7 +144,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:8ba31e0ab3a4d7afd0d0e505f4331714d366bd6bc21fddb982705d4e603a343b",
+  "manifestDigest": "sha256:312c7a6d738da3d01f4f332b9e556e92b00835b3960f574df80e7154df6144a9",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -175,7 +177,7 @@ Machine verdict:
 
 The validator also fresh-rejects:
 
-- ordinary Bearer/access-token/token-shaped secret material embedded in schema-valid free text;
+- ordinary Bearer/access-token/token-shaped secret material embedded in schema-valid free text, including Bearer credentials split by raw newline, tab, or CRLF whitespace before JSON serialization;
 - secret fields, pre-populated approved action IDs and blanket approval;
 - missing or extra entries in the exhaustive `blockingGateIds` surface, including action-specific blocked gates;
 - drift in the separate deployment-level `deploymentBlockingGateIds` subset;
@@ -655,3 +657,47 @@ manifest digest  sha256:8ba31e0ab3a4d7afd0d0e505f4331714d366bd6bc21fddb982705d4e
 ```
 
 No storage creation, production import, VCP/Kiosk enablement, external write, or other production mutation was executed.
+
+
+## Source-scoped integration rollback + raw secret scan + retained storage semantics
+
+Exact-current review on `11afe530...` identified three contract gaps:
+
+1. VCP, Kiosk, and DingTalk shared one rollback ID, so rollback authority from one integration could disable another.
+2. secret scanning happened after stable JSON serialization, allowing raw newline/tab whitespace inside Bearer material to evade the regex.
+3. PROD-02 claimed `REVERSIBLE` even though rollback intentionally preserves the created directory and volume.
+
+Integration rollback authority is now source-scoped:
+
+```text
+PROD-10 → ROLLBACK-09-DISABLE-VCP-CONFIG
+PROD-11 → ROLLBACK-10-DISABLE-KIOSK-CONFIG
+PROD-12 → ROLLBACK-11-DISABLE-DINGTALK-CONFIG
+```
+
+Each rollback target is bound only to configuration introduced by its originating forward action. Derived rollback regression proves approval of one integration cannot derive either of the other two rollback IDs. PROD-13 carries only the VCP and Kiosk rollback capabilities required by its cutover chain; DingTalk rollback is not added to cutover authority.
+
+Secret material is now scanned recursively over the original manifest string values **before** stable JSON escaping. Regressions cover Bearer credentials separated by ordinary space, raw newline, tab, and CRLF.
+
+PROD-02 is no longer described as fully reversible:
+
+```text
+PROD-02.sideEffect = IRREVERSIBLE_OR_EXTERNAL
+PROD-02.rollbackActionIds = [ROLLBACK-04-PRESERVE-DATA-VOLUME]
+PROD-02.evidenceRequired += RETAINED_STORAGE_ARTIFACT_ACKNOWLEDGED
+```
+
+Its effect now explicitly states that the newly created directory and volume are intentionally retained on rollback. This preserves the existing no-destructive-data-deletion rule rather than introducing an unsafe automatic volume deletion path.
+
+Exact implementation-bearing evidence:
+
+```text
+head             e864db2360c66dff91054df2e601614e37e0d885
+run              36030322588
+result           success
+full suite       564 tests / 563 pass / 0 fail / 1 expected VCP skip
+manifest suite   34 / 34 PASS
+manifest digest  sha256:312c7a6d738da3d01f4f332b9e556e92b00835b3960f574df80e7154df6144a9
+```
+
+No integration configuration, storage, secret, rollback, or other production mutation was executed.

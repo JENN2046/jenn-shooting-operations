@@ -271,12 +271,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36027812496` on implementation-bearing head `450fba3eb6a7d6fbdbdf5b76f6245c59e62ed004` passed:
+GitHub Actions run `36030322588` on implementation-bearing head `e864db2360c66dff91054df2e601614e37e0d885` passed:
 
-- full `npm run check`: 562 tests / 561 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 32/32 PASS;
+- full `npm run check`: 564 tests / 563 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 34/34 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:8ba31e0ab3a4d7afd0d0e505f4331714d366bd6bc21fddb982705d4e603a343b`;
+- manifest digest: `sha256:312c7a6d738da3d01f4f332b9e556e92b00835b3960f574df80e7154df6144a9`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -293,7 +293,7 @@ The production authorization validator now freezes, for every frozen action ID:
 - exact prerequisite-gate set;
 - exact rollback-action set.
 
-The requestable status set is additionally checked bidirectionally against the frozen empty requestable set. Unknown/replaced action IDs are rejected. Secret scanning now rejects ordinary Bearer material in schema-valid free text.
+The requestable status set is additionally checked bidirectionally against the frozen empty requestable set. Unknown/replaced action IDs are rejected. Secret scanning rejects Bearer material in schema-valid free text from the original string values before JSON escaping, including raw newline/tab/CRLF separators.
 
 The exact-head hostile regressions cover all 4×P1 + 1×P2 review findings plus combined multi-axis widening. The authorization packet remains:
 
@@ -340,7 +340,9 @@ remove new route
 → stop new container
 → remove the exact PROD-04 image digest after proving it is unused
 → revoke/remove role-token runtime bindings created by PROD-03
-→ disable newly enabled external config
+→ disable only VCP configuration introduced by PROD-10
+→ disable only Kiosk configuration introduced by PROD-11
+→ disable only DingTalk configuration introduced by PROD-12
 → preserve data volume
 ```
 
@@ -529,3 +531,30 @@ DEPLOYMENT_CHAIN_COMPLETION_PROOF
 Both `PROD-10` and `PROD-11` carry this gate and proof, preventing external writes before storage, tokens, image, runtime, health, proxy and production dataset preparation are complete.
 
 Implementation evidence: head `450fba3eb6a7d6fbdbdf5b76f6245c59e62ed004`, run `36027812496`, full suite 562/561/0/1, manifest suite 32/32, digest `sha256:8ba31e0ab3a4d7afd0d0e505f4331714d366bd6bc21fddb982705d4e603a343b`.
+
+
+### WO-06D source-scoped integration rollback + raw secret scan + retained storage
+
+The shared external-config rollback has been removed. Integration rollback is now source-specific:
+
+```text
+PROD-10 → ROLLBACK-09-DISABLE-VCP-CONFIG
+PROD-11 → ROLLBACK-10-DISABLE-KIOSK-CONFIG
+PROD-12 → ROLLBACK-11-DISABLE-DINGTALK-CONFIG
+```
+
+Each rollback can affect only configuration introduced by its corresponding forward action. The ordered rollback plan lists the three capabilities separately, while derived rollback authority admits only the IDs bound to actually approved forward actions.
+
+Secret scanning now traverses original string values before stable JSON serialization. Bearer credentials split by raw newline, tab, or CRLF are explicitly rejected by hostile regression.
+
+Storage creation is intentionally retained:
+
+```text
+PROD-02.sideEffect = IRREVERSIBLE_OR_EXTERNAL
+PROD-02.rollbackActionIds = [ROLLBACK-04-PRESERVE-DATA-VOLUME]
+RETAINED_STORAGE_ARTIFACT_ACKNOWLEDGED
+```
+
+This makes the classification match the existing recovery rule: stop mutation and preserve the newly created directory/volume rather than destructively deleting deployment data.
+
+Implementation evidence: head `e864db2360c66dff91054df2e601614e37e0d885`, run `36030322588`, full suite 564/563/0/1, manifest suite 34/34, digest `sha256:312c7a6d738da3d01f4f332b9e556e92b00835b3960f574df80e7154df6144a9`.
