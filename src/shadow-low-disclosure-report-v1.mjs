@@ -157,7 +157,8 @@ function admitMetric(name, value) {
 
   if (MEDIAN_METRICS.has(name)) {
     if (record.numerator !== null
-      || !Number.isSafeInteger(record.value * 2)) return null;
+      || !Number.isSafeInteger(record.value * 2)
+      || (record.denominator % 2 === 1 && !Number.isSafeInteger(record.value))) return null;
   } else if (P90_METRICS.has(name)) {
     if (record.numerator !== null || !Number.isSafeInteger(record.value)) return null;
   } else {
