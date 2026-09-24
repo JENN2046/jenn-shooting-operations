@@ -243,10 +243,11 @@ The packet currently blocks a deployment authorization request on:
 - `PRODUCTION_DATA_MIGRATION`;
 - `PRODUCTION_DEPLOYMENT_GATE`.
 
-The only definitions marked requestable for separate explicit authorization are:
+The only definition currently marked requestable for separate explicit authorization is:
 
-- `PROD-01-TARGET-READONLY-PREFLIGHT`;
-- `PROD-12-DINGTALK-PROVIDER-INTEGRATION`.
+- `PROD-01-TARGET-READONLY-PREFLIGHT`.
+
+`PROD-12-DINGTALK-PROVIDER-INTEGRATION` remains externally provider-ready at the WO-06C local boundary, but is `BLOCKED_PREREQUISITE` in WO-06D because `DINGTALK_TARGET_BINDING = BLOCKED`. No concrete app/provider identity or bounded test destination is present, so it is not requestable.
 
 “Requestable” does not mean requested or approved.
 
@@ -266,12 +267,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `35987184987` on implementation-bearing head `097800f17df598d02b0c7f51d893cbe69b2d1d9b` passed:
+GitHub Actions run `36014400886` on implementation-bearing head `89c6c95a0d3b30a4dc36067aac7d3d81aec1ef15` passed:
 
-- full `npm run check`: 550 tests / 549 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 20/20 PASS;
+- full `npm run check`: 551 tests / 550 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 21/21 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:99c7c6c6f2477d1c256879bb14ccc964122232a9d032b070c084b727c37938a7`;
+- manifest digest: `sha256:2083b959badbf0a11ea1df2c5af32c111c8eac2200738d4db41d025de13b4833`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -288,7 +289,7 @@ The production authorization validator now freezes, for every one of the 18 acti
 - exact prerequisite-gate set;
 - exact rollback-action set.
 
-The requestable status set is additionally checked bidirectionally against the two frozen requestable action IDs. Unknown/replaced action IDs are rejected. Secret scanning now rejects ordinary Bearer material in schema-valid free text.
+The requestable status set is additionally checked bidirectionally against the single currently bound requestable action ID. Unknown/replaced action IDs are rejected. Secret scanning now rejects ordinary Bearer material in schema-valid free text.
 
 The exact-head hostile regressions cover all 4×P1 + 1×P2 review findings plus combined multi-axis widening. The authorization packet remains:
 
@@ -338,3 +339,21 @@ remove new route
 ```
 
 This closes the gap where a future authorized firewall mutation could otherwise survive a rollback sequence. Omission or misplacement of rollback 05 is covered by hostile regression and fails closed.
+
+
+### WO-06D DingTalk exact-target fail-closed correction
+
+The latest P1 established that a generic DingTalk target description is insufficient for `EXACT_ACTION_IDS_AND_TARGETS_ONLY`.
+
+WO-06D therefore does not fabricate a concrete DingTalk app/provider or recipient. Instead it freezes:
+
+```text
+DINGTALK_TARGET_BINDING = BLOCKED
+evidence = EXACT_APP_PROVIDER_AND_TEST_DESTINATION_UNRESOLVED
+
+PROD-12.status = BLOCKED_PREREQUISITE
+PROD-12.authorityTarget = UNRESOLVED_DINGTALK_TARGET_BINDING
+requestableActionIds = [PROD-01-TARGET-READONLY-PREFLIGHT]
+```
+
+Two different candidate DingTalk app/destination targets are exercised by hostile regression and both fail closed before requestability. The packet remains `FROZEN_NOT_REQUESTED`; requested/approved action arrays remain empty.

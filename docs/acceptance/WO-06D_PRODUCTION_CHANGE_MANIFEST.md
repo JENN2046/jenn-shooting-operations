@@ -58,14 +58,15 @@ The deployment authorization request remains blocked by:
 - unvalidated real production migration inputs: `PRODUCTION_DATA_MIGRATION`;
 - the explicit production deployment gate itself: `PRODUCTION_DEPLOYMENT_GATE`.
 
-DingTalk is separately requestable for an integration-authorization step because WO-06C classified it as `READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION`; this does not authorize credentials or traffic.
+WO-06C still classifies the local DingTalk provider boundary as `READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION`, but WO-06D now separately freezes `DINGTALK_TARGET_BINDING = BLOCKED` because no concrete app/provider identity plus bounded test destination has been supplied. Provider readiness therefore does not make `PROD-12` requestable.
 
 ## Requestable actions
 
-Only these action definitions are currently marked requestable, and neither has been requested or approved:
+Only this action definition is currently marked requestable, and it has not been requested or approved:
 
 - `PROD-01-TARGET-READONLY-PREFLIGHT`
-- `PROD-12-DINGTALK-PROVIDER-INTEGRATION`
+
+`PROD-12-DINGTALK-PROVIDER-INTEGRATION` is now `BLOCKED_PREREQUISITE` with `authorityTarget = UNRESOLVED_DINGTALK_TARGET_BINDING` and prerequisite `DINGTALK_TARGET_BINDING`. It cannot become requestable until a concrete DingTalk app/provider identity and one bounded test destination are structurally bound in a separately reviewed authority revision.
 
 All mutation/deployment/cutover actions remain blocked or conditional.
 
@@ -104,8 +105,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `097800f17df598d02b0c7f51d893cbe69b2d1d9b`
-- GitHub Actions run: `35987184987`
+- Head: `89c6c95a0d3b30a4dc36067aac7d3d81aec1ef15`
+- GitHub Actions run: `36014400886`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -114,8 +115,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          550
-pass                           549
+tests                          551
+pass                           550
 fail                           0
 skipped                        1
 ```
@@ -125,8 +126,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  20
-pass   20
+tests  21
+pass   21
 fail   0
 ```
 
@@ -135,13 +136,12 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:99c7c6c6f2477d1c256879bb14ccc964122232a9d032b070c084b727c37938a7",
+  "manifestDigest": "sha256:2083b959badbf0a11ea1df2c5af32c111c8eac2200738d4db41d025de13b4833",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
   "requestableActionIds": [
-    "PROD-01-TARGET-READONLY-PREFLIGHT",
-    "PROD-12-DINGTALK-PROVIDER-INTEGRATION"
+    "PROD-01-TARGET-READONLY-PREFLIGHT"
   ],
   "blockingGateIds": [
     "WO06C_VCP_EXTERNAL",
@@ -160,7 +160,8 @@ The validator also fresh-rejects:
 - missing authorization blockers;
 - authority-target widening for frozen action IDs;
 - production data/VCP/Kiosk/cutover actions that drop `PRODUCTION_TARGET_FACTS` or any other frozen prerequisite;
-- any action whose requestable/non-requestable status drifts from the frozen two-action set;
+- any action whose requestable/non-requestable status drifts from the frozen single-action set;
+- attempts to make DingTalk requestable with either of two different app/destination candidates before exact target binding;
 - rollback bindings redirected to the wrong rollback action, even when the replacement is syntactically a rollback action;
 - rollback references to non-rollback actions;
 - additional or replaced production action IDs;
@@ -277,3 +278,30 @@ manifest digest sha256:99c7c6c6f2477d1c256879bb14ccc964122232a9d032b070c084b727c
 This P2 intentionally changes the manifest body, so the prior `sha256:b037827...` digest remains historical evidence only. The digest above is the current manifest authority candidate.
 
 The resulting docs-only PR head must pass the unchanged WO-06D workflow before the review thread is closed.
+
+
+## DingTalk exact-target P1 correction
+
+Latest Codex P1 showed that the previously frozen DingTalk `authorityTarget` text was still generic and therefore could not satisfy `EXACT_ACTION_IDS_AND_TARGETS_ONLY` while `PROD-12` remained requestable.
+
+The fail-closed correction does not invent an app ID, provider ID, recipient, webhook or credential:
+
+- new gate: `DINGTALK_TARGET_BINDING = BLOCKED / EXACT_APP_PROVIDER_AND_TEST_DESTINATION_UNRESOLVED`;
+- `PROD-12` status: `BLOCKED_PREREQUISITE`;
+- `PROD-12.authorityTarget = UNRESOLVED_DINGTALK_TARGET_BINDING`;
+- `PROD-12` prerequisites include both `WO06C_DINGTALK_PROVIDER` and `DINGTALK_TARGET_BINDING`;
+- authorization-packet `requestableActionIds` contains only `PROD-01-TARGET-READONLY-PREFLIGHT`;
+- requested and approved arrays remain empty.
+
+Exact implementation-bearing evidence:
+
+```text
+head             89c6c95a0d3b30a4dc36067aac7d3d81aec1ef15
+run              36014400886
+result           success
+full suite       551 tests / 550 pass / 0 fail / 1 expected VCP skip
+manifest suite   21 / 21 PASS
+manifest digest  sha256:2083b959badbf0a11ea1df2c5af32c111c8eac2200738d4db41d025de13b4833
+```
+
+The hostile regression attempts two different DingTalk app/destination candidate targets and proves neither can be promoted into the frozen requestable surface.
