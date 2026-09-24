@@ -245,7 +245,7 @@ The packet's deployment-level blocker subset is frozen as:
 
 This is emitted as `deploymentBlockingGateIds`.
 
-Separately, `blockingGateIds` is exhaustive across **every current `BLOCKED` gate**, including action-specific gates such as `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, and `PROXY_BACKEND_READINESS`. The validator derives this exhaustive set from gate statuses.
+Separately, `blockingGateIds` is exhaustive across **every current `BLOCKED` gate**, including action-specific gates such as `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, `PROXY_BACKEND_READINESS`, `PRODUCTION_IMPORT_STORAGE_READINESS`, and `INTEGRATION_DEPLOYMENT_READINESS`. The validator derives this exhaustive set from gate statuses.
 
 No action definition is currently marked requestable. The frozen requestable set is empty.
 
@@ -271,12 +271,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36025922987` on implementation-bearing head `0ecdcfb56413c6303d292a65d2b2601fa5d701fa` passed:
+GitHub Actions run `36027812496` on implementation-bearing head `450fba3eb6a7d6fbdbdf5b76f6245c59e62ed004` passed:
 
-- full `npm run check`: 560 tests / 559 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 30/30 PASS;
+- full `npm run check`: 562 tests / 561 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 32/32 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:29e56b86e43fa01117058b432d8f2df4ff3ddf994aa566c9d71059ee824345fe`;
+- manifest digest: `sha256:8ba31e0ab3a4d7afd0d0e505f4331714d366bd6bc21fddb982705d4e603a343b`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -286,7 +286,7 @@ This PR branch remains `MERGE_PENDING`. It does not publish authority PASS befor
 
 ### WO-06D review hardening
 
-The production authorization validator now freezes, for every one of the 18 action IDs:
+The production authorization validator now freezes, for every frozen action ID:
 
 - requestability/status;
 - exact authority target;
@@ -437,6 +437,8 @@ TARGET_HOST_BINDING
 CONTAINER_START_READINESS
 HEALTH_SMOKE_READINESS
 PROXY_BACKEND_READINESS
+PRODUCTION_IMPORT_STORAGE_READINESS
+INTEGRATION_DEPLOYMENT_READINESS
 ```
 
 `PROD-07-CONFIGURE-REVERSE-PROXY-TLS` now requires:
@@ -504,3 +506,26 @@ WO-06C compatibility/readiness is therefore not treated as proof that VCP synchr
 `PROD-04-BUILD-IMAGE` now binds to `ROLLBACK-08-REMOVE-BUILT-IMAGE`. The rollback is restricted to the exact captured PROD-04 image digest and requires proof that no running container references it before removal. It is part of the frozen ordered rollback plan after stopping the new container.
 
 Implementation evidence: head `0ecdcfb56413c6303d292a65d2b2601fa5d701fa`, run `36025922987`, full suite 560/559/0/1, manifest suite 30/30, digest `sha256:29e56b86e43fa01117058b432d8f2df4ff3ddf994aa566c9d71059ee824345fe`.
+
+
+### WO-06D import storage + integration deployment-chain gates
+
+Production data import now requires verified isolated storage preparation:
+
+```text
+PRODUCTION_IMPORT_STORAGE_READINESS = BLOCKED
+evidence = REQUIRES_VERIFIED_PROD_02
+STORAGE_PREPARATION_COMPLETION_PROOF
+```
+
+VCP and Kiosk enablement now require the applicable deployment chain through real-data import:
+
+```text
+INTEGRATION_DEPLOYMENT_READINESS = BLOCKED
+evidence = REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_AND_PROD_08_IF_USED
+DEPLOYMENT_CHAIN_COMPLETION_PROOF
+```
+
+Both `PROD-10` and `PROD-11` carry this gate and proof, preventing external writes before storage, tokens, image, runtime, health, proxy and production dataset preparation are complete.
+
+Implementation evidence: head `450fba3eb6a7d6fbdbdf5b76f6245c59e62ed004`, run `36027812496`, full suite 562/561/0/1, manifest suite 32/32, digest `sha256:8ba31e0ab3a4d7afd0d0e505f4331714d366bd6bc21fddb982705d4e603a343b`.

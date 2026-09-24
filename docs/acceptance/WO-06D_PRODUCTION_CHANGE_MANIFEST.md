@@ -60,7 +60,7 @@ The deployment authorization request remains blocked by the dedicated deployment
 
 This subset is frozen separately as `deploymentBlockingGateIds`.
 
-`blockingGateIds` has a different, exhaustive meaning: it must equal **every gate whose current status is `BLOCKED`**. It therefore also contains the action-specific blockers `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, and `PROXY_BACKEND_READINESS`. The validator derives the expected exhaustive set from the gate statuses, so a newly blocked gate cannot be omitted from the CLI checklist.
+`blockingGateIds` has a different, exhaustive meaning: it must equal **every gate whose current status is `BLOCKED`**. It therefore also contains the action-specific blockers `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, `PROXY_BACKEND_READINESS`, `PRODUCTION_IMPORT_STORAGE_READINESS`, and `INTEGRATION_DEPLOYMENT_READINESS`. The validator derives the expected exhaustive set from the gate statuses, so a newly blocked gate cannot be omitted from the CLI checklist.
 
 WO-06C still classifies the local DingTalk provider boundary as `READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION`, but WO-06D separately freezes `DINGTALK_TARGET_BINDING = BLOCKED` because no concrete app/provider identity plus bounded test destination has been supplied. Provider readiness therefore does not make `PROD-12` requestable.
 
@@ -111,8 +111,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `0ecdcfb56413c6303d292a65d2b2601fa5d701fa`
-- GitHub Actions run: `36025922987`
+- Head: `450fba3eb6a7d6fbdbdf5b76f6245c59e62ed004`
+- GitHub Actions run: `36027812496`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -121,8 +121,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          560
-pass                           559
+tests                          562
+pass                           561
 fail                           0
 skipped                        1
 ```
@@ -132,8 +132,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  30
-pass   30
+tests  32
+pass   32
 fail   0
 ```
 
@@ -142,7 +142,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:29e56b86e43fa01117058b432d8f2df4ff3ddf994aa566c9d71059ee824345fe",
+  "manifestDigest": "sha256:8ba31e0ab3a4d7afd0d0e505f4331714d366bd6bc21fddb982705d4e603a343b",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -157,6 +157,8 @@ Machine verdict:
     "CONTAINER_START_READINESS",
     "HEALTH_SMOKE_READINESS",
     "PROXY_BACKEND_READINESS",
+    "PRODUCTION_IMPORT_STORAGE_READINESS",
+    "INTEGRATION_DEPLOYMENT_READINESS",
     "PRODUCTION_TARGET_FACTS",
     "PRODUCTION_DATA_MIGRATION",
     "PRODUCTION_DEPLOYMENT_GATE"
@@ -202,7 +204,7 @@ After merge, a docs-only authority closure may publish WO-06D PASS if the final 
 
 ## Review hardening closure candidate
 
-Codex review on the prior head reported four P1 and one P2 authorization-surface gaps. They are addressed together by freezing the authority contract for all 18 action IDs.
+Codex review on the prior head reported four P1 and one P2 authorization-surface gaps. They are addressed together by freezing the authority contract for all frozen action IDs.
 
 | Finding | Closure |
 | --- | --- |
@@ -238,7 +240,7 @@ The re-review identified three additional P1 gaps. They are closed on implementa
 | Finding | Closure |
 | --- | --- |
 | P1 authorityBase accepted any SHA | schema now binds `authorityBase` to the frozen authority commit and regression proves unrelated SHAs fail closed |
-| P1 action risk/sideEffect/evidence could be understated | all 18 action IDs now freeze title, category, risk, sideEffect, status, authorityTarget, preconditions, effects, rollback bindings and evidenceRequired |
+| P1 action risk/sideEffect/evidence could be understated | all frozen action IDs now freeze title, category, risk, sideEffect, status, authorityTarget, preconditions, effects, rollback bindings and evidenceRequired |
 | P1 mustRevalidateBeforeRequest could be reduced | the complete pre-request revalidation checklist is validated as an exact frozen set |
 
 Additional hostile regressions also freeze:
@@ -607,3 +609,49 @@ manifest digest  sha256:29e56b86e43fa01117058b432d8f2df4ff3ddf994aa566c9d71059ee
 ```
 
 No VCP/Kiosk enablement, image removal, container stop, cutover, or other production action was executed.
+
+
+## Import-storage + integration deployment-chain correction
+
+Exact-current review on `ca6aa2b...` identified two remaining dependency shortcuts:
+
+1. `PROD-09-PRODUCTION-DATA-IMPORT` could run before PROD-02 created the isolated storage target.
+2. `PROD-10` / `PROD-11` could enable external-write integrations before the applicable PROD-02–09 deployment chain had completed.
+
+The import path is now frozen behind:
+
+```text
+PRODUCTION_IMPORT_STORAGE_READINESS = BLOCKED
+evidence = REQUIRES_VERIFIED_PROD_02
+
+PROD-09.preconditions += PRODUCTION_IMPORT_STORAGE_READINESS
+PROD-09.evidenceRequired += STORAGE_PREPARATION_COMPLETION_PROOF
+```
+
+The VCP/Kiosk enablement path is now frozen behind:
+
+```text
+INTEGRATION_DEPLOYMENT_READINESS = BLOCKED
+evidence = REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_AND_PROD_08_IF_USED
+
+PROD-10.preconditions += INTEGRATION_DEPLOYMENT_READINESS
+PROD-11.preconditions += INTEGRATION_DEPLOYMENT_READINESS
+
+PROD-10.evidenceRequired += DEPLOYMENT_CHAIN_COMPLETION_PROOF
+PROD-11.evidenceRequired += DEPLOYMENT_CHAIN_COMPLETION_PROOF
+```
+
+This prevents guarded VCP pushes or Kiosk event submissions against an absent, empty, or not-yet-verified production service. Hostile regressions reject dropping either predecessor gate/proof and reject self-promotion of the gates.
+
+Exact implementation-bearing evidence:
+
+```text
+head             450fba3eb6a7d6fbdbdf5b76f6245c59e62ed004
+run              36027812496
+result           success
+full suite       562 tests / 561 pass / 0 fail / 1 expected VCP skip
+manifest suite   32 / 32 PASS
+manifest digest  sha256:8ba31e0ab3a4d7afd0d0e505f4331714d366bd6bc21fddb982705d4e603a343b
+```
+
+No storage creation, production import, VCP/Kiosk enablement, external write, or other production mutation was executed.
