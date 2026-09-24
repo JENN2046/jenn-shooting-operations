@@ -274,3 +274,29 @@ test('hostile combined semantic widening still fails closed after schema admissi
     'AUTHORITY_TARGET_INVALID',
   ]) assert.equal(codes.has(code), true, code);
 });
+
+
+test('global rollback order includes the exact firewall revert at the frozen point', () => {
+  assert.deepEqual(base.rollbackPlan.orderedActionIds, [
+    'ROLLBACK-01-REMOVE-NEW-ROUTE',
+    'ROLLBACK-05-REVERT-FIREWALL-RULE',
+    'ROLLBACK-02-STOP-NEW-CONTAINER',
+    'ROLLBACK-03-DISABLE-EXTERNAL-CONFIG',
+    'ROLLBACK-04-PRESERVE-DATA-VOLUME',
+  ]);
+
+  const omitted = structuredClone(base);
+  omitted.rollbackPlan.orderedActionIds = omitted.rollbackPlan.orderedActionIds
+    .filter(id => id !== 'ROLLBACK-05-REVERT-FIREWALL-RULE');
+  expectRejected(omitted, 'ROLLBACK_PLAN_ORDER_INVALID', 'firewall rollback omitted');
+
+  const misplaced = structuredClone(base);
+  misplaced.rollbackPlan.orderedActionIds = [
+    'ROLLBACK-01-REMOVE-NEW-ROUTE',
+    'ROLLBACK-02-STOP-NEW-CONTAINER',
+    'ROLLBACK-03-DISABLE-EXTERNAL-CONFIG',
+    'ROLLBACK-04-PRESERVE-DATA-VOLUME',
+    'ROLLBACK-05-REVERT-FIREWALL-RULE',
+  ];
+  expectRejected(misplaced, 'ROLLBACK_PLAN_ORDER_INVALID', 'firewall rollback misplaced');
+});
