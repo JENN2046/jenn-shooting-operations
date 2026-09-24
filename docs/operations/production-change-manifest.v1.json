@@ -94,6 +94,11 @@
       "evidence": "READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION"
     },
     {
+      "id": "DINGTALK_TARGET_BINDING",
+      "status": "BLOCKED",
+      "evidence": "EXACT_APP_PROVIDER_AND_TEST_DESTINATION_UNRESOLVED"
+    },
+    {
       "id": "PRODUCTION_TARGET_FACTS",
       "status": "BLOCKED",
       "evidence": "UNRESOLVED_OUTSIDE_REPOSITORY"
@@ -400,11 +405,12 @@
       "category": "INTEGRATION",
       "risk": "HIGH",
       "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
-      "status": "REQUESTABLE_EXPLICIT_AUTHORIZATION",
+      "status": "BLOCKED_PREREQUISITE",
       "requiresExplicitAuthorization": true,
-      "authorityTarget": "Exact DingTalk app/provider configuration and bounded test destination",
+      "authorityTarget": "UNRESOLVED_DINGTALK_TARGET_BINDING",
       "preconditions": [
-        "WO06C_DINGTALK_PROVIDER"
+        "WO06C_DINGTALK_PROVIDER",
+        "DINGTALK_TARGET_BINDING"
       ],
       "effects": [
         "May perform real provider authentication and bounded integration traffic only after explicit authorization"
@@ -568,8 +574,7 @@
     "requestedActionIds": [],
     "approvedActionIds": [],
     "requestableActionIds": [
-      "PROD-01-TARGET-READONLY-PREFLIGHT",
-      "PROD-12-DINGTALK-PROVIDER-INTEGRATION"
+      "PROD-01-TARGET-READONLY-PREFLIGHT"
     ],
     "blockingGateIds": [
       "WO06C_VCP_EXTERNAL",
