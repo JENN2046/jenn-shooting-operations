@@ -75,6 +75,7 @@ Rollback order is frozen as:
 
 ```text
 remove new route
+→ revert only the newly changed firewall/security-group rule
 → stop new container
 → disable newly enabled external config
 → preserve data volume and stop mutation
@@ -103,8 +104,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `38453503ade5b276735097e59d17bb44959e20ca`
-- GitHub Actions run: `35986269431`
+- Head: `097800f17df598d02b0c7f51d893cbe69b2d1d9b`
+- GitHub Actions run: `35987184987`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -113,8 +114,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          549
-pass                           548
+tests                          550
+pass                           549
 fail                           0
 skipped                        1
 ```
@@ -124,8 +125,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  19
-pass   19
+tests  20
+pass   20
 fail   0
 ```
 
@@ -134,7 +135,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:b03782756107194f5edf7fa624abf0223f5628e7316134d91b312b79962e05f1",
+  "manifestDigest": "sha256:99c7c6c6f2477d1c256879bb14ccc964122232a9d032b070c084b727c37938a7",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -241,3 +242,38 @@ manifest digest sha256:b03782756107194f5edf7fa624abf0223f5628e7316134d91b312b799
 ```
 
 The manifest JSON remains unchanged, so the digest is stable. This evidence update is docs-only and must itself pass the unchanged workflow before review closure.
+
+
+## Final firewall rollback-order correction
+
+A final Codex P2 identified that `PROD-08-FIREWALL-SECURITY-GROUP` had an exact per-action rollback binding to `ROLLBACK-05-REVERT-FIREWALL-RULE`, but the global ordered rollback plan omitted that rollback step.
+
+The manifest and validator now freeze the global rollback order as:
+
+```text
+ROLLBACK-01-REMOVE-NEW-ROUTE
+→ ROLLBACK-05-REVERT-FIREWALL-RULE
+→ ROLLBACK-02-STOP-NEW-CONTAINER
+→ ROLLBACK-03-DISABLE-EXTERNAL-CONFIG
+→ ROLLBACK-04-PRESERVE-DATA-VOLUME
+```
+
+The firewall rule is reverted immediately after removing the newly exposed route, restoring the network boundary before the remaining runtime/config rollback steps.
+
+Hostile regression proves that both omission and misplacement of `ROLLBACK-05` fail with `ROLLBACK_PLAN_ORDER_INVALID`.
+
+Final manifest-bearing implementation evidence:
+
+```text
+head   097800f17df598d02b0c7f51d893cbe69b2d1d9b
+run    35987184987
+result success
+
+full suite      550 tests / 549 pass / 0 fail / 1 expected VCP skip
+manifest suite  20 / 20 PASS
+manifest digest sha256:99c7c6c6f2477d1c256879bb14ccc964122232a9d032b070c084b727c37938a7
+```
+
+This P2 intentionally changes the manifest body, so the prior `sha256:b037827...` digest remains historical evidence only. The digest above is the current manifest authority candidate.
+
+The resulting docs-only PR head must pass the unchanged WO-06D workflow before the review thread is closed.
