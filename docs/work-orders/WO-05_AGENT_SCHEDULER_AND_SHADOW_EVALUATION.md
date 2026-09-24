@@ -175,8 +175,8 @@
 
 当前实现：
 
-- `src/shadow-low-disclosure-report-v1.mjs` 为 aggregate shadow report 增加独立 admission boundary，只接受固定 report root、eligibility、exclusion 与 metric allowlist；
-- report admission 验证 synthetic / approved-low-disclosure approval matrix、stable exclusion code/order/count、Level A/B/C count relation 与每类 metric 的 `OK / NOT_ENOUGH_DATA` 数值矩阵；
+- `src/shadow-low-disclosure-report-v1.mjs` 为 aggregate shadow report 增加独立 admission boundary，只接受固定 report root、eligibility、exclusion 与 metric allowlist；`approvedLowDisclosure` 还必须匹配来自已验证 dataset context 的 trusted `expectedApprovalDigest + expectedDatasetDigest`；
+- report admission 验证 synthetic / approved-low-disclosure approval matrix、stable exclusion code/order/count、Level A/B/C count relation、cohort denominator 绑定，以及每类 metric 的 `OK / NOT_ENOUGH_DATA` 数值与 duration precision 矩阵；
 - `resultDigest` 由不含 `generatedAt` 的 report fact body 重新计算并核对；`generatedAt` 仅做 RFC3339 规范化，不参与事实 digest；
 - report-only integration 出口固定为 `npm run evaluate:shadow:report`，不输出 fixtureId、sampleId、requestId、scheduleItemId、runId 或 per-case classification；
 - `npm run validate:shadow` 只读取 checked-in synthetic fixture，重放 evaluator 后再经过 low-disclosure admission；
