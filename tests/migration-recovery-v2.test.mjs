@@ -397,6 +397,7 @@ test('backup verification detects WAL content rewrite with restored mtime', asyn
     const keeper = new DatabaseSync(source);
     const wal = `${source}-wal`;
     let originalWal;
+    let originalWalStat;
     let originalMtime;
     try {
       assert.equal(keeper.prepare('PRAGMA journal_mode = WAL').get().journal_mode, 'wal');
@@ -410,7 +411,8 @@ test('backup verification detects WAL content rewrite with restored mtime', asyn
       await createVerifiedBackup({ fixtureRoot: root, source, backup, plan });
 
       originalWal = readFileSync(wal);
-      originalMtime = statSync(wal, { bigint: true }).mtimeNs;
+      originalWalStat = statSync(wal, { bigint: true });
+      originalMtime = originalWalStat.mtimeNs;
 
       assert.throws(() => verifyExistingBackup({
         fixtureRoot: root,
@@ -422,7 +424,11 @@ test('backup verification detects WAL content rewrite with restored mtime', asyn
           changed[changed.length - 1] ^= 0x01;
           writeFileSync(wal, changed);
           restoreMtimeNs(wal, originalMtime);
-          assert.equal(statSync(wal, { bigint: true }).size, BigInt(originalWal.length));
+          const after = statSync(wal, { bigint: true });
+          assert.equal(after.dev, originalWalStat.dev);
+          assert.equal(after.ino, originalWalStat.ino);
+          assert.equal(after.size, originalWalStat.size);
+          assert.equal(after.mtimeNs, originalWalStat.mtimeNs);
         },
       }), error => error.code === 'BACKUP_EVIDENCE_MISMATCH');
     } finally {
