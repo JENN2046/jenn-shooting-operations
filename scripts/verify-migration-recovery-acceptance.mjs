@@ -128,7 +128,7 @@ async function main() {
     });
     assert.equal(dryRun.exitCode, 0, dryRun.output);
     assert.ok(['PASS', 'PASS_WITH_WARNINGS'].includes(dryRun.report.result), dryRun.output);
-    assert.equal(dryRun.report.switchReadiness, 'BLOCKED');
+    assert.equal(dryRun.report.switchReadiness, 'NOT_RUN');
 
     const sourceModel = readV1Source(resolveExistingPath(source));
     const plan = buildMigrationPlan({
