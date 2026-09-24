@@ -67,7 +67,7 @@ function stableStat(metadata) {
 }
 
 function databaseFamily(path, code, result) {
-  const entry = candidate => {
+  const entry = (candidate, { includeCtime = true } = {}) => {
     let metadata;
     try {
       metadata = lstatSync(candidate, { bigint: true });
@@ -76,11 +76,14 @@ function databaseFamily(path, code, result) {
       fail(code, result);
     }
     if (metadata.isSymbolicLink() || !metadata.isFile() || metadata.nlink !== 1n) fail(code, result);
-    return stableStat(metadata);
+    const stat = stableStat(metadata);
+    if (includeCtime) return stat;
+    const { ctimeNs: _ctimeNs, ...withoutCtime } = stat;
+    return withoutCtime;
   };
   const family = {
     database: entry(path),
-    wal: entry(`${path}-wal`),
+    wal: entry(`${path}-wal`, { includeCtime: false }),
     shm: entry(`${path}-shm`),
     journal: entry(`${path}-journal`),
   };
