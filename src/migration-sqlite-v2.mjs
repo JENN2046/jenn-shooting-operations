@@ -157,7 +157,7 @@ function openReadOnly(path, invalidResult) {
   }
 }
 
-function fileIdentity(path) {
+function fileIdentity(path, { includeCtime = true } = {}) {
   let metadata;
   try {
     metadata = lstatSync(path, { bigint: true });
@@ -168,19 +168,20 @@ function fileIdentity(path) {
   if (!metadata.isFile() || metadata.isSymbolicLink()) {
     fail('SOURCE_CHANGED_DURING_SCAN', 'INVALID_SOURCE');
   }
-  return {
+  const identity = {
     device: metadata.dev.toString(),
     inode: metadata.ino.toString(),
     size: metadata.size.toString(),
     mtimeNs: metadata.mtimeNs.toString(),
-    ctimeNs: metadata.ctimeNs.toString(),
   };
+  if (includeCtime) identity.ctimeNs = metadata.ctimeNs.toString();
+  return identity;
 }
 
 function sourceFamily(path) {
   return {
     database: fileIdentity(path),
-    wal: fileIdentity(`${path}-wal`),
+    wal: fileIdentity(`${path}-wal`, { includeCtime: false }),
     shm: fileIdentity(`${path}-shm`),
     journal: fileIdentity(`${path}-journal`),
   };
