@@ -41,7 +41,7 @@ const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
   },
   "CUTOVER_FORWARD_CHAIN": {
     "status": "BLOCKED",
-    "evidence": "REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_AND_PROD_08_IF_USED"
+    "evidence": "REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_10_11_AND_PROD_08_IF_USED"
   },
   "CUTOVER_SWITCH_RECOVERY": {
     "status": "BLOCKED",
@@ -118,13 +118,15 @@ const EXPECTED_INVARIANTS = Object.freeze([
   "ROLLBACK_AUTHORITY_ONLY_DERIVED_FROM_APPROVED_FORWARD_ACTION",
   "NO_CUTOVER_WITHOUT_POST_SWITCH_AUTHORITY_RECOVERY",
   "TARGET_PREFLIGHT_REQUIRES_BOUND_CANDIDATE_NOT_PREFLIGHT_RESULTS",
-  "RUNTIME_START_AND_HEALTH_REQUIRE_VERIFIED_PREDECESSORS"
+  "RUNTIME_START_AND_HEALTH_REQUIRE_VERIFIED_PREDECESSORS",
+  "BUILT_IMAGE_ROLLBACK_REQUIRES_EXACT_DIGEST_AND_ZERO_RUNTIME_REFERENCES"
 ]);
 
 const EXPECTED_ROLLBACK_ORDER = Object.freeze([
   "ROLLBACK-01-REMOVE-NEW-ROUTE",
   "ROLLBACK-05-REVERT-FIREWALL-RULE",
   "ROLLBACK-02-STOP-NEW-CONTAINER",
+  "ROLLBACK-08-REMOVE-BUILT-IMAGE",
   "ROLLBACK-06-REVOKE-ROLE-TOKENS",
   "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG",
   "ROLLBACK-04-PRESERVE-DATA-VOLUME"
@@ -218,7 +220,9 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "effects": [
       "Create a new application image without replacing running services"
     ],
-    "rollbackActionIds": [],
+    "rollbackActionIds": [
+      "ROLLBACK-08-REMOVE-BUILT-IMAGE"
+    ],
     "evidenceRequired": [
       "AUTHORITY_COMMIT",
       "IMAGE_ID_OR_DIGEST",
@@ -454,6 +458,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "ROLLBACK-01-REMOVE-NEW-ROUTE",
       "ROLLBACK-05-REVERT-FIREWALL-RULE",
       "ROLLBACK-02-STOP-NEW-CONTAINER",
+      "ROLLBACK-08-REMOVE-BUILT-IMAGE",
       "ROLLBACK-06-REVOKE-ROLE-TOKENS",
       "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG",
       "ROLLBACK-04-PRESERVE-DATA-VOLUME"
@@ -461,6 +466,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "evidenceRequired": [
       "CUTOVER_PLAN",
       "FORWARD_CHAIN_COMPLETION_PROOF",
+      "VCP_KIOSK_ENABLEMENT_COMPLETION_PROOF",
       "POST_SWITCH_RECOVERY_DESIGN",
       "DUAL_READ_COMPATIBLE_WRITE_RECOVERY_PROOF",
       "SWITCH_RECORD",
@@ -589,6 +595,24 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "DUAL_READ_COMPATIBLE_WRITE_RECOVERY_PROOF",
       "SWITCH_RECORD",
       "PREVIOUS_AUTHORITY_RESTORED"
+    ]
+  },
+  "ROLLBACK-08-REMOVE-BUILT-IMAGE": {
+    "title": "Remove image built by PROD-04",
+    "category": "ROLLBACK",
+    "risk": "MEDIUM",
+    "sideEffect": "REVERSIBLE",
+    "status": "ROLLBACK_ONLY",
+    "authorityTarget": "Only the exact image digest created by PROD-04 on the resolved production host",
+    "preconditions": [],
+    "effects": [
+      "Remove only the PROD-04 image after proving no running container references that digest"
+    ],
+    "rollbackActionIds": [],
+    "evidenceRequired": [
+      "IMAGE_DIGEST_MATCH",
+      "IMAGE_NOT_IN_USE",
+      "IMAGE_REMOVED"
     ]
   }
 }));

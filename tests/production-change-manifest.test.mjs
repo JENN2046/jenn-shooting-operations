@@ -256,6 +256,7 @@ test('DingTalk candidates cannot become requestable before exact app/provider an
 test('each action keeps its exact rollback binding, not merely any rollback-category reference', () => {
   for (const [actionId, replacement] of [
     ['PROD-03-GENERATE-INSTALL-TOKENS', ['ROLLBACK-03-DISABLE-EXTERNAL-CONFIG']],
+    ['PROD-04-BUILD-IMAGE', []],
     ['PROD-05-START-ISOLATED-CONTAINER', ['ROLLBACK-01-REMOVE-NEW-ROUTE']],
     ['PROD-09-PRODUCTION-DATA-IMPORT', ['ROLLBACK-01-REMOVE-NEW-ROUTE']],
     ['PROD-10-ENABLE-VCP-REMOTE-SYNC', ['ROLLBACK-04-PRESERVE-DATA-VOLUME']],
@@ -504,12 +505,16 @@ test('cutover remains blocked until the frozen forward deployment chain is verif
   assert.equal(gate.status, 'BLOCKED');
   assert.equal(
     gate.evidence,
-    'REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_AND_PROD_08_IF_USED',
+    'REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_10_11_AND_PROD_08_IF_USED',
   );
 
   const cutover = action(base, 'PROD-13-CUTOVER-SWITCH');
   assert.equal(cutover.preconditions.includes('CUTOVER_FORWARD_CHAIN'), true);
   assert.equal(cutover.evidenceRequired.includes('FORWARD_CHAIN_COMPLETION_PROOF'), true);
+  assert.equal(
+    cutover.evidenceRequired.includes('VCP_KIOSK_ENABLEMENT_COMPLETION_PROOF'),
+    true,
+  );
 
   const droppedGate = structuredClone(base);
   action(droppedGate, 'PROD-13-CUTOVER-SWITCH').preconditions =
@@ -525,6 +530,16 @@ test('cutover remains blocked until the frozen forward deployment chain is verif
     droppedEvidence,
     'ACTION_EVIDENCE_REQUIRED_INVALID',
     'cutover completion proof removed',
+  );
+
+  const droppedIntegrationProof = structuredClone(base);
+  action(droppedIntegrationProof, 'PROD-13-CUTOVER-SWITCH').evidenceRequired =
+    action(droppedIntegrationProof, 'PROD-13-CUTOVER-SWITCH').evidenceRequired
+      .filter(id => id !== 'VCP_KIOSK_ENABLEMENT_COMPLETION_PROOF');
+  expectRejected(
+    droppedIntegrationProof,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'VCP/Kiosk enablement completion proof removed',
   );
 
   const forgedGate = structuredClone(base);
@@ -615,6 +630,7 @@ test('rollback authority is derived from approved forward actions without a seco
       'ROLLBACK-04-PRESERVE-DATA-VOLUME',
       'ROLLBACK-05-REVERT-FIREWALL-RULE',
       'ROLLBACK-06-REVOKE-ROLE-TOKENS',
+      'ROLLBACK-08-REMOVE-BUILT-IMAGE',
     ],
   );
 
@@ -644,11 +660,40 @@ test('rollback authority is derived from approved forward actions without a seco
 });
 
 
+test('PROD-04 image creation has exact digest-bound rollback authority', () => {
+  assert.deepEqual(
+    action(base, 'PROD-04-BUILD-IMAGE').rollbackActionIds,
+    ['ROLLBACK-08-REMOVE-BUILT-IMAGE'],
+  );
+  const rollback = action(base, 'ROLLBACK-08-REMOVE-BUILT-IMAGE');
+  assert.equal(rollback.status, 'ROLLBACK_ONLY');
+  assert.equal(rollback.requiresExplicitAuthorization, false);
+  assert.equal(rollback.authorityTarget.includes('exact image digest created by PROD-04'), true);
+  for (const evidence of ['IMAGE_DIGEST_MATCH', 'IMAGE_NOT_IN_USE', 'IMAGE_REMOVED']) {
+    assert.equal(rollback.evidenceRequired.includes(evidence), true, evidence);
+  }
+  assert.deepEqual(
+    deriveCoauthorizedRollbackActionIds(base.actions, ['PROD-04-BUILD-IMAGE']),
+    ['ROLLBACK-08-REMOVE-BUILT-IMAGE'],
+  );
+
+  const widened = structuredClone(base);
+  action(widened, 'ROLLBACK-08-REMOVE-BUILT-IMAGE').authorityTarget =
+    'Any unused production-host image';
+  expectRejected(widened, 'AUTHORITY_TARGET_INVALID', 'image rollback target widened');
+
+  const unsafe = structuredClone(base);
+  action(unsafe, 'ROLLBACK-08-REMOVE-BUILT-IMAGE').evidenceRequired = ['IMAGE_REMOVED'];
+  expectRejected(unsafe, 'ACTION_EVIDENCE_REQUIRED_INVALID', 'image rollback safety removed');
+});
+
+
 test('global rollback order includes the exact firewall and role-token rollback points', () => {
   assert.deepEqual(base.rollbackPlan.orderedActionIds, [
     'ROLLBACK-01-REMOVE-NEW-ROUTE',
     'ROLLBACK-05-REVERT-FIREWALL-RULE',
     'ROLLBACK-02-STOP-NEW-CONTAINER',
+    'ROLLBACK-08-REMOVE-BUILT-IMAGE',
     'ROLLBACK-06-REVOKE-ROLE-TOKENS',
     'ROLLBACK-03-DISABLE-EXTERNAL-CONFIG',
     'ROLLBACK-04-PRESERVE-DATA-VOLUME',
@@ -664,10 +709,16 @@ test('global rollback order includes the exact firewall and role-token rollback 
     .filter(id => id !== 'ROLLBACK-06-REVOKE-ROLE-TOKENS');
   expectRejected(tokenOmitted, 'ROLLBACK_PLAN_ORDER_INVALID', 'role-token rollback omitted');
 
+  const imageOmitted = structuredClone(base);
+  imageOmitted.rollbackPlan.orderedActionIds = imageOmitted.rollbackPlan.orderedActionIds
+    .filter(id => id !== 'ROLLBACK-08-REMOVE-BUILT-IMAGE');
+  expectRejected(imageOmitted, 'ROLLBACK_PLAN_ORDER_INVALID', 'image rollback omitted');
+
   const misplaced = structuredClone(base);
   misplaced.rollbackPlan.orderedActionIds = [
     'ROLLBACK-01-REMOVE-NEW-ROUTE',
     'ROLLBACK-02-STOP-NEW-CONTAINER',
+    'ROLLBACK-08-REMOVE-BUILT-IMAGE',
     'ROLLBACK-06-REVOKE-ROLE-TOKENS',
     'ROLLBACK-03-DISABLE-EXTERNAL-CONFIG',
     'ROLLBACK-04-PRESERVE-DATA-VOLUME',
