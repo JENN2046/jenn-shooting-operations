@@ -4,7 +4,7 @@
 - Authority base: `79cff08aff2b17ee28b506377966087fd962d5a3`
 - Reconstruction branch: `codex/wo-05e-fresh-runtime-closure`
 - Scope: fresh-runtime failure reproduction evidence, minimal WAL physical-family correction, focused regression, final exact-head rerun gate
-- Current result: `PHASE_1_EXACT_HEAD_RUNTIME_PASS / FINAL_HEAD_RERUN_PENDING`
+- Current result: `FINAL_HEAD_GATE / MERGE_PENDING`
 - Real shadow-data gate: `BLOCKED_DATA`
 
 ## 1. Initial fresh-runtime evidence
@@ -152,13 +152,25 @@ The final-head workflow must continue to prove:
 
 ## 6. Closure rule
 
-The PR branch now records the intended post-merge implementation state:
+PR #11 must remain non-authoritative while it is open, even when its exact-head GitHub Actions runtime gate is green.
+
+The strongest PR-branch state is:
+
+```text
+BLOCKED_DATA
+FINAL_HEAD_RUNTIME_PASS
+MERGE_PENDING
+```
+
+PR #11 itself must not publish `SHADOW_EVALUATOR_PASS_WITH_BLOCKED_DATA` as the current work-order status.
+
+After PR #11 is merged into the authority branch, a separate docs-only authority-closure PR may publish:
 
 ```text
 SHADOW_EVALUATOR_PASS_WITH_BLOCKED_DATA
 ```
 
-That state becomes authoritative only if the exact final PR head passes the GitHub Actions runtime gate and the PR is merged.
+That closure PR must preserve the real-data gate and must not change implementation code.
 
 The real data gate remains separate and unchanged:
 
