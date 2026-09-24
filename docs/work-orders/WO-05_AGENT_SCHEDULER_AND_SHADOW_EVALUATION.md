@@ -155,7 +155,7 @@
 
 #### WO-05E-B：Checked-in Fixture Dataset + Offline Replay
 
-状态：`MERGED / POST_MERGE_VERIFICATION_PENDING`
+状态：`POST_MERGE_CODE_EVIDENCE_VERIFIED / FRESH_RUNTIME_PENDING`
 
 当前实现：
 
