@@ -175,7 +175,6 @@ const EXPECTED_ACTION_REVALIDATION = Object.freeze({
     "ROLLBACK_TARGETS"
   ])
 });
-});
 
 const EXPECTED_TARGET_UNRESOLVED_FACTS = Object.freeze([
   "TARGET_HOST_IDENTITY",
