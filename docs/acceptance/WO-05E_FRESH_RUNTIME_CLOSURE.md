@@ -4,7 +4,7 @@
 - Authority base: `79cff08aff2b17ee28b506377966087fd962d5a3`
 - Reconstruction branch: `codex/wo-05e-fresh-runtime-closure`
 - Scope: fresh-runtime failure reproduction evidence, minimal WAL physical-family correction, focused regression, final exact-head rerun gate
-- Current result: `FRESH_RUNTIME_FIX_IMPLEMENTED / FINAL_EXACT_HEAD_RERUN_REQUIRED`
+- Current result: `PHASE_1_EXACT_HEAD_RUNTIME_PASS / FINAL_HEAD_RERUN_PENDING`
 - Real shadow-data gate: `BLOCKED_DATA`
 
 ## 1. Initial fresh-runtime evidence
@@ -72,28 +72,60 @@ Existing real-writer protections remain in place, including:
 
 The regression intentionally does **not** require WAL `ctimeNs` equality.
 
-## 4. Exact-head rerun status
+## 4. Phase 1 exact-head runtime result
 
-After reconstructing the visible GitHub branch, an independent execution container attempted to clone:
+A GitHub Actions exact-head runtime gate was added directly to the PR branch so the runner checks out the real GitHub commit instead of relying on a transient Codex worktree.
 
-`codex/wo-05e-fresh-runtime-closure`
-
-for a fresh exact-head rerun.
-
-The attempt failed before checkout with:
+Phase 1 ran on:
 
 ```text
-fatal: unable to access 'https://github.com/JENN2046/jenn-shooting-operations.git/':
-Could not resolve host: github.com
+HEAD 85536f53ade1af8d35f96671e386485f1124d77f
+GitHub Actions run 35954996312
+conclusion = success
 ```
 
-The container has Git available, but outbound GitHub DNS/network is blocked.
+Runtime facts:
 
-Therefore this document does **not** claim that the reconstructed GitHub head has completed the final full runtime sequence yet.
+- runner: Ubuntu 24.04 / Linux `6.17.0-1022-azure`;
+- Node.js: `22.22.2`;
+- npm: `11.4.2`;
+- Node tzdata: `2025c`;
+- ICU: `78.2`.
 
-## 5. Required final runtime sequence
+Phase 1 commands all passed:
 
-On the final reviewed PR head, a connected clean environment must run:
+- `npm ci`;
+- `npm run validate:contract`;
+- `npm run validate:shadow`;
+- `npm test`;
+- `npm run check`.
+
+The shadow gate output remained:
+
+```text
+datasetClass=synthetic
+gateStatus=BLOCKED_DATA
+resultDigest=sha256:73da98b7d91688235da5ce3547c7e06af685532697e699aa01a589c6619c3e4c
+```
+
+The test suite completed twice during the explicit `npm test` step and the repository `npm run check` step with the same counts:
+
+```text
+tests = 527
+pass = 526
+fail = 0
+skipped = 1
+cancelled = 0
+todo = 0
+```
+
+The only skip is the external VCP sync adapter test because that adapter is not present in the workspace; no production DB, credential, provider, deployment, or real business dataset was used.
+
+## 5. Final-head rerun rule
+
+This document/status update is the only Phase 2 change after the successful Phase 1 runtime gate.
+
+The resulting final PR head must itself pass the same GitHub Actions workflow, which runs:
 
 ```sh
 npm ci
@@ -103,37 +135,27 @@ npm test
 npm run check
 ```
 
-The final record must include:
+PR #11 must not merge unless the workflow attached to that exact final commit succeeds.
 
-- OS;
-- Node version;
-- npm version;
-- Node tzdata/runtime timezone-data fingerprint when available;
-- dependency install result;
-- complete test/pass/fail/skip counts;
-- `validate:shadow` output proving:
-  - `datasetClass=synthetic`;
-  - `gateStatus=BLOCKED_DATA`;
-  - no unqualified real shadow-acceptance PASS.
+The final-head workflow must continue to prove:
+
+- Node `22.22.2` and npm `11.4.2`;
+- `datasetClass=synthetic`;
+- `gateStatus=BLOCKED_DATA`;
+- no unqualified real shadow-acceptance PASS;
+- complete test/pass/fail/skip counts with zero failures.
 
 ## 6. Closure rule
 
-Until that exact-head rerun succeeds, the strongest honest WO-05E state is:
-
-```text
-POST_MERGE_CODE_EVIDENCE_VERIFIED
-FRESH_RUNTIME_FIX_IMPLEMENTED
-FINAL_EXACT_HEAD_RERUN_REQUIRED
-BLOCKED_DATA
-```
-
-Only after the final exact-head runtime sequence passes may WO-05E move to:
+The PR branch now records the intended post-merge implementation state:
 
 ```text
 SHADOW_EVALUATOR_PASS_WITH_BLOCKED_DATA
 ```
 
-Even then:
+That state becomes authoritative only if the exact final PR head passes the GitHub Actions runtime gate and the PR is merged.
+
+The real data gate remains separate and unchanged:
 
 ```text
 approved/real Level C dataset = 0
