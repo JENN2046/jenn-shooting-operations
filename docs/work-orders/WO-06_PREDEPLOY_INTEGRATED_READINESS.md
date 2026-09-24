@@ -1,7 +1,7 @@
 # WO-06：部署前综合预检
 
 - Authority base: `8d5747439ccdfb29dd78ae294c1df82cba6476a3`
-- 状态：`IN_PROGRESS / WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS / BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
+- 状态：`IN_PROGRESS / WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS / WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS / BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
 - 目标：证明系统是否具备进入“申请部署授权”的条件，不执行部署。
 - 硬边界：不接生产 DB、不写真实凭据、不调用真实钉钉/VCP provider、不发布、不切流、不做 Switch。
 
@@ -87,3 +87,51 @@
 - 仍保持 `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`。
 
 06A PASS 只意味着“部署前证据基线可用”，不代表 WO-06 总体 PASS，更不代表授权部署。
+
+
+## WO-06B：MIGRATION_BACKUP_RESTORE_ROLLBACK_FRESH_ACCEPTANCE
+
+- Authority base: `b66c6e0377531064b4e1db03dbc2067d4457acf0`
+- 状态：`WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS`
+
+### Fresh evidence
+
+GitHub Actions run `35975920061` on head `15f5b905d09ce842883a03ba76cbc629f88a822d` completed successfully with:
+
+- Ubuntu 24.04 / Linux `6.17.0-1022-azure`;
+- Node `24.21.0`;
+- npm `11.19.0`;
+- tzdata `2026c`;
+- ICU `78.3`;
+- full `npm run check`: 530 tests / 529 pass / 0 fail / 1 expected external-VCP skip;
+- targeted migration/recovery suite: 126/126 PASS;
+- fresh full-chain acceptance: PASS.
+
+The full-chain harness proved:
+
+```text
+dry-run                    PASS / switchReadiness=NOT_RUN
+isolated apply             APPLIED_VERIFIED
+verified backup            BACKUP_VERIFIED
+verified rollback restore  ROLLBACK_VERIFIED
+target post-verify         ALREADY_APPLIED_VERIFIED
+completed replay           ALREADY_APPLIED_VERIFIED
+apply/replay switch state  BLOCKED
+source bytes               unchanged
+completed artifacts        unchanged on replay
+```
+
+The target also retained zero `production_events` and zero `notification_outbox` rows, so historical migration did not fabricate runtime or notification facts.
+
+### Limits preserved
+
+This PASS applies only to fresh isolated fixture paths under the frozen WO-02D contract. It does not authorize or claim:
+
+- production DB migration;
+- online migration;
+- real upload-volume migration;
+- production backup/restore;
+- Switch/cutover;
+- deployment/release.
+
+WO-06C still owns VCP/Kiosk/DingTalk external readiness. WO-06D still owns the production change and authorization packet. The global deployment gate remains `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
