@@ -112,14 +112,54 @@ test('every production action keeps its complete frozen prerequisite set', () =>
   }
 });
 
-test('requestable status is bidirectionally frozen to exactly two action ids', () => {
+test('requestable status is bidirectionally frozen to the single currently bound action', () => {
   const widened = structuredClone(base);
   action(widened, 'PROD-02-CREATE-ISOLATED-APP-STORAGE').status = 'REQUESTABLE_EXPLICIT_AUTHORIZATION';
   expectRejected(widened, 'ACTION_STATUS_INVALID', 'widen blocked action');
 
-  const narrowed = structuredClone(base);
-  action(narrowed, 'PROD-12-DINGTALK-PROVIDER-INTEGRATION').status = 'BLOCKED_PREREQUISITE';
-  expectRejected(narrowed, 'ACTION_STATUS_INVALID', 'remove requestable action');
+  const dingtalkWidened = structuredClone(base);
+  action(dingtalkWidened, 'PROD-12-DINGTALK-PROVIDER-INTEGRATION').status = 'REQUESTABLE_EXPLICIT_AUTHORIZATION';
+  dingtalkWidened.authorizationPacket.requestableActionIds.push('PROD-12-DINGTALK-PROVIDER-INTEGRATION');
+  const result = validate(dingtalkWidened);
+  assert.equal(result.ok, false);
+  const codes = issueCodes(result);
+  assert.equal(codes.has('ACTION_STATUS_INVALID'), true);
+  assert.equal(codes.has('REQUESTABLE_ACTION_SET_INVALID'), true);
+  assert.equal(codes.has('REQUESTABLE_STATUS_SET_INVALID'), true);
+});
+
+test('DingTalk candidates cannot become requestable before exact app/provider and bounded destination binding', () => {
+  const baseAction = action(base, 'PROD-12-DINGTALK-PROVIDER-INTEGRATION');
+  assert.equal(baseAction.status, 'BLOCKED_PREREQUISITE');
+  assert.equal(baseAction.authorityTarget, 'UNRESOLVED_DINGTALK_TARGET_BINDING');
+  assert.equal(baseAction.preconditions.includes('DINGTALK_TARGET_BINDING'), true);
+  assert.equal(
+    base.authorizationPacket.requestableActionIds.includes('PROD-12-DINGTALK-PROVIDER-INTEGRATION'),
+    false,
+  );
+
+  for (const authorityTarget of [
+    'DingTalk app/provider APP_A -> bounded destination RECIPIENT_A',
+    'DingTalk app/provider APP_B -> bounded destination RECIPIENT_B',
+  ]) {
+    const changed = structuredClone(base);
+    const candidate = action(changed, 'PROD-12-DINGTALK-PROVIDER-INTEGRATION');
+    candidate.status = 'REQUESTABLE_EXPLICIT_AUTHORIZATION';
+    candidate.authorityTarget = authorityTarget;
+    candidate.preconditions = ['WO06C_DINGTALK_PROVIDER'];
+    changed.authorizationPacket.requestableActionIds.push('PROD-12-DINGTALK-PROVIDER-INTEGRATION');
+
+    const result = validate(changed);
+    assert.equal(result.ok, false, authorityTarget);
+    const codes = issueCodes(result);
+    for (const code of [
+      'ACTION_STATUS_INVALID',
+      'AUTHORITY_TARGET_INVALID',
+      'ACTION_PRECONDITIONS_INVALID',
+      'REQUESTABLE_ACTION_SET_INVALID',
+      'REQUESTABLE_STATUS_SET_INVALID',
+    ]) assert.equal(codes.has(code), true, `${authorityTarget}: ${code}`);
+  }
 });
 
 test('each action keeps its exact rollback binding, not merely any rollback-category reference', () => {
