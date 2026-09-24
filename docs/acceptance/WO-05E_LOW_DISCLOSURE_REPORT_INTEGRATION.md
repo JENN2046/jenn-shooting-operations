@@ -52,12 +52,12 @@ Root and nested records are admitted through exact own-data keys. Metric objects
 The low-disclosure admission verifies:
 
 - `gateStatus = BLOCKED_DATA`;
-- synthetic vs approved-low-disclosure approval matrix;
-- Level count relation `levelC <= levelB <= levelA`;
+- synthetic vs approved-low-disclosure approval matrix; approved reports additionally require trusted `expectedApprovalDigest` and `expectedDatasetDigest` from a previously verified dataset context;
+- Level count relation `levelC <= levelB <= levelA`, with duration/human-override denominators exactly bound to Level C and retrospective baseline denominators exactly bound to Level B;
 - `levelA + ineligible = total`;
 - stable exclusion-code allowlist, order, uniqueness and dataset-count bounds;
-- zero denominator only as `NOT_ENOUGH_DATA + value:null + numerator:null + denominator:0`;
-- metric-specific statistic/rate/count numerator-denominator relations for `OK` metrics;
+- zero denominator only as `NOT_ENOUGH_DATA + value:null + numerator:null + denominator:0`; Level C / Level B cohorts force the metrics that the frozen evaluator always computes to be `OK` with the exact cohort denominator;
+- metric-specific statistic/rate/count numerator-denominator relations for `OK` metrics, including integer-millisecond P90 values and median precision limited to integer or `.5ms` where cohort parity permits;
 - `resultDigest` recomputation from the fact body;
 - `generatedAt` normalization while remaining outside the fact digest.
 
