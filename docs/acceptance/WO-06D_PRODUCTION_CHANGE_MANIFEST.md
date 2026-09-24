@@ -106,8 +106,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `239527fbdd88e6aad27fc039ac1ab20d9165b138`
-- GitHub Actions run: `36015492997`
+- Head: `a9f80f38b2745ee739f6d35fae708172840cdefa`
+- GitHub Actions run: `36016721973`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -116,8 +116,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          553
-pass                           552
+tests                          555
+pass                           554
 fail                           0
 skipped                        1
 ```
@@ -127,8 +127,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  23
-pass   23
+tests  25
+pass   25
 fail   0
 ```
 
@@ -137,7 +137,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:4ae83ba4ce1fb4e6cace95b2768a011f36bd91efb4432b36bae49e92845b3531",
+  "manifestDigest": "sha256:f3d912fa3afeb94473bee8d75583516a0899e45f69374d7754b8d0389e0f3575",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -342,3 +342,42 @@ manifest digest  sha256:4ae83ba4ce1fb4e6cace95b2768a011f36bd91efb4432b36bae49e92
 ```
 
 The packet remains `FROZEN_NOT_REQUESTED`; requested/approved action arrays remain empty; deployment authorization remains blocked.
+
+
+## Cutover forward-chain + derived rollback authority correction
+
+Exact-current review identified two additional future-execution contract gaps:
+
+1. `PROD-13-CUTOVER-SWITCH` could previously become authorizable after closing broad gates without proving the forward deployment chain had actually succeeded.
+2. Rollback actions were marked as requiring their own explicit approval even though a forward action may need immediate recovery authority during an incident.
+
+The current machine contract now adds:
+
+```text
+CUTOVER_FORWARD_CHAIN = BLOCKED
+evidence = REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_AND_PROD_08_IF_USED
+
+PROD-13.preconditions += CUTOVER_FORWARD_CHAIN
+PROD-13.evidenceRequired += FORWARD_CHAIN_COMPLETION_PROOF
+
+rollbackAuthorizationModel = BOUND_ROLLBACK_IDS_COAUTHORIZED_WITH_FORWARD_ACTION
+separateRollbackApprovalRequired = false
+derivedRollbackActionIds = []
+```
+
+The cutover rollback binding now also covers all six frozen rollback capabilities, including firewall revert and role-token revocation. Forward actions continue to require explicit human authorization; rollback-only actions do not require a second standalone approval and can only receive authority as the exact derived rollback set of an approved forward action.
+
+Hostile regressions prove that the cutover chain gate/completion proof cannot be removed or self-promoted, rollback authority cannot be forged without a forward approval, and rollback actions cannot be changed back into second-approval operations.
+
+Exact implementation-bearing evidence:
+
+```text
+head             a9f80f38b2745ee739f6d35fae708172840cdefa
+run              36016721973
+result           success
+full suite       555 tests / 554 pass / 0 fail / 1 expected VCP skip
+manifest suite   25 / 25 PASS
+manifest digest  sha256:f3d912fa3afeb94473bee8d75583516a0899e45f69374d7754b8d0389e0f3575
+```
+
+The current packet still carries no requested, approved, requestable, or derived rollback action IDs. No deployment or rollback action was executed.

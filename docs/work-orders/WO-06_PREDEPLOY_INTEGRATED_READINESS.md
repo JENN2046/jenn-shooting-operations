@@ -267,12 +267,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36015492997` on implementation-bearing head `239527fbdd88e6aad27fc039ac1ab20d9165b138` passed:
+GitHub Actions run `36016721973` on implementation-bearing head `a9f80f38b2745ee739f6d35fae708172840cdefa` passed:
 
-- full `npm run check`: 553 tests / 552 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 23/23 PASS;
+- full `npm run check`: 555 tests / 554 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 25/25 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:4ae83ba4ce1fb4e6cace95b2768a011f36bd91efb4432b36bae49e92845b3531`;
+- manifest digest: `sha256:f3d912fa3afeb94473bee8d75583516a0899e45f69374d7754b8d0389e0f3575`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -377,3 +377,20 @@ PROD-03.rollbackActionIds = [ROLLBACK-06-REVOKE-ROLE-TOKENS]
 The validator rejects attempts to promote either a HOST_A or HOST_B candidate into requestability before exact host binding, rejects rebinding PROD-03 to the generic external-config rollback, and rejects omission of rollback 06 from the global rollback sequence.
 
 Implementation evidence: head `239527fbdd88e6aad27fc039ac1ab20d9165b138`, run `36015492997`, 553/552/0/1 full-suite result, 23/23 manifest suite, digest `sha256:4ae83ba4ce1fb4e6cace95b2768a011f36bd91efb4432b36bae49e92845b3531`.
+
+
+### WO-06D cutover chain + derived rollback authority
+
+Cutover is now blocked by the dedicated `CUTOVER_FORWARD_CHAIN` gate until verified completion evidence exists for the required forward deployment chain. `PROD-13` also requires `FORWARD_CHAIN_COMPLETION_PROOF`.
+
+Rollback authority is no longer a second-approval dead end:
+
+```text
+rollbackAuthorizationModel = BOUND_ROLLBACK_IDS_COAUTHORIZED_WITH_FORWARD_ACTION
+separateRollbackApprovalRequired = false
+derivedRollbackActionIds = []
+```
+
+Forward actions still require explicit human authorization. Rollback-only actions are authorized only as the exact rollback IDs bound to an approved forward action; the validator derives that set and rejects forged rollback authority.
+
+Implementation evidence: head `a9f80f38b2745ee739f6d35fae708172840cdefa`, run `36016721973`, 555/554/0/1 full suite, 25/25 manifest suite, digest `sha256:f3d912fa3afeb94473bee8d75583516a0899e45f69374d7754b8d0389e0f3575`.
