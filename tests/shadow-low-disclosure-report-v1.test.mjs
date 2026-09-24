@@ -545,3 +545,48 @@ test('outside-window cases cannot inflate Level C or outcome exclusion upper bou
     reason: 'REPORT_CONTENT_INVALID',
   });
 });
+
+
+test('window-filtered ineligible cases cannot justify classifier Level-A exclusions', async () => {
+  const report = await replayReport();
+
+  const impossible = structuredClone(report);
+  impossible.eligibilityCounts.ineligible = 1;
+  impossible.eligibilityCounts.levelA = 1;
+  impossible.eligibilityCounts.levelB = 1;
+  impossible.exclusionCounts = [
+    { code: 'EVENT_OUTSIDE_DATASET_WINDOW', count: 1 },
+    { code: 'NOT_TASK_SCOPE', count: 1 },
+    { code: 'SCHEDULING_INPUT_MISSING', count: 1 },
+    { code: 'PROPOSAL_MISSING', count: 1 },
+    { code: 'ITEM_DECISION_DIFF_MISSING', count: 1 },
+    { code: 'OUTCOME_MISSING', count: 1 },
+  ];
+  impossible.resultDigest = recomputeResultDigest(impossible);
+
+  assert.deepEqual(admitLowDisclosureShadowReportV1(impossible), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_CONTENT_INVALID',
+  });
+});
+
+test('window-filtered ineligible cases remain valid without fabricated classifier exclusions', async () => {
+  const report = await replayReport();
+
+  const possible = structuredClone(report);
+  possible.eligibilityCounts.ineligible = 1;
+  possible.eligibilityCounts.levelA = 1;
+  possible.eligibilityCounts.levelB = 1;
+  possible.exclusionCounts = [
+    { code: 'EVENT_OUTSIDE_DATASET_WINDOW', count: 1 },
+    { code: 'SCHEDULING_INPUT_MISSING', count: 1 },
+    { code: 'PROPOSAL_MISSING', count: 1 },
+    { code: 'ITEM_DECISION_DIFF_MISSING', count: 1 },
+    { code: 'OUTCOME_MISSING', count: 1 },
+  ];
+  possible.resultDigest = recomputeResultDigest(possible);
+
+  const admitted = admitLowDisclosureShadowReportV1(possible);
+  assert.equal(admitted.ok, true, JSON.stringify(admitted));
+});
