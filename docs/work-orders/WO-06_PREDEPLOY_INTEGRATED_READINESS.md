@@ -235,13 +235,17 @@ deploymentAuthorizationRequest = BLOCKED_PREREQUISITES
 deploymentGate = BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 ```
 
-The packet currently blocks a deployment authorization request on:
+The packet's deployment-level blocker subset is frozen as:
 
 - `WO06C_VCP_EXTERNAL`;
 - `WO06C_KIOSK_DEVICE`;
 - `PRODUCTION_TARGET_FACTS`;
 - `PRODUCTION_DATA_MIGRATION`;
 - `PRODUCTION_DEPLOYMENT_GATE`.
+
+This is emitted as `deploymentBlockingGateIds`.
+
+Separately, `blockingGateIds` is exhaustive across **every current `BLOCKED` gate**, including action-specific gates such as `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, and `PROXY_BACKEND_READINESS`. The validator derives this exhaustive set from gate statuses.
 
 No action definition is currently marked requestable. The frozen requestable set is empty.
 
@@ -267,12 +271,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36020032853` on implementation-bearing head `11c172f50d6cf843eed391de400f473f43db1f04` passed:
+GitHub Actions run `36022131601` on implementation-bearing head `3440cf3efdc6c5fa5a0ea1667ea21f43a99a7260` passed:
 
-- full `npm run check`: 556 tests / 555 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 26/26 PASS;
+- full `npm run check`: 557 tests / 556 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 27/27 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:91d0fd5fb681e402fd0fda67f211d6abc6002eab4eff3976e8c5c441d483de3e`;
+- manifest digest: `sha256:c10a179016e15aac94614fa6588e772b67b6f0dc533e1454603c6c98ef3cabbb`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -416,3 +420,29 @@ ROLLBACK-07.authorityTarget = UNRESOLVED_POST_SWITCH_AUTHORITY_RECOVERY_CAPABILI
 Rollback 07 is not executable, not in the global rollback order, and not derivable as rollback authority while blocked. It becomes a real rollback capability only through a later reviewed authority revision that provides the dual-read/compatible-write recovery proof and switch-record contract.
 
 Implementation evidence: head `11c172f50d6cf843eed391de400f473f43db1f04`, run `36020032853`, full suite 556/555/0/1, manifest suite 26/26, digest `sha256:91d0fd5fb681e402fd0fda67f211d6abc6002eab4eff3976e8c5c441d483de3e`.
+
+
+### WO-06D exhaustive blocker surface + proxy backend readiness
+
+`blockingGateIds` is now defined as the exhaustive set of all gates currently in `BLOCKED` state. `deploymentBlockingGateIds` separately preserves the five deployment-level blockers, so action-specific blockers remain visible without changing their meaning.
+
+Current action-specific blocked gates include:
+
+```text
+DINGTALK_TARGET_BINDING
+CUTOVER_FORWARD_CHAIN
+CUTOVER_SWITCH_RECOVERY
+PROXY_BACKEND_READINESS
+```
+
+`PROD-07-CONFIGURE-REVERSE-PROXY-TLS` now requires:
+
+```text
+PROXY_BACKEND_READINESS = BLOCKED
+evidence = REQUIRES_VERIFIED_PROD_04_05_06
+BACKEND_BUILD_START_HEALTH_PROOF
+```
+
+Therefore route/TLS exposure cannot be authorized before build, isolated-container start, and loopback health verification have completed successfully.
+
+Implementation evidence: head `3440cf3efdc6c5fa5a0ea1667ea21f43a99a7260`, run `36022131601`, full suite 557/556/0/1, manifest suite 27/27, digest `sha256:c10a179016e15aac94614fa6588e772b67b6f0dc533e1454603c6c98ef3cabbb`.

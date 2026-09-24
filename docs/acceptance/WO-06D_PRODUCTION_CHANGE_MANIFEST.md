@@ -50,7 +50,7 @@ Nothing in WO-06D is an authorization to execute an action.
 
 ## Current blockers
 
-The deployment authorization request remains blocked by:
+The deployment authorization request remains blocked by the dedicated deployment-level set:
 
 - VCP real compatibility: `WO06C_VCP_EXTERNAL`;
 - Kiosk real-device evidence: `WO06C_KIOSK_DEVICE`;
@@ -58,7 +58,11 @@ The deployment authorization request remains blocked by:
 - unvalidated real production migration inputs: `PRODUCTION_DATA_MIGRATION`;
 - the explicit production deployment gate itself: `PRODUCTION_DEPLOYMENT_GATE`.
 
-WO-06C still classifies the local DingTalk provider boundary as `READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION`, but WO-06D now separately freezes `DINGTALK_TARGET_BINDING = BLOCKED` because no concrete app/provider identity plus bounded test destination has been supplied. Provider readiness therefore does not make `PROD-12` requestable.
+This subset is frozen separately as `deploymentBlockingGateIds`.
+
+`blockingGateIds` has a different, exhaustive meaning: it must equal **every gate whose current status is `BLOCKED`**. It therefore also contains the action-specific blockers `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, and `PROXY_BACKEND_READINESS`. The validator derives the expected exhaustive set from the gate statuses, so a newly blocked gate cannot be omitted from the CLI checklist.
+
+WO-06C still classifies the local DingTalk provider boundary as `READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION`, but WO-06D separately freezes `DINGTALK_TARGET_BINDING = BLOCKED` because no concrete app/provider identity plus bounded test destination has been supplied. Provider readiness therefore does not make `PROD-12` requestable.
 
 ## Requestable actions
 
@@ -106,8 +110,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `11c172f50d6cf843eed391de400f473f43db1f04`
-- GitHub Actions run: `36020032853`
+- Head: `3440cf3efdc6c5fa5a0ea1667ea21f43a99a7260`
+- GitHub Actions run: `36022131601`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -116,8 +120,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          556
-pass                           555
+tests                          557
+pass                           556
 fail                           0
 skipped                        1
 ```
@@ -127,8 +131,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  26
-pass   26
+tests  27
+pass   27
 fail   0
 ```
 
@@ -137,12 +141,23 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:91d0fd5fb681e402fd0fda67f211d6abc6002eab4eff3976e8c5c441d483de3e",
+  "manifestDigest": "sha256:c10a179016e15aac94614fa6588e772b67b6f0dc533e1454603c6c98ef3cabbb",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
   "requestableActionIds": [],
   "blockingGateIds": [
+    "WO06C_VCP_EXTERNAL",
+    "WO06C_KIOSK_DEVICE",
+    "DINGTALK_TARGET_BINDING",
+    "CUTOVER_FORWARD_CHAIN",
+    "CUTOVER_SWITCH_RECOVERY",
+    "PROXY_BACKEND_READINESS",
+    "PRODUCTION_TARGET_FACTS",
+    "PRODUCTION_DATA_MIGRATION",
+    "PRODUCTION_DEPLOYMENT_GATE"
+  ],
+  "deploymentBlockingGateIds": [
     "WO06C_VCP_EXTERNAL",
     "WO06C_KIOSK_DEVICE",
     "PRODUCTION_TARGET_FACTS",
@@ -156,7 +171,8 @@ The validator also fresh-rejects:
 
 - ordinary Bearer/access-token/token-shaped secret material embedded in schema-valid free text;
 - secret fields, pre-populated approved action IDs and blanket approval;
-- missing authorization blockers;
+- missing or extra entries in the exhaustive `blockingGateIds` surface, including action-specific blocked gates;
+- drift in the separate deployment-level `deploymentBlockingGateIds` subset;
 - authority-target widening for frozen action IDs;
 - production data/VCP/Kiosk/cutover actions that drop `PRODUCTION_TARGET_FACTS` or any other frozen prerequisite;
 - any action whose requestable/non-requestable status drifts from the frozen empty requestable set;
@@ -417,3 +433,60 @@ manifest digest  sha256:91d0fd5fb681e402fd0fda67f211d6abc6002eab4eff3976e8c5c441
 ```
 
 No Switch, route mutation, client remap, migration, provider call, or production rollback was executed.
+
+
+## Exhaustive blockers + proxy backend predecessor correction
+
+Two P2 findings on exact head `5c5c977f...` exposed adjacent prerequisite semantics:
+
+1. the CLI blocker checklist was not exhaustive because action-specific blocked gates were omitted;
+2. `PROD-07-CONFIGURE-REVERSE-PROXY-TLS` could be authorized before the backend had been built, started, and health-checked.
+
+The current contract now freezes two distinct blocker surfaces:
+
+```text
+blockingGateIds = every gate with status BLOCKED
+
+deploymentBlockingGateIds =
+  WO06C_VCP_EXTERNAL
+  WO06C_KIOSK_DEVICE
+  PRODUCTION_TARGET_FACTS
+  PRODUCTION_DATA_MIGRATION
+  PRODUCTION_DEPLOYMENT_GATE
+```
+
+Current exhaustive `blockingGateIds` also includes:
+
+```text
+DINGTALK_TARGET_BINDING
+CUTOVER_FORWARD_CHAIN
+CUTOVER_SWITCH_RECOVERY
+PROXY_BACKEND_READINESS
+```
+
+The validator computes the exhaustive expected set directly from current gate statuses. Hostile regression removes several action-specific blockers, adds a non-blocked gate, narrows the deployment subset, and widens the deployment subset with an action-specific blocker; every case fails closed.
+
+Proxy exposure now has its own predecessor gate:
+
+```text
+PROXY_BACKEND_READINESS = BLOCKED
+evidence = REQUIRES_VERIFIED_PROD_04_05_06
+
+PROD-07.preconditions += PROXY_BACKEND_READINESS
+PROD-07.evidenceRequired += BACKEND_BUILD_START_HEALTH_PROOF
+```
+
+This prevents reverse-proxy/TLS exposure until the exact build → start → loopback-health sequence has verified a healthy backend. Regression proves the gate/evidence cannot be removed or self-promoted.
+
+Exact implementation-bearing evidence:
+
+```text
+head             3440cf3efdc6c5fa5a0ea1667ea21f43a99a7260
+run              36022131601
+result           success
+full suite       557 tests / 556 pass / 0 fail / 1 expected VCP skip
+manifest suite   27 / 27 PASS
+manifest digest  sha256:c10a179016e15aac94614fa6588e772b67b6f0dc533e1454603c6c98ef3cabbb
+```
+
+No proxy route, TLS binding, container, provider, migration, cutover, or deployment action was executed.
