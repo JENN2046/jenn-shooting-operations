@@ -235,6 +235,8 @@ deploymentAuthorizationRequest = BLOCKED_PREREQUISITES
 deploymentGate = BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 ```
 
+Pre-request revalidation is intentionally split: the global checklist contains only facts that can exist before the first production action, while `actionSpecificRevalidation` binds source/base digest checks to PROD-04 and the built-image digest only to downstream actions that depend on the produced image.
+
 The packet's deployment-level blocker subset is frozen as:
 
 - `WO06C_VCP_EXTERNAL`;
@@ -271,12 +273,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36030322588` on implementation-bearing head `e864db2360c66dff91054df2e601614e37e0d885` passed:
+GitHub Actions run `36032380591` on implementation-bearing head `7cb0597171846f56f060d8289b147602dd6b8f1f` passed:
 
 - full `npm run check`: 564 tests / 563 pass / 0 fail / 1 expected external-VCP skip;
 - production-manifest targeted tests: 34/34 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:312c7a6d738da3d01f4f332b9e556e92b00835b3960f574df80e7154df6144a9`;
+- manifest digest: `sha256:cd6f28259bff04abb06a7bc6c91f176ae3814e47bd9dcfd12fce3ce0341acdfc`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -558,3 +560,21 @@ RETAINED_STORAGE_ARTIFACT_ACKNOWLEDGED
 This makes the classification match the existing recovery rule: stop mutation and preserve the newly created directory/volume rather than destructively deleting deployment data.
 
 Implementation evidence: head `e864db2360c66dff91054df2e601614e37e0d885`, run `36030322588`, full suite 564/563/0/1, manifest suite 34/34, digest `sha256:312c7a6d738da3d01f4f332b9e556e92b00835b3960f574df80e7154df6144a9`.
+
+
+### WO-06D action-specific image digest revalidation
+
+The global pre-request checklist no longer requires an output image digest before one exists.
+
+```text
+PROD-04:
+  BUILD_SOURCE_AUTHORITY_COMMIT
+  BUILD_BASE_IMAGE_DIGEST
+
+PROD-05 / PROD-06 / PROD-07 / PROD-10 / PROD-11 / PROD-13:
+  BUILT_IMAGE_DIGEST
+```
+
+PROD-01 has no built-image revalidation requirement. The validator freezes both the global checklist and the exact action-specific map, so the build cannot require its own output digest and downstream actions cannot silently drop their built-image identity check.
+
+Implementation evidence: head `7cb0597171846f56f060d8289b147602dd6b8f1f`, run `36032380591`, full suite 564/563/0/1, manifest suite 34/34, digest `sha256:cd6f28259bff04abb06a7bc6c91f176ae3814e47bd9dcfd12fce3ce0341acdfc`.

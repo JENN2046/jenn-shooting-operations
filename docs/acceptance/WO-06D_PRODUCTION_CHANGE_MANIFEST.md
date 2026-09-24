@@ -35,6 +35,8 @@ Validator:
 
 The authorization packet is nested inside the manifest so it cannot drift from the change list it governs.
 
+Pre-request revalidation is split into a global checklist plus action-specific checks. Build-output identity is not a global prerequisite: PROD-04 revalidates its bound source commit and base-image digest before build, while downstream runtime/cutover actions revalidate the built-image digest only after PROD-04 has produced it.
+
 ## Frozen authorization semantics
 
 ```text
@@ -113,8 +115,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `e864db2360c66dff91054df2e601614e37e0d885`
-- GitHub Actions run: `36030322588`
+- Head: `7cb0597171846f56f060d8289b147602dd6b8f1f`
+- GitHub Actions run: `36032380591`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -144,7 +146,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:312c7a6d738da3d01f4f332b9e556e92b00835b3960f574df80e7154df6144a9",
+  "manifestDigest": "sha256:cd6f28259bff04abb06a7bc6c91f176ae3814e47bd9dcfd12fce3ce0341acdfc",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -701,3 +703,51 @@ manifest digest  sha256:312c7a6d738da3d01f4f332b9e556e92b00835b3960f574df80e7154
 ```
 
 No integration configuration, storage, secret, rollback, or other production mutation was executed.
+
+
+## Action-specific image digest revalidation
+
+Exact-current review on `3307e794...` identified that the global `mustRevalidateBeforeRequest` list still required `IMAGE_DIGEST` before PROD-04 had created any image, recreating a prerequisite cycle for PROD-01 and PROD-04.
+
+The current machine contract removes all built-image digest requirements from the global checklist and freezes a separate action-specific map:
+
+```text
+global mustRevalidateBeforeRequest:
+  AUTHORITY_HEAD
+  TARGET_HOST_IDENTITY
+  DISK_PORT_ROUTE_CONFLICTS
+  BACKUP_ROLLBACK_PROOF
+  SECRET_STORAGE
+  EXTERNAL_READINESS_GATES
+  ROLLBACK_TARGETS
+
+PROD-04-BUILD-IMAGE:
+  BUILD_SOURCE_AUTHORITY_COMMIT
+  BUILD_BASE_IMAGE_DIGEST
+
+downstream actions that depend on the built runtime:
+  PROD-05 / PROD-06 / PROD-07 / PROD-10 / PROD-11 / PROD-13
+  → BUILT_IMAGE_DIGEST
+```
+
+PROD-01 is deliberately absent from `actionSpecificRevalidation`, so target preflight cannot be blocked by an image that does not yet exist. PROD-04 likewise cannot require its own output digest; it binds source authority and the base-image digest before execution instead.
+
+Hostile regressions reject:
+
+- reintroducing `IMAGE_DIGEST` into the global checklist;
+- making PROD-04 require `BUILT_IMAGE_DIGEST`;
+- dropping `BUILD_BASE_IMAGE_DIGEST` from the build request checks;
+- adding a built-image digest prerequisite to PROD-01.
+
+Exact implementation-bearing evidence:
+
+```text
+head             7cb0597171846f56f060d8289b147602dd6b8f1f
+run              36032380591
+result           success
+full suite       564 tests / 563 pass / 0 fail / 1 expected VCP skip
+manifest suite   34 / 34 PASS
+manifest digest  sha256:cd6f28259bff04abb06a7bc6c91f176ae3814e47bd9dcfd12fce3ce0341acdfc
+```
+
+No image build, host preflight, deployment request, or production mutation was executed.
