@@ -401,3 +401,86 @@ test('Level-A-disqualifying exclusions are bound to the ineligible cohort', asyn
     reason: 'REPORT_CONTENT_INVALID',
   });
 });
+
+
+test('Level B exclusions are bound to the Level A to Level B cohort shortfall', async () => {
+  const report = await replayReport();
+
+  const impossibleMissing = structuredClone(report);
+  impossibleMissing.eligibilityCounts.levelB = impossibleMissing.eligibilityCounts.levelA;
+  impossibleMissing.metrics.retrospectiveDurationBaselineMedianAbsoluteErrorMs.denominator =
+    impossibleMissing.eligibilityCounts.levelB;
+  impossibleMissing.metrics.retrospectiveDurationBaselineP90OverrunMs.denominator =
+    impossibleMissing.eligibilityCounts.levelB;
+  impossibleMissing.resultDigest = recomputeResultDigest(impossibleMissing);
+  assert.deepEqual(admitLowDisclosureShadowReportV1(impossibleMissing), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_CONTENT_INVALID',
+  });
+
+  const missingCause = structuredClone(report);
+  missingCause.exclusionCounts = missingCause.exclusionCounts
+    .filter(item => !['RUN_CONTEXT_SNAPSHOT_MISSING', 'RUN_CONTEXT_SNAPSHOT_INELIGIBLE'].includes(item.code));
+  missingCause.resultDigest = recomputeResultDigest(missingCause);
+  assert.deepEqual(admitLowDisclosureShadowReportV1(missingCause), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_CONTENT_INVALID',
+  });
+});
+
+test('Level C exclusions are bound to the Level B to Level C cohort shortfall', async () => {
+  const report = await replayReport();
+
+  const fullLevelC = structuredClone(report);
+  fullLevelC.eligibilityCounts.levelC = fullLevelC.eligibilityCounts.levelB;
+  fullLevelC.metrics.medianAbsoluteDurationErrorMs = {
+    status: 'OK', value: 100, numerator: null, denominator: 1,
+  };
+  fullLevelC.metrics.p90OverrunMs = {
+    status: 'OK', value: 100, numerator: null, denominator: 1,
+  };
+  fullLevelC.metrics.humanOverrideRate = {
+    status: 'OK', value: 0, numerator: 0, denominator: 1,
+  };
+  fullLevelC.resultDigest = recomputeResultDigest(fullLevelC);
+  assert.deepEqual(admitLowDisclosureShadowReportV1(fullLevelC), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_CONTENT_INVALID',
+  });
+
+  const missingCause = structuredClone(report);
+  missingCause.exclusionCounts = missingCause.exclusionCounts.filter(item => ![
+    'SCHEDULING_INPUT_MISSING',
+    'PROPOSAL_MISSING',
+    'ITEM_DECISION_DIFF_MISSING',
+    'OUTCOME_MISSING',
+    'OUTCOME_INCOMPLETE_AT_CUTOFF',
+    'OUTCOME_AFTER_CUTOFF',
+  ].includes(item.code));
+  missingCause.resultDigest = recomputeResultDigest(missingCause);
+  assert.deepEqual(admitLowDisclosureShadowReportV1(missingCause), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_CONTENT_INVALID',
+  });
+});
+
+test('event-after-cutoff exclusions are a subset of outside-window exclusions', async () => {
+  const report = await replayReport();
+  const impossible = structuredClone(report);
+  impossible.eligibilityCounts.ineligible = 1;
+  impossible.eligibilityCounts.levelA = impossible.eligibilityCounts.total - 1;
+  impossible.exclusionCounts.unshift(
+    { code: 'EVENT_OUTSIDE_DATASET_WINDOW', count: 1 },
+    { code: 'EVENT_AFTER_CUTOFF', count: 2 },
+  );
+  impossible.resultDigest = recomputeResultDigest(impossible);
+  assert.deepEqual(admitLowDisclosureShadowReportV1(impossible), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_CONTENT_INVALID',
+  });
+});
