@@ -153,6 +153,8 @@ Codex review of the verification branch found two additional correctness details
 
 The verification branch now applies these refinements and adds isolated processed-cohort regressions for both Level B and Level C/outcome bounds.
 
+A subsequent closure-review P1 refined the Level-A side of the same model: window/cutoff-filtered cases are skipped before `classify()`, so non-window Level-A exclusions cannot be bounded against the full `ineligible` count. The admission boundary now computes `processedIneligible = ineligible - EVENT_OUTSIDE_DATASET_WINDOW` and binds `NOT_TASK_SCOPE` and the other classifier-produced Level-A exclusions only to that processed-ineligible cohort. Exact negative and adjacent positive regressions cover this distinction.
+
 ## 5. Scope and authority audit
 
 Comparing the pre-WO-05E authority point `f344e7ec830457605b98bc043c279ee48b9bc1f1` to the reviewed HEAD shows WO-05E changes are confined to:
