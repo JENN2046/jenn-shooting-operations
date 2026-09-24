@@ -182,10 +182,10 @@ Classification: harness persistence-precondition mismatch, not a Kiosk implement
 Correction: seed only the frozen revision-counter bootstrap fact in the isolated harness database before the configured loopback read. No application code or production path is changed.
 
 
-### Run 5 — LOCAL_FRESH_PASS
+### Canonical-status implementation run — LOCAL_FRESH_PASS
 
-- Final implementation-bearing head: `e0f3d3fea7c0906f0365272243c149d9b808ca1b`
-- GitHub Actions run: `35979065391`
+- Final implementation-bearing head: `2282af589280de94f2d517b6cd1c221ebfe9d5fc`
+- GitHub Actions run: `35980565090`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 - `npm run check`: 530 tests / 529 pass / 0 fail / 1 expected external-VCP skip
 - Kiosk targeted suite: `118/118 PASS`
