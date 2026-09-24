@@ -496,23 +496,47 @@ test('event-after-cutoff exclusions are a subset of outside-window exclusions', 
 });
 
 
-test('outside-window cases cannot inflate Level B/C exclusion upper bounds', async () => {
+test('outside-window cases cannot inflate the Level B snapshot exclusion upper bound', async () => {
   const report = await replayReport();
 
   const impossible = structuredClone(report);
   impossible.eligibilityCounts.ineligible = 1;
   impossible.eligibilityCounts.levelA = 1;
+  impossible.eligibilityCounts.levelB = 0;
   impossible.exclusionCounts.unshift({ code: 'EVENT_OUTSIDE_DATASET_WINDOW', count: 1 });
-  impossible.exclusionCounts = impossible.exclusionCounts.map(item => {
-    if (item.code === 'RUN_CONTEXT_SNAPSHOT_MISSING') return { ...item, count: 1 };
-    if ([
+  impossible.exclusionCounts = impossible.exclusionCounts.map(item =>
+    item.code === 'RUN_CONTEXT_SNAPSHOT_MISSING' ? { ...item, count: 2 } : item);
+  impossible.metrics.retrospectiveDurationBaselineMedianAbsoluteErrorMs = {
+    status: 'NOT_ENOUGH_DATA', value: null, numerator: null, denominator: 0,
+  };
+  impossible.metrics.retrospectiveDurationBaselineP90OverrunMs = {
+    status: 'NOT_ENOUGH_DATA', value: null, numerator: null, denominator: 0,
+  };
+  impossible.resultDigest = recomputeResultDigest(impossible);
+
+  assert.deepEqual(admitLowDisclosureShadowReportV1(impossible), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_CONTENT_INVALID',
+  });
+});
+
+test('outside-window cases cannot inflate Level C or outcome exclusion upper bounds', async () => {
+  const report = await replayReport();
+
+  const impossible = structuredClone(report);
+  impossible.eligibilityCounts.ineligible = 1;
+  impossible.eligibilityCounts.levelA = 1;
+  impossible.eligibilityCounts.levelB = 1;
+  impossible.exclusionCounts.unshift({ code: 'EVENT_OUTSIDE_DATASET_WINDOW', count: 1 });
+  impossible.exclusionCounts = impossible.exclusionCounts
+    .filter(item => item.code !== 'RUN_CONTEXT_SNAPSHOT_MISSING')
+    .map(item => ([
       'SCHEDULING_INPUT_MISSING',
       'PROPOSAL_MISSING',
       'ITEM_DECISION_DIFF_MISSING',
       'OUTCOME_MISSING',
-    ].includes(item.code)) return { ...item, count: 2 };
-    return item;
-  });
+    ].includes(item.code) ? { ...item, count: 2 } : item));
   impossible.resultDigest = recomputeResultDigest(impossible);
 
   assert.deepEqual(admitLowDisclosureShadowReportV1(impossible), {
