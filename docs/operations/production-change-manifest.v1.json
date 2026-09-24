@@ -99,6 +99,11 @@
       "evidence": "EXACT_APP_PROVIDER_AND_TEST_DESTINATION_UNRESOLVED"
     },
     {
+      "id": "CUTOVER_FORWARD_CHAIN",
+      "status": "BLOCKED",
+      "evidence": "REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_AND_PROD_08_IF_USED"
+    },
+    {
       "id": "PRODUCTION_TARGET_FACTS",
       "status": "BLOCKED",
       "evidence": "UNRESOLVED_OUTSIDE_REPOSITORY"
@@ -442,6 +447,7 @@
         "WO06C_KIOSK_DEVICE",
         "PRODUCTION_TARGET_FACTS",
         "PRODUCTION_DATA_MIGRATION",
+        "CUTOVER_FORWARD_CHAIN",
         "PRODUCTION_DEPLOYMENT_GATE"
       ],
       "effects": [
@@ -449,12 +455,15 @@
       ],
       "rollbackActionIds": [
         "ROLLBACK-01-REMOVE-NEW-ROUTE",
+        "ROLLBACK-05-REVERT-FIREWALL-RULE",
         "ROLLBACK-02-STOP-NEW-CONTAINER",
+        "ROLLBACK-06-REVOKE-ROLE-TOKENS",
         "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG",
         "ROLLBACK-04-PRESERVE-DATA-VOLUME"
       ],
       "evidenceRequired": [
         "CUTOVER_PLAN",
+        "FORWARD_CHAIN_COMPLETION_PROOF",
         "PRE_CUTOVER_BACKUP",
         "CLIENT_SWITCH_LIST",
         "ROLLBACK_TRIGGER",
@@ -468,7 +477,7 @@
       "risk": "HIGH",
       "sideEffect": "REVERSIBLE",
       "status": "ROLLBACK_ONLY",
-      "requiresExplicitAuthorization": true,
+      "requiresExplicitAuthorization": false,
       "authorityTarget": "Only the newly added route from this deployment",
       "preconditions": [],
       "effects": [
@@ -487,7 +496,7 @@
       "risk": "MEDIUM",
       "sideEffect": "REVERSIBLE",
       "status": "ROLLBACK_ONLY",
-      "requiresExplicitAuthorization": true,
+      "requiresExplicitAuthorization": false,
       "authorityTarget": "Only the newly started container from this deployment",
       "preconditions": [],
       "effects": [
@@ -506,7 +515,7 @@
       "risk": "HIGH",
       "sideEffect": "REVERSIBLE",
       "status": "ROLLBACK_ONLY",
-      "requiresExplicitAuthorization": true,
+      "requiresExplicitAuthorization": false,
       "authorityTarget": "Only new VCP/Kiosk/DingTalk configuration introduced by an approved action",
       "preconditions": [],
       "effects": [
@@ -525,7 +534,7 @@
       "risk": "LOW",
       "sideEffect": "READ_ONLY",
       "status": "ROLLBACK_ONLY",
-      "requiresExplicitAuthorization": true,
+      "requiresExplicitAuthorization": false,
       "authorityTarget": "New deployment data volume only",
       "preconditions": [],
       "effects": [
@@ -544,7 +553,7 @@
       "risk": "CRITICAL",
       "sideEffect": "REVERSIBLE",
       "status": "ROLLBACK_ONLY",
-      "requiresExplicitAuthorization": true,
+      "requiresExplicitAuthorization": false,
       "authorityTarget": "Exact firewall/security-group rule changed by PROD-08 only",
       "preconditions": [],
       "effects": [
@@ -562,7 +571,7 @@
       "risk": "HIGH",
       "sideEffect": "REVERSIBLE",
       "status": "ROLLBACK_ONLY",
-      "requiresExplicitAuthorization": true,
+      "requiresExplicitAuthorization": false,
       "authorityTarget": "Only the four role tokens and server-restricted runtime bindings created by PROD-03",
       "preconditions": [],
       "effects": [
@@ -612,7 +621,10 @@
       "SECRET_STORAGE",
       "EXTERNAL_READINESS_GATES",
       "ROLLBACK_TARGETS"
-    ]
+    ],
+    "rollbackAuthorizationModel": "BOUND_ROLLBACK_IDS_COAUTHORIZED_WITH_FORWARD_ACTION",
+    "separateRollbackApprovalRequired": false,
+    "derivedRollbackActionIds": []
   },
   "invariants": [
     "NO_EXISTING_ROUTE_OR_CONTAINER_OVERWRITE",
@@ -621,6 +633,7 @@
     "NO_PRODUCTION_DATA_MUTATION_WITHOUT_SEPARATE_AUTHORIZATION",
     "NO_SWITCH_OR_CUTOVER_FROM_PREDEPLOY_APPROVAL",
     "NO_AGENT_AUTO_ADOPTION_PERMISSION_EXPANSION",
-    "ROLLBACK_PRESERVES_DATA_VOLUME"
+    "ROLLBACK_PRESERVES_DATA_VOLUME",
+    "ROLLBACK_AUTHORITY_ONLY_DERIVED_FROM_APPROVED_FORWARD_ACTION"
   ]
 }

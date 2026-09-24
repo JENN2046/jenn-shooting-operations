@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { createProductionChangeManifestValidator } from '../src/production-change-manifest-v1.mjs';
+import {
+  createProductionChangeManifestValidator,
+  deriveCoauthorizedRollbackActionIds,
+} from '../src/production-change-manifest-v1.mjs';
 
 const schema = JSON.parse(readFileSync(
   new URL('../contracts/production-change-manifest.v1.schema.json', import.meta.url),
@@ -35,6 +38,13 @@ test('production change manifest validates with deployment request blocked and n
   assert.match(result.digest, /^sha256:[a-f0-9]{64}$/u);
   assert.equal(base.authorizationPacket.requestedActionIds.length, 0);
   assert.equal(base.authorizationPacket.approvedActionIds.length, 0);
+  assert.deepEqual(base.authorizationPacket.requestableActionIds, []);
+  assert.deepEqual(base.authorizationPacket.derivedRollbackActionIds, []);
+  assert.equal(
+    base.authorizationPacket.rollbackAuthorizationModel,
+    'BOUND_ROLLBACK_IDS_COAUTHORIZED_WITH_FORWARD_ACTION',
+  );
+  assert.equal(base.authorizationPacket.separateRollbackApprovalRequired, false);
 });
 
 test('secret scanner rejects ordinary Bearer and token-shaped material inside schema-valid free text', () => {
@@ -352,6 +362,93 @@ test('hostile combined semantic widening still fails closed after schema admissi
     'ACTION_EVIDENCE_REQUIRED_INVALID',
     'AUTHORITY_TARGET_INVALID',
   ]) assert.equal(codes.has(code), true, code);
+});
+
+
+test('cutover remains blocked until the frozen forward deployment chain is verified', () => {
+  const gate = base.gates.find(candidate => candidate.id === 'CUTOVER_FORWARD_CHAIN');
+  assert.ok(gate);
+  assert.equal(gate.status, 'BLOCKED');
+  assert.equal(
+    gate.evidence,
+    'REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_AND_PROD_08_IF_USED',
+  );
+
+  const cutover = action(base, 'PROD-13-CUTOVER-SWITCH');
+  assert.equal(cutover.preconditions.includes('CUTOVER_FORWARD_CHAIN'), true);
+  assert.equal(cutover.evidenceRequired.includes('FORWARD_CHAIN_COMPLETION_PROOF'), true);
+
+  const droppedGate = structuredClone(base);
+  action(droppedGate, 'PROD-13-CUTOVER-SWITCH').preconditions =
+    action(droppedGate, 'PROD-13-CUTOVER-SWITCH').preconditions
+      .filter(id => id !== 'CUTOVER_FORWARD_CHAIN');
+  expectRejected(droppedGate, 'ACTION_PRECONDITIONS_INVALID', 'cutover forward-chain gate removed');
+
+  const droppedEvidence = structuredClone(base);
+  action(droppedEvidence, 'PROD-13-CUTOVER-SWITCH').evidenceRequired =
+    action(droppedEvidence, 'PROD-13-CUTOVER-SWITCH').evidenceRequired
+      .filter(id => id !== 'FORWARD_CHAIN_COMPLETION_PROOF');
+  expectRejected(
+    droppedEvidence,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'cutover completion proof removed',
+  );
+
+  const forgedGate = structuredClone(base);
+  forgedGate.gates.find(candidate => candidate.id === 'CUTOVER_FORWARD_CHAIN').status = 'SATISFIED';
+  expectRejected(forgedGate, 'GATE_STATUS_INVALID', 'cutover chain cannot be self-promoted');
+});
+
+test('rollback authority is derived from approved forward actions without a second approval', () => {
+  assert.deepEqual(
+    deriveCoauthorizedRollbackActionIds(base.actions, [
+      'PROD-03-GENERATE-INSTALL-TOKENS',
+      'PROD-07-CONFIGURE-REVERSE-PROXY-TLS',
+    ]),
+    [
+      'ROLLBACK-01-REMOVE-NEW-ROUTE',
+      'ROLLBACK-06-REVOKE-ROLE-TOKENS',
+    ],
+  );
+
+  assert.deepEqual(
+    deriveCoauthorizedRollbackActionIds(
+      base.actions,
+      base.actions.filter(candidate => candidate.id.startsWith('PROD-')).map(candidate => candidate.id),
+    ),
+    [
+      'ROLLBACK-01-REMOVE-NEW-ROUTE',
+      'ROLLBACK-02-STOP-NEW-CONTAINER',
+      'ROLLBACK-03-DISABLE-EXTERNAL-CONFIG',
+      'ROLLBACK-04-PRESERVE-DATA-VOLUME',
+      'ROLLBACK-05-REVERT-FIREWALL-RULE',
+      'ROLLBACK-06-REVOKE-ROLE-TOKENS',
+    ],
+  );
+
+  for (const rollback of base.actions.filter(candidate => candidate.status === 'ROLLBACK_ONLY')) {
+    assert.equal(rollback.requiresExplicitAuthorization, false, rollback.id);
+  }
+  assert.equal(
+    action(base, 'PROD-07-CONFIGURE-REVERSE-PROXY-TLS').requiresExplicitAuthorization,
+    true,
+  );
+
+  const forgedDerived = structuredClone(base);
+  forgedDerived.authorizationPacket.derivedRollbackActionIds = ['ROLLBACK-01-REMOVE-NEW-ROUTE'];
+  expectRejected(
+    forgedDerived,
+    'DERIVED_ROLLBACK_AUTHORITY_INVALID',
+    'rollback authority cannot exist without an approved forward action',
+  );
+
+  const secondApproval = structuredClone(base);
+  action(secondApproval, 'ROLLBACK-01-REMOVE-NEW-ROUTE').requiresExplicitAuthorization = true;
+  expectRejected(
+    secondApproval,
+    'ACTION_AUTHORIZATION_MODE_INVALID',
+    'rollback cannot demand a second standalone approval',
+  );
 });
 
 

@@ -39,6 +39,10 @@ const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
     "status": "BLOCKED",
     "evidence": "EXACT_APP_PROVIDER_AND_TEST_DESTINATION_UNRESOLVED"
   },
+  "CUTOVER_FORWARD_CHAIN": {
+    "status": "BLOCKED",
+    "evidence": "REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_AND_PROD_08_IF_USED"
+  },
   "PRODUCTION_TARGET_FACTS": {
     "status": "BLOCKED",
     "evidence": "UNRESOLVED_OUTSIDE_REPOSITORY"
@@ -90,7 +94,8 @@ const EXPECTED_INVARIANTS = Object.freeze([
   "NO_PRODUCTION_DATA_MUTATION_WITHOUT_SEPARATE_AUTHORIZATION",
   "NO_SWITCH_OR_CUTOVER_FROM_PREDEPLOY_APPROVAL",
   "NO_AGENT_AUTO_ADOPTION_PERMISSION_EXPANSION",
-  "ROLLBACK_PRESERVES_DATA_VOLUME"
+  "ROLLBACK_PRESERVES_DATA_VOLUME",
+  "ROLLBACK_AUTHORITY_ONLY_DERIVED_FROM_APPROVED_FORWARD_ACTION"
 ]);
 
 const EXPECTED_ROLLBACK_ORDER = Object.freeze([
@@ -407,6 +412,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "WO06C_KIOSK_DEVICE",
       "PRODUCTION_TARGET_FACTS",
       "PRODUCTION_DATA_MIGRATION",
+      "CUTOVER_FORWARD_CHAIN",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
     "effects": [
@@ -414,12 +420,15 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ],
     "rollbackActionIds": [
       "ROLLBACK-01-REMOVE-NEW-ROUTE",
+      "ROLLBACK-05-REVERT-FIREWALL-RULE",
       "ROLLBACK-02-STOP-NEW-CONTAINER",
+      "ROLLBACK-06-REVOKE-ROLE-TOKENS",
       "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG",
       "ROLLBACK-04-PRESERVE-DATA-VOLUME"
     ],
     "evidenceRequired": [
       "CUTOVER_PLAN",
+      "FORWARD_CHAIN_COMPLETION_PROOF",
       "PRE_CUTOVER_BACKUP",
       "CLIENT_SWITCH_LIST",
       "ROLLBACK_TRIGGER",
@@ -563,6 +572,19 @@ function issue(code, path) {
   return Object.freeze({ code, path });
 }
 
+export function deriveCoauthorizedRollbackActionIds(actions, approvedActionIds) {
+  const actionMap = new Map((actions ?? []).map(action => [action.id, action]));
+  const derived = new Set();
+  for (const actionId of approvedActionIds ?? []) {
+    const action = actionMap.get(actionId);
+    if (!action || action.status === 'ROLLBACK_ONLY') continue;
+    for (const rollbackId of action.rollbackActionIds ?? []) {
+      if (actionMap.get(rollbackId)?.status === 'ROLLBACK_ONLY') derived.add(rollbackId);
+    }
+  }
+  return Object.freeze([...derived].sort());
+}
+
 export function createProductionChangeManifestValidator(schema) {
   const ajv = new Ajv2020({ allErrors: true, strict: true, ownProperties: true });
   const validateSchema = ajv.compile(schema);
@@ -649,11 +671,46 @@ export function createProductionChangeManifestValidator(schema) {
         }
       }
 
+      const expectedExplicitAuthorization = action.status !== 'ROLLBACK_ONLY';
+      if (action.requiresExplicitAuthorization !== expectedExplicitAuthorization) {
+        issues.push(issue(
+          'ACTION_AUTHORIZATION_MODE_INVALID',
+          '/actions/' + actionId + '/requiresExplicitAuthorization',
+        ));
+      }
+
       for (const rollbackId of action.rollbackActionIds) {
         if (actionMap.get(rollbackId)?.category !== 'ROLLBACK') {
           issues.push(issue('ROLLBACK_REFERENCE_INVALID', '/actions/' + actionId + '/rollbackActionIds'));
         }
       }
+    }
+
+    if (value.authorizationPacket.rollbackAuthorizationModel
+        !== 'BOUND_ROLLBACK_IDS_COAUTHORIZED_WITH_FORWARD_ACTION') {
+      issues.push(issue(
+        'ROLLBACK_AUTHORIZATION_MODEL_INVALID',
+        '/authorizationPacket/rollbackAuthorizationModel',
+      ));
+    }
+    if (value.authorizationPacket.separateRollbackApprovalRequired !== false) {
+      issues.push(issue(
+        'SEPARATE_ROLLBACK_APPROVAL_INVALID',
+        '/authorizationPacket/separateRollbackApprovalRequired',
+      ));
+    }
+    const derivedRollbackActionIds = deriveCoauthorizedRollbackActionIds(
+      value.actions,
+      value.authorizationPacket.approvedActionIds,
+    );
+    if (!sameSet(
+      value.authorizationPacket.derivedRollbackActionIds,
+      derivedRollbackActionIds,
+    )) {
+      issues.push(issue(
+        'DERIVED_ROLLBACK_AUTHORITY_INVALID',
+        '/authorizationPacket/derivedRollbackActionIds',
+      ));
     }
 
     if (!sameSet(value.authorizationPacket.requestableActionIds, EXPECTED_REQUESTABLE)) {
