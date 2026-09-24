@@ -157,7 +157,41 @@ function openReadOnly(path, invalidResult) {
   }
 }
 
-function fileIdentity(path, { includeCtime = true } = {}) {
+function hashFamilyFileStable(path, expectedMetadata) {
+  let descriptor;
+  try {
+    descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    const before = fstatSync(descriptor, { bigint: true });
+    if (!before.isFile()
+        || before.dev !== expectedMetadata.dev
+        || before.ino !== expectedMetadata.ino) {
+      fail('SOURCE_CHANGED_DURING_SCAN', 'INVALID_SOURCE');
+    }
+    const digest = createHash('sha256');
+    const buffer = Buffer.allocUnsafe(64 * 1024);
+    while (true) {
+      const bytesRead = readSync(descriptor, buffer, 0, buffer.length, null);
+      if (bytesRead === 0) break;
+      digest.update(buffer.subarray(0, bytesRead));
+    }
+    const after = fstatSync(descriptor, { bigint: true });
+    if (before.dev !== after.dev
+        || before.ino !== after.ino
+        || before.size !== after.size
+        || before.mtimeNs !== after.mtimeNs
+        || before.ctimeNs !== after.ctimeNs) {
+      fail('SOURCE_CHANGED_DURING_SCAN', 'INVALID_SOURCE');
+    }
+    return `sha256:${digest.digest('hex')}`;
+  } catch (error) {
+    if (error instanceof MigrationError) throw error;
+    fail('SOURCE_CHANGED_DURING_SCAN', 'INVALID_SOURCE');
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+}
+
+function fileIdentity(path, { includeCtime = true, includeDigest = false } = {}) {
   let metadata;
   try {
     metadata = lstatSync(path, { bigint: true });
@@ -175,13 +209,14 @@ function fileIdentity(path, { includeCtime = true } = {}) {
     mtimeNs: metadata.mtimeNs.toString(),
   };
   if (includeCtime) identity.ctimeNs = metadata.ctimeNs.toString();
+  if (includeDigest) identity.digest = hashFamilyFileStable(path, metadata);
   return identity;
 }
 
 function sourceFamily(path) {
   return {
     database: fileIdentity(path),
-    wal: fileIdentity(`${path}-wal`, { includeCtime: false }),
+    wal: fileIdentity(`${path}-wal`, { includeCtime: false, includeDigest: true }),
     shm: fileIdentity(`${path}-shm`),
     journal: fileIdentity(`${path}-journal`),
   };
