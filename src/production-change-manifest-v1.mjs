@@ -43,6 +43,10 @@ const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
     "status": "BLOCKED",
     "evidence": "REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_AND_PROD_08_IF_USED"
   },
+  "CUTOVER_SWITCH_RECOVERY": {
+    "status": "BLOCKED",
+    "evidence": "POST_SWITCH_DUAL_READ_COMPATIBLE_WRITE_AND_SWITCH_RECORD_NOT_DESIGNED"
+  },
   "PRODUCTION_TARGET_FACTS": {
     "status": "BLOCKED",
     "evidence": "UNRESOLVED_OUTSIDE_REPOSITORY"
@@ -95,7 +99,8 @@ const EXPECTED_INVARIANTS = Object.freeze([
   "NO_SWITCH_OR_CUTOVER_FROM_PREDEPLOY_APPROVAL",
   "NO_AGENT_AUTO_ADOPTION_PERMISSION_EXPANSION",
   "ROLLBACK_PRESERVES_DATA_VOLUME",
-  "ROLLBACK_AUTHORITY_ONLY_DERIVED_FROM_APPROVED_FORWARD_ACTION"
+  "ROLLBACK_AUTHORITY_ONLY_DERIVED_FROM_APPROVED_FORWARD_ACTION",
+  "NO_CUTOVER_WITHOUT_POST_SWITCH_AUTHORITY_RECOVERY"
 ]);
 
 const EXPECTED_ROLLBACK_ORDER = Object.freeze([
@@ -413,12 +418,14 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "PRODUCTION_TARGET_FACTS",
       "PRODUCTION_DATA_MIGRATION",
       "CUTOVER_FORWARD_CHAIN",
+      "CUTOVER_SWITCH_RECOVERY",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
     "effects": [
       "Change which production endpoint/data/client path is authoritative"
     ],
     "rollbackActionIds": [
+      "ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH",
       "ROLLBACK-01-REMOVE-NEW-ROUTE",
       "ROLLBACK-05-REVERT-FIREWALL-RULE",
       "ROLLBACK-02-STOP-NEW-CONTAINER",
@@ -429,6 +436,9 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "evidenceRequired": [
       "CUTOVER_PLAN",
       "FORWARD_CHAIN_COMPLETION_PROOF",
+      "POST_SWITCH_RECOVERY_DESIGN",
+      "DUAL_READ_COMPATIBLE_WRITE_RECOVERY_PROOF",
+      "SWITCH_RECORD",
       "PRE_CUTOVER_BACKUP",
       "CLIENT_SWITCH_LIST",
       "ROLLBACK_TRIGGER",
@@ -534,6 +544,26 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "evidenceRequired": [
       "ROLE_TOKEN_BINDINGS_REMOVED",
       "SECRET_VALUES_NOT_LOGGED"
+    ]
+  },
+  "ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH": {
+    "title": "Restore previous authoritative endpoint, data path, and client mappings",
+    "category": "ROLLBACK",
+    "risk": "CRITICAL",
+    "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+    "status": "BLOCKED_PREREQUISITE",
+    "authorityTarget": "UNRESOLVED_POST_SWITCH_AUTHORITY_RECOVERY_CAPABILITY",
+    "preconditions": [
+      "CUTOVER_SWITCH_RECOVERY"
+    ],
+    "effects": [
+      "Restore the previously authoritative endpoint, data path, and client mappings using a separately designed compatible recovery path and recorded switch state"
+    ],
+    "rollbackActionIds": [],
+    "evidenceRequired": [
+      "DUAL_READ_COMPATIBLE_WRITE_RECOVERY_PROOF",
+      "SWITCH_RECORD",
+      "PREVIOUS_AUTHORITY_RESTORED"
     ]
   }
 }));
@@ -671,7 +701,7 @@ export function createProductionChangeManifestValidator(schema) {
         }
       }
 
-      const expectedExplicitAuthorization = action.status !== 'ROLLBACK_ONLY';
+      const expectedExplicitAuthorization = action.category !== 'ROLLBACK';
       if (action.requiresExplicitAuthorization !== expectedExplicitAuthorization) {
         issues.push(issue(
           'ACTION_AUTHORIZATION_MODE_INVALID',

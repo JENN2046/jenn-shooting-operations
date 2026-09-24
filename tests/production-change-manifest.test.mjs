@@ -399,6 +399,65 @@ test('cutover remains blocked until the frozen forward deployment chain is verif
   expectRejected(forgedGate, 'GATE_STATUS_INVALID', 'cutover chain cannot be self-promoted');
 });
 
+test('cutover is blocked until post-Switch authority restoration is designed and bound', () => {
+  const gate = base.gates.find(candidate => candidate.id === 'CUTOVER_SWITCH_RECOVERY');
+  assert.ok(gate);
+  assert.equal(gate.status, 'BLOCKED');
+  assert.equal(
+    gate.evidence,
+    'POST_SWITCH_DUAL_READ_COMPATIBLE_WRITE_AND_SWITCH_RECORD_NOT_DESIGNED',
+  );
+
+  const cutover = action(base, 'PROD-13-CUTOVER-SWITCH');
+  assert.equal(cutover.preconditions.includes('CUTOVER_SWITCH_RECOVERY'), true);
+  assert.equal(
+    cutover.rollbackActionIds.includes('ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH'),
+    true,
+  );
+  for (const evidence of [
+    'POST_SWITCH_RECOVERY_DESIGN',
+    'DUAL_READ_COMPATIBLE_WRITE_RECOVERY_PROOF',
+    'SWITCH_RECORD',
+  ]) assert.equal(cutover.evidenceRequired.includes(evidence), true, evidence);
+
+  const switchRollback = action(base, 'ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH');
+  assert.equal(switchRollback.category, 'ROLLBACK');
+  assert.equal(switchRollback.status, 'BLOCKED_PREREQUISITE');
+  assert.equal(switchRollback.requiresExplicitAuthorization, false);
+  assert.deepEqual(switchRollback.preconditions, ['CUTOVER_SWITCH_RECOVERY']);
+  assert.equal(
+    switchRollback.authorityTarget,
+    'UNRESOLVED_POST_SWITCH_AUTHORITY_RECOVERY_CAPABILITY',
+  );
+  assert.equal(base.rollbackPlan.orderedActionIds.includes(switchRollback.id), false);
+  assert.equal(
+    deriveCoauthorizedRollbackActionIds(base.actions, ['PROD-13-CUTOVER-SWITCH'])
+      .includes(switchRollback.id),
+    false,
+  );
+
+  const droppedGate = structuredClone(base);
+  action(droppedGate, 'PROD-13-CUTOVER-SWITCH').preconditions =
+    action(droppedGate, 'PROD-13-CUTOVER-SWITCH').preconditions
+      .filter(id => id !== 'CUTOVER_SWITCH_RECOVERY');
+  expectRejected(droppedGate, 'ACTION_PRECONDITIONS_INVALID', 'switch recovery gate removed');
+
+  const droppedRollback = structuredClone(base);
+  action(droppedRollback, 'PROD-13-CUTOVER-SWITCH').rollbackActionIds =
+    action(droppedRollback, 'PROD-13-CUTOVER-SWITCH').rollbackActionIds
+      .filter(id => id !== 'ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH');
+  expectRejected(droppedRollback, 'ROLLBACK_BINDING_INVALID', 'switch restore rollback removed');
+
+  const forgedGate = structuredClone(base);
+  forgedGate.gates.find(candidate => candidate.id === 'CUTOVER_SWITCH_RECOVERY').status = 'SATISFIED';
+  expectRejected(forgedGate, 'GATE_STATUS_INVALID', 'switch recovery cannot be self-promoted');
+
+  const forgedRollback = structuredClone(base);
+  action(forgedRollback, 'ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH').status = 'ROLLBACK_ONLY';
+  expectRejected(forgedRollback, 'ACTION_STATUS_INVALID', 'blocked switch rollback cannot be activated');
+});
+
+
 test('rollback authority is derived from approved forward actions without a second approval', () => {
   assert.deepEqual(
     deriveCoauthorizedRollbackActionIds(base.actions, [
