@@ -1,0 +1,104 @@
+name: WO-06A Predeploy Baseline
+
+on:
+  push:
+    branches:
+      - codex/wo-06a-predeploy-evidence-baseline
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    name: Local and container baseline
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v4
+
+      - name: Set up fixed Node 24 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: npm
+
+      - name: Record runtime facts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          uname -a
+          node --version
+          npm --version
+          node -p "JSON.stringify({node: process.versions.node, tz: process.versions.tz ?? null, icu: process.versions.icu ?? null})"
+
+      - name: Install declared dependencies
+        run: npm ci
+
+      - name: Run repository check
+        run: npm run check
+
+      - name: Build container image
+        run: docker build --pull -t jenn-shooting-operations:wo06a .
+
+      - name: Verify image contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          user="$(docker image inspect jenn-shooting-operations:wo06a --format '{{.Config.User}}')"
+          test "$user" = "node"
+          cmd="$(docker image inspect jenn-shooting-operations:wo06a --format '{{json .Config.Cmd}}')"
+          if grep -F -- '--experimental-sqlite' <<<"$cmd"; then
+            echo "experimental sqlite flag must not be present" >&2
+            exit 1
+          fi
+
+      - name: Empty-volume container startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker volume create jso_wo06a_data >/dev/null
+          docker run -d --name jso-wo06a             -p 127.0.0.1:3800:3800             -v jso_wo06a_data:/app/data             -e VIEWER_TOKEN=viewer-token-wo06a-000000000001             -e SUBMITTER_TOKEN=submitter-token-wo06a-000000001             -e SCHEDULER_TOKEN=scheduler-token-wo06a-000000001             -e ADMIN_TOKEN=admin-token-wo06a-00000000001             jenn-shooting-operations:wo06a
+
+          for attempt in $(seq 1 30); do
+            if node -e "fetch('http://127.0.0.1:3800/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs jso-wo06a >&2 || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+          uid="$(docker exec jso-wo06a id -u)"
+          test "$uid" != "0"
+          docker exec jso-wo06a test -f /app/data/shooting-operations.sqlite
+
+      - name: Same-volume restart
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker rm -f jso-wo06a >/dev/null
+          docker run -d --name jso-wo06a-restart             -p 127.0.0.1:3800:3800             -v jso_wo06a_data:/app/data             -e VIEWER_TOKEN=viewer-token-wo06a-000000000001             -e SUBMITTER_TOKEN=submitter-token-wo06a-000000001             -e SCHEDULER_TOKEN=scheduler-token-wo06a-000000001             -e ADMIN_TOKEN=admin-token-wo06a-00000000001             jenn-shooting-operations:wo06a
+
+          for attempt in $(seq 1 30); do
+            if node -e "fetch('http://127.0.0.1:3800/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs jso-wo06a-restart >&2 || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Cleanup
+        if: always()
+        shell: bash
+        run: |
+          docker rm -f jso-wo06a jso-wo06a-restart >/dev/null 2>&1 || true
+          docker volume rm -f jso_wo06a_data >/dev/null 2>&1 || true

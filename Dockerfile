@@ -1,7 +1,8 @@
-FROM node:24-alpine
+FROM node:24.21.0-alpine
 
 WORKDIR /app
-COPY package.json ./
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY contracts ./contracts
 COPY public ./public
 COPY scripts ./scripts
