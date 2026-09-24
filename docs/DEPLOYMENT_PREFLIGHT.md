@@ -1,12 +1,17 @@
 # 腾讯云部署前检清单
 
-状态：本地实现已完成；生产部署未执行。
+状态：历史部署前参考；生产部署未执行。
+
+> Authority note: 当前生产变更与授权事实以 `docs/work-orders/WO-06_PREDEPLOY_INTEGRATED_READINESS.md`、
+> `docs/acceptance/WO-06D_PRODUCTION_CHANGE_MANIFEST.md` 和
+> `docs/operations/production-change-manifest.v1.json` 为准。本文件保留历史证据，不得单独作为部署授权依据；
+> 若与 WO-06A/B/C/D 冲突，必须服从当前 WO-06 authority。
 
 ## 本地证据
 
 - 当前 VCP 工作台数据可映射到 v1 契约。
 - 服务权限、幂等、版本冲突和非法快照均有自动化测试。
-- VCP 同步客户端已与真实本地 HTTP 服务完成拉取、写入、再拉取闭环。
+- 历史环境曾验证 VCP 同步客户端的本地 HTTP 拉取/写入/再拉取闭环；当前 authority 仍以 WO-06C `BLOCKED_EXTERNAL_RUNTIME` 为准，独立仓库中的 VCP skip 不构成真实兼容性 PASS。
 - 浏览器已验证需求提交后进入待排池。
 - 图片与附件上传已覆盖类型白名单、文件签名、单文件数量与总容量限制。
 - 2026-09-22 已在本机构建 `jenn-shooting-operations:local-preflight` 镜像。
