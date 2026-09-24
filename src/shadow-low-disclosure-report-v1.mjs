@@ -39,6 +39,23 @@ const INELIGIBLE_EXCLUSION_CODES = new Set([
   'GROUPED_UNALLOCATED',
   'LEGACY_SYNTHESIZED',
 ]);
+const LEVEL_B_EXCLUSION_CODES = new Set([
+  'RUN_CONTEXT_SNAPSHOT_MISSING',
+  'RUN_CONTEXT_SNAPSHOT_INELIGIBLE',
+]);
+const LEVEL_C_EXCLUSION_CODES = new Set([
+  'SCHEDULING_INPUT_MISSING',
+  'PROPOSAL_MISSING',
+  'ITEM_DECISION_DIFF_MISSING',
+  'OUTCOME_MISSING',
+  'OUTCOME_INCOMPLETE_AT_CUTOFF',
+  'OUTCOME_AFTER_CUTOFF',
+]);
+const OUTCOME_EXCLUSION_CODES = new Set([
+  'OUTCOME_MISSING',
+  'OUTCOME_INCOMPLETE_AT_CUTOFF',
+  'OUTCOME_AFTER_CUTOFF',
+]);
 const MEDIAN_METRICS = new Set([
   'medianAbsoluteDurationErrorMs',
   'retrospectiveDurationBaselineMedianAbsoluteErrorMs',
@@ -272,6 +289,33 @@ export function admitLowDisclosureShadowReportV1(value, context = {
       || (eligibilityCounts.ineligible > 0
         && ineligibleExclusions.reduce((sum, item) => sum + item.count, 0)
           < eligibilityCounts.ineligible)) {
+      return invalid('REPORT_CONTENT_INVALID');
+    }
+
+    const eventOutside = exclusionCounts.find(item => item.code === 'EVENT_OUTSIDE_DATASET_WINDOW')?.count ?? 0;
+    const eventAfter = exclusionCounts.find(item => item.code === 'EVENT_AFTER_CUTOFF')?.count ?? 0;
+    if (eventAfter > eventOutside) return invalid('REPORT_CONTENT_INVALID');
+
+    const levelBExclusions = exclusionCounts
+      .filter(item => LEVEL_B_EXCLUSION_CODES.has(item.code));
+    const levelBExclusionTotal = levelBExclusions.reduce((sum, item) => sum + item.count, 0);
+    const levelBShortfall = eligibilityCounts.levelA - eligibilityCounts.levelB;
+    if (levelBExclusionTotal < levelBShortfall
+      || levelBExclusionTotal > eligibilityCounts.total - eligibilityCounts.levelB) {
+      return invalid('REPORT_CONTENT_INVALID');
+    }
+
+    const levelCExclusions = exclusionCounts
+      .filter(item => LEVEL_C_EXCLUSION_CODES.has(item.code));
+    const levelCShortfall = eligibilityCounts.levelB - eligibilityCounts.levelC;
+    if (levelCExclusions.some(item => item.count > eligibilityCounts.total - eligibilityCounts.levelC)
+      || levelCExclusions.reduce((sum, item) => sum + item.count, 0) < levelCShortfall) {
+      return invalid('REPORT_CONTENT_INVALID');
+    }
+    const outcomeExclusionTotal = levelCExclusions
+      .filter(item => OUTCOME_EXCLUSION_CODES.has(item.code))
+      .reduce((sum, item) => sum + item.count, 0);
+    if (outcomeExclusionTotal > eligibilityCounts.total - eligibilityCounts.levelC) {
       return invalid('REPORT_CONTENT_INVALID');
     }
 
