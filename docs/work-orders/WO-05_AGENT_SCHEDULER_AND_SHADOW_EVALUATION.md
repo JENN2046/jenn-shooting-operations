@@ -136,7 +136,7 @@
 
 ### WO-05E：Sample Capture and Offline Evaluation
 
-状态：`BLOCKED_DATA / POST_MERGE_CODE_EVIDENCE_VERIFIED / FRESH_RUNTIME_PENDING`
+状态：`BLOCKED_DATA / POST_MERGE_CODE_EVIDENCE_VERIFIED / FRESH_RUNTIME_FIX_IMPLEMENTED / FINAL_EXACT_HEAD_RERUN_REQUIRED`
 
 #### WO-05E-A：Future Run-Context Capture
 
@@ -289,4 +289,4 @@ WINDOWS_NOT_RUN
 
 ## 7. 当前下一步
 
-WO-05E A/B/C post-merge independent code/evidence verification 已完成。当前唯一未关闭的实现证据门为 fresh runtime `npm check`；verification 分支同时包含一处 C 段 aggregate exclusion/cohort consistency 修复。approved/real Level C dataset 仍为 0，真实 shadow acceptance gate 继续保持 `BLOCKED_DATA`。
+WO-05E A/B/C post-merge independent code/evidence verification 已完成。fresh runtime 首轮在 Node 22.22.2 / SQLite WAL read-only path 暴露 `SOURCE_CHANGED_DURING_SCAN` ctime false positive；当前 closure 分支已重建最小 WAL-only ctime 修复与 focused regression。最终 exact PR head 仍需在可连接 GitHub 的 clean runtime 执行 `npm ci`、`npm run validate:contract`、`npm run validate:shadow`、`npm test`、`npm run check`。approved/real Level C dataset 仍为 0，真实 shadow acceptance gate 继续保持 `BLOCKED_DATA`。
