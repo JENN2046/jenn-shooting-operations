@@ -47,6 +47,10 @@ const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
     "status": "BLOCKED",
     "evidence": "POST_SWITCH_DUAL_READ_COMPATIBLE_WRITE_AND_SWITCH_RECORD_NOT_DESIGNED"
   },
+  "PROXY_BACKEND_READINESS": {
+    "status": "BLOCKED",
+    "evidence": "REQUIRES_VERIFIED_PROD_04_05_06"
+  },
   "PRODUCTION_TARGET_FACTS": {
     "status": "BLOCKED",
     "evidence": "UNRESOLVED_OUTSIDE_REPOSITORY"
@@ -63,7 +67,7 @@ const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
 
 const EXPECTED_REQUESTABLE = Object.freeze([]);
 
-const EXPECTED_BLOCKERS = Object.freeze([
+const EXPECTED_DEPLOYMENT_BLOCKERS = Object.freeze([
   "WO06C_VCP_EXTERNAL",
   "WO06C_KIOSK_DEVICE",
   "PRODUCTION_TARGET_FACTS",
@@ -263,6 +267,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "authorityTarget": "Exact resolved reverse-proxy route and TLS binding only",
     "preconditions": [
       "PRODUCTION_TARGET_FACTS",
+      "PROXY_BACKEND_READINESS",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
     "effects": [
@@ -276,7 +281,8 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "HOSTNAME",
       "TLS_BINDING",
       "CONFIG_TEST",
-      "NO_EXISTING_ROUTE_OVERWRITE"
+      "NO_EXISTING_ROUTE_OVERWRITE",
+      "BACKEND_BUILD_START_HEALTH_PROOF"
     ]
   },
   "PROD-08-FIREWALL-SECURITY-GROUP": {
@@ -754,8 +760,20 @@ export function createProductionChangeManifestValidator(schema) {
       issues.push(issue('REQUESTABLE_STATUS_SET_INVALID', '/actions'));
     }
 
-    if (!sameSet(value.authorizationPacket.blockingGateIds, EXPECTED_BLOCKERS)) {
+    const allBlockedGateIds = value.gates
+      .filter(gate => gate.status === 'BLOCKED')
+      .map(gate => gate.id);
+    if (!sameSet(value.authorizationPacket.blockingGateIds, allBlockedGateIds)) {
       issues.push(issue('AUTHORIZATION_BLOCKER_SET_INVALID', '/authorizationPacket/blockingGateIds'));
+    }
+    if (!sameSet(
+      value.authorizationPacket.deploymentBlockingGateIds,
+      EXPECTED_DEPLOYMENT_BLOCKERS,
+    )) {
+      issues.push(issue(
+        'DEPLOYMENT_BLOCKER_SET_INVALID',
+        '/authorizationPacket/deploymentBlockingGateIds',
+      ));
     }
 
     if (!sameSet(

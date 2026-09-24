@@ -109,6 +109,11 @@
       "evidence": "POST_SWITCH_DUAL_READ_COMPATIBLE_WRITE_AND_SWITCH_RECORD_NOT_DESIGNED"
     },
     {
+      "id": "PROXY_BACKEND_READINESS",
+      "status": "BLOCKED",
+      "evidence": "REQUIRES_VERIFIED_PROD_04_05_06"
+    },
+    {
       "id": "PRODUCTION_TARGET_FACTS",
       "status": "BLOCKED",
       "evidence": "UNRESOLVED_OUTSIDE_REPOSITORY"
@@ -286,6 +291,7 @@
       "authorityTarget": "Exact resolved reverse-proxy route and TLS binding only",
       "preconditions": [
         "PRODUCTION_TARGET_FACTS",
+        "PROXY_BACKEND_READINESS",
         "PRODUCTION_DEPLOYMENT_GATE"
       ],
       "effects": [
@@ -299,7 +305,8 @@
         "HOSTNAME",
         "TLS_BINDING",
         "CONFIG_TEST",
-        "NO_EXISTING_ROUTE_OVERWRITE"
+        "NO_EXISTING_ROUTE_OVERWRITE",
+        "BACKEND_BUILD_START_HEALTH_PROOF"
       ]
     },
     {
@@ -640,6 +647,10 @@
     "blockingGateIds": [
       "WO06C_VCP_EXTERNAL",
       "WO06C_KIOSK_DEVICE",
+      "DINGTALK_TARGET_BINDING",
+      "CUTOVER_FORWARD_CHAIN",
+      "CUTOVER_SWITCH_RECOVERY",
+      "PROXY_BACKEND_READINESS",
       "PRODUCTION_TARGET_FACTS",
       "PRODUCTION_DATA_MIGRATION",
       "PRODUCTION_DEPLOYMENT_GATE"
@@ -656,7 +667,14 @@
     ],
     "rollbackAuthorizationModel": "BOUND_ROLLBACK_IDS_COAUTHORIZED_WITH_FORWARD_ACTION",
     "separateRollbackApprovalRequired": false,
-    "derivedRollbackActionIds": []
+    "derivedRollbackActionIds": [],
+    "deploymentBlockingGateIds": [
+      "WO06C_VCP_EXTERNAL",
+      "WO06C_KIOSK_DEVICE",
+      "PRODUCTION_TARGET_FACTS",
+      "PRODUCTION_DATA_MIGRATION",
+      "PRODUCTION_DEPLOYMENT_GATE"
+    ]
   },
   "invariants": [
     "NO_EXISTING_ROUTE_OR_CONTAINER_OVERWRITE",

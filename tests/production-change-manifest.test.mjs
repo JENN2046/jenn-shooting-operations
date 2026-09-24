@@ -45,6 +45,20 @@ test('production change manifest validates with deployment request blocked and n
     'BOUND_ROLLBACK_IDS_COAUTHORIZED_WITH_FORWARD_ACTION',
   );
   assert.equal(base.authorizationPacket.separateRollbackApprovalRequired, false);
+  assert.deepEqual(
+    [...base.authorizationPacket.blockingGateIds].sort(),
+    base.gates.filter(gate => gate.status === 'BLOCKED').map(gate => gate.id).sort(),
+  );
+  assert.deepEqual(
+    [...base.authorizationPacket.deploymentBlockingGateIds].sort(),
+    [
+      'WO06C_VCP_EXTERNAL',
+      'WO06C_KIOSK_DEVICE',
+      'PRODUCTION_TARGET_FACTS',
+      'PRODUCTION_DATA_MIGRATION',
+      'PRODUCTION_DEPLOYMENT_GATE',
+    ].sort(),
+  );
 });
 
 test('secret scanner rejects ordinary Bearer and token-shaped material inside schema-valid free text', () => {
@@ -69,15 +83,45 @@ test('manifest rejects schema-level secret fields and any attempt to pre-authori
   expectRejected(approved, 'SCHEMA_INVALID', 'pre-approved action');
 });
 
-test('manifest rejects blanket approval and missing production blockers', () => {
+test('manifest rejects blanket approval and incomplete blocker surfaces', () => {
   const blanket = structuredClone(base);
   blanket.authorizationPacket.blanketApprovalAllowed = true;
   expectRejected(blanket, 'SCHEMA_INVALID', 'blanket approval');
 
-  const missing = structuredClone(base);
-  missing.authorizationPacket.blockingGateIds = missing.authorizationPacket.blockingGateIds
-    .filter(id => id !== 'WO06C_VCP_EXTERNAL');
-  expectRejected(missing, 'AUTHORIZATION_BLOCKER_SET_INVALID', 'missing blocker');
+  for (const blockerId of [
+    'WO06C_VCP_EXTERNAL',
+    'DINGTALK_TARGET_BINDING',
+    'CUTOVER_FORWARD_CHAIN',
+    'CUTOVER_SWITCH_RECOVERY',
+    'PROXY_BACKEND_READINESS',
+  ]) {
+    const missing = structuredClone(base);
+    missing.authorizationPacket.blockingGateIds =
+      missing.authorizationPacket.blockingGateIds.filter(id => id !== blockerId);
+    expectRejected(missing, 'AUTHORIZATION_BLOCKER_SET_INVALID', `missing ${blockerId}`);
+  }
+
+  const staleExtra = structuredClone(base);
+  staleExtra.authorizationPacket.blockingGateIds.push('WO06C_DINGTALK_PROVIDER');
+  expectRejected(staleExtra, 'AUTHORIZATION_BLOCKER_SET_INVALID', 'non-blocked gate listed');
+
+  const deploymentMissing = structuredClone(base);
+  deploymentMissing.authorizationPacket.deploymentBlockingGateIds =
+    deploymentMissing.authorizationPacket.deploymentBlockingGateIds
+      .filter(id => id !== 'PRODUCTION_TARGET_FACTS');
+  expectRejected(
+    deploymentMissing,
+    'DEPLOYMENT_BLOCKER_SET_INVALID',
+    'deployment blocker missing',
+  );
+
+  const deploymentWidened = structuredClone(base);
+  deploymentWidened.authorizationPacket.deploymentBlockingGateIds.push('DINGTALK_TARGET_BINDING');
+  expectRejected(
+    deploymentWidened,
+    'DEPLOYMENT_BLOCKER_SET_INVALID',
+    'action-specific blocker leaked into deployment blocker set',
+  );
 });
 
 test('every action id is bound to its exact authority target', () => {
@@ -362,6 +406,38 @@ test('hostile combined semantic widening still fails closed after schema admissi
     'ACTION_EVIDENCE_REQUIRED_INVALID',
     'AUTHORITY_TARGET_INVALID',
   ]) assert.equal(codes.has(code), true, code);
+});
+
+
+test('proxy exposure remains blocked until build, start, and health verification are complete', () => {
+  const gate = base.gates.find(candidate => candidate.id === 'PROXY_BACKEND_READINESS');
+  assert.ok(gate);
+  assert.equal(gate.status, 'BLOCKED');
+  assert.equal(gate.evidence, 'REQUIRES_VERIFIED_PROD_04_05_06');
+
+  const proxy = action(base, 'PROD-07-CONFIGURE-REVERSE-PROXY-TLS');
+  assert.equal(proxy.preconditions.includes('PROXY_BACKEND_READINESS'), true);
+  assert.equal(proxy.evidenceRequired.includes('BACKEND_BUILD_START_HEALTH_PROOF'), true);
+
+  const droppedGate = structuredClone(base);
+  action(droppedGate, 'PROD-07-CONFIGURE-REVERSE-PROXY-TLS').preconditions =
+    action(droppedGate, 'PROD-07-CONFIGURE-REVERSE-PROXY-TLS').preconditions
+      .filter(id => id !== 'PROXY_BACKEND_READINESS');
+  expectRejected(droppedGate, 'ACTION_PRECONDITIONS_INVALID', 'proxy backend gate removed');
+
+  const droppedEvidence = structuredClone(base);
+  action(droppedEvidence, 'PROD-07-CONFIGURE-REVERSE-PROXY-TLS').evidenceRequired =
+    action(droppedEvidence, 'PROD-07-CONFIGURE-REVERSE-PROXY-TLS').evidenceRequired
+      .filter(id => id !== 'BACKEND_BUILD_START_HEALTH_PROOF');
+  expectRejected(
+    droppedEvidence,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'proxy backend proof removed',
+  );
+
+  const forgedGate = structuredClone(base);
+  forgedGate.gates.find(candidate => candidate.id === 'PROXY_BACKEND_READINESS').status = 'SATISFIED';
+  expectRejected(forgedGate, 'GATE_STATUS_INVALID', 'proxy backend gate cannot self-promote');
 });
 
 

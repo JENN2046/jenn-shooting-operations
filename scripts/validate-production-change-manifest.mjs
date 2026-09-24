@@ -18,5 +18,6 @@ if (!result.ok) {
     deploymentGate: manifest.currentState.deploymentGate,
     requestableActionIds: manifest.authorizationPacket.requestableActionIds,
     blockingGateIds: manifest.authorizationPacket.blockingGateIds,
+    deploymentBlockingGateIds: manifest.authorizationPacket.deploymentBlockingGateIds,
   }));
 }
