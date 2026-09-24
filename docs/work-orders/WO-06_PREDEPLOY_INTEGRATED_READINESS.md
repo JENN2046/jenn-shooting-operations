@@ -235,7 +235,7 @@ deploymentAuthorizationRequest = BLOCKED_PREREQUISITES
 deploymentGate = BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 ```
 
-Pre-request revalidation is intentionally split: global checks exclude facts that are produced by earlier production actions. `actionSpecificRevalidation` binds source/base digest checks to PROD-04, host-conflict facts to PROD-02 and later host-dependent actions only after PROD-01, and the built-image digest only to downstream actions that depend on the produced image.
+Pre-request revalidation is intentionally split with `AUTHORITY_HEAD` as the only universal global check. Every other runtime/deployment fact is action-specific: host identity/conflicts only after PROD-01, source/base digest at PROD-04, built-image digest only downstream, backup proof only for data/cutover, secret storage only for secret-bearing actions, external readiness only for integrations/cutover, and rollback-target checks only where a forward action needs a concrete recovery scope.
 
 The packet's deployment-level blocker subset is frozen as:
 
@@ -273,12 +273,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36033799141` on implementation-bearing head `efe576d66d9b2802cd5a81d2ca5ef0008dbafb18` passed:
+GitHub Actions run `36036138172` on implementation-bearing head `a1eb4199cf7a7cbaf68e24b0a20ef72f2876e6ff` passed:
 
 - full `npm run check`: 564 tests / 563 pass / 0 fail / 1 expected external-VCP skip;
 - production-manifest targeted tests: 34/34 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:c1b08096be43f98d0f791ee15419c3b22f9b57a6df880e87f18477fa353f2492`;
+- manifest digest: `sha256:ae134f0803e558ad15f8f19428158b450d8c745534cb2ebaeb8465d70144cf7e`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -595,3 +595,20 @@ PROD-08 / PROD-09 / PROD-10 / PROD-11 / PROD-13
 PROD-01 therefore cannot depend on its own outputs, while later host mutations still fail closed if the preflight conflict facts are missing or stale. PROD-12 remains outside this host-specific revalidation path.
 
 Implementation evidence: head `efe576d66d9b2802cd5a81d2ca5ef0008dbafb18`, run `36033799141`, full suite 564/563/0/1, manifest suite 34/34, digest `sha256:c1b08096be43f98d0f791ee15419c3b22f9b57a6df880e87f18477fa353f2492`.
+
+
+### WO-06D initial preflight exempt from later-stage revalidation
+
+The global pre-request checklist is now:
+
+```text
+AUTHORITY_HEAD
+```
+
+PROD-01 has no action-specific revalidation entry. Its read-only inspection therefore does not require backup/rollback proof, external readiness, secret storage, rollback targets, built-image identity, or conflict facts that it is responsible for discovering.
+
+Those checks are frozen only on later actions that require them. This preserves fail-closed mutation/integration behavior without recreating a prerequisite cycle at the first preflight step.
+
+Implementation evidence: head `a1eb4199cf7a7cbaf68e24b0a20ef72f2876e6ff`, run `36036138172`, full suite 564/563/0/1, manifest suite 34/34, digest `sha256:ae134f0803e558ad15f8f19428158b450d8c745534cb2ebaeb8465d70144cf7e`.
+
+The immediately prior run `36036021841` failed only on a duplicate validator closing token introduced during generated text replacement; the correction was syntax-only and did not weaken the revalidation contract.

@@ -35,7 +35,7 @@ Validator:
 
 The authorization packet is nested inside the manifest so it cannot drift from the change list it governs.
 
-Pre-request revalidation is split into a global checklist plus action-specific checks. Neither build-output identity nor host-conflict facts discovered by PROD-01 are global prerequisites. PROD-04 revalidates its bound source commit and base-image digest before build; PROD-02 and later host-dependent actions revalidate `DISK_PORT_ROUTE_CONFLICTS` only after PROD-01 has produced those facts; downstream runtime/cutover actions revalidate the built-image digest only after PROD-04 has produced it.
+Pre-request revalidation is split into a truly global checklist plus action-specific checks. The global checklist now contains only `AUTHORITY_HEAD`. Host identity/conflict facts, backup/rollback proof, secret storage, external readiness, rollback-target scope, build source/base digest, and built-image digest are all bound only to the actions that can actually satisfy and require them. PROD-01 has no action-specific revalidation and remains gated only by its exact candidate-host binding plus the global authority-head check.
 
 ## Frozen authorization semantics
 
@@ -115,8 +115,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `efe576d66d9b2802cd5a81d2ca5ef0008dbafb18`
-- GitHub Actions run: `36033799141`
+- Head: `a1eb4199cf7a7cbaf68e24b0a20ef72f2876e6ff`
+- GitHub Actions run: `36036138172`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -146,7 +146,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:c1b08096be43f98d0f791ee15419c3b22f9b57a6df880e87f18477fa353f2492",
+  "manifestDigest": "sha256:ae134f0803e558ad15f8f19428158b450d8c745534cb2ebaeb8465d70144cf7e",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -789,3 +789,76 @@ manifest digest  sha256:c1b08096be43f98d0f791ee15419c3b22f9b57a6df880e87f18477fa
 Run `36033670866` on the immediately prior implementation head failed only because the new hostile regression used an empty array and was rejected by schema before reaching the intended semantic error code. The regression was corrected to use a schema-valid but semantically wrong replacement; no production contract weakening was needed.
 
 No host inspection, deployment request, or production mutation was executed.
+
+
+## Initial-preflight exemption from later-stage checks
+
+Exact-current review on `0656e01c...` found that three later-stage checks still remained global:
+
+```text
+BACKUP_ROLLBACK_PROOF
+EXTERNAL_READINESS_GATES
+ROLLBACK_TARGETS
+```
+
+The same audit also showed that `TARGET_HOST_IDENTITY` and `SECRET_STORAGE` are not universal pre-request facts either. The global checklist is therefore now the minimum true universal:
+
+```text
+mustRevalidateBeforeRequest = [AUTHORITY_HEAD]
+```
+
+`PROD-01-TARGET-READONLY-PREFLIGHT` has no `actionSpecificRevalidation` entry. After `TARGET_HOST_BINDING` is closed, the read-only inspection can be requested without backup proof, external-readiness closure, secret-storage proof, rollback-target materialization, built-image identity, or host-conflict results that do not exist yet.
+
+Later-stage checks are frozen on the actions that require them. Examples:
+
+```text
+PROD-03:
+  TARGET_HOST_IDENTITY
+  DISK_PORT_ROUTE_CONFLICTS
+  SECRET_STORAGE
+  ROLLBACK_TARGETS
+
+PROD-09:
+  TARGET_HOST_IDENTITY
+  DISK_PORT_ROUTE_CONFLICTS
+  BACKUP_ROLLBACK_PROOF
+  ROLLBACK_TARGETS
+
+PROD-10 / PROD-11:
+  TARGET_HOST_IDENTITY
+  DISK_PORT_ROUTE_CONFLICTS
+  BUILT_IMAGE_DIGEST
+  SECRET_STORAGE
+  EXTERNAL_READINESS_GATES
+  ROLLBACK_TARGETS
+
+PROD-12:
+  SECRET_STORAGE
+  EXTERNAL_READINESS_GATES
+  ROLLBACK_TARGETS
+
+PROD-13:
+  TARGET_HOST_IDENTITY
+  DISK_PORT_ROUTE_CONFLICTS
+  BUILT_IMAGE_DIGEST
+  BACKUP_ROLLBACK_PROOF
+  EXTERNAL_READINESS_GATES
+  ROLLBACK_TARGETS
+```
+
+Hostile regressions reject reintroducing later-stage checks globally, attaching external readiness to PROD-01, dropping backup proof from PROD-09, or dropping external readiness from PROD-10.
+
+Run `36036021841` on the immediately prior implementation head failed because a generated validator block contained one duplicate closing token. The syntax-only defect was corrected without changing the frozen revalidation allocation.
+
+Exact implementation-bearing evidence:
+
+```text
+head             a1eb4199cf7a7cbaf68e24b0a20ef72f2876e6ff
+run              36036138172
+result           success
+full suite       564 tests / 563 pass / 0 fail / 1 expected VCP skip
+manifest suite   34 / 34 PASS
+manifest digest  sha256:ae134f0803e558ad15f8f19428158b450d8c745534cb2ebaeb8465d70144cf7e
+```
+
+No target preflight, credential operation, external integration, rollback, deployment request, or production mutation was executed.
