@@ -55,7 +55,7 @@ The low-disclosure admission verifies:
 - synthetic vs approved-low-disclosure approval matrix; approved reports additionally require trusted `expectedApprovalDigest` and `expectedDatasetDigest` from a previously verified dataset context;
 - Level count relation `levelC <= levelB <= levelA`, with duration/human-override denominators exactly bound to Level C and retrospective baseline denominators exactly bound to Level B;
 - `levelA + ineligible = total`;
-- stable exclusion-code allowlist, order, uniqueness and dataset-count bounds;
+- stable exclusion-code allowlist, order, uniqueness and dataset-count bounds; Level-A-disqualifying exclusion counts are additionally bounded by `eligibilityCounts.ineligible`, and a positive ineligible cohort must have aggregate disqualifying-exclusion evidence;
 - zero denominator only as `NOT_ENOUGH_DATA + value:null + numerator:null + denominator:0`; Level C / Level B cohorts force the metrics that the frozen evaluator always computes to be `OK` with the exact cohort denominator;
 - metric-specific statistic/rate/count numerator-denominator relations for `OK` metrics, including integer-millisecond P90 values and median precision limited to integer or `.5ms` where cohort parity permits;
 - `resultDigest` recomputation from the fact body;
