@@ -103,8 +103,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `f746a408c5d689a1667f6a887740572010719b66`
-- GitHub Actions run: `35985335257`
+- Head: `38453503ade5b276735097e59d17bb44959e20ca`
+- GitHub Actions run: `35986269431`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -113,8 +113,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          542
-pass                           541
+tests                          549
+pass                           548
 fail                           0
 skipped                        1
 ```
@@ -124,8 +124,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  12
-pass   12
+tests  19
+pass   19
 fail   0
 ```
 
@@ -196,15 +196,48 @@ Additional hostile regression rejects unknown/replaced action IDs and a combined
 Implementation-bearing hardening evidence:
 
 ```text
-head   f746a408c5d689a1667f6a887740572010719b66
-run    35985335257
+head   38453503ade5b276735097e59d17bb44959e20ca
+run    35986269431
 result success
 
-full suite      542 tests / 541 pass / 0 fail / 1 expected VCP skip
-manifest suite  12 / 12 PASS
+full suite      549 tests / 548 pass / 0 fail / 1 expected VCP skip
+manifest suite  19 / 19 PASS
 manifest digest sha256:b03782756107194f5edf7fa624abf0223f5628e7316134d91b312b79962e05f1
 ```
 
 The manifest body itself is unchanged, so its canonical digest remains stable while the validator around it becomes stricter.
 
 This evidence update is docs-only. The resulting final PR head must also pass the unchanged WO-06D workflow before merge.
+
+
+## Second review hardening closure candidate
+
+The re-review identified three additional P1 gaps. They are closed on implementation-bearing head `38453503ade5b276735097e59d17bb44959e20ca`:
+
+| Finding | Closure |
+| --- | --- |
+| P1 authorityBase accepted any SHA | schema now binds `authorityBase` to the frozen authority commit and regression proves unrelated SHAs fail closed |
+| P1 action risk/sideEffect/evidence could be understated | all 18 action IDs now freeze title, category, risk, sideEffect, status, authorityTarget, preconditions, effects, rollback bindings and evidenceRequired |
+| P1 mustRevalidateBeforeRequest could be reduced | the complete pre-request revalidation checklist is validated as an exact frozen set |
+
+Additional hostile regressions also freeze:
+
+- target unresolved-fact set;
+- global invariants;
+- gate evidence text;
+- action title/category/effects;
+- combined semantic widening after schema admission.
+
+Implementation-bearing evidence:
+
+```text
+head   38453503ade5b276735097e59d17bb44959e20ca
+run    35986269431
+result success
+
+full suite      549 tests / 548 pass / 0 fail / 1 expected VCP skip
+manifest suite  19 / 19 PASS
+manifest digest sha256:b03782756107194f5edf7fa624abf0223f5628e7316134d91b312b79962e05f1
+```
+
+The manifest JSON remains unchanged, so the digest is stable. This evidence update is docs-only and must itself pass the unchanged workflow before review closure.
