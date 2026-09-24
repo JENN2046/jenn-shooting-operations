@@ -35,6 +35,10 @@ const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
     "status": "READY_FOR_AUTHORIZATION",
     "evidence": "READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION"
   },
+  "DINGTALK_TARGET_BINDING": {
+    "status": "BLOCKED",
+    "evidence": "EXACT_APP_PROVIDER_AND_TEST_DESTINATION_UNRESOLVED"
+  },
   "PRODUCTION_TARGET_FACTS": {
     "status": "BLOCKED",
     "evidence": "UNRESOLVED_OUTSIDE_REPOSITORY"
@@ -50,8 +54,7 @@ const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
 }));
 
 const EXPECTED_REQUESTABLE = Object.freeze([
-  "PROD-01-TARGET-READONLY-PREFLIGHT",
-  "PROD-12-DINGTALK-PROVIDER-INTEGRATION"
+  "PROD-01-TARGET-READONLY-PREFLIGHT"
 ]);
 
 const EXPECTED_BLOCKERS = Object.freeze([
@@ -371,10 +374,11 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "category": "INTEGRATION",
     "risk": "HIGH",
     "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
-    "status": "REQUESTABLE_EXPLICIT_AUTHORIZATION",
-    "authorityTarget": "Exact DingTalk app/provider configuration and bounded test destination",
+    "status": "BLOCKED_PREREQUISITE",
+    "authorityTarget": "UNRESOLVED_DINGTALK_TARGET_BINDING",
     "preconditions": [
-      "WO06C_DINGTALK_PROVIDER"
+      "WO06C_DINGTALK_PROVIDER",
+      "DINGTALK_TARGET_BINDING"
     ],
     "effects": [
       "May perform real provider authentication and bounded integration traffic only after explicit authorization"
