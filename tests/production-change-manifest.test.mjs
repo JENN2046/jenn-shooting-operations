@@ -93,6 +93,9 @@ test('manifest rejects blanket approval and incomplete blocker surfaces', () => 
     'DINGTALK_TARGET_BINDING',
     'CUTOVER_FORWARD_CHAIN',
     'CUTOVER_SWITCH_RECOVERY',
+    'TARGET_HOST_BINDING',
+    'CONTAINER_START_READINESS',
+    'HEALTH_SMOKE_READINESS',
     'PROXY_BACKEND_READINESS',
   ]) {
     const missing = structuredClone(base);
@@ -189,35 +192,31 @@ test('requestable status is frozen empty while exact external targets remain unr
   }
 });
 
-test('production-host candidates cannot become requestable before exact host identity binding', () => {
-  const baseAction = action(base, 'PROD-01-TARGET-READONLY-PREFLIGHT');
-  assert.equal(base.target.hostIdentifier, null);
-  assert.equal(baseAction.status, 'BLOCKED_PREREQUISITE');
-  assert.equal(baseAction.authorityTarget, 'UNRESOLVED_PRODUCTION_HOST_IDENTITY');
-  assert.equal(baseAction.preconditions.includes('PRODUCTION_TARGET_FACTS'), true);
+test('target preflight depends on candidate host binding, not facts it is responsible for discovering', () => {
+  const gate = base.gates.find(candidate => candidate.id === 'TARGET_HOST_BINDING');
+  assert.ok(gate);
+  assert.equal(gate.status, 'BLOCKED');
+  assert.equal(gate.evidence, 'EXACT_CANDIDATE_PRODUCTION_HOST_UNRESOLVED');
 
-  for (const authorityTarget of [
-    'Production host HOST_A; read-only preflight only',
-    'Production host HOST_B; read-only preflight only',
-  ]) {
-    const changed = structuredClone(base);
-    const candidate = action(changed, 'PROD-01-TARGET-READONLY-PREFLIGHT');
-    candidate.status = 'REQUESTABLE_EXPLICIT_AUTHORIZATION';
-    candidate.authorityTarget = authorityTarget;
-    candidate.preconditions = [];
-    changed.authorizationPacket.requestableActionIds.push('PROD-01-TARGET-READONLY-PREFLIGHT');
+  const preflight = action(base, 'PROD-01-TARGET-READONLY-PREFLIGHT');
+  assert.deepEqual(preflight.preconditions, ['TARGET_HOST_BINDING']);
+  assert.equal(preflight.preconditions.includes('PRODUCTION_TARGET_FACTS'), false);
+  assert.equal(preflight.evidenceRequired.includes('BOUND_HOST_IDENTITY_MATCH'), true);
+  assert.equal(preflight.evidenceRequired.includes('DISK_CAPACITY'), true);
+  assert.equal(preflight.evidenceRequired.includes('TLS_BINDING_FACTS'), true);
 
-    const result = validate(changed);
-    assert.equal(result.ok, false, authorityTarget);
-    const codes = issueCodes(result);
-    for (const code of [
-      'ACTION_STATUS_INVALID',
-      'AUTHORITY_TARGET_INVALID',
-      'ACTION_PRECONDITIONS_INVALID',
-      'REQUESTABLE_ACTION_SET_INVALID',
-      'REQUESTABLE_STATUS_SET_INVALID',
-    ]) assert.equal(codes.has(code), true, `${authorityTarget}: ${code}`);
-  }
+  const cycle = structuredClone(base);
+  action(cycle, 'PROD-01-TARGET-READONLY-PREFLIGHT').preconditions =
+    ['PRODUCTION_TARGET_FACTS'];
+  expectRejected(cycle, 'ACTION_PRECONDITIONS_INVALID', 'target-preflight cycle restored');
+
+  const missingBinding = structuredClone(base);
+  action(missingBinding, 'PROD-01-TARGET-READONLY-PREFLIGHT').preconditions = [];
+  expectRejected(missingBinding, 'ACTION_PRECONDITIONS_INVALID', 'host binding removed');
+
+  const forgedBinding = structuredClone(base);
+  forgedBinding.gates.find(candidate => candidate.id === 'TARGET_HOST_BINDING').status = 'SATISFIED';
+  expectRejected(forgedBinding, 'GATE_STATUS_INVALID', 'host binding cannot self-promote');
 });
 
 test('DingTalk candidates cannot become requestable before exact app/provider and bounded destination binding', () => {
@@ -406,6 +405,64 @@ test('hostile combined semantic widening still fails closed after schema admissi
     'ACTION_EVIDENCE_REQUIRED_INVALID',
     'AUTHORITY_TARGET_INVALID',
   ]) assert.equal(codes.has(code), true, code);
+});
+
+
+test('container startup remains blocked until storage, tokens, and image predecessors complete', () => {
+  const gate = base.gates.find(candidate => candidate.id === 'CONTAINER_START_READINESS');
+  assert.ok(gate);
+  assert.equal(gate.status, 'BLOCKED');
+  assert.equal(gate.evidence, 'REQUIRES_VERIFIED_PROD_02_03_04');
+
+  const start = action(base, 'PROD-05-START-ISOLATED-CONTAINER');
+  assert.equal(start.preconditions.includes('CONTAINER_START_READINESS'), true);
+  assert.equal(
+    start.evidenceRequired.includes('STORAGE_TOKEN_IMAGE_PREDECESSOR_PROOF'),
+    true,
+  );
+
+  const droppedGate = structuredClone(base);
+  action(droppedGate, 'PROD-05-START-ISOLATED-CONTAINER').preconditions =
+    action(droppedGate, 'PROD-05-START-ISOLATED-CONTAINER').preconditions
+      .filter(id => id !== 'CONTAINER_START_READINESS');
+  expectRejected(droppedGate, 'ACTION_PRECONDITIONS_INVALID', 'container predecessor gate removed');
+
+  const droppedProof = structuredClone(base);
+  action(droppedProof, 'PROD-05-START-ISOLATED-CONTAINER').evidenceRequired =
+    action(droppedProof, 'PROD-05-START-ISOLATED-CONTAINER').evidenceRequired
+      .filter(id => id !== 'STORAGE_TOKEN_IMAGE_PREDECESSOR_PROOF');
+  expectRejected(
+    droppedProof,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'container predecessor proof removed',
+  );
+
+  const forgedGate = structuredClone(base);
+  forgedGate.gates.find(candidate => candidate.id === 'CONTAINER_START_READINESS').status =
+    'SATISFIED';
+  expectRejected(forgedGate, 'GATE_STATUS_INVALID', 'container readiness cannot self-promote');
+});
+
+test('health smoke remains blocked until the isolated container has started successfully', () => {
+  const gate = base.gates.find(candidate => candidate.id === 'HEALTH_SMOKE_READINESS');
+  assert.ok(gate);
+  assert.equal(gate.status, 'BLOCKED');
+  assert.equal(gate.evidence, 'REQUIRES_VERIFIED_PROD_05');
+
+  const health = action(base, 'PROD-06-LOOPBACK-HEALTH-SMOKE');
+  assert.equal(health.preconditions.includes('HEALTH_SMOKE_READINESS'), true);
+  assert.equal(health.evidenceRequired.includes('CONTAINER_START_COMPLETION_PROOF'), true);
+
+  const droppedGate = structuredClone(base);
+  action(droppedGate, 'PROD-06-LOOPBACK-HEALTH-SMOKE').preconditions =
+    action(droppedGate, 'PROD-06-LOOPBACK-HEALTH-SMOKE').preconditions
+      .filter(id => id !== 'HEALTH_SMOKE_READINESS');
+  expectRejected(droppedGate, 'ACTION_PRECONDITIONS_INVALID', 'health predecessor gate removed');
+
+  const forgedGate = structuredClone(base);
+  forgedGate.gates.find(candidate => candidate.id === 'HEALTH_SMOKE_READINESS').status =
+    'SATISFIED';
+  expectRejected(forgedGate, 'GATE_STATUS_INVALID', 'health readiness cannot self-promote');
 });
 
 

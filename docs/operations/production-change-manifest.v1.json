@@ -109,6 +109,21 @@
       "evidence": "POST_SWITCH_DUAL_READ_COMPATIBLE_WRITE_AND_SWITCH_RECORD_NOT_DESIGNED"
     },
     {
+      "id": "TARGET_HOST_BINDING",
+      "status": "BLOCKED",
+      "evidence": "EXACT_CANDIDATE_PRODUCTION_HOST_UNRESOLVED"
+    },
+    {
+      "id": "CONTAINER_START_READINESS",
+      "status": "BLOCKED",
+      "evidence": "REQUIRES_VERIFIED_PROD_02_03_04"
+    },
+    {
+      "id": "HEALTH_SMOKE_READINESS",
+      "status": "BLOCKED",
+      "evidence": "REQUIRES_VERIFIED_PROD_05"
+    },
+    {
       "id": "PROXY_BACKEND_READINESS",
       "status": "BLOCKED",
       "evidence": "REQUIRES_VERIFIED_PROD_04_05_06"
@@ -140,18 +155,19 @@
       "requiresExplicitAuthorization": true,
       "authorityTarget": "UNRESOLVED_PRODUCTION_HOST_IDENTITY",
       "preconditions": [
-        "PRODUCTION_TARGET_FACTS"
+        "TARGET_HOST_BINDING"
       ],
       "effects": [
-        "Resolve target host identity and deployment conflicts without mutation"
+        "Verify the bound candidate host identity and resolve disk/port/container/proxy/TLS deployment facts without mutation"
       ],
       "rollbackActionIds": [],
       "evidenceRequired": [
-        "HOST_IDENTITY",
+        "BOUND_HOST_IDENTITY_MATCH",
         "DISK_CAPACITY",
         "PORT_CONFLICTS",
         "CONTAINER_CONFLICTS",
-        "REVERSE_PROXY_ROUTE_CONFLICTS"
+        "REVERSE_PROXY_ROUTE_CONFLICTS",
+        "TLS_BINDING_FACTS"
       ]
     },
     {
@@ -240,6 +256,7 @@
       "authorityTarget": "Resolved production host; one new loopback-only container and dedicated data volume",
       "preconditions": [
         "PRODUCTION_TARGET_FACTS",
+        "CONTAINER_START_READINESS",
         "PRODUCTION_DEPLOYMENT_GATE"
       ],
       "effects": [
@@ -253,7 +270,8 @@
         "IMAGE_DIGEST",
         "LOOPBACK_BIND",
         "HEALTH_STATUS",
-        "RUNTIME_UID"
+        "RUNTIME_UID",
+        "STORAGE_TOKEN_IMAGE_PREDECESSOR_PROOF"
       ]
     },
     {
@@ -267,6 +285,7 @@
       "authorityTarget": "New isolated container on resolved production host",
       "preconditions": [
         "PRODUCTION_TARGET_FACTS",
+        "HEALTH_SMOKE_READINESS",
         "PRODUCTION_DEPLOYMENT_GATE"
       ],
       "effects": [
@@ -277,7 +296,8 @@
         "HEALTHZ_STATUS",
         "CONTAINER_UID",
         "DATABASE_PATH",
-        "VOLUME_MOUNT"
+        "VOLUME_MOUNT",
+        "CONTAINER_START_COMPLETION_PROOF"
       ]
     },
     {
@@ -650,6 +670,9 @@
       "DINGTALK_TARGET_BINDING",
       "CUTOVER_FORWARD_CHAIN",
       "CUTOVER_SWITCH_RECOVERY",
+      "TARGET_HOST_BINDING",
+      "CONTAINER_START_READINESS",
+      "HEALTH_SMOKE_READINESS",
       "PROXY_BACKEND_READINESS",
       "PRODUCTION_TARGET_FACTS",
       "PRODUCTION_DATA_MIGRATION",
@@ -685,6 +708,8 @@
     "NO_AGENT_AUTO_ADOPTION_PERMISSION_EXPANSION",
     "ROLLBACK_PRESERVES_DATA_VOLUME",
     "ROLLBACK_AUTHORITY_ONLY_DERIVED_FROM_APPROVED_FORWARD_ACTION",
-    "NO_CUTOVER_WITHOUT_POST_SWITCH_AUTHORITY_RECOVERY"
+    "NO_CUTOVER_WITHOUT_POST_SWITCH_AUTHORITY_RECOVERY",
+    "TARGET_PREFLIGHT_REQUIRES_BOUND_CANDIDATE_NOT_PREFLIGHT_RESULTS",
+    "RUNTIME_START_AND_HEALTH_REQUIRE_VERIFIED_PREDECESSORS"
   ]
 }

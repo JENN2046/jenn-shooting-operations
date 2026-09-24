@@ -47,6 +47,18 @@ const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
     "status": "BLOCKED",
     "evidence": "POST_SWITCH_DUAL_READ_COMPATIBLE_WRITE_AND_SWITCH_RECORD_NOT_DESIGNED"
   },
+  "TARGET_HOST_BINDING": {
+    "status": "BLOCKED",
+    "evidence": "EXACT_CANDIDATE_PRODUCTION_HOST_UNRESOLVED"
+  },
+  "CONTAINER_START_READINESS": {
+    "status": "BLOCKED",
+    "evidence": "REQUIRES_VERIFIED_PROD_02_03_04"
+  },
+  "HEALTH_SMOKE_READINESS": {
+    "status": "BLOCKED",
+    "evidence": "REQUIRES_VERIFIED_PROD_05"
+  },
   "PROXY_BACKEND_READINESS": {
     "status": "BLOCKED",
     "evidence": "REQUIRES_VERIFIED_PROD_04_05_06"
@@ -104,7 +116,9 @@ const EXPECTED_INVARIANTS = Object.freeze([
   "NO_AGENT_AUTO_ADOPTION_PERMISSION_EXPANSION",
   "ROLLBACK_PRESERVES_DATA_VOLUME",
   "ROLLBACK_AUTHORITY_ONLY_DERIVED_FROM_APPROVED_FORWARD_ACTION",
-  "NO_CUTOVER_WITHOUT_POST_SWITCH_AUTHORITY_RECOVERY"
+  "NO_CUTOVER_WITHOUT_POST_SWITCH_AUTHORITY_RECOVERY",
+  "TARGET_PREFLIGHT_REQUIRES_BOUND_CANDIDATE_NOT_PREFLIGHT_RESULTS",
+  "RUNTIME_START_AND_HEALTH_REQUIRE_VERIFIED_PREDECESSORS"
 ]);
 
 const EXPECTED_ROLLBACK_ORDER = Object.freeze([
@@ -128,18 +142,19 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "status": "BLOCKED_PREREQUISITE",
     "authorityTarget": "UNRESOLVED_PRODUCTION_HOST_IDENTITY",
     "preconditions": [
-      "PRODUCTION_TARGET_FACTS"
+      "TARGET_HOST_BINDING"
     ],
     "effects": [
-      "Resolve target host identity and deployment conflicts without mutation"
+      "Verify the bound candidate host identity and resolve disk/port/container/proxy/TLS deployment facts without mutation"
     ],
     "rollbackActionIds": [],
     "evidenceRequired": [
-      "HOST_IDENTITY",
+      "BOUND_HOST_IDENTITY_MATCH",
       "DISK_CAPACITY",
       "PORT_CONFLICTS",
       "CONTAINER_CONFLICTS",
-      "REVERSE_PROXY_ROUTE_CONFLICTS"
+      "REVERSE_PROXY_ROUTE_CONFLICTS",
+      "TLS_BINDING_FACTS"
     ]
   },
   "PROD-02-CREATE-ISOLATED-APP-STORAGE": {
@@ -220,6 +235,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "authorityTarget": "Resolved production host; one new loopback-only container and dedicated data volume",
     "preconditions": [
       "PRODUCTION_TARGET_FACTS",
+      "CONTAINER_START_READINESS",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
     "effects": [
@@ -233,7 +249,8 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "IMAGE_DIGEST",
       "LOOPBACK_BIND",
       "HEALTH_STATUS",
-      "RUNTIME_UID"
+      "RUNTIME_UID",
+      "STORAGE_TOKEN_IMAGE_PREDECESSOR_PROOF"
     ]
   },
   "PROD-06-LOOPBACK-HEALTH-SMOKE": {
@@ -245,6 +262,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "authorityTarget": "New isolated container on resolved production host",
     "preconditions": [
       "PRODUCTION_TARGET_FACTS",
+      "HEALTH_SMOKE_READINESS",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
     "effects": [
@@ -255,7 +273,8 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "HEALTHZ_STATUS",
       "CONTAINER_UID",
       "DATABASE_PATH",
-      "VOLUME_MOUNT"
+      "VOLUME_MOUNT",
+      "CONTAINER_START_COMPLETION_PROOF"
     ]
   },
   "PROD-07-CONFIGURE-REVERSE-PROXY-TLS": {
