@@ -345,17 +345,11 @@ test('critical action risk, side effect and evidence contract cannot be understa
   }
 });
 
-test('pre-request revalidation moves preflight-produced conflict facts out of the global checklist', () => {
-  assert.equal(base.authorizationPacket.mustRevalidateBeforeRequest.includes('IMAGE_DIGEST'), false);
-  assert.equal(
-    base.authorizationPacket.mustRevalidateBeforeRequest.includes('BUILT_IMAGE_DIGEST'),
-    false,
+test('initial preflight is exempt from all later-stage revalidation checks', () => {
+  assert.deepEqual(
+    base.authorizationPacket.mustRevalidateBeforeRequest,
+    ['AUTHORITY_HEAD'],
   );
-  assert.equal(
-    base.authorizationPacket.mustRevalidateBeforeRequest.includes('DISK_PORT_ROUTE_CONFLICTS'),
-    false,
-  );
-
   assert.equal(
     Object.hasOwn(
       base.authorizationPacket.actionSpecificRevalidation,
@@ -363,109 +357,125 @@ test('pre-request revalidation moves preflight-produced conflict facts out of th
     ),
     false,
   );
-  assert.equal(
-    Object.hasOwn(
-      base.authorizationPacket.actionSpecificRevalidation,
-      'PROD-12-DINGTALK-PROVIDER-INTEGRATION',
-    ),
-    false,
-  );
 
+  for (const forbidden of [
+    'TARGET_HOST_IDENTITY',
+    'DISK_PORT_ROUTE_CONFLICTS',
+    'BACKUP_ROLLBACK_PROOF',
+    'SECRET_STORAGE',
+    'EXTERNAL_READINESS_GATES',
+    'ROLLBACK_TARGETS',
+    'BUILT_IMAGE_DIGEST',
+  ]) {
+    assert.equal(
+      base.authorizationPacket.mustRevalidateBeforeRequest.includes(forbidden),
+      false,
+      forbidden,
+    );
+  }
+
+  assert.deepEqual(
+    base.authorizationPacket.actionSpecificRevalidation['PROD-02-CREATE-ISOLATED-APP-STORAGE'],
+    ['TARGET_HOST_IDENTITY', 'DISK_PORT_ROUTE_CONFLICTS', 'ROLLBACK_TARGETS'],
+  );
+  assert.deepEqual(
+    base.authorizationPacket.actionSpecificRevalidation['PROD-03-GENERATE-INSTALL-TOKENS'],
+    ['TARGET_HOST_IDENTITY', 'DISK_PORT_ROUTE_CONFLICTS', 'SECRET_STORAGE', 'ROLLBACK_TARGETS'],
+  );
   assert.deepEqual(
     base.authorizationPacket.actionSpecificRevalidation['PROD-04-BUILD-IMAGE'],
     [
+      'TARGET_HOST_IDENTITY',
+      'DISK_PORT_ROUTE_CONFLICTS',
       'BUILD_SOURCE_AUTHORITY_COMMIT',
       'BUILD_BASE_IMAGE_DIGEST',
+    ],
+  );
+  assert.deepEqual(
+    base.authorizationPacket.actionSpecificRevalidation['PROD-09-PRODUCTION-DATA-IMPORT'],
+    [
+      'TARGET_HOST_IDENTITY',
       'DISK_PORT_ROUTE_CONFLICTS',
+      'BACKUP_ROLLBACK_PROOF',
+      'ROLLBACK_TARGETS',
+    ],
+  );
+  assert.deepEqual(
+    base.authorizationPacket.actionSpecificRevalidation['PROD-12-DINGTALK-PROVIDER-INTEGRATION'],
+    ['SECRET_STORAGE', 'EXTERNAL_READINESS_GATES', 'ROLLBACK_TARGETS'],
+  );
+  assert.deepEqual(
+    base.authorizationPacket.actionSpecificRevalidation['PROD-13-CUTOVER-SWITCH'],
+    [
+      'TARGET_HOST_IDENTITY',
+      'DISK_PORT_ROUTE_CONFLICTS',
+      'BUILT_IMAGE_DIGEST',
+      'BACKUP_ROLLBACK_PROOF',
+      'EXTERNAL_READINESS_GATES',
+      'ROLLBACK_TARGETS',
     ],
   );
 
-  for (const actionId of [
-    'PROD-02-CREATE-ISOLATED-APP-STORAGE',
-    'PROD-03-GENERATE-INSTALL-TOKENS',
-    'PROD-04-BUILD-IMAGE',
-    'PROD-05-START-ISOLATED-CONTAINER',
-    'PROD-06-LOOPBACK-HEALTH-SMOKE',
-    'PROD-07-CONFIGURE-REVERSE-PROXY-TLS',
-    'PROD-08-FIREWALL-SECURITY-GROUP',
-    'PROD-09-PRODUCTION-DATA-IMPORT',
-    'PROD-10-ENABLE-VCP-REMOTE-SYNC',
-    'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE',
-    'PROD-13-CUTOVER-SWITCH',
-  ]) {
-    assert.equal(
-      base.authorizationPacket.actionSpecificRevalidation[actionId]
-        .includes('DISK_PORT_ROUTE_CONFLICTS'),
-      true,
-      actionId,
-    );
-  }
-
-  for (const actionId of [
-    'PROD-05-START-ISOLATED-CONTAINER',
-    'PROD-06-LOOPBACK-HEALTH-SMOKE',
-    'PROD-07-CONFIGURE-REVERSE-PROXY-TLS',
-    'PROD-10-ENABLE-VCP-REMOTE-SYNC',
-    'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE',
-    'PROD-13-CUTOVER-SWITCH',
-  ]) {
-    assert.equal(
-      base.authorizationPacket.actionSpecificRevalidation[actionId]
-        .includes('BUILT_IMAGE_DIGEST'),
-      true,
-      actionId,
-    );
-  }
-
-  const reduced = structuredClone(base);
-  reduced.authorizationPacket.mustRevalidateBeforeRequest = ['AUTHORITY_HEAD'];
-  expectRejected(reduced, 'REVALIDATION_CHECKLIST_INVALID', 'reduced checklist');
-
-  const globalConflictFacts = structuredClone(base);
-  globalConflictFacts.authorizationPacket.mustRevalidateBeforeRequest
-    .push('DISK_PORT_ROUTE_CONFLICTS');
+  const pollutedGlobal = structuredClone(base);
+  pollutedGlobal.authorizationPacket.mustRevalidateBeforeRequest.push('BACKUP_ROLLBACK_PROOF');
   expectRejected(
-    globalConflictFacts,
+    pollutedGlobal,
     'REVALIDATION_CHECKLIST_INVALID',
-    'preflight-produced conflict facts cannot be global prerequisites',
+    'later-stage backup proof cannot become a global preflight prerequisite',
   );
 
-  const earlyConflictFacts = structuredClone(base);
-  earlyConflictFacts.authorizationPacket.actionSpecificRevalidation[
+  const earlyExternal = structuredClone(base);
+  earlyExternal.authorizationPacket.actionSpecificRevalidation[
     'PROD-01-TARGET-READONLY-PREFLIGHT'
-  ] = ['DISK_PORT_ROUTE_CONFLICTS'];
+  ] = ['EXTERNAL_READINESS_GATES'];
   expectRejected(
-    earlyConflictFacts,
+    earlyExternal,
     'ACTION_REVALIDATION_SET_INVALID',
-    'preflight cannot require its own conflict-fact outputs',
+    'preflight cannot require external readiness',
   );
 
-  const missingConflictFacts = structuredClone(base);
-  missingConflictFacts.authorizationPacket.actionSpecificRevalidation[
-    'PROD-02-CREATE-ISOLATED-APP-STORAGE'
-  ] = ['BUILT_IMAGE_DIGEST'];
+  const missingBackup = structuredClone(base);
+  missingBackup.authorizationPacket.actionSpecificRevalidation[
+    'PROD-09-PRODUCTION-DATA-IMPORT'
+  ] = [
+    'TARGET_HOST_IDENTITY',
+    'DISK_PORT_ROUTE_CONFLICTS',
+    'ROLLBACK_TARGETS',
+  ];
   expectRejected(
-    missingConflictFacts,
+    missingBackup,
     'ACTION_REVALIDATION_INVALID',
-    'post-preflight storage action cannot replace conflict revalidation',
+    'production import cannot drop backup rollback proof',
+  );
+
+  const missingExternal = structuredClone(base);
+  missingExternal.authorizationPacket.actionSpecificRevalidation[
+    'PROD-10-ENABLE-VCP-REMOTE-SYNC'
+  ] = [
+    'TARGET_HOST_IDENTITY',
+    'DISK_PORT_ROUTE_CONFLICTS',
+    'BUILT_IMAGE_DIGEST',
+    'SECRET_STORAGE',
+    'ROLLBACK_TARGETS',
+  ];
+  expectRejected(
+    missingExternal,
+    'ACTION_REVALIDATION_INVALID',
+    'VCP enablement cannot drop external readiness',
   );
 
   const buildCycle = structuredClone(base);
   buildCycle.authorizationPacket.actionSpecificRevalidation['PROD-04-BUILD-IMAGE'] =
-    ['BUILT_IMAGE_DIGEST', 'DISK_PORT_ROUTE_CONFLICTS'];
+    [
+      'TARGET_HOST_IDENTITY',
+      'DISK_PORT_ROUTE_CONFLICTS',
+      'BUILT_IMAGE_DIGEST',
+      'BUILD_BASE_IMAGE_DIGEST',
+    ];
   expectRejected(
     buildCycle,
     'ACTION_REVALIDATION_INVALID',
     'build cannot require its own output digest',
-  );
-
-  const missingBaseDigest = structuredClone(base);
-  missingBaseDigest.authorizationPacket.actionSpecificRevalidation['PROD-04-BUILD-IMAGE'] =
-    ['BUILD_SOURCE_AUTHORITY_COMMIT', 'DISK_PORT_ROUTE_CONFLICTS'];
-  expectRejected(
-    missingBaseDigest,
-    'ACTION_REVALIDATION_INVALID',
-    'build base digest cannot be dropped',
   );
 });
 
@@ -502,9 +512,10 @@ test('action title, category and effects remain bound to the frozen operation me
 
 test('hostile combined semantic widening still fails closed after schema admission', () => {
   const changed = structuredClone(base);
-  changed.authorizationPacket.mustRevalidateBeforeRequest = ['AUTHORITY_HEAD'];
+  changed.authorizationPacket.mustRevalidateBeforeRequest =
+    ['AUTHORITY_HEAD', 'BACKUP_ROLLBACK_PROOF'];
   changed.authorizationPacket.actionSpecificRevalidation['PROD-04-BUILD-IMAGE'] =
-    ['BUILT_IMAGE_DIGEST', 'DISK_PORT_ROUTE_CONFLICTS'];
+    ['TARGET_HOST_IDENTITY', 'DISK_PORT_ROUTE_CONFLICTS', 'BUILT_IMAGE_DIGEST'];
   changed.target.unresolvedFacts = ['TARGET_HOST_IDENTITY'];
 
   const importAction = action(changed, 'PROD-09-PRODUCTION-DATA-IMPORT');
