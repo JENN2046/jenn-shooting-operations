@@ -53,9 +53,7 @@ const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
   }
 }));
 
-const EXPECTED_REQUESTABLE = Object.freeze([
-  "PROD-01-TARGET-READONLY-PREFLIGHT"
-]);
+const EXPECTED_REQUESTABLE = Object.freeze([]);
 
 const EXPECTED_BLOCKERS = Object.freeze([
   "WO06C_VCP_EXTERNAL",
@@ -99,6 +97,7 @@ const EXPECTED_ROLLBACK_ORDER = Object.freeze([
   "ROLLBACK-01-REMOVE-NEW-ROUTE",
   "ROLLBACK-05-REVERT-FIREWALL-RULE",
   "ROLLBACK-02-STOP-NEW-CONTAINER",
+  "ROLLBACK-06-REVOKE-ROLE-TOKENS",
   "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG",
   "ROLLBACK-04-PRESERVE-DATA-VOLUME"
 ]);
@@ -112,9 +111,11 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "category": "TARGET",
     "risk": "LOW",
     "sideEffect": "READ_ONLY",
-    "status": "REQUESTABLE_EXPLICIT_AUTHORIZATION",
-    "authorityTarget": "One identified production host; read-only disk/port/container/proxy inspection only",
-    "preconditions": [],
+    "status": "BLOCKED_PREREQUISITE",
+    "authorityTarget": "UNRESOLVED_PRODUCTION_HOST_IDENTITY",
+    "preconditions": [
+      "PRODUCTION_TARGET_FACTS"
+    ],
     "effects": [
       "Resolve target host identity and deployment conflicts without mutation"
     ],
@@ -166,7 +167,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "Generate independent secret values and install them outside Git/logs/chat"
     ],
     "rollbackActionIds": [
-      "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG"
+      "ROLLBACK-06-REVOKE-ROLE-TOKENS"
     ],
     "evidenceRequired": [
       "SECRET_STORAGE_PATH",
@@ -507,6 +508,23 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "rollbackActionIds": [],
     "evidenceRequired": [
       "PREVIOUS_RULE_RESTORED"
+    ]
+  },
+  "ROLLBACK-06-REVOKE-ROLE-TOKENS": {
+    "title": "Revoke and remove generated role-token configuration",
+    "category": "ROLLBACK",
+    "risk": "HIGH",
+    "sideEffect": "REVERSIBLE",
+    "status": "ROLLBACK_ONLY",
+    "authorityTarget": "Only the four role tokens and server-restricted runtime bindings created by PROD-03",
+    "preconditions": [],
+    "effects": [
+      "Remove the generated role-token bindings from server-restricted runtime configuration without exposing token values"
+    ],
+    "rollbackActionIds": [],
+    "evidenceRequired": [
+      "ROLE_TOKEN_BINDINGS_REMOVED",
+      "SECRET_VALUES_NOT_LOGGED"
     ]
   }
 }));

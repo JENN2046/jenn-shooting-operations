@@ -112,20 +112,58 @@ test('every production action keeps its complete frozen prerequisite set', () =>
   }
 });
 
-test('requestable status is bidirectionally frozen to the single currently bound action', () => {
-  const widened = structuredClone(base);
-  action(widened, 'PROD-02-CREATE-ISOLATED-APP-STORAGE').status = 'REQUESTABLE_EXPLICIT_AUTHORIZATION';
-  expectRejected(widened, 'ACTION_STATUS_INVALID', 'widen blocked action');
+test('requestable status is frozen empty while exact external targets remain unresolved', () => {
+  assert.deepEqual(base.authorizationPacket.requestableActionIds, []);
+  assert.deepEqual(
+    base.actions.filter(candidate => candidate.status === 'REQUESTABLE_EXPLICIT_AUTHORIZATION'),
+    [],
+  );
 
-  const dingtalkWidened = structuredClone(base);
-  action(dingtalkWidened, 'PROD-12-DINGTALK-PROVIDER-INTEGRATION').status = 'REQUESTABLE_EXPLICIT_AUTHORIZATION';
-  dingtalkWidened.authorizationPacket.requestableActionIds.push('PROD-12-DINGTALK-PROVIDER-INTEGRATION');
-  const result = validate(dingtalkWidened);
-  assert.equal(result.ok, false);
-  const codes = issueCodes(result);
-  assert.equal(codes.has('ACTION_STATUS_INVALID'), true);
-  assert.equal(codes.has('REQUESTABLE_ACTION_SET_INVALID'), true);
-  assert.equal(codes.has('REQUESTABLE_STATUS_SET_INVALID'), true);
+  for (const actionId of [
+    'PROD-01-TARGET-READONLY-PREFLIGHT',
+    'PROD-12-DINGTALK-PROVIDER-INTEGRATION',
+  ]) {
+    const changed = structuredClone(base);
+    action(changed, actionId).status = 'REQUESTABLE_EXPLICIT_AUTHORIZATION';
+    changed.authorizationPacket.requestableActionIds.push(actionId);
+    const result = validate(changed);
+    assert.equal(result.ok, false, actionId);
+    const codes = issueCodes(result);
+    assert.equal(codes.has('ACTION_STATUS_INVALID'), true, actionId);
+    assert.equal(codes.has('REQUESTABLE_ACTION_SET_INVALID'), true, actionId);
+    assert.equal(codes.has('REQUESTABLE_STATUS_SET_INVALID'), true, actionId);
+  }
+});
+
+test('production-host candidates cannot become requestable before exact host identity binding', () => {
+  const baseAction = action(base, 'PROD-01-TARGET-READONLY-PREFLIGHT');
+  assert.equal(base.target.hostIdentifier, null);
+  assert.equal(baseAction.status, 'BLOCKED_PREREQUISITE');
+  assert.equal(baseAction.authorityTarget, 'UNRESOLVED_PRODUCTION_HOST_IDENTITY');
+  assert.equal(baseAction.preconditions.includes('PRODUCTION_TARGET_FACTS'), true);
+
+  for (const authorityTarget of [
+    'Production host HOST_A; read-only preflight only',
+    'Production host HOST_B; read-only preflight only',
+  ]) {
+    const changed = structuredClone(base);
+    const candidate = action(changed, 'PROD-01-TARGET-READONLY-PREFLIGHT');
+    candidate.status = 'REQUESTABLE_EXPLICIT_AUTHORIZATION';
+    candidate.authorityTarget = authorityTarget;
+    candidate.preconditions = [];
+    changed.authorizationPacket.requestableActionIds.push('PROD-01-TARGET-READONLY-PREFLIGHT');
+
+    const result = validate(changed);
+    assert.equal(result.ok, false, authorityTarget);
+    const codes = issueCodes(result);
+    for (const code of [
+      'ACTION_STATUS_INVALID',
+      'AUTHORITY_TARGET_INVALID',
+      'ACTION_PRECONDITIONS_INVALID',
+      'REQUESTABLE_ACTION_SET_INVALID',
+      'REQUESTABLE_STATUS_SET_INVALID',
+    ]) assert.equal(codes.has(code), true, `${authorityTarget}: ${code}`);
+  }
 });
 
 test('DingTalk candidates cannot become requestable before exact app/provider and bounded destination binding', () => {
@@ -164,6 +202,7 @@ test('DingTalk candidates cannot become requestable before exact app/provider an
 
 test('each action keeps its exact rollback binding, not merely any rollback-category reference', () => {
   for (const [actionId, replacement] of [
+    ['PROD-03-GENERATE-INSTALL-TOKENS', ['ROLLBACK-03-DISABLE-EXTERNAL-CONFIG']],
     ['PROD-05-START-ISOLATED-CONTAINER', ['ROLLBACK-01-REMOVE-NEW-ROUTE']],
     ['PROD-09-PRODUCTION-DATA-IMPORT', ['ROLLBACK-01-REMOVE-NEW-ROUTE']],
     ['PROD-10-ENABLE-VCP-REMOTE-SYNC', ['ROLLBACK-04-PRESERVE-DATA-VOLUME']],
@@ -316,27 +355,46 @@ test('hostile combined semantic widening still fails closed after schema admissi
 });
 
 
-test('global rollback order includes the exact firewall revert at the frozen point', () => {
+test('global rollback order includes the exact firewall and role-token rollback points', () => {
   assert.deepEqual(base.rollbackPlan.orderedActionIds, [
     'ROLLBACK-01-REMOVE-NEW-ROUTE',
     'ROLLBACK-05-REVERT-FIREWALL-RULE',
     'ROLLBACK-02-STOP-NEW-CONTAINER',
+    'ROLLBACK-06-REVOKE-ROLE-TOKENS',
     'ROLLBACK-03-DISABLE-EXTERNAL-CONFIG',
     'ROLLBACK-04-PRESERVE-DATA-VOLUME',
   ]);
 
-  const omitted = structuredClone(base);
-  omitted.rollbackPlan.orderedActionIds = omitted.rollbackPlan.orderedActionIds
+  const firewallOmitted = structuredClone(base);
+  firewallOmitted.rollbackPlan.orderedActionIds = firewallOmitted.rollbackPlan.orderedActionIds
     .filter(id => id !== 'ROLLBACK-05-REVERT-FIREWALL-RULE');
-  expectRejected(omitted, 'ROLLBACK_PLAN_ORDER_INVALID', 'firewall rollback omitted');
+  expectRejected(firewallOmitted, 'ROLLBACK_PLAN_ORDER_INVALID', 'firewall rollback omitted');
+
+  const tokenOmitted = structuredClone(base);
+  tokenOmitted.rollbackPlan.orderedActionIds = tokenOmitted.rollbackPlan.orderedActionIds
+    .filter(id => id !== 'ROLLBACK-06-REVOKE-ROLE-TOKENS');
+  expectRejected(tokenOmitted, 'ROLLBACK_PLAN_ORDER_INVALID', 'role-token rollback omitted');
 
   const misplaced = structuredClone(base);
   misplaced.rollbackPlan.orderedActionIds = [
     'ROLLBACK-01-REMOVE-NEW-ROUTE',
     'ROLLBACK-02-STOP-NEW-CONTAINER',
+    'ROLLBACK-06-REVOKE-ROLE-TOKENS',
     'ROLLBACK-03-DISABLE-EXTERNAL-CONFIG',
     'ROLLBACK-04-PRESERVE-DATA-VOLUME',
     'ROLLBACK-05-REVERT-FIREWALL-RULE',
   ];
-  expectRejected(misplaced, 'ROLLBACK_PLAN_ORDER_INVALID', 'firewall rollback misplaced');
+  expectRejected(misplaced, 'ROLLBACK_PLAN_ORDER_INVALID', 'rollback sequence misplaced');
+});
+
+test('PROD-03 rollback explicitly revokes the generated role-token bindings', () => {
+  assert.deepEqual(
+    action(base, 'PROD-03-GENERATE-INSTALL-TOKENS').rollbackActionIds,
+    ['ROLLBACK-06-REVOKE-ROLE-TOKENS'],
+  );
+  const rollback = action(base, 'ROLLBACK-06-REVOKE-ROLE-TOKENS');
+  assert.equal(rollback.status, 'ROLLBACK_ONLY');
+  assert.equal(rollback.authorityTarget.includes('created by PROD-03'), true);
+  assert.equal(rollback.evidenceRequired.includes('ROLE_TOKEN_BINDINGS_REMOVED'), true);
+  assert.equal(rollback.evidenceRequired.includes('SECRET_VALUES_NOT_LOGGED'), true);
 });
