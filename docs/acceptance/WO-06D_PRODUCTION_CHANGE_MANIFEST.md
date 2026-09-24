@@ -62,11 +62,11 @@ WO-06C still classifies the local DingTalk provider boundary as `READY_FOR_EXTER
 
 ## Requestable actions
 
-Only this action definition is currently marked requestable, and it has not been requested or approved:
+No action definition is currently requestable. The frozen requestable set is empty.
 
-- `PROD-01-TARGET-READONLY-PREFLIGHT`
+`PROD-01-TARGET-READONLY-PREFLIGHT` is now `BLOCKED_PREREQUISITE` with `authorityTarget = UNRESOLVED_PRODUCTION_HOST_IDENTITY` and prerequisite `PRODUCTION_TARGET_FACTS`. It cannot become requestable until a concrete production host identity is structurally recorded.
 
-`PROD-12-DINGTALK-PROVIDER-INTEGRATION` is now `BLOCKED_PREREQUISITE` with `authorityTarget = UNRESOLVED_DINGTALK_TARGET_BINDING` and prerequisite `DINGTALK_TARGET_BINDING`. It cannot become requestable until a concrete DingTalk app/provider identity and one bounded test destination are structurally bound in a separately reviewed authority revision.
+`PROD-12-DINGTALK-PROVIDER-INTEGRATION` remains `BLOCKED_PREREQUISITE` with `authorityTarget = UNRESOLVED_DINGTALK_TARGET_BINDING` and prerequisite `DINGTALK_TARGET_BINDING`. It cannot become requestable until a concrete DingTalk app/provider identity and one bounded test destination are structurally bound in a separately reviewed authority revision.
 
 All mutation/deployment/cutover actions remain blocked or conditional.
 
@@ -78,6 +78,7 @@ Rollback order is frozen as:
 remove new route
 → revert only the newly changed firewall/security-group rule
 → stop new container
+→ revoke/remove role-token runtime bindings created by PROD-03
 → disable newly enabled external config
 → preserve data volume and stop mutation
 ```
@@ -105,8 +106,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `89c6c95a0d3b30a4dc36067aac7d3d81aec1ef15`
-- GitHub Actions run: `36014400886`
+- Head: `239527fbdd88e6aad27fc039ac1ab20d9165b138`
+- GitHub Actions run: `36015492997`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -115,8 +116,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          551
-pass                           550
+tests                          553
+pass                           552
 fail                           0
 skipped                        1
 ```
@@ -126,8 +127,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  21
-pass   21
+tests  23
+pass   23
 fail   0
 ```
 
@@ -136,13 +137,11 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:2083b959badbf0a11ea1df2c5af32c111c8eac2200738d4db41d025de13b4833",
+  "manifestDigest": "sha256:4ae83ba4ce1fb4e6cace95b2768a011f36bd91efb4432b36bae49e92845b3531",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
-  "requestableActionIds": [
-    "PROD-01-TARGET-READONLY-PREFLIGHT"
-  ],
+  "requestableActionIds": [],
   "blockingGateIds": [
     "WO06C_VCP_EXTERNAL",
     "WO06C_KIOSK_DEVICE",
@@ -160,7 +159,7 @@ The validator also fresh-rejects:
 - missing authorization blockers;
 - authority-target widening for frozen action IDs;
 - production data/VCP/Kiosk/cutover actions that drop `PRODUCTION_TARGET_FACTS` or any other frozen prerequisite;
-- any action whose requestable/non-requestable status drifts from the frozen single-action set;
+- any action whose requestable/non-requestable status drifts from the frozen empty requestable set;
 - attempts to make DingTalk requestable with either of two different app/destination candidates before exact target binding;
 - rollback bindings redirected to the wrong rollback action, even when the replacement is syntactically a rollback action;
 - rollback references to non-rollback actions;
@@ -305,3 +304,41 @@ manifest digest  sha256:2083b959badbf0a11ea1df2c5af32c111c8eac2200738d4db41d025d
 ```
 
 The hostile regression attempts two different DingTalk app/destination candidate targets and proves neither can be promoted into the frozen requestable surface.
+
+
+## Production-host target and role-token rollback correction
+
+Exact-current review on `66023a218d...` identified two additional gaps:
+
+1. `PROD-01-TARGET-READONLY-PREFLIGHT` was still requestable while `target.hostIdentifier = null`.
+2. `PROD-03-GENERATE-INSTALL-TOKENS` had no rollback dedicated to removing the four generated role-token bindings.
+
+The fail-closed correction now freezes:
+
+```text
+PROD-01.status = BLOCKED_PREREQUISITE
+PROD-01.authorityTarget = UNRESOLVED_PRODUCTION_HOST_IDENTITY
+PROD-01.preconditions = [PRODUCTION_TARGET_FACTS]
+
+requestableActionIds = []
+
+PROD-03.rollbackActionIds = [ROLLBACK-06-REVOKE-ROLE-TOKENS]
+ROLLBACK-06.status = ROLLBACK_ONLY
+```
+
+`ROLLBACK-06-REVOKE-ROLE-TOKENS` is scoped only to the four role tokens and server-restricted runtime bindings created by `PROD-03`; its evidence requires `ROLE_TOKEN_BINDINGS_REMOVED` and `SECRET_VALUES_NOT_LOGGED`. The global rollback order includes rollback 06 after stopping the new container and before disabling external integration configuration.
+
+Hostile regression attempts two different production-host candidate targets and proves neither can enter the requestable surface while host identity is unresolved. Additional regression proves `PROD-03` cannot be rebound to the generic external-config rollback and that rollback 06 cannot be omitted from the global sequence.
+
+Exact implementation-bearing evidence:
+
+```text
+head             239527fbdd88e6aad27fc039ac1ab20d9165b138
+run              36015492997
+result           success
+full suite       553 tests / 552 pass / 0 fail / 1 expected VCP skip
+manifest suite   23 / 23 PASS
+manifest digest  sha256:4ae83ba4ce1fb4e6cace95b2768a011f36bd91efb4432b36bae49e92845b3531
+```
+
+The packet remains `FROZEN_NOT_REQUESTED`; requested/approved action arrays remain empty; deployment authorization remains blocked.

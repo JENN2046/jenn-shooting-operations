@@ -243,13 +243,13 @@ The packet currently blocks a deployment authorization request on:
 - `PRODUCTION_DATA_MIGRATION`;
 - `PRODUCTION_DEPLOYMENT_GATE`.
 
-The only definition currently marked requestable for separate explicit authorization is:
+No action definition is currently marked requestable. The frozen requestable set is empty.
 
-- `PROD-01-TARGET-READONLY-PREFLIGHT`.
+`PROD-01-TARGET-READONLY-PREFLIGHT` is `BLOCKED_PREREQUISITE` because the concrete production host identity is still unresolved.
 
 `PROD-12-DINGTALK-PROVIDER-INTEGRATION` remains externally provider-ready at the WO-06C local boundary, but is `BLOCKED_PREREQUISITE` in WO-06D because `DINGTALK_TARGET_BINDING = BLOCKED`. No concrete app/provider identity or bounded test destination is present, so it is not requestable.
 
-“Requestable” does not mean requested or approved.
+No action is requested or approved.
 
 ### Hard boundary
 
@@ -267,12 +267,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36014400886` on implementation-bearing head `89c6c95a0d3b30a4dc36067aac7d3d81aec1ef15` passed:
+GitHub Actions run `36015492997` on implementation-bearing head `239527fbdd88e6aad27fc039ac1ab20d9165b138` passed:
 
-- full `npm run check`: 551 tests / 550 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 21/21 PASS;
+- full `npm run check`: 553 tests / 552 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 23/23 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:2083b959badbf0a11ea1df2c5af32c111c8eac2200738d4db41d025de13b4833`;
+- manifest digest: `sha256:4ae83ba4ce1fb4e6cace95b2768a011f36bd91efb4432b36bae49e92845b3531`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -289,7 +289,7 @@ The production authorization validator now freezes, for every one of the 18 acti
 - exact prerequisite-gate set;
 - exact rollback-action set.
 
-The requestable status set is additionally checked bidirectionally against the single currently bound requestable action ID. Unknown/replaced action IDs are rejected. Secret scanning now rejects ordinary Bearer material in schema-valid free text.
+The requestable status set is additionally checked bidirectionally against the frozen empty requestable set. Unknown/replaced action IDs are rejected. Secret scanning now rejects ordinary Bearer material in schema-valid free text.
 
 The exact-head hostile regressions cover all 4×P1 + 1×P2 review findings plus combined multi-axis widening. The authorization packet remains:
 
@@ -334,6 +334,7 @@ The global rollback plan now explicitly includes `ROLLBACK-05-REVERT-FIREWALL-RU
 remove new route
 → revert new firewall/security-group rule
 → stop new container
+→ revoke/remove role-token runtime bindings created by PROD-03
 → disable newly enabled external config
 → preserve data volume
 ```
@@ -357,3 +358,22 @@ requestableActionIds = [PROD-01-TARGET-READONLY-PREFLIGHT]
 ```
 
 Two different candidate DingTalk app/destination targets are exercised by hostile regression and both fail closed before requestability. The packet remains `FROZEN_NOT_REQUESTED`; requested/approved action arrays remain empty.
+
+
+### WO-06D production-host target + role-token rollback correction
+
+Exact-current Codex review identified that `PROD-01` was still requestable without a concrete host and that `PROD-03` lacked a rollback dedicated to its generated role-token bindings.
+
+Current machine contract now freezes:
+
+```text
+PROD-01.status = BLOCKED_PREREQUISITE
+PROD-01.authorityTarget = UNRESOLVED_PRODUCTION_HOST_IDENTITY
+requestableActionIds = []
+
+PROD-03.rollbackActionIds = [ROLLBACK-06-REVOKE-ROLE-TOKENS]
+```
+
+The validator rejects attempts to promote either a HOST_A or HOST_B candidate into requestability before exact host binding, rejects rebinding PROD-03 to the generic external-config rollback, and rejects omission of rollback 06 from the global rollback sequence.
+
+Implementation evidence: head `239527fbdd88e6aad27fc039ac1ab20d9165b138`, run `36015492997`, 553/552/0/1 full-suite result, 23/23 manifest suite, digest `sha256:4ae83ba4ce1fb4e6cace95b2768a011f36bd91efb4432b36bae49e92845b3531`.
