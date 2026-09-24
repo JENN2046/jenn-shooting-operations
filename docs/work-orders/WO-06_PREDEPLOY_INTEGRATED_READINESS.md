@@ -271,12 +271,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36024210771` on implementation-bearing head `5ea293522846b9be2b6e82803c0df3b56826d591` passed:
+GitHub Actions run `36025922987` on implementation-bearing head `0ecdcfb56413c6303d292a65d2b2601fa5d701fa` passed:
 
-- full `npm run check`: 559 tests / 558 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 29/29 PASS;
+- full `npm run check`: 560 tests / 559 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 30/30 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:7de680a5e8b748faddc9cea087914acc5b26a22229c7e508c9f7c0bd492f01c3`;
+- manifest digest: `sha256:29e56b86e43fa01117058b432d8f2df4ff3ddf994aa566c9d71059ee824345fe`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -338,6 +338,7 @@ The global rollback plan now explicitly includes `ROLLBACK-05-REVERT-FIREWALL-RU
 remove new route
 → revert new firewall/security-group rule
 → stop new container
+→ remove the exact PROD-04 image digest after proving it is unused
 → revoke/remove role-token runtime bindings created by PROD-03
 → disable newly enabled external config
 → preserve data volume
@@ -487,3 +488,19 @@ target binding
 ```
 
 Implementation evidence: head `5ea293522846b9be2b6e82803c0df3b56826d591`, run `36024210771`, full suite 559/558/0/1, manifest suite 29/29, digest `sha256:7de680a5e8b748faddc9cea087914acc5b26a22229c7e508c9f7c0bd492f01c3`.
+
+
+### WO-06D cutover integration completion + image rollback
+
+The cutover forward-chain proof now requires verified completion of PROD-10 and PROD-11 in addition to the previously frozen predecessor chain:
+
+```text
+REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_10_11_AND_PROD_08_IF_USED
+VCP_KIOSK_ENABLEMENT_COMPLETION_PROOF
+```
+
+WO-06C compatibility/readiness is therefore not treated as proof that VCP synchronization or Kiosk identity mapping has actually been enabled.
+
+`PROD-04-BUILD-IMAGE` now binds to `ROLLBACK-08-REMOVE-BUILT-IMAGE`. The rollback is restricted to the exact captured PROD-04 image digest and requires proof that no running container references it before removal. It is part of the frozen ordered rollback plan after stopping the new container.
+
+Implementation evidence: head `0ecdcfb56413c6303d292a65d2b2601fa5d701fa`, run `36025922987`, full suite 560/559/0/1, manifest suite 30/30, digest `sha256:29e56b86e43fa01117058b432d8f2df4ff3ddf994aa566c9d71059ee824345fe`.

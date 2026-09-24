@@ -82,6 +82,7 @@ Rollback order is frozen as:
 remove new route
 → revert only the newly changed firewall/security-group rule
 → stop new container
+→ remove the exact PROD-04 image digest after proving it is unused
 → revoke/remove role-token runtime bindings created by PROD-03
 → disable newly enabled external config
 → preserve data volume and stop mutation
@@ -110,8 +111,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `5ea293522846b9be2b6e82803c0df3b56826d591`
-- GitHub Actions run: `36024210771`
+- Head: `0ecdcfb56413c6303d292a65d2b2601fa5d701fa`
+- GitHub Actions run: `36025922987`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -120,8 +121,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          559
-pass                           558
+tests                          560
+pass                           559
 fail                           0
 skipped                        1
 ```
@@ -131,8 +132,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  29
-pass   29
+tests  30
+pass   30
 fail   0
 ```
 
@@ -141,7 +142,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:7de680a5e8b748faddc9cea087914acc5b26a22229c7e508c9f7c0bd492f01c3",
+  "manifestDigest": "sha256:29e56b86e43fa01117058b432d8f2df4ff3ddf994aa566c9d71059ee824345fe",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -557,3 +558,52 @@ manifest digest  sha256:7de680a5e8b748faddc9cea087914acc5b26a22229c7e508c9f7c0bd
 ```
 
 No host inspection, storage creation, token generation, image build, container start, health request, proxy change, or production mutation was executed.
+
+
+## Cutover integration completion + image rollback correction
+
+Exact-current review on `4d56c34b...` identified two remaining gaps:
+
+1. the cutover forward-chain contract omitted successful completion of VCP and Kiosk enablement actions;
+2. `PROD-04-BUILD-IMAGE` was classified `REVERSIBLE` but had no exact rollback authority.
+
+The cutover predecessor contract now freezes:
+
+```text
+CUTOVER_FORWARD_CHAIN = BLOCKED
+evidence = REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_10_11_AND_PROD_08_IF_USED
+
+PROD-13.evidenceRequired += VCP_KIOSK_ENABLEMENT_COMPLETION_PROOF
+```
+
+This distinguishes WO-06C readiness evidence from actual completion of:
+
+```text
+PROD-10-ENABLE-VCP-REMOTE-SYNC
+PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE
+```
+
+The image build now has a dedicated rollback:
+
+```text
+PROD-04.rollbackActionIds = [ROLLBACK-08-REMOVE-BUILT-IMAGE]
+
+ROLLBACK-08.status = ROLLBACK_ONLY
+ROLLBACK-08.authorityTarget =
+  Only the exact image digest created by PROD-04 on the resolved production host
+```
+
+Rollback 08 requires `IMAGE_DIGEST_MATCH`, `IMAGE_NOT_IN_USE`, and `IMAGE_REMOVED`, so it cannot widen into image-store cleanup. It is inserted after stopping the new container in the global rollback order and is also bound into PROD-13's full rollback set.
+
+Exact implementation-bearing evidence:
+
+```text
+head             0ecdcfb56413c6303d292a65d2b2601fa5d701fa
+run              36025922987
+result           success
+full suite       560 tests / 559 pass / 0 fail / 1 expected VCP skip
+manifest suite   30 / 30 PASS
+manifest digest  sha256:29e56b86e43fa01117058b432d8f2df4ff3ddf994aa566c9d71059ee824345fe
+```
+
+No VCP/Kiosk enablement, image removal, container stop, cutover, or other production action was executed.
