@@ -251,9 +251,8 @@ test('action title, category and effects remain bound to the frozen operation me
   }
 });
 
-test('hostile combined lineage and risk understatement still fails closed', () => {
+test('hostile combined semantic widening still fails closed after schema admission', () => {
   const changed = structuredClone(base);
-  changed.authorityBase = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
   changed.authorizationPacket.mustRevalidateBeforeRequest = ['AUTHORITY_HEAD'];
   changed.target.unresolvedFacts = ['TARGET_HOST_IDENTITY'];
 
@@ -266,7 +265,6 @@ test('hostile combined lineage and risk understatement still fails closed', () =
   const result = validate(changed);
   assert.equal(result.ok, false);
   const codes = issueCodes(result);
-  assert.equal(codes.has('SCHEMA_INVALID') || codes.has('AUTHORITY_BASE_INVALID'), true);
   for (const code of [
     'REVALIDATION_CHECKLIST_INVALID',
     'TARGET_UNRESOLVED_FACTS_INVALID',
