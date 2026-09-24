@@ -26,8 +26,7 @@
       "const": "WO-06D-PRODUCTION-CHANGE-MANIFEST-V1"
     },
     "authorityBase": {
-      "type": "string",
-      "pattern": "^[a-f0-9]{40}$"
+      "const": "56f18930b8a89b19cdbfdde24d090649329d50c9"
     },
     "purpose": {
       "const": "PREDEPLOY_AUTHORIZATION_DEFINITION"
