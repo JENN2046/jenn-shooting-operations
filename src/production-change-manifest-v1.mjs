@@ -129,7 +129,9 @@ const EXPECTED_INVARIANTS = Object.freeze([
   "RUNTIME_START_AND_HEALTH_REQUIRE_VERIFIED_PREDECESSORS",
   "BUILT_IMAGE_ROLLBACK_REQUIRES_EXACT_DIGEST_AND_ZERO_RUNTIME_REFERENCES",
   "PRODUCTION_IMPORT_REQUIRES_VERIFIED_STORAGE_PREPARATION",
-  "EXTERNAL_WRITE_INTEGRATIONS_REQUIRE_VERIFIED_DEPLOYMENT_CHAIN"
+  "EXTERNAL_WRITE_INTEGRATIONS_REQUIRE_VERIFIED_DEPLOYMENT_CHAIN",
+  "INTEGRATION_ROLLBACK_AUTHORITY_IS_SOURCE_ACTION_SCOPED",
+  "CREATED_STORAGE_IS_INTENTIONALLY_RETAINED_ON_ROLLBACK"
 ]);
 
 const EXPECTED_ROLLBACK_ORDER = Object.freeze([
@@ -138,7 +140,9 @@ const EXPECTED_ROLLBACK_ORDER = Object.freeze([
   "ROLLBACK-02-STOP-NEW-CONTAINER",
   "ROLLBACK-08-REMOVE-BUILT-IMAGE",
   "ROLLBACK-06-REVOKE-ROLE-TOKENS",
-  "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG",
+  "ROLLBACK-09-DISABLE-VCP-CONFIG",
+  "ROLLBACK-10-DISABLE-KIOSK-CONFIG",
+  "ROLLBACK-11-DISABLE-DINGTALK-CONFIG",
   "ROLLBACK-04-PRESERVE-DATA-VOLUME"
 ]);
 
@@ -173,7 +177,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "title": "Create isolated application directory and persistent volume",
     "category": "FILESYSTEM",
     "risk": "MEDIUM",
-    "sideEffect": "REVERSIBLE",
+    "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
     "status": "BLOCKED_PREREQUISITE",
     "authorityTarget": "Resolved production host; new isolated application directory and data volume only",
     "preconditions": [
@@ -181,7 +185,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
     "effects": [
-      "Create new application storage without modifying existing application data"
+      "Create new isolated application storage without modifying existing application data; retain the created directory and volume on rollback"
     ],
     "rollbackActionIds": [
       "ROLLBACK-04-PRESERVE-DATA-VOLUME"
@@ -190,7 +194,8 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "TARGET_PATH",
       "VOLUME_NAME",
       "OWNER_MODE",
-      "FREE_SPACE"
+      "FREE_SPACE",
+      "RETAINED_STORAGE_ARTIFACT_ACKNOWLEDGED"
     ]
   },
   "PROD-03-GENERATE-INSTALL-TOKENS": {
@@ -388,7 +393,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "Allow VCP to pull and guarded-push against the deployed service"
     ],
     "rollbackActionIds": [
-      "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG"
+      "ROLLBACK-09-DISABLE-VCP-CONFIG"
     ],
     "evidenceRequired": [
       "VCP_ADAPTER_REVISION",
@@ -415,7 +420,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "Allow real device to read and submit authorized run events"
     ],
     "rollbackActionIds": [
-      "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG"
+      "ROLLBACK-10-DISABLE-KIOSK-CONFIG"
     ],
     "evidenceRequired": [
       "DEVICE_IDENTITY",
@@ -440,7 +445,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "May perform real provider authentication and bounded integration traffic only after explicit authorization"
     ],
     "rollbackActionIds": [
-      "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG"
+      "ROLLBACK-11-DISABLE-DINGTALK-CONFIG"
     ],
     "evidenceRequired": [
       "PROVIDER_CONFIG_SCOPE",
@@ -476,7 +481,8 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "ROLLBACK-02-STOP-NEW-CONTAINER",
       "ROLLBACK-08-REMOVE-BUILT-IMAGE",
       "ROLLBACK-06-REVOKE-ROLE-TOKENS",
-      "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG",
+      "ROLLBACK-09-DISABLE-VCP-CONFIG",
+      "ROLLBACK-10-DISABLE-KIOSK-CONFIG",
       "ROLLBACK-04-PRESERVE-DATA-VOLUME"
     ],
     "evidenceRequired": [
@@ -526,20 +532,56 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "DATA_VOLUME_PRESERVED"
     ]
   },
-  "ROLLBACK-03-DISABLE-EXTERNAL-CONFIG": {
-    "title": "Disable newly enabled external integration configuration",
+  "ROLLBACK-09-DISABLE-VCP-CONFIG": {
+    "title": "Disable VCP configuration introduced by PROD-10",
     "category": "ROLLBACK",
     "risk": "HIGH",
     "sideEffect": "REVERSIBLE",
     "status": "ROLLBACK_ONLY",
-    "authorityTarget": "Only new VCP/Kiosk/DingTalk configuration introduced by an approved action",
+    "authorityTarget": "Only the VCP runtime adapter configuration and service endpoint binding introduced by PROD-10",
     "preconditions": [],
     "effects": [
-      "Disable new external integrations without deleting data"
+      "Disable only the VCP integration configuration introduced by PROD-10 without affecting Kiosk or DingTalk"
     ],
     "rollbackActionIds": [],
     "evidenceRequired": [
-      "INTEGRATION_DISABLED",
+      "VCP_INTEGRATION_DISABLED",
+      "KIOSK_DINGTALK_UNCHANGED",
+      "SECRET_VALUES_NOT_LOGGED"
+    ]
+  },
+  "ROLLBACK-10-DISABLE-KIOSK-CONFIG": {
+    "title": "Disable Kiosk configuration introduced by PROD-11",
+    "category": "ROLLBACK",
+    "risk": "HIGH",
+    "sideEffect": "REVERSIBLE",
+    "status": "ROLLBACK_ONLY",
+    "authorityTarget": "Only the Kiosk device and trusted identity mapping introduced by PROD-11",
+    "preconditions": [],
+    "effects": [
+      "Disable only the Kiosk integration configuration introduced by PROD-11 without affecting VCP or DingTalk"
+    ],
+    "rollbackActionIds": [],
+    "evidenceRequired": [
+      "KIOSK_INTEGRATION_DISABLED",
+      "VCP_DINGTALK_UNCHANGED"
+    ]
+  },
+  "ROLLBACK-11-DISABLE-DINGTALK-CONFIG": {
+    "title": "Disable DingTalk configuration introduced by PROD-12",
+    "category": "ROLLBACK",
+    "risk": "HIGH",
+    "sideEffect": "REVERSIBLE",
+    "status": "ROLLBACK_ONLY",
+    "authorityTarget": "Only the DingTalk provider configuration introduced by PROD-12",
+    "preconditions": [],
+    "effects": [
+      "Disable only the DingTalk integration configuration introduced by PROD-12 without affecting VCP or Kiosk"
+    ],
+    "rollbackActionIds": [],
+    "evidenceRequired": [
+      "DINGTALK_INTEGRATION_DISABLED",
+      "VCP_KIOSK_UNCHANGED",
       "SECRET_VALUES_NOT_LOGGED"
     ]
   },
@@ -639,6 +681,17 @@ const FORBIDDEN_SECRET_PATTERNS = Object.freeze([
   /sk-[A-Za-z0-9_-]{16,}/u,
   /replace-with-random-/iu,
 ]);
+
+function containsForbiddenSecretMaterial(value) {
+  if (typeof value === 'string') {
+    return FORBIDDEN_SECRET_PATTERNS.some(pattern => pattern.test(value));
+  }
+  if (Array.isArray(value)) return value.some(containsForbiddenSecretMaterial);
+  if (value && typeof value === 'object') {
+    return Object.values(value).some(containsForbiddenSecretMaterial);
+  }
+  return false;
+}
 
 function stableJson(value) {
   if (Array.isArray(value)) return '[' + value.map(stableJson).join(',') + ']';
@@ -865,11 +918,11 @@ export function createProductionChangeManifestValidator(schema) {
       }
     }
 
-    const text = stableJson(value);
-    if (FORBIDDEN_SECRET_PATTERNS.some(pattern => pattern.test(text))) {
+    if (containsForbiddenSecretMaterial(value)) {
       issues.push(issue('SECRET_MATERIAL_DETECTED', '/'));
     }
 
+    const text = stableJson(value);
     const digest = 'sha256:' + createHash('sha256').update(text).digest('hex');
     return Object.freeze({
       ok: issues.length === 0,

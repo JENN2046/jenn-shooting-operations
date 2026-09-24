@@ -64,6 +64,9 @@ test('production change manifest validates with deployment request blocked and n
 test('secret scanner rejects ordinary Bearer and token-shaped material inside schema-valid free text', () => {
   for (const [label, secretText] of [
     ['bearer', 'Bearer 12345678901234567890123456789012'],
+    ['bearer newline', 'Bearer\n12345678901234567890123456789012'],
+    ['bearer tab', 'Bearer\t12345678901234567890123456789012'],
+    ['bearer CRLF', 'Bearer\r\n12345678901234567890123456789012'],
     ['access token', 'access_token = abcdefghijklmnopqrstuvwxyz123456'],
     ['openai-shaped token', 'sk-abcdefghijklmnopqrstuvwx1234567890'],
   ]) {
@@ -711,11 +714,13 @@ test('rollback authority is derived from approved forward actions without a seco
     [
       'ROLLBACK-01-REMOVE-NEW-ROUTE',
       'ROLLBACK-02-STOP-NEW-CONTAINER',
-      'ROLLBACK-03-DISABLE-EXTERNAL-CONFIG',
       'ROLLBACK-04-PRESERVE-DATA-VOLUME',
       'ROLLBACK-05-REVERT-FIREWALL-RULE',
       'ROLLBACK-06-REVOKE-ROLE-TOKENS',
       'ROLLBACK-08-REMOVE-BUILT-IMAGE',
+      'ROLLBACK-09-DISABLE-VCP-CONFIG',
+      'ROLLBACK-10-DISABLE-KIOSK-CONFIG',
+      'ROLLBACK-11-DISABLE-DINGTALK-CONFIG',
     ],
   );
 
@@ -741,6 +746,67 @@ test('rollback authority is derived from approved forward actions without a seco
     secondApproval,
     'ACTION_AUTHORIZATION_MODE_INVALID',
     'rollback cannot demand a second standalone approval',
+  );
+});
+
+
+test('integration rollback authority stays scoped to its originating forward action', () => {
+  const cases = [
+    [
+      'PROD-10-ENABLE-VCP-REMOTE-SYNC',
+      'ROLLBACK-09-DISABLE-VCP-CONFIG',
+      ['ROLLBACK-10-DISABLE-KIOSK-CONFIG', 'ROLLBACK-11-DISABLE-DINGTALK-CONFIG'],
+    ],
+    [
+      'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE',
+      'ROLLBACK-10-DISABLE-KIOSK-CONFIG',
+      ['ROLLBACK-09-DISABLE-VCP-CONFIG', 'ROLLBACK-11-DISABLE-DINGTALK-CONFIG'],
+    ],
+    [
+      'PROD-12-DINGTALK-PROVIDER-INTEGRATION',
+      'ROLLBACK-11-DISABLE-DINGTALK-CONFIG',
+      ['ROLLBACK-09-DISABLE-VCP-CONFIG', 'ROLLBACK-10-DISABLE-KIOSK-CONFIG'],
+    ],
+  ];
+
+  for (const [forwardId, expectedRollbackId, forbiddenRollbackIds] of cases) {
+    const derived = deriveCoauthorizedRollbackActionIds(base.actions, [forwardId]);
+    assert.deepEqual(derived, [expectedRollbackId], forwardId);
+    for (const forbiddenId of forbiddenRollbackIds) {
+      assert.equal(derived.includes(forbiddenId), false, `${forwardId} must not derive ${forbiddenId}`);
+    }
+  }
+
+  assert.equal(
+    action(base, 'ROLLBACK-09-DISABLE-VCP-CONFIG').authorityTarget.includes('introduced by PROD-10'),
+    true,
+  );
+  assert.equal(
+    action(base, 'ROLLBACK-10-DISABLE-KIOSK-CONFIG').authorityTarget.includes('introduced by PROD-11'),
+    true,
+  );
+  assert.equal(
+    action(base, 'ROLLBACK-11-DISABLE-DINGTALK-CONFIG').authorityTarget.includes('introduced by PROD-12'),
+    true,
+  );
+});
+
+test('PROD-02 storage creation is intentionally retained rather than misclassified reversible', () => {
+  const storage = action(base, 'PROD-02-CREATE-ISOLATED-APP-STORAGE');
+  assert.equal(storage.sideEffect, 'IRREVERSIBLE_OR_EXTERNAL');
+  assert.deepEqual(storage.rollbackActionIds, ['ROLLBACK-04-PRESERVE-DATA-VOLUME']);
+  assert.equal(
+    storage.effects.some(value => value.includes('retain the created directory and volume')),
+    true,
+  );
+  assert.equal(storage.evidenceRequired.includes('RETAINED_STORAGE_ARTIFACT_ACKNOWLEDGED'), true);
+
+  const falselyReversible = structuredClone(base);
+  action(falselyReversible, 'PROD-02-CREATE-ISOLATED-APP-STORAGE').sideEffect = 'REVERSIBLE';
+  expectRejected(
+    falselyReversible,
+    'ACTION_SIDE_EFFECT_INVALID',
+    'retained storage cannot be classified fully reversible',
   );
 });
 
@@ -780,7 +846,9 @@ test('global rollback order includes the exact firewall and role-token rollback 
     'ROLLBACK-02-STOP-NEW-CONTAINER',
     'ROLLBACK-08-REMOVE-BUILT-IMAGE',
     'ROLLBACK-06-REVOKE-ROLE-TOKENS',
-    'ROLLBACK-03-DISABLE-EXTERNAL-CONFIG',
+    'ROLLBACK-09-DISABLE-VCP-CONFIG',
+    'ROLLBACK-10-DISABLE-KIOSK-CONFIG',
+    'ROLLBACK-11-DISABLE-DINGTALK-CONFIG',
     'ROLLBACK-04-PRESERVE-DATA-VOLUME',
   ]);
 
@@ -805,7 +873,9 @@ test('global rollback order includes the exact firewall and role-token rollback 
     'ROLLBACK-02-STOP-NEW-CONTAINER',
     'ROLLBACK-08-REMOVE-BUILT-IMAGE',
     'ROLLBACK-06-REVOKE-ROLE-TOKENS',
-    'ROLLBACK-03-DISABLE-EXTERNAL-CONFIG',
+    'ROLLBACK-09-DISABLE-VCP-CONFIG',
+    'ROLLBACK-10-DISABLE-KIOSK-CONFIG',
+    'ROLLBACK-11-DISABLE-DINGTALK-CONFIG',
     'ROLLBACK-04-PRESERVE-DATA-VOLUME',
     'ROLLBACK-05-REVERT-FIREWALL-RULE',
   ];
