@@ -76,3 +76,31 @@ Only after exact-head fresh CI and independent review may this work package reco
 WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS
 BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 ```
+
+
+## Fresh run history
+
+### Run 1 — HARNESS_CONTRACT_MISMATCH
+
+- Head: `9437eda7485347add5018a045a7d846c49b3a3aa`
+- GitHub Actions run: `35975791946`
+- `npm run check`: PASS
+- targeted migration/recovery suite: `126/126 PASS`
+- full-chain harness: FAIL before apply
+
+Failure:
+
+```text
+dry-run switchReadiness
+actual:   NOT_RUN
+expected: BLOCKED
+```
+
+Classification: acceptance-harness assertion error, not migration/recovery implementation failure.
+
+Frozen semantics:
+
+- dry-run performs mapping/readiness analysis only and reports `switchReadiness=NOT_RUN`;
+- verified isolated apply/replay must remain `switchReadiness=BLOCKED`.
+
+Run 1 is preserved as non-PASS evidence. A fresh rerun on the corrected harness is required.
