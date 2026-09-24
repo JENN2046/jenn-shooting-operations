@@ -471,8 +471,10 @@ test('Level C exclusions are bound to the Level B to Level C cohort shortfall', 
 test('event-after-cutoff exclusions are a subset of outside-window exclusions', async () => {
   const report = await replayReport();
   const impossible = structuredClone(report);
-  impossible.eligibilityCounts.ineligible = 1;
-  impossible.eligibilityCounts.levelA = impossible.eligibilityCounts.total - 1;
+  impossible.eligibilityCounts.total = 3;
+  impossible.eligibilityCounts.ineligible = 2;
+  impossible.eligibilityCounts.levelA = 1;
+  impossible.eligibilityCounts.levelB = 1;
   impossible.exclusionCounts.unshift(
     { code: 'EVENT_OUTSIDE_DATASET_WINDOW', count: 1 },
     { code: 'EVENT_AFTER_CUTOFF', count: 2 },
