@@ -156,3 +156,27 @@ Actual frozen Kiosk unauthenticated envelope:
 Classification: harness assertion mismatch, not a Kiosk implementation failure.
 
 Run 1 is preserved as non-PASS evidence. A fresh rerun is required.
+
+
+### Run 2 — HARNESS_PERSISTENCE_PRECONDITION_MISMATCH
+
+- Head: `59d7e8dbc7eb29b600d9650e881959aa6499bfe9`
+- GitHub Actions run: `35978853404`
+- `npm run check`: PASS
+- Kiosk targeted suite: `118/118 PASS`
+- DingTalk/Outbox/Callback targeted suite: `64/64 PASS`
+- VCP integration classification: `1 skipped / external adapter absent`
+- local boundary harness: FAIL after trusted-principal injection
+
+Observed:
+
+```text
+configured Kiosk current HTTP status = 500
+expected = 200
+```
+
+Root cause: the harness used a newly initialized database without the revision-counter bootstrap fact required by the frozen Kiosk composition contract. The existing composition test explicitly seeds `revision_counters(id=1, projection_revision=0, schedule_revision=0)` before validating an empty-resource read.
+
+Classification: harness persistence-precondition mismatch, not a Kiosk implementation failure.
+
+Correction: seed only the frozen revision-counter bootstrap fact in the isolated harness database before the configured loopback read. No application code or production path is changed.
