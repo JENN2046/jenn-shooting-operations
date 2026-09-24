@@ -40,7 +40,10 @@ The WAL comparison still includes:
 - device;
 - inode;
 - size;
-- `mtimeNs`.
+- `mtimeNs`;
+- SHA-256 content digest.
+
+The digest is computed through a read-only descriptor with before/after file-stat stability checks, so dropping the long-lived WAL `ctimeNs` comparison does not allow an in-place content rewrite with restored `mtime` to pass.
 
 The main database, SHM and journal comparisons retain their previous `ctimeNs` checks.
 
@@ -63,6 +66,8 @@ The idle-WAL source-reader regression now explicitly records the WAL before the 
 - `mtimeNs` unchanged.
 
 The verified-backup WAL regression records the same properties around `createVerifiedBackup()`.
+
+Additional focused regressions rewrite the existing WAL in place, preserve inode/size, restore the original nanosecond `mtime`, and confirm both source scanning and backup verification still fail closed because the production WAL SHA-256 changes.
 
 Existing real-writer protections remain in place, including:
 
