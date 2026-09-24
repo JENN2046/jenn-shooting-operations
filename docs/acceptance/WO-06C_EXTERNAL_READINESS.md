@@ -128,3 +128,31 @@ BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 ```
 
 WO-06C is not fully closed until the required VCP and Kiosk external evidence exists and any separately authorized DingTalk integration step is recorded.
+
+
+## Fresh run history
+
+### Run 1 — HARNESS_CONTRACT_MISMATCH
+
+- Head: `c348d34da501c1d4b1331ec0235e628519147a33`
+- GitHub Actions run: `35978740143`
+- `npm run check`: PASS
+- Kiosk targeted suite: `118/118 PASS`
+- DingTalk/Outbox/Callback targeted suite: `64/64 PASS`
+- VCP integration classification: `1 skipped / external adapter absent`
+- local boundary harness: FAIL on Kiosk error-envelope assertion
+
+Actual frozen Kiosk unauthenticated envelope:
+
+```json
+{
+  "schemaVersion": 2,
+  "ok": false,
+  "code": "AUTH_NOT_CONFIGURED",
+  "replayed": false
+}
+```
+
+Classification: harness assertion mismatch, not a Kiosk implementation failure.
+
+Run 1 is preserved as non-PASS evidence. A fresh rerun is required.
