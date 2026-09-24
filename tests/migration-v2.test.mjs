@@ -164,6 +164,16 @@ function hashFile(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
 
+function restoreMtimeNs(path, mtimeNs) {
+  const seconds = mtimeNs / 1_000_000_000n;
+  const nanos = (mtimeNs % 1_000_000_000n).toString().padStart(9, '0');
+  const touch = spawnSync('touch', ['-m', '-d', `@${seconds}.${nanos}`, path], {
+    encoding: 'utf8',
+  });
+  assert.equal(touch.status, 0, touch.stderr);
+  assert.equal(statSync(path, { bigint: true }).mtimeNs, mtimeNs);
+}
+
 function withTempRoot(action) {
   const root = mkdtempSync(join(tmpdir(), 'jso-migration-v2-'));
   try {
@@ -333,8 +343,19 @@ test('source family remains stable for an idle WAL reader and detects a real WAL
       INSERT INTO audit_log (action, role, entity_id, revision, result, created_at)
       VALUES ('fixture.start', 'test', NULL, 0, 'ok', ?)
     `).run(FIXED_NOW);
+    const wal = `${source}-wal`;
+    const beforeWalHash = hashFile(wal);
+    const beforeWalStat = statSync(wal, { bigint: true });
+
     const stable = readV1Source(resolveExistingPath(source));
     assert.equal(stable.queryOnly, true);
+
+    const afterWalStat = statSync(wal, { bigint: true });
+    assert.equal(hashFile(wal), beforeWalHash);
+    assert.equal(afterWalStat.dev, beforeWalStat.dev);
+    assert.equal(afterWalStat.ino, beforeWalStat.ino);
+    assert.equal(afterWalStat.size, beforeWalStat.size);
+    assert.equal(afterWalStat.mtimeNs, beforeWalStat.mtimeNs);
 
     assert.throws(() => readV1Source(resolveExistingPath(source), {
       duringScan: () => {
@@ -355,6 +376,52 @@ test('source family remains stable for an idle WAL reader and detects a real WAL
     keeper.close();
   }
 }));
+test('WAL content digest detects in-place rewrite even when mtime is restored', t => withTempRoot(root => {
+  if (process.platform !== 'linux') {
+    t.skip('requires GNU touch nanosecond timestamp restoration');
+    return;
+  }
+
+  const source = createSource(root, emptySnapshot());
+  const keeper = new DatabaseSync(source);
+  const wal = `${source}-wal`;
+  let originalWal;
+  let originalWalStat;
+  let originalMtime;
+  try {
+    assert.equal(keeper.prepare('PRAGMA journal_mode = WAL').get().journal_mode, 'wal');
+    keeper.prepare(`
+      INSERT INTO audit_log (action, role, entity_id, revision, result, created_at)
+      VALUES ('fixture.digest', 'test', NULL, 0, 'ok', ?)
+    `).run(FIXED_NOW);
+
+    originalWal = readFileSync(wal);
+    originalWalStat = statSync(wal, { bigint: true });
+    originalMtime = originalWalStat.mtimeNs;
+
+    assert.throws(() => readV1Source(resolveExistingPath(source), {
+      duringScan: () => {
+        const changed = Buffer.from(originalWal);
+        changed[changed.length - 1] ^= 0x01;
+        writeFileSync(wal, changed);
+        restoreMtimeNs(wal, originalMtime);
+        const after = statSync(wal, { bigint: true });
+        assert.equal(after.dev, originalWalStat.dev);
+        assert.equal(after.ino, originalWalStat.ino);
+        assert.equal(after.size, originalWalStat.size);
+        assert.equal(after.mtimeNs, originalWalStat.mtimeNs);
+      },
+    }), error => error.code === 'SOURCE_CHANGED_DURING_SCAN');
+  } finally {
+    if (originalWal && originalMtime !== undefined) {
+      writeFileSync(wal, originalWal);
+      restoreMtimeNs(wal, originalMtime);
+    }
+    keeper.close();
+  }
+}));
+
+
 
 test('relational source facts participate in stable structural and batch identities', () => withTempRoot(root => {
   const sourcePath = createSource(root, emptySnapshot(), {

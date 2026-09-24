@@ -67,7 +67,7 @@ function stableStat(metadata) {
 }
 
 function databaseFamily(path, code, result) {
-  const entry = candidate => {
+  const entry = (candidate, { includeCtime = true, includeDigest = false } = {}) => {
     let metadata;
     try {
       metadata = lstatSync(candidate, { bigint: true });
@@ -76,11 +76,24 @@ function databaseFamily(path, code, result) {
       fail(code, result);
     }
     if (metadata.isSymbolicLink() || !metadata.isFile() || metadata.nlink !== 1n) fail(code, result);
-    return stableStat(metadata);
+    const stat = stableStat(metadata);
+    const normalized = includeCtime
+      ? stat
+      : (({ ctimeNs: _ctimeNs, ...withoutCtime }) => withoutCtime)(stat);
+    if (!includeDigest) return normalized;
+
+    const digest = hashFileStable(candidate, code, result, metadata);
+    const after = lstatOrNull(candidate);
+    if (!after || after.isSymbolicLink() || !after.isFile() || after.nlink !== 1n
+        || after.dev !== metadata.dev || after.ino !== metadata.ino
+        || after.size !== metadata.size || after.mtimeNs !== metadata.mtimeNs) {
+      fail(code, result);
+    }
+    return { ...normalized, digest };
   };
   const family = {
     database: entry(path),
-    wal: entry(`${path}-wal`),
+    wal: entry(`${path}-wal`, { includeCtime: false, includeDigest: true }),
     shm: entry(`${path}-shm`),
     journal: entry(`${path}-journal`),
   };
@@ -294,12 +307,16 @@ function assertArtifactIdentity(prepared, created, code, result) {
   return pathMetadata;
 }
 
-function hashFileStable(path, invalidCode, invalidResult) {
+export function hashFileStable(path, invalidCode, invalidResult, expectedIdentity = null) {
   let descriptor;
   try {
     descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
     const before = fstatSync(descriptor, { bigint: true });
-    if (!before.isFile()) fail(invalidCode, invalidResult);
+    if (!before.isFile()
+        || (expectedIdentity !== null
+          && (before.dev !== expectedIdentity.dev || before.ino !== expectedIdentity.ino))) {
+      fail(invalidCode, invalidResult);
+    }
     const hash = createHash('sha256');
     const buffer = Buffer.allocUnsafe(COPY_BUFFER_SIZE);
     while (true) {

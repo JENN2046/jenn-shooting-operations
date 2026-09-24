@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   appendFileSync,
@@ -23,6 +24,7 @@ import test from 'node:test';
 import { buildMigrationPlan } from '../src/migration-v2.mjs';
 import {
   createVerifiedBackup,
+  hashFileStable,
   restoreVerifiedBackup,
   verifyExistingBackup,
   verifyExistingRestore,
@@ -110,6 +112,16 @@ function hashFile(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
 
+function restoreMtimeNs(path, mtimeNs) {
+  const seconds = mtimeNs / 1_000_000_000n;
+  const nanos = (mtimeNs % 1_000_000_000n).toString().padStart(9, '0');
+  const touch = spawnSync('touch', ['-m', '-d', `@${seconds}.${nanos}`, path], {
+    encoding: 'utf8',
+  });
+  assert.equal(touch.status, 0, touch.stderr);
+  assert.equal(statSync(path, { bigint: true }).mtimeNs, mtimeNs);
+}
+
 async function withFixtureRoot(action) {
   const root = mkdtempSync(join(tmpdir(), 'jenn-shooting-migration-fixture-'));
   chmodSync(root, 0o700);
@@ -119,6 +131,30 @@ async function withFixtureRoot(action) {
     rmSync(root, { recursive: true, force: true });
   }
 }
+
+test('stable file hash rejects a descriptor inode different from the inspected identity', async () => {
+  await withFixtureRoot(async root => {
+    const inspected = join(root, 'inspected.bin');
+    const swapped = join(root, 'swapped.bin');
+    writeFileSync(inspected, Buffer.from('same'), { mode: 0o600 });
+    writeFileSync(swapped, Buffer.from('diff'), { mode: 0o600 });
+
+    const expectedIdentity = statSync(inspected, { bigint: true });
+    const swappedIdentity = statSync(swapped, { bigint: true });
+    assert.equal(expectedIdentity.size, swappedIdentity.size);
+    assert.notEqual(expectedIdentity.ino, swappedIdentity.ino);
+
+    assert.throws(
+      () => hashFileStable(
+        swapped,
+        'BACKUP_EVIDENCE_MISMATCH',
+        'INVALID_SOURCE',
+        expectedIdentity,
+      ),
+      error => error.code === 'BACKUP_EVIDENCE_MISMATCH',
+    );
+  });
+});
 
 test('verified backup and restore bind database, artifact, and hashed attachment evidence', async () => {
   await withFixtureRoot(async root => {
@@ -227,12 +263,23 @@ test('SQLite backup includes committed WAL data and remains self-contained', asy
       const backup = join(root, 'wal-backup.sqlite');
       const sourceHash = hashFile(source);
       const sourceMtime = statSync(source, { bigint: true }).mtimeNs;
+      const sourceWal = `${source}-wal`;
+      const sourceWalHash = hashFile(sourceWal);
+      const sourceWalStat = statSync(sourceWal, { bigint: true });
+
       const receipt = await createVerifiedBackup({ fixtureRoot: root, source, backup, plan });
       assert.equal(receipt.auditSummary.count, 1);
       assert.equal(existsSync(`${backup}-wal`), false);
       assert.equal(existsSync(`${backup}-shm`), false);
       assert.equal(hashFile(source), sourceHash);
       assert.equal(statSync(source, { bigint: true }).mtimeNs, sourceMtime);
+
+      const afterWalStat = statSync(sourceWal, { bigint: true });
+      assert.equal(hashFile(sourceWal), sourceWalHash);
+      assert.equal(afterWalStat.dev, sourceWalStat.dev);
+      assert.equal(afterWalStat.ino, sourceWalStat.ino);
+      assert.equal(afterWalStat.size, sourceWalStat.size);
+      assert.equal(afterWalStat.mtimeNs, sourceWalStat.mtimeNs);
       const copy = new DatabaseSync(backup, { readOnly: true });
       try {
         assert.equal(copy.prepare('SELECT COUNT(*) AS count FROM audit_log').get().count, 1);
@@ -359,6 +406,61 @@ test('SOURCE_CHANGED_DURING_SCAN fails closed without retrying a newly stable vi
       assert.equal(scanHookCalls, 1);
       assert.equal(existsSync(join(root, 'backup.sqlite')), false);
     } finally {
+      keeper.close();
+    }
+  });
+});
+
+test('backup verification detects WAL content rewrite with restored mtime', async t => {
+  if (process.platform !== 'linux') {
+    t.skip('requires GNU touch nanosecond timestamp restoration');
+    return;
+  }
+
+  await withFixtureRoot(async root => {
+    const source = createSource(root);
+    const keeper = new DatabaseSync(source);
+    const wal = `${source}-wal`;
+    let originalWal;
+    let originalWalStat;
+    let originalMtime;
+    try {
+      assert.equal(keeper.prepare('PRAGMA journal_mode = WAL').get().journal_mode, 'wal');
+      keeper.prepare(`
+        INSERT INTO audit_log (action, role, entity_id, revision, result, created_at)
+        VALUES ('fixture.digest', 'test', NULL, 0, 'ok', ?)
+      `).run(FIXED_NOW);
+
+      const plan = buildPlan(source);
+      const backup = join(root, 'backup.sqlite');
+      await createVerifiedBackup({ fixtureRoot: root, source, backup, plan });
+
+      originalWal = readFileSync(wal);
+      originalWalStat = statSync(wal, { bigint: true });
+      originalMtime = originalWalStat.mtimeNs;
+
+      assert.throws(() => verifyExistingBackup({
+        fixtureRoot: root,
+        source,
+        backup,
+        plan,
+        duringVerification: () => {
+          const changed = Buffer.from(originalWal);
+          changed[changed.length - 1] ^= 0x01;
+          writeFileSync(wal, changed);
+          restoreMtimeNs(wal, originalMtime);
+          const after = statSync(wal, { bigint: true });
+          assert.equal(after.dev, originalWalStat.dev);
+          assert.equal(after.ino, originalWalStat.ino);
+          assert.equal(after.size, originalWalStat.size);
+          assert.equal(after.mtimeNs, originalWalStat.mtimeNs);
+        },
+      }), error => error.code === 'BACKUP_EVIDENCE_MISMATCH');
+    } finally {
+      if (originalWal && originalMtime !== undefined) {
+        writeFileSync(wal, originalWal);
+        restoreMtimeNs(wal, originalMtime);
+      }
       keeper.close();
     }
   });
