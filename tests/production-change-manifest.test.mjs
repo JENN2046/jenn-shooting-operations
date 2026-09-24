@@ -443,11 +443,11 @@ test('pre-request revalidation moves preflight-produced conflict facts out of th
   const missingConflictFacts = structuredClone(base);
   missingConflictFacts.authorizationPacket.actionSpecificRevalidation[
     'PROD-02-CREATE-ISOLATED-APP-STORAGE'
-  ] = [];
+  ] = ['BUILT_IMAGE_DIGEST'];
   expectRejected(
     missingConflictFacts,
     'ACTION_REVALIDATION_INVALID',
-    'post-preflight storage action cannot drop conflict revalidation',
+    'post-preflight storage action cannot replace conflict revalidation',
   );
 
   const buildCycle = structuredClone(base);
