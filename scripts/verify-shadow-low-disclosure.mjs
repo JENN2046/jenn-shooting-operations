@@ -31,7 +31,9 @@ if (text !== undefined) {
       process.stderr.write(`${admitted.code}:${admitted.reason}\n`);
       process.exitCode = 1;
     } else if (process.argv.includes('--check')) {
-      process.stdout.write(`PASS low-disclosure shadow report ${admitted.resultDigest}\n`);
+      process.stdout.write(
+        `VALID synthetic low-disclosure implementation; datasetClass=${admitted.report.datasetClass}; gateStatus=${admitted.report.gateStatus}; resultDigest=${admitted.resultDigest}\n`,
+      );
     } else {
       process.stdout.write(`${JSON.stringify(admitted.report, null, 2)}\n`);
     }
