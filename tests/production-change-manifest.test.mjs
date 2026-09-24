@@ -3,9 +3,31 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { createProductionChangeManifestValidator } from '../src/production-change-manifest-v1.mjs';
 
-const schema = JSON.parse(readFileSync(new URL('../contracts/production-change-manifest.v1.schema.json', import.meta.url), 'utf8'));
-const base = JSON.parse(readFileSync(new URL('../docs/operations/production-change-manifest.v1.json', import.meta.url), 'utf8'));
+const schema = JSON.parse(readFileSync(
+  new URL('../contracts/production-change-manifest.v1.schema.json', import.meta.url),
+  'utf8',
+));
+const base = JSON.parse(readFileSync(
+  new URL('../docs/operations/production-change-manifest.v1.json', import.meta.url),
+  'utf8',
+));
 const validate = createProductionChangeManifestValidator(schema);
+
+function issueCodes(result) {
+  return new Set(result.issues.map(entry => entry.code));
+}
+
+function expectRejected(value, code, label) {
+  const result = validate(value);
+  assert.equal(result.ok, false, label);
+  assert.equal(issueCodes(result).has(code), true, `${label}: missing ${code}: ${JSON.stringify(result.issues)}`);
+}
+
+function action(value, id) {
+  const found = value.actions.find(candidate => candidate.id === id);
+  assert.ok(found, id);
+  return found;
+}
 
 test('production change manifest validates with deployment request blocked and no authorization granted', () => {
   const result = validate(base);
@@ -15,28 +37,68 @@ test('production change manifest validates with deployment request blocked and n
   assert.equal(base.authorizationPacket.approvedActionIds.length, 0);
 });
 
-test('manifest rejects secret material and any attempt to pre-authorize actions', () => {
+test('secret scanner rejects ordinary Bearer and token-shaped material inside schema-valid free text', () => {
+  for (const [label, secretText] of [
+    ['bearer', 'Bearer 12345678901234567890123456789012'],
+    ['access token', 'access_token = abcdefghijklmnopqrstuvwxyz123456'],
+    ['openai-shaped token', 'sk-abcdefghijklmnopqrstuvwx1234567890'],
+  ]) {
+    const changed = structuredClone(base);
+    changed.gates[0].evidence = secretText;
+    expectRejected(changed, 'SECRET_MATERIAL_DETECTED', label);
+  }
+});
+
+test('manifest rejects schema-level secret fields and any attempt to pre-authorize actions', () => {
   const secret = structuredClone(base);
   secret.secrets[0].value = 'replace-with-random-viewer-token';
-  assert.equal(validate(secret).ok, false);
+  expectRejected(secret, 'SCHEMA_INVALID', 'secret field');
 
   const approved = structuredClone(base);
   approved.authorizationPacket.approvedActionIds = ['PROD-01-TARGET-READONLY-PREFLIGHT'];
-  assert.equal(validate(approved).ok, false);
+  expectRejected(approved, 'SCHEMA_INVALID', 'pre-approved action');
 });
 
 test('manifest rejects blanket approval and missing production blockers', () => {
   const blanket = structuredClone(base);
   blanket.authorizationPacket.blanketApprovalAllowed = true;
-  assert.equal(validate(blanket).ok, false);
+  expectRejected(blanket, 'SCHEMA_INVALID', 'blanket approval');
 
   const missing = structuredClone(base);
   missing.authorizationPacket.blockingGateIds = missing.authorizationPacket.blockingGateIds
     .filter(id => id !== 'WO06C_VCP_EXTERNAL');
-  assert.equal(validate(missing).ok, false);
+  expectRejected(missing, 'AUTHORIZATION_BLOCKER_SET_INVALID', 'missing blocker');
 });
 
-test('high-risk actions cannot bypass their frozen prerequisite gates', () => {
+test('every action id is bound to its exact authority target', () => {
+  for (const actionId of [
+    'PROD-01-TARGET-READONLY-PREFLIGHT',
+    'PROD-02-CREATE-ISOLATED-APP-STORAGE',
+    'PROD-09-PRODUCTION-DATA-IMPORT',
+    'PROD-12-DINGTALK-PROVIDER-INTEGRATION',
+    'PROD-13-CUTOVER-SWITCH',
+  ]) {
+    const changed = structuredClone(base);
+    action(changed, actionId).authorityTarget = 'every production host and any operation';
+    expectRejected(changed, 'AUTHORITY_TARGET_INVALID', actionId);
+  }
+});
+
+test('high-risk production actions cannot drop the unresolved target-facts prerequisite', () => {
+  for (const actionId of [
+    'PROD-09-PRODUCTION-DATA-IMPORT',
+    'PROD-10-ENABLE-VCP-REMOTE-SYNC',
+    'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE',
+    'PROD-13-CUTOVER-SWITCH',
+  ]) {
+    const changed = structuredClone(base);
+    const candidate = action(changed, actionId);
+    candidate.preconditions = candidate.preconditions.filter(gate => gate !== 'PRODUCTION_TARGET_FACTS');
+    expectRejected(changed, 'ACTION_PRECONDITIONS_INVALID', actionId);
+  }
+});
+
+test('every production action keeps its complete frozen prerequisite set', () => {
   for (const [actionId, gate] of [
     ['PROD-09-PRODUCTION-DATA-IMPORT', 'PRODUCTION_DATA_MIGRATION'],
     ['PROD-10-ENABLE-VCP-REMOTE-SYNC', 'WO06C_VCP_EXTERNAL'],
@@ -44,15 +106,77 @@ test('high-risk actions cannot bypass their frozen prerequisite gates', () => {
     ['PROD-13-CUTOVER-SWITCH', 'PRODUCTION_DEPLOYMENT_GATE'],
   ]) {
     const changed = structuredClone(base);
-    const action = changed.actions.find(candidate => candidate.id === actionId);
-    action.preconditions = action.preconditions.filter(candidate => candidate !== gate);
-    assert.equal(validate(changed).ok, false, actionId);
+    const candidate = action(changed, actionId);
+    candidate.preconditions = candidate.preconditions.filter(entry => entry !== gate);
+    expectRejected(changed, 'ACTION_PRECONDITIONS_INVALID', actionId);
   }
 });
 
-test('rollback references must resolve only to rollback actions', () => {
+test('requestable status is bidirectionally frozen to exactly two action ids', () => {
+  const widened = structuredClone(base);
+  action(widened, 'PROD-02-CREATE-ISOLATED-APP-STORAGE').status = 'REQUESTABLE_EXPLICIT_AUTHORIZATION';
+  expectRejected(widened, 'ACTION_STATUS_INVALID', 'widen blocked action');
+
+  const narrowed = structuredClone(base);
+  action(narrowed, 'PROD-12-DINGTALK-PROVIDER-INTEGRATION').status = 'BLOCKED_PREREQUISITE';
+  expectRejected(narrowed, 'ACTION_STATUS_INVALID', 'remove requestable action');
+});
+
+test('each action keeps its exact rollback binding, not merely any rollback-category reference', () => {
+  for (const [actionId, replacement] of [
+    ['PROD-05-START-ISOLATED-CONTAINER', ['ROLLBACK-01-REMOVE-NEW-ROUTE']],
+    ['PROD-09-PRODUCTION-DATA-IMPORT', ['ROLLBACK-01-REMOVE-NEW-ROUTE']],
+    ['PROD-10-ENABLE-VCP-REMOTE-SYNC', ['ROLLBACK-04-PRESERVE-DATA-VOLUME']],
+    ['PROD-13-CUTOVER-SWITCH', ['ROLLBACK-02-STOP-NEW-CONTAINER']],
+  ]) {
+    const changed = structuredClone(base);
+    action(changed, actionId).rollbackActionIds = replacement;
+    expectRejected(changed, 'ROLLBACK_BINDING_INVALID', actionId);
+  }
+});
+
+test('rollback references still reject non-rollback actions independently of exact binding', () => {
   const changed = structuredClone(base);
-  changed.actions.find(action => action.id === 'PROD-05-START-ISOLATED-CONTAINER')
+  action(changed, 'PROD-05-START-ISOLATED-CONTAINER')
     .rollbackActionIds = ['PROD-04-BUILD-IMAGE'];
-  assert.equal(validate(changed).ok, false);
+  const result = validate(changed);
+  assert.equal(result.ok, false);
+  assert.equal(issueCodes(result).has('ROLLBACK_BINDING_INVALID'), true);
+  assert.equal(issueCodes(result).has('ROLLBACK_REFERENCE_INVALID'), true);
+});
+
+test('hostile manifest cannot add or replace a frozen action id', () => {
+  const added = structuredClone(base);
+  added.actions.push({
+    ...structuredClone(added.actions[0]),
+    id: 'PROD-99-BLANKET-OPERATIONS',
+    title: 'Blanket operations',
+  });
+  expectRejected(added, 'ACTION_SET_INVALID', 'extra action');
+
+  const replaced = structuredClone(base);
+  action(replaced, 'PROD-02-CREATE-ISOLATED-APP-STORAGE').id = 'PROD-99-REPLACED-STORAGE';
+  expectRejected(replaced, 'ACTION_SET_INVALID', 'replaced action');
+});
+
+test('hostile combined mutation cannot widen target, requestability and rollback in one edit', () => {
+  const changed = structuredClone(base);
+  const candidate = action(changed, 'PROD-09-PRODUCTION-DATA-IMPORT');
+  candidate.status = 'REQUESTABLE_EXPLICIT_AUTHORIZATION';
+  candidate.authorityTarget = 'all hosts, all databases, any migration';
+  candidate.preconditions = ['PRODUCTION_DEPLOYMENT_GATE'];
+  candidate.rollbackActionIds = ['ROLLBACK-01-REMOVE-NEW-ROUTE'];
+  changed.gates[0].evidence = 'Bearer 12345678901234567890123456789012';
+
+  const result = validate(changed);
+  assert.equal(result.ok, false);
+  const codes = issueCodes(result);
+  for (const code of [
+    'ACTION_STATUS_INVALID',
+    'AUTHORITY_TARGET_INVALID',
+    'ACTION_PRECONDITIONS_INVALID',
+    'ROLLBACK_BINDING_INVALID',
+    'REQUESTABLE_STATUS_SET_INVALID',
+    'SECRET_MATERIAL_DETECTED',
+  ]) assert.equal(codes.has(code), true, code);
 });
