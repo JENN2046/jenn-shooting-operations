@@ -231,6 +231,7 @@ test('approved low-disclosure reports require trusted expected approval context'
   });
   assert.deepEqual(admitLowDisclosureShadowReportV1(approved, {
     expectedApprovalDigest: `sha256:${'8'.repeat(64)}`,
+    expectedDatasetDigest: approved.datasetDigest,
   }), {
     ok: false,
     code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
@@ -239,11 +240,22 @@ test('approved low-disclosure reports require trusted expected approval context'
 
   const admitted = admitLowDisclosureShadowReportV1(approved, {
     expectedApprovalDigest: approvalDigest,
+    expectedDatasetDigest: approved.datasetDigest,
   });
   assert.equal(admitted.ok, true, JSON.stringify(admitted));
 
+  assert.deepEqual(admitLowDisclosureShadowReportV1(approved, {
+    expectedApprovalDigest: approvalDigest,
+    expectedDatasetDigest: `sha256:${'7'.repeat(64)}`,
+  }), {
+    ok: false,
+    code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
+    reason: 'REPORT_APPROVAL_UNVERIFIED',
+  });
+
   assert.deepEqual(admitLowDisclosureShadowReportV1(report, {
     expectedApprovalDigest: approvalDigest,
+    expectedDatasetDigest: report.datasetDigest,
   }), {
     ok: false,
     code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID',
