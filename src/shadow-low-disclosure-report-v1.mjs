@@ -18,8 +18,18 @@ const EXCLUSION_KEYS = Object.freeze(['code', 'count']);
 const METRIC_KEYS = Object.freeze(['status', 'value', 'numerator', 'denominator']);
 const TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const DIGEST = /^sha256:[a-f0-9]{64}$/u;
-const RFC3339 = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/u;
+const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/u;
 const EXCLUSION_ORDER = new Map(SAMPLE_EXCLUSION_CODES_V1.map((code, index) => [code, index]));
+const MEDIAN_METRICS = new Set([
+  'medianAbsoluteDurationErrorMs',
+  'retrospectiveDurationBaselineMedianAbsoluteErrorMs',
+]);
+const P90_METRICS = new Set([
+  'p90OverrunMs',
+  'retrospectiveDurationBaselineP90OverrunMs',
+]);
+const RATE_METRICS = new Set(['setupBufferMissRate', 'humanOverrideRate']);
+const COUNT_METRICS = new Set(['hardConflictCount', 'priorityViolationCount']);
 
 function invalid(reason) {
   return Object.freeze({ ok: false, code: 'LOW_DISCLOSURE_SHADOW_REPORT_INVALID', reason });
@@ -145,22 +155,16 @@ function admitMetric(name, value) {
   if (!Number.isFinite(record.value) || record.value < 0
     || !Number.isSafeInteger(record.denominator) || record.denominator <= 0) return null;
 
-  const statistics = new Set([
-    'medianAbsoluteDurationErrorMs',
-    'p90OverrunMs',
-    'retrospectiveDurationBaselineMedianAbsoluteErrorMs',
-    'retrospectiveDurationBaselineP90OverrunMs',
-  ]);
-  const rates = new Set(['setupBufferMissRate', 'humanOverrideRate']);
-  const counts = new Set(['hardConflictCount', 'priorityViolationCount']);
-
-  if (statistics.has(name)) {
-    if (record.numerator !== null) return null;
+  if (MEDIAN_METRICS.has(name)) {
+    if (record.numerator !== null
+      || !Number.isSafeInteger(record.value * 2)) return null;
+  } else if (P90_METRICS.has(name)) {
+    if (record.numerator !== null || !Number.isSafeInteger(record.value)) return null;
   } else {
     if (!Number.isSafeInteger(record.numerator) || record.numerator < 0
       || record.numerator > record.denominator) return null;
-    if (rates.has(name) && record.value !== record.numerator / record.denominator) return null;
-    if (counts.has(name) && record.value !== record.numerator) return null;
+    if (RATE_METRICS.has(name) && record.value !== record.numerator / record.denominator) return null;
+    if (COUNT_METRICS.has(name) && record.value !== record.numerator) return null;
   }
 
   return Object.freeze({
@@ -188,8 +192,16 @@ function admitMetrics(value) {
   return Object.freeze(result);
 }
 
-export function admitLowDisclosureShadowReportV1(value) {
+export function admitLowDisclosureShadowReportV1(value, context = { expectedApprovalDigest: null }) {
   try {
+    const trustedContext = exactRecord(context, ['expectedApprovalDigest']);
+    if (!trustedContext) return invalid('TRUSTED_APPROVAL_CONTEXT_INVALID');
+    const expectedApprovalDigest = trustedContext.expectedApprovalDigest === null
+      ? null : digest(trustedContext.expectedApprovalDigest);
+    if (trustedContext.expectedApprovalDigest !== null && expectedApprovalDigest === null) {
+      return invalid('TRUSTED_APPROVAL_CONTEXT_INVALID');
+    }
+
     const record = exactRecord(value, ROOT_KEYS);
     if (!record
       || record.schemaVersion !== 1
@@ -203,9 +215,16 @@ export function admitLowDisclosureShadowReportV1(value) {
       || !timestamp(record.generatedAt)
       || !digest(record.resultDigest)) return invalid('REPORT_SHAPE_INVALID');
 
-    if ((record.datasetClass === 'synthetic' && record.approvalDigest !== null)
-      || (record.datasetClass === 'approvedLowDisclosure' && !digest(record.approvalDigest))) {
-      return invalid('REPORT_APPROVAL_MATRIX_INVALID');
+    if (record.datasetClass === 'synthetic') {
+      if (record.approvalDigest !== null || expectedApprovalDigest !== null) {
+        return invalid('REPORT_APPROVAL_MATRIX_INVALID');
+      }
+    } else {
+      if (!digest(record.approvalDigest)
+        || expectedApprovalDigest === null
+        || record.approvalDigest !== expectedApprovalDigest) {
+        return invalid('REPORT_APPROVAL_UNVERIFIED');
+      }
     }
 
     const eligibilityCounts = admitEligibility(record.eligibilityCounts);
@@ -216,24 +235,47 @@ export function admitLowDisclosureShadowReportV1(value) {
       return invalid('REPORT_CONTENT_INVALID');
     }
 
-    const agentMetricNames = [
+    const levelCExactMetrics = [
       'medianAbsoluteDurationErrorMs',
       'p90OverrunMs',
+      'humanOverrideRate',
+    ];
+    const levelCBoundedMetrics = [
       'setupBufferMissRate',
       'hardConflictCount',
-      'humanOverrideRate',
       'priorityViolationCount',
     ];
     const baselineMetricNames = [
       'retrospectiveDurationBaselineMedianAbsoluteErrorMs',
       'retrospectiveDurationBaselineP90OverrunMs',
     ];
-    if (eligibilityCounts.levelC === 0
-      && agentMetricNames.some(name => metrics[name].status !== 'NOT_ENOUGH_DATA')) {
-      return invalid('REPORT_CONTENT_INVALID');
+
+    if (eligibilityCounts.levelC === 0) {
+      if ([...levelCExactMetrics, ...levelCBoundedMetrics]
+        .some(name => metrics[name].status !== 'NOT_ENOUGH_DATA')) {
+        return invalid('REPORT_CONTENT_INVALID');
+      }
+    } else {
+      if (levelCExactMetrics.some(name => metrics[name].status !== 'OK'
+        || metrics[name].denominator !== eligibilityCounts.levelC)) {
+        return invalid('REPORT_CONTENT_INVALID');
+      }
+      if (metrics.hardConflictCount.status === 'OK'
+        && metrics.hardConflictCount.denominator !== eligibilityCounts.levelC) {
+        return invalid('REPORT_CONTENT_INVALID');
+      }
+      if (metrics.setupBufferMissRate.status === 'OK'
+        && metrics.setupBufferMissRate.denominator > eligibilityCounts.levelC) {
+        return invalid('REPORT_CONTENT_INVALID');
+      }
     }
-    if (eligibilityCounts.levelB === 0
-      && baselineMetricNames.some(name => metrics[name].status !== 'NOT_ENOUGH_DATA')) {
+
+    if (eligibilityCounts.levelB === 0) {
+      if (baselineMetricNames.some(name => metrics[name].status !== 'NOT_ENOUGH_DATA')) {
+        return invalid('REPORT_CONTENT_INVALID');
+      }
+    } else if (baselineMetricNames.some(name => metrics[name].status !== 'OK'
+      || metrics[name].denominator !== eligibilityCounts.levelB)) {
       return invalid('REPORT_CONTENT_INVALID');
     }
 
