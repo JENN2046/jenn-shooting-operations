@@ -136,11 +136,11 @@
 
 ### WO-05E：Sample Capture and Offline Evaluation
 
-状态：`BLOCKED_DATA / POST_MERGE_CODE_EVIDENCE_VERIFIED / FRESH_RUNTIME_FIX_IMPLEMENTED / FINAL_EXACT_HEAD_RERUN_REQUIRED`
+状态：`SHADOW_EVALUATOR_PASS_WITH_BLOCKED_DATA`
 
 #### WO-05E-A：Future Run-Context Capture
 
-状态：`POST_MERGE_CODE_EVIDENCE_VERIFIED / FRESH_RUNTIME_PENDING`
+状态：`POST_MERGE_CODE_EVIDENCE_VERIFIED / FRESH_RUNTIME_PASS`
 
 当前实现：
 
@@ -151,7 +151,7 @@
 - exact event replay 不重复 snapshot；历史 run 不回填，不因本迁移自动升级 Level B；
 - generic `run-event-use-case-v2` 虽只更新既有 run，但 `scheduled → shooting` 本身就是 first-start，因此已接入同一 capture builder/persistence port；预创建 run 与现场 provisioned run 均不会因入口差异永久失去 Level B snapshot。
 
-05E-A post-merge independent code/evidence verification 已通过；authority HEAD 上无 GitHub Actions/check-run，当前隔离执行环境无法取得 exact checkout，因此 fresh runtime `npm check` 仍为 pending。
+05E-A post-merge independent code/evidence verification 已通过；PR #11 Phase 1 exact-head GitHub Actions runtime gate 已完成完整 `npm test` / `npm run check` 并通过。
 
 #### WO-05E-B：Checked-in Fixture Dataset + Offline Replay
 
@@ -167,11 +167,11 @@
 - `npm run evaluate:shadow:fixtures` 只读取 checked-in fixture，不访问网络、provider、环境凭据或生产数据库；CLI 只输出 classification 与 low-disclosure report；
 - regression 覆盖 deterministic replay、digest/report tamper fail-closed、zero Level C 和 low-disclosure output。
 
-05E-B post-merge independent code/evidence verification 已通过；checked-in fixture 的 event/metrics/snapshot/dataset/report SHA-256 已由独立 canonical implementation 重新计算并 7/7 匹配。fresh runtime replay 仍为 pending。
+05E-B post-merge independent code/evidence verification 已通过；checked-in fixture 的 event/metrics/snapshot/dataset/report SHA-256 已由独立 canonical implementation 重新计算并 7/7 匹配；Phase 1 exact-head `validate:shadow` 保持 `datasetClass=synthetic / gateStatus=BLOCKED_DATA` 并通过。
 
 #### WO-05E-C：Low-Disclosure Report Integration Closure
 
-状态：`POST_MERGE_CODE_EVIDENCE_VERIFIED_WITH_VERIFICATION_FIX / FRESH_RUNTIME_PENDING`
+状态：`POST_MERGE_CODE_EVIDENCE_VERIFIED_WITH_VERIFICATION_FIX / FRESH_RUNTIME_PASS`
 
 当前实现：
 
@@ -183,7 +183,7 @@
 - `npm check` 已串入 `validate:shadow`，使 report schema widening、digest drift、zero-denominator 伪成功或不稳定 exclusion 直接阻断主检查；
 - regression 覆盖 root/nested disclosure widening、`NOT_ENOUGH_DATA + value:null`、metric-specific numerator/denominator semantics、resultDigest、generatedAt-outside-digest 与 exclusion allowlist/order/bounds。
 
-05E-C post-merge independent review 发现并修复一处 aggregate exclusion/cohort consistency gap：Level B/Level C exclusion counts 现在与对应 cohort shortfall 绑定，并补充 outcome/event subset 约束与回归。该 verification fix 合并且 fresh runtime `npm check` 完成后，WO-05E 才可进入 `SHADOW_EVALUATOR_PASS_WITH_BLOCKED_DATA`；真实 shadow acceptance 仍不得声称通过。
+05E-C post-merge independent review 发现并修复 aggregate exclusion/cohort consistency gaps；PR #11 Phase 1 exact-head full runtime 已通过。WO-05E implementation state 可在 PR #11 final-head runtime gate 再次全绿并合并后记为 `SHADOW_EVALUATOR_PASS_WITH_BLOCKED_DATA`；真实 shadow acceptance 仍不得声称通过。
 
 真实 Level C 数据与真实 shadow threshold gate 继续保持 `BLOCKED_DATA`。
 
@@ -289,4 +289,4 @@ WINDOWS_NOT_RUN
 
 ## 7. 当前下一步
 
-WO-05E A/B/C post-merge independent code/evidence verification 已完成。fresh runtime 首轮在 Node 22.22.2 / SQLite WAL read-only path 暴露 `SOURCE_CHANGED_DURING_SCAN` ctime false positive；当前 closure 分支已重建最小 WAL-only ctime 修复与 focused regression。最终 exact PR head 仍需在可连接 GitHub 的 clean runtime 执行 `npm ci`、`npm run validate:contract`、`npm run validate:shadow`、`npm test`、`npm run check`。approved/real Level C dataset 仍为 0，真实 shadow acceptance gate 继续保持 `BLOCKED_DATA`。
+WO-05E A/B/C post-merge independent code/evidence verification 已完成。PR #11 Phase 1 exact-head GitHub Actions 已在 Node 22.22.2 / npm 11.4.2 上通过 `npm ci`、`npm run validate:contract`、`npm run validate:shadow`、`npm test`、`npm run check`，统计为 527 tests / 526 pass / 0 fail / 1 skip。当前只允许在 PR #11 final docs/status head 的同一 workflow 再次全绿后合并；approved/real Level C dataset 仍为 0，真实 shadow acceptance gate 继续保持 `BLOCKED_DATA`。
