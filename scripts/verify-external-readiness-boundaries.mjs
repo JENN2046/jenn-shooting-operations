@@ -69,6 +69,10 @@ async function verifyKioskBoundary(root) {
     kioskAuthenticate: () => principalResult.principal,
     kioskBusinessTimeZone: 'UTC',
   });
+  configuredRuntime.store.db.prepare(`
+    INSERT INTO revision_counters (id, projection_revision, schedule_revision, updated_at)
+    VALUES (1, 0, 0, ?)
+  `).run(FIXED_NOW);
   const configuredBase = await listen(configuredRuntime.server);
   try {
     const current = await fetch(
