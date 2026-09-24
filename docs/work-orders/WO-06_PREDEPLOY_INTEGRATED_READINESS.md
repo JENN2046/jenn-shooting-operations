@@ -96,7 +96,7 @@
 
 ### Fresh evidence
 
-GitHub Actions run `35975920061` on head `15f5b905d09ce842883a03ba76cbc629f88a822d` completed successfully with:
+GitHub Actions run `35976098214` on final implementation-bearing head `b10a2ff8fac20d6ba892a5a8bfc3232c4189c73d` completed successfully with:
 
 - Ubuntu 24.04 / Linux `6.17.0-1022-azure`;
 - Node `24.21.0`;
@@ -104,6 +104,7 @@ GitHub Actions run `35975920061` on head `15f5b905d09ce842883a03ba76cbc629f88a82
 - tzdata `2026c`;
 - ICU `78.3`;
 - full `npm run check`: 530 tests / 529 pass / 0 fail / 1 expected external-VCP skip;
+- this evidence citation correction is docs-only; the resulting PR head must also pass the same workflow before merge, with that run attached to the PR/check record rather than creating an impossible self-referential run ID inside the same commit;
 - targeted migration/recovery suite: 126/126 PASS;
 - fresh full-chain acceptance: PASS.
 
