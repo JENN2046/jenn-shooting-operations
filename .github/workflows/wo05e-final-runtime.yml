@@ -1,0 +1,63 @@
+name: WO-05E Final Runtime
+
+on:
+  push:
+    branches:
+      - codex/wo-05e-fresh-runtime-closure
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Exact-head runtime closure
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact workflow head
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22.22.2
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
+
+      - name: Pin npm 11.4.2
+        run: npm install --global npm@11.4.2
+
+      - name: Record runtime facts
+        shell: bash
+        run: |
+          set -euo pipefail
+          uname -a
+          node --version
+          npm --version
+          node -p "JSON.stringify({tz: process.versions.tz ?? null, icu: process.versions.icu ?? null, node: process.versions.node})"
+          git rev-parse HEAD
+          git status --short --branch
+
+      - name: Install declared dependencies
+        run: npm ci
+
+      - name: Validate contracts
+        run: npm run validate:contract
+
+      - name: Validate synthetic shadow boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run validate:shadow | tee /tmp/wo05e-shadow.log
+          grep -F 'datasetClass=synthetic' /tmp/wo05e-shadow.log
+          grep -F 'gateStatus=BLOCKED_DATA' /tmp/wo05e-shadow.log
+          if grep -E '^PASS ' /tmp/wo05e-shadow.log; then
+            echo 'Unexpected unqualified PASS in shadow validation output' >&2
+            exit 1
+          fi
+
+      - name: Run full tests
+        run: npm test
+
+      - name: Run repository check
+        run: npm run check
