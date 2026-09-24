@@ -193,13 +193,19 @@ function admitMetrics(value) {
   return Object.freeze(result);
 }
 
-export function admitLowDisclosureShadowReportV1(value, context = { expectedApprovalDigest: null }) {
+export function admitLowDisclosureShadowReportV1(value, context = {
+  expectedApprovalDigest: null,
+  expectedDatasetDigest: null,
+}) {
   try {
-    const trustedContext = exactRecord(context, ['expectedApprovalDigest']);
+    const trustedContext = exactRecord(context, ['expectedApprovalDigest', 'expectedDatasetDigest']);
     if (!trustedContext) return invalid('TRUSTED_APPROVAL_CONTEXT_INVALID');
     const expectedApprovalDigest = trustedContext.expectedApprovalDigest === null
       ? null : digest(trustedContext.expectedApprovalDigest);
-    if (trustedContext.expectedApprovalDigest !== null && expectedApprovalDigest === null) {
+    const expectedDatasetDigest = trustedContext.expectedDatasetDigest === null
+      ? null : digest(trustedContext.expectedDatasetDigest);
+    if ((trustedContext.expectedApprovalDigest !== null && expectedApprovalDigest === null)
+      || (trustedContext.expectedDatasetDigest !== null && expectedDatasetDigest === null)) {
       return invalid('TRUSTED_APPROVAL_CONTEXT_INVALID');
     }
 
@@ -217,13 +223,17 @@ export function admitLowDisclosureShadowReportV1(value, context = { expectedAppr
       || !digest(record.resultDigest)) return invalid('REPORT_SHAPE_INVALID');
 
     if (record.datasetClass === 'synthetic') {
-      if (record.approvalDigest !== null || expectedApprovalDigest !== null) {
+      if (record.approvalDigest !== null
+        || expectedApprovalDigest !== null
+        || expectedDatasetDigest !== null) {
         return invalid('REPORT_APPROVAL_MATRIX_INVALID');
       }
     } else {
       if (!digest(record.approvalDigest)
         || expectedApprovalDigest === null
-        || record.approvalDigest !== expectedApprovalDigest) {
+        || expectedDatasetDigest === null
+        || record.approvalDigest !== expectedApprovalDigest
+        || record.datasetDigest !== expectedDatasetDigest) {
         return invalid('REPORT_APPROVAL_UNVERIFIED');
       }
     }
