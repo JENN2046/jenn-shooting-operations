@@ -146,7 +146,7 @@ WO-06C still owns VCP/Kiosk/DingTalk external readiness. WO-06D still owns the p
 
 ### Fresh local evidence
 
-GitHub Actions run `35980565090` on final implementation-bearing head `2282af589280de94f2d517b6cd1c221ebfe9d5fc` completed successfully with:
+GitHub Actions run `35981030282` on final implementation-bearing head `775b6072687c53d2135be8d069b650bb37771090` completed successfully with:
 
 - Ubuntu 24.04 / Linux `6.17.0-1022-azure`;
 - Node `24.21.0`;
