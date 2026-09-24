@@ -386,6 +386,7 @@ test('WAL content digest detects in-place rewrite even when mtime is restored', 
   const keeper = new DatabaseSync(source);
   const wal = `${source}-wal`;
   let originalWal;
+  let originalWalStat;
   let originalMtime;
   try {
     assert.equal(keeper.prepare('PRAGMA journal_mode = WAL').get().journal_mode, 'wal');
@@ -395,7 +396,8 @@ test('WAL content digest detects in-place rewrite even when mtime is restored', 
     `).run(FIXED_NOW);
 
     originalWal = readFileSync(wal);
-    originalMtime = statSync(wal, { bigint: true }).mtimeNs;
+    originalWalStat = statSync(wal, { bigint: true });
+    originalMtime = originalWalStat.mtimeNs;
 
     assert.throws(() => readV1Source(resolveExistingPath(source), {
       duringScan: () => {
@@ -404,9 +406,10 @@ test('WAL content digest detects in-place rewrite even when mtime is restored', 
         writeFileSync(wal, changed);
         restoreMtimeNs(wal, originalMtime);
         const after = statSync(wal, { bigint: true });
-        assert.equal(after.ino, statSync(wal, { bigint: true }).ino);
-        assert.equal(after.size, BigInt(originalWal.length));
-        assert.equal(after.mtimeNs, originalMtime);
+        assert.equal(after.dev, originalWalStat.dev);
+        assert.equal(after.ino, originalWalStat.ino);
+        assert.equal(after.size, originalWalStat.size);
+        assert.equal(after.mtimeNs, originalWalStat.mtimeNs);
       },
     }), error => error.code === 'SOURCE_CHANGED_DURING_SCAN');
   } finally {
