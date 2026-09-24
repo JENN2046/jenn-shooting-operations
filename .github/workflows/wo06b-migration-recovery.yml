@@ -1,0 +1,54 @@
+name: WO-06B Migration Recovery Acceptance
+
+on:
+  push:
+    branches:
+      - codex/wo-06b-migration-recovery-acceptance
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    name: Isolated migration and recovery chain
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v4
+
+      - name: Set up fixed Node 24 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: npm
+
+      - name: Record runtime facts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          uname -a
+          node --version
+          npm --version
+          node -p "JSON.stringify({node: process.versions.node, tz: process.versions.tz ?? null, icu: process.versions.icu ?? null})"
+
+      - name: Install declared dependencies
+        run: npm ci
+
+      - name: Run repository check
+        run: npm run check
+
+      - name: Run targeted migration and recovery suite
+        run: >-
+          node --test
+          tests/schema-migrations.test.mjs
+          tests/migration-v2.test.mjs
+          tests/migration-recovery-v2.test.mjs
+          tests/migration-materialize-v2.test.mjs
+          tests/migration-apply-v2.test.mjs
+
+      - name: Run fresh full-chain acceptance
+        run: node scripts/verify-migration-recovery-acceptance.mjs
