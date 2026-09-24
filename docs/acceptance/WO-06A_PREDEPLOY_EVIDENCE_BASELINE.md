@@ -2,7 +2,7 @@
 
 - Authority base: `8d5747439ccdfb29dd78ae294c1df82cba6476a3`
 - Branch: `codex/wo-06a-predeploy-evidence-baseline`
-- Current result: `BASELINE_FIX_IN_PROGRESS`
+- Current result: `WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS`
 - Deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
 
 ## Frozen baseline assertions
@@ -114,3 +114,62 @@ Minimal correction on this branch:
 - keep non-root user, data volume, healthcheck and application command unchanged.
 
 Run 1 is not a PASS and is preserved as failure evidence. A fresh rerun is required.
+
+
+### Run 3 — FRESH_PASS
+
+- Head: `35f368118933d5c1164bf9a46f93e46c15b9aa15`
+- GitHub Actions run: `35973534068`
+- Runner: Ubuntu 24.04 / Linux `6.17.0-1022-azure`
+- Node: `24.21.0`
+- npm: `11.19.0`
+- Node tzdata: `2026c`
+- ICU: `78.3`
+
+Local gate:
+
+```text
+npm ci          PASS
+npm run check   PASS
+tests           530
+pass            529
+fail            0
+skipped         1
+```
+
+The single skip remains the external VCP sync adapter test and is classified as `EXTERNAL_BLOCKED`, not as a compatibility PASS.
+
+Container gate:
+
+```text
+Docker build                     PASS
+image user = node                PASS
+--experimental-sqlite absent     PASS
+empty named volume startup       PASS
+/healthz                         PASS
+runtime uid != 0                 PASS
+SQLite DB created on volume      PASS
+same-volume restart              PASS
+second /healthz                  PASS
+```
+
+Run 3 confirms the minimal Docker correction fixed the missing-runtime-dependency failure without weakening the baseline.
+
+## WO-06A closure
+
+The 06A baseline is complete when this acceptance record and work-order state are reviewed on the final branch head.
+
+Current classification:
+
+```text
+WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS
+BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
+```
+
+Remaining gates are intentionally delegated:
+
+- WO-06B: fresh migration / backup / restore / rollback acceptance;
+- WO-06C: VCP compatibility, Kiosk real device/browser, DingTalk real-integration readiness;
+- WO-06D: production change manifest and authorization packet.
+
+No real deployment or production integration is authorized by this result.
