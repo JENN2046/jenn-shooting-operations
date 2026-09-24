@@ -20,9 +20,7 @@ const TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const DIGEST = /^sha256:[a-f0-9]{64}$/u;
 const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/u;
 const EXCLUSION_ORDER = new Map(SAMPLE_EXCLUSION_CODES_V1.map((code, index) => [code, index]));
-const INELIGIBLE_EXCLUSION_CODES = new Set([
-  'EVENT_OUTSIDE_DATASET_WINDOW',
-  'EVENT_AFTER_CUTOFF',
+const LEVEL_A_CLASSIFIER_EXCLUSION_CODES = new Set([
   'NOT_TASK_SCOPE',
   'BINDING_COUNT_NOT_ONE',
   'RUN_NOT_COMPLETED',
@@ -38,6 +36,23 @@ const INELIGIBLE_EXCLUSION_CODES = new Set([
   'SCHEDULE_CANCELLED',
   'GROUPED_UNALLOCATED',
   'LEGACY_SYNTHESIZED',
+]);
+const LEVEL_B_EXCLUSION_CODES = new Set([
+  'RUN_CONTEXT_SNAPSHOT_MISSING',
+  'RUN_CONTEXT_SNAPSHOT_INELIGIBLE',
+]);
+const LEVEL_C_EXCLUSION_CODES = new Set([
+  'SCHEDULING_INPUT_MISSING',
+  'PROPOSAL_MISSING',
+  'ITEM_DECISION_DIFF_MISSING',
+  'OUTCOME_MISSING',
+  'OUTCOME_INCOMPLETE_AT_CUTOFF',
+  'OUTCOME_AFTER_CUTOFF',
+]);
+const OUTCOME_EXCLUSION_CODES = new Set([
+  'OUTCOME_MISSING',
+  'OUTCOME_INCOMPLETE_AT_CUTOFF',
+  'OUTCOME_AFTER_CUTOFF',
 ]);
 const MEDIAN_METRICS = new Set([
   'medianAbsoluteDurationErrorMs',
@@ -265,13 +280,44 @@ export function admitLowDisclosureShadowReportV1(value, context = {
       return invalid('REPORT_CONTENT_INVALID');
     }
 
-    const ineligibleExclusions = exclusionCounts
-      .filter(item => INELIGIBLE_EXCLUSION_CODES.has(item.code));
-    if (ineligibleExclusions.some(item => item.count > eligibilityCounts.ineligible)
-      || (eligibilityCounts.ineligible === 0 && ineligibleExclusions.length > 0)
-      || (eligibilityCounts.ineligible > 0
-        && ineligibleExclusions.reduce((sum, item) => sum + item.count, 0)
-          < eligibilityCounts.ineligible)) {
+    const eventOutside = exclusionCounts.find(item => item.code === 'EVENT_OUTSIDE_DATASET_WINDOW')?.count ?? 0;
+    const eventAfter = exclusionCounts.find(item => item.code === 'EVENT_AFTER_CUTOFF')?.count ?? 0;
+    if (eventOutside > eligibilityCounts.ineligible
+      || eventAfter > eventOutside) return invalid('REPORT_CONTENT_INVALID');
+
+    const processedIneligible = eligibilityCounts.ineligible - eventOutside;
+    const levelAClassifierExclusions = exclusionCounts
+      .filter(item => LEVEL_A_CLASSIFIER_EXCLUSION_CODES.has(item.code));
+    if (levelAClassifierExclusions.some(item => item.count > processedIneligible)
+      || (processedIneligible === 0 && levelAClassifierExclusions.length > 0)
+      || (processedIneligible > 0
+        && levelAClassifierExclusions.reduce((sum, item) => sum + item.count, 0)
+          < processedIneligible)) {
+      return invalid('REPORT_CONTENT_INVALID');
+    }
+
+    const processedCohort = eligibilityCounts.total - eventOutside;
+
+    const levelBExclusions = exclusionCounts
+      .filter(item => LEVEL_B_EXCLUSION_CODES.has(item.code));
+    const levelBExclusionTotal = levelBExclusions.reduce((sum, item) => sum + item.count, 0);
+    const levelBShortfall = eligibilityCounts.levelA - eligibilityCounts.levelB;
+    if (levelBExclusionTotal < levelBShortfall
+      || levelBExclusionTotal > processedCohort - eligibilityCounts.levelB) {
+      return invalid('REPORT_CONTENT_INVALID');
+    }
+
+    const levelCExclusions = exclusionCounts
+      .filter(item => LEVEL_C_EXCLUSION_CODES.has(item.code));
+    const levelCShortfall = eligibilityCounts.levelB - eligibilityCounts.levelC;
+    if (levelCExclusions.some(item => item.count > processedCohort - eligibilityCounts.levelC)
+      || levelCExclusions.reduce((sum, item) => sum + item.count, 0) < levelCShortfall) {
+      return invalid('REPORT_CONTENT_INVALID');
+    }
+    const outcomeExclusionTotal = levelCExclusions
+      .filter(item => OUTCOME_EXCLUSION_CODES.has(item.code))
+      .reduce((sum, item) => sum + item.count, 0);
+    if (outcomeExclusionTotal > processedCohort - eligibilityCounts.levelC) {
       return invalid('REPORT_CONTENT_INVALID');
     }
 
