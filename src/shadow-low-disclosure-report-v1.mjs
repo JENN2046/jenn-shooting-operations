@@ -20,6 +20,25 @@ const TOKEN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const DIGEST = /^sha256:[a-f0-9]{64}$/u;
 const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/u;
 const EXCLUSION_ORDER = new Map(SAMPLE_EXCLUSION_CODES_V1.map((code, index) => [code, index]));
+const INELIGIBLE_EXCLUSION_CODES = new Set([
+  'EVENT_OUTSIDE_DATASET_WINDOW',
+  'EVENT_AFTER_CUTOFF',
+  'NOT_TASK_SCOPE',
+  'BINDING_COUNT_NOT_ONE',
+  'RUN_NOT_COMPLETED',
+  'EVENT_CHAIN_INVALID',
+  'EVENT_CHAIN_INCOMPLETE',
+  'EVENT_CHAIN_VERSION_UNKNOWN',
+  'EVENT_CHAIN_VERSION_UNSUPPORTED',
+  'METRICS_VERSION_UNKNOWN',
+  'METRICS_VERSION_UNSUPPORTED',
+  'NET_DURATION_INVALID',
+  'PENDING_REVIEW',
+  'CORRECTION_PRESENT',
+  'SCHEDULE_CANCELLED',
+  'GROUPED_UNALLOCATED',
+  'LEGACY_SYNTHESIZED',
+]);
 const MEDIAN_METRICS = new Set([
   'medianAbsoluteDurationErrorMs',
   'retrospectiveDurationBaselineMedianAbsoluteErrorMs',
@@ -243,6 +262,16 @@ export function admitLowDisclosureShadowReportV1(value, context = {
     const metrics = admitMetrics(record.metrics);
     if (!eligibilityCounts || !exclusionCounts || !metrics
       || exclusionCounts.some(item => item.count > eligibilityCounts.total)) {
+      return invalid('REPORT_CONTENT_INVALID');
+    }
+
+    const ineligibleExclusions = exclusionCounts
+      .filter(item => INELIGIBLE_EXCLUSION_CODES.has(item.code));
+    if (ineligibleExclusions.some(item => item.count > eligibilityCounts.ineligible)
+      || (eligibilityCounts.ineligible === 0 && ineligibleExclusions.length > 0)
+      || (eligibilityCounts.ineligible > 0
+        && ineligibleExclusions.reduce((sum, item) => sum + item.count, 0)
+          < eligibilityCounts.ineligible)) {
       return invalid('REPORT_CONTENT_INVALID');
     }
 
