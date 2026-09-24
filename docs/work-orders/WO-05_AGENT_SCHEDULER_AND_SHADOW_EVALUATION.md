@@ -136,11 +136,11 @@
 
 ### WO-05E：Sample Capture and Offline Evaluation
 
-状态：`BLOCKED_DATA / IMPLEMENTATION_CLOSURE_IN_PROGRESS`
+状态：`BLOCKED_DATA / POST_MERGE_CODE_EVIDENCE_VERIFIED / FRESH_RUNTIME_PENDING`
 
 #### WO-05E-A：Future Run-Context Capture
 
-状态：`MERGED / POST_MERGE_VERIFICATION_PENDING`
+状态：`POST_MERGE_CODE_EVIDENCE_VERIFIED / FRESH_RUNTIME_PENDING`
 
 当前实现：
 
@@ -151,7 +151,7 @@
 - exact event replay 不重复 snapshot；历史 run 不回填，不因本迁移自动升级 Level B；
 - generic `run-event-use-case-v2` 虽只更新既有 run，但 `scheduled → shooting` 本身就是 first-start，因此已接入同一 capture builder/persistence port；预创建 run 与现场 provisioned run 均不会因入口差异永久失去 Level B snapshot。
 
-05E-A 尚需：fresh regression、PR independent review、post-merge verification。未通过这些门前不得标记 capture closure。
+05E-A post-merge independent code/evidence verification 已通过；authority HEAD 上无 GitHub Actions/check-run，当前隔离执行环境无法取得 exact checkout，因此 fresh runtime `npm check` 仍为 pending。
 
 #### WO-05E-B：Checked-in Fixture Dataset + Offline Replay
 
@@ -167,11 +167,11 @@
 - `npm run evaluate:shadow:fixtures` 只读取 checked-in fixture，不访问网络、provider、环境凭据或生产数据库；CLI 只输出 classification 与 low-disclosure report；
 - regression 覆盖 deterministic replay、digest/report tamper fail-closed、zero Level C 和 low-disclosure output。
 
-05E-B 尚需：fresh runtime replay、PR independent review、post-merge verification。
+05E-B post-merge independent code/evidence verification 已通过；checked-in fixture 的 event/metrics/snapshot/dataset/report SHA-256 已由独立 canonical implementation 重新计算并 7/7 匹配。fresh runtime replay 仍为 pending。
 
 #### WO-05E-C：Low-Disclosure Report Integration Closure
 
-状态：`LOCAL_REPORT_INTEGRATION_IMPLEMENTED / REVIEW_REQUIRED`
+状态：`POST_MERGE_CODE_EVIDENCE_VERIFIED_WITH_VERIFICATION_FIX / FRESH_RUNTIME_PENDING`
 
 当前实现：
 
@@ -183,7 +183,7 @@
 - `npm check` 已串入 `validate:shadow`，使 report schema widening、digest drift、zero-denominator 伪成功或不稳定 exclusion 直接阻断主检查；
 - regression 覆盖 root/nested disclosure widening、`NOT_ENOUGH_DATA + value:null`、metric-specific numerator/denominator semantics、resultDigest、generatedAt-outside-digest 与 exclusion allowlist/order/bounds。
 
-05E-C 尚需：fresh runtime `npm check`、PR independent review、post-merge verification。完成这些实现门后，WO-05E 只能进入 `SHADOW_EVALUATOR_PASS_WITH_BLOCKED_DATA`，仍不得声称真实 shadow acceptance 通过。
+05E-C post-merge independent review 发现并修复一处 aggregate exclusion/cohort consistency gap：Level B/Level C exclusion counts 现在与对应 cohort shortfall 绑定，并补充 outcome/event subset 约束与回归。该 verification fix 合并且 fresh runtime `npm check` 完成后，WO-05E 才可进入 `SHADOW_EVALUATOR_PASS_WITH_BLOCKED_DATA`；真实 shadow acceptance 仍不得声称通过。
 
 真实 Level C 数据与真实 shadow threshold gate 继续保持 `BLOCKED_DATA`。
 
@@ -289,4 +289,4 @@ WINDOWS_NOT_RUN
 
 ## 7. 当前下一步
 
-WO-05D post-merge independent code/evidence verification 已完成并放行本地 HTTP wiring；trusted scheduler/admin HTTP principal adapter 已在本地实现分支接入，仍需 fresh runtime regression 与 PR 独立复核后才能关闭该子门。之后进入 WO-05E implementation；真实 shadow 指标继续保持 `BLOCKED_DATA`，不得用合成数据关闭。
+WO-05E A/B/C post-merge independent code/evidence verification 已完成。当前唯一未关闭的实现证据门为 fresh runtime `npm check`；verification 分支同时包含一处 C 段 aggregate exclusion/cohort consistency 修复。approved/real Level C dataset 仍为 0，真实 shadow acceptance gate 继续保持 `BLOCKED_DATA`。
