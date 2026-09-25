@@ -933,12 +933,16 @@ function shellAssignmentValueLength(text) {
   let quote = null;
   let escaped = false;
   for (const char of text) {
-    if (char === '\r' || char === '\n') break;
     if (escaped) {
-      length += char.length;
       escaped = false;
+      // Backslash-newline is removed before shell word parsing, not a word end.
+      if (char === '\n') continue;
+      // Inside double quotes, other backslashes remain part of the value.
+      if (quote === '"' && !['$', '`', '"', '\\'].includes(char)) length += 1;
+      length += char.length;
       continue;
     }
+    if (quote === null && (char === '\r' || char === '\n')) break;
     if (char === '\\' && quote !== "'") {
       escaped = true;
       continue;
