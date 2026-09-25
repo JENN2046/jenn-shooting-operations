@@ -280,10 +280,10 @@ until the selected action's own prerequisites and exact targets are separately r
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36125110628` (run #95) on implementation-bearing head `cda455204aa91224f85ba87d12968726eb3a4006` passed:
+GitHub Actions run `36126894944` (run #97) on implementation-bearing head `16899f5532983a0e45a965dba3aa578ec466d5e4` passed:
 
-- full `npm run check`: 579 tests / 578 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 49/49 PASS, including `production-change-manifest-unicode.test.mjs`;
+- full `npm run check`: 581 tests / 580 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 51/51 PASS, including `production-change-manifest-unicode.test.mjs` and `production-change-manifest-shell-continuation.test.mjs`;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
 - manifest digest: `sha256:32fa0a5d754c157345561e9a5e1f6fcd274f8f0f94b96f3f605df4aef609cd47`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
@@ -295,6 +295,8 @@ This PR branch remains `MERGE_PENDING`. It does not publish authority PASS befor
 ### WO-06D current UTF-16 and summary corrections
 
 Both role-token parsers count `char.length` in all ordinary, quoted and escaped branches to match `createAuthorizer`'s UTF-16 `string.length`. Bearer detection uses the same unit. Synthetic eight-emoji assignments are rejected with `SECRET_MATERIAL_DETECTED`, and hostile regressions compare the 15/16-unit boundary with the actual in-memory authorizer. No real token, external request, or production runtime is involved.
+
+The shell parser now consumes escaped LF before logical-line termination: backslash-LF is removed and the credential continues. Ordinary unquoted newlines still end the assignment, while quoted literal newlines and applicable literal backslashes remain part of the value. Synthetic tests cover all five token keys, repeated continuations, quoted/unquoted concatenation, ASCII and astral Unicode at 15/16 UTF-16 units, escaped-backslash boundaries, and single/double-quote distinctions. These tests execute no shell command and use no real credential or external call.
 
 The current deployment summary above now matches the machine packet exactly. `WO06C_VCP_EXTERNAL` remains post-enable compatibility and a cutover prerequisite; the manifest JSON/digest and all non-authorizing boundaries are unchanged.
 

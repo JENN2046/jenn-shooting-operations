@@ -122,8 +122,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `cda455204aa91224f85ba87d12968726eb3a4006`
-- GitHub Actions run: `36125110628` (run #95)
+- Head: `16899f5532983a0e45a965dba3aa578ec466d5e4`
+- GitHub Actions run: `36126894944` (run #97)
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -132,19 +132,19 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          579
-pass                           578
+tests                          581
+pass                           580
 fail                           0
 skipped                        1
 ```
 
 The single skip remains the external VCP adapter and does not close WO-06C external validation.
 
-Manifest targeted tests (`node --test tests/production-change-manifest*.test.mjs`, including the Unicode regression file):
+Manifest targeted tests (`node --test tests/production-change-manifest*.test.mjs`, including the Unicode and shell-continuation regression files):
 
 ```text
-tests  49
-pass   49
+tests  51
+pass   51
 fail   0
 ```
 
@@ -200,6 +200,7 @@ The validator also fresh-rejects:
 - ordinary Bearer/access-token/token-shaped secret material embedded in schema-valid free text, including Bearer credentials split by raw newline, tab, or CRLF whitespace and complete Bearer values containing punctuation or spaces;
 - assignments to the four declared deployment role-token names: `VIEWER_TOKEN`, `SUBMITTER_TOKEN`, `SCHEDULER_TOKEN`, and `ADMIN_TOKEN`, with case-insensitive names, optional single/double quotes around the key, either `=` or `:` delimiters, and a parser that follows the complete assignment RHS including shell-concatenated quoted/unquoted segments;
 - astral Unicode credentials at the authorizer's 16-UTF-16-code-unit threshold, including ordinary, quoted, escaped and concatenated role-token segments and Bearer values;
+- shell assignment credentials split across escaped newlines, including double-quoted, concatenated and repeated-continuation forms; literal quoted newlines and backslashes are counted without confusing them with removed line continuations;
 - secret fields, pre-populated approved action IDs and blanket approval;
 - missing or extra entries in the exhaustive `blockingGateIds` surface, including action-specific blocked gates;
 - drift in the separate deployment-level `deploymentBlockingGateIds` subset;
@@ -217,6 +218,8 @@ This evidence update is docs-only. The resulting final PR head must separately p
 ## Current UTF-16 scanner and human-summary correction
 
 The two role-token parsers now accumulate `char.length` in all six ordinary, quoted, and escaped branches, matching `createAuthorizer`'s `string.length` unit. Bearer detection also counts UTF-16 units rather than Unicode code points. Synthetic eight-emoji fixtures in unquoted `ADMIN_TOKEN=` and quoted `VIEWER_TOKEN:` evidence now produce `SECRET_MATERIAL_DETECTED`; regressions also check the 15/16-unit boundary against the actual in-memory authorizer. No real credential is used.
+
+The shell parser now handles an escaped LF before deciding that a logical assignment ends: backslash-LF contributes no credential units and scanning continues. Ordinary unquoted newlines still terminate the assignment; quoted literal newlines remain part of the value. Single quotes retain a backslash literally, and double quotes retain backslashes before non-special characters. Synthetic regressions cover all five token keys, repeated continuations, concatenated quoted/unquoted segments, ASCII and astral Unicode at the 15/16-unit boundary, and these newline/quote distinctions. No shell command, external request, or configured runtime credential is executed by these tests.
 
 Both this document and the WO-06 work order now use `VCP_DEPLOYABLE_ADAPTER_WIRING` in the five-item current deployment blocker summary. `WO06C_VCP_EXTERNAL` remains blocked, post-enable, exhaustive, and required for cutover. The manifest JSON and digest are unchanged.
 
