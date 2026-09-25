@@ -178,10 +178,11 @@ No VCP runtime access, device operation, credential/provider call, public callba
 - 状态：`WO-06D_MANIFEST_PACKET_VALID / MERGE_PENDING / REVIEW_CLOSURE_BLOCKED / DEPLOYMENT_AUTHORIZATION_REQUEST_BLOCKED`
 - Authority candidate: `docs/operations/production-change-manifest.v1.json`
 - Acceptance: [WO-06D current acceptance](../acceptance/WO-06D_PRODUCTION_CHANGE_MANIFEST.md)
+- Shared input contract: [Production Evidence Input Boundary V1](../operations/PRODUCTION_EVIDENCE_INPUT_BOUNDARY_V1.md)
 
-The manifest freezes unresolved production target facts, four secret classes without values, prerequisite gates, exact action IDs/targets, risk/side effects, evidence, rollback bindings and an embedded exact-action human authorization packet. A valid definition is not a completed independent review or an implemented deployment capability.
+The manifest freezes unresolved production targets, four secret classes without values, exact action IDs/targets, prerequisites, risk/effects, evidence and source-scoped rollback. Input admission and definition validation are not production authorization, implemented external capabilities or independent review closure.
 
-### Authorization semantics
+### Unchanged authorization semantics
 
 ```text
 approvalModel = EXACT_ACTION_IDS_AND_TARGETS_ONLY
@@ -195,9 +196,9 @@ deploymentAuthorizationRequest = BLOCKED_PREREQUISITES
 deploymentGate = BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 ```
 
-`AUTHORITY_HEAD` remains the only global pre-request check. Host/conflict facts apply after PROD-01; build source/base digest applies at PROD-04; built-image checks apply downstream. Backup, secret, external and rollback checks remain action-specific. PROD-12 retains prior `DEPLOYMENT_CHAIN_COMPLETION_PROOF` in its exact pre-request checklist. This scalar-boundary correction changes no authorization rule.
+`AUTHORITY_HEAD` remains the only global pre-request check. Host/conflict facts apply after PROD-01; build source/base digest applies at PROD-04; built-image checks apply downstream. Backup, secret, external and rollback checks remain action-specific. PROD-12 retains prior `DEPLOYMENT_CHAIN_COMPLETION_PROOF`. This correction changes no production action, gate or authorization rule.
 
-### Current blockers and requestability
+### Current production blockers
 
 The five deployment-level blockers remain exactly:
 
@@ -209,49 +210,69 @@ PRODUCTION_DATA_MIGRATION
 PRODUCTION_DEPLOYMENT_GATE
 ```
 
-`WO06C_VCP_EXTERNAL` remains blocked post-enable compatibility, not a deployment-level blocker or PROD-10 prerequisite. Deployable wiring precedes separately authorized enablement and real pull / guarded push / verification pull; compatibility PASS is required before PROD-13. The real operation has not run. Kiosk retains the analogous deployable-auth-wiring → PROD-11 → real-device acceptance → cutover sequence.
+Exhaustive `blockingGateIds` separately contains all 25 BLOCKED gates, reproduced below. `POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION` belongs to PROD-14, not the deployment subset. No gate is promoted, deleted or newly added.
 
-`blockingGateIds` is separately exhaustive across every current BLOCKED gate: all 25 entries are reproduced in the machine verdict below. `POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION` belongs to PROD-14, not the five deployment-level blockers. No gate status is promoted and no new capability gate is added in this correction.
+VCP retains wiring -> separately authorized PROD-10 -> real pull / guarded push / verification pull -> compatibility PASS -> cutover. `WO06C_VCP_EXTERNAL` stays blocked, exhaustive and required by PROD-13; it is not a deployment-level blocker or a prerequisite of its own producing action. Kiosk retains deployable authentication -> PROD-11 -> real-device acceptance -> cutover. No real compatibility operation was executed.
 
-No action is requestable, requested or approved. PROD-01 remains gated by exact `TARGET_HOST_BINDING`, not the target facts it must discover.
+No action is requested, approved or requestable. PROD-01 requires exact `TARGET_HOST_BINDING`, not its own discovered facts. PROD-12 keeps `UNRESOLVED_DINGTALK_TARGET_BINDING` and `BLOCKED_PREREQUISITE`. Its exact prerequisites remain `WO06C_DINGTALK_PROVIDER`, `DINGTALK_TARGET_BINDING`, `DINGTALK_DEPLOYABLE_ADAPTER_WIRING`, `PRODUCTION_TARGET_FACTS`, `INTEGRATION_DEPLOYMENT_READINESS` and `PRODUCTION_DEPLOYMENT_GATE`. Deployment-chain proof is required before request and as evidence, not a prerequisite requiring PROD-12's own send. Existing runtime/secret/external/rollback and bounded provider/wiring/destination/send checks remain intact.
 
-PROD-12 keeps `UNRESOLVED_DINGTALK_TARGET_BINDING` and `BLOCKED_PREREQUISITE`. Its exact prerequisite set contains `WO06C_DINGTALK_PROVIDER`, `DINGTALK_TARGET_BINDING`, `DINGTALK_DEPLOYABLE_ADAPTER_WIRING`, `PRODUCTION_TARGET_FACTS`, `INTEGRATION_DEPLOYMENT_READINESS`, and `PRODUCTION_DEPLOYMENT_GATE`. `DEPLOYMENT_CHAIN_COMPLETION_PROOF` remains required both in pre-request revalidation and action evidence; it proves predecessor deployment completion, not PROD-12's own send. Existing runtime/secret/external/rollback checks and bounded provider/destination/wiring/send evidence remain intact. Local provider readiness cannot bypass the deployment chain. No provider was configured or called.
+### Retained execution and recovery
 
-### Retained execution and recovery contract
+PROD-09 requires offline/quiescent source state or verified coordination, absent target SQLite, prepared isolated storage, attachment-byte copy capability and source/target manifests plus record/file parity. Import precedes PROD-05 startup.
 
-PROD-09 requires offline/quiescent source state or verified coordination, an absent target SQLite path, isolated storage, target attachment-byte copy capability and source/target manifest plus record/file parity. Import precedes PROD-05 container initialization.
+PROD-07 remains staging-only; limited staging writes are not a target-wide fence. PROD-13's target-side race remains unimplemented in comments `4103936494` / `4104786562`. All destructive orphan-cleanup entries, including startup, timer, `saveUpload` and `submitRequest`, remain disabled through cutover and are re-proved at PROD-05/07/13. PROD-14 owns separate post-cutover restoration after protected parity.
 
-PROD-07 is staging-only: public unauthenticated writes are blocked or write access is limited to exact bounded staging principals. PROD-13 revalidates this restriction, but that is not a target-wide write freeze. Comments `4103936494` / `4104786562` remain unimplemented and block review closure.
+PROD-10/11 remain irreversible/external. Rollback removes the exact new route and changed firewall rule, stops/removes the exact new container before its unused exact image, revokes introduced token bindings, disables only origin-scoped integration configurations, and preserves named data. Volume deletion remains forbidden. Blocked post-Switch authority recovery is not available capability.
 
-All destructive orphan-cleanup entry points (startup, periodic timer, `saveUpload`, `submitRequest`) must remain disabled through cutover and be re-proved at PROD-05/07/13. PROD-14 separately restores cleanup after cutover completion and protected attachment parity.
+### One input boundary for all scanner findings and raw-source duplicates
 
-PROD-10/11 remain `IRREVERSIBLE_OR_EXTERNAL`; disabling configuration does not remove persisted VCP/Kiosk business facts. Rollback removes the exact new route and changed firewall rule, stops and removes the exact new container before removing its exact built image, revokes introduced role-token bindings, disables only origin-scoped integration configurations, and preserves the named data volume. Data-volume deletion is forbidden. Blocked post-Switch authority recovery is not an available capability.
+The machine manifest admits declarative summaries and exact credential declarations only, not shell/config/header snippets or credential values. Partial shell/YAML parsing and header length guessing are removed. See the shared design for the complete admission matrix and rationale.
+
+```text
+original UTF-8 bytes
+-> duplicate-rejecting JSON source admission
+-> strict schema
+-> declarative text and exact declaration-path admission
+-> frozen semantic contract
+-> valid verdict and stable digest
+```
+
+`src/production-manifest-json-v1.mjs` reuses the existing pure callback JSON parser unchanged, with no callback/provider behavior. Original source is limited to 1 MiB, decoded fatally, and not normalized or repaired. Repeated decoded keys are rejected per object before overwriting, including nested, equal-valued and escaped-equivalent keys. Separate objects may reuse names. Invalid syntax, UTF-8/BOM, trailing tokens and excess depth fail closed.
+
+The CLI reads schema and manifest once as bytes and uses the raw loader for both. It does not run whole-object native `JSON.parse` first or hash a reread file. Lower-level parsed-object validation does not prove source integrity; file/text callers must enter through raw admission.
+
+`src/production-evidence-input-boundary-v1.mjs` admits only Unicode letters/marks/numbers, ASCII space and `. , : ; ( ) / + _ -` in decoded strings and keys. Reserved credential labels are forbidden outside exact `secrets[index].id`, indices 0 through 3, regardless of value length or layout. Existing strict secret schema prevents extra value fields. Quoting, backslashes, equals signs, controls, non-ASCII whitespace and line breaks are rejected rather than decoded or joined.
+
+All five reported classes therefore share one boundary: continued header, append assignment, plain-scalar backslash, continued key and split name/value. Short/empty/placeholder credential snippets are intentionally rejected too. Existing negative controls were migrated to this stricter policy, with independent runtime-authorizer assertions retained. No server token rule changes and no new YAML/shell dependency are involved.
+
+For schema-valid text rejection, `SECRET_MATERIAL_DETECTED` appears only at `/`, before semantic diagnostics or digest. It also represents unsupported syntax, not proof of a real secret. Raw failures use fixed `MANIFEST_JSON_DUPLICATE_KEY`, `MANIFEST_JSON_INVALID` or `MANIFEST_JSON_TOO_LARGE`. The CLI reduces all errors to fixed root paths, suppresses source/exception details, produces no stdout/digest on rejection and exits nonzero. I/O/compile failure is `MANIFEST_SOURCE_VALIDATION_ERROR`.
 
 ### WO-06D fresh implementation-bearing evidence
 
-- Head: `61b1695466abeb62402392588ac42626fd08a06c`
-- Parent and correction starting head: `14726a2a1dac20c4c8b5496b0ae5527e23f28ae3`
-- GitHub Actions run: `36141921053` (run #105)
+- Exact head: `3f454f9fb41a5a65b6125360783cc804be15adb9`
+- Parent: `d0632e26e9f6f546dcd46aaa5b3d5cdadae60a13`
+- Batch starting checkpoint: `36a8a0a3000e8fb750fe60196eddb7a1c97a960c`
+- GitHub Actions run #109: `36152821332`
 - Workflow: `WO-06D Production Authorization Packet`; event `push`; conclusion `success`
-- Verified job: `108093583730`
+- Verified job: `108130052543`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
-The checkout and recorded `git rev-parse HEAD` both match the implementation SHA. The full log includes the six new scalar-boundary groups in both test runs. This is published exact-head GitHub evidence, not a local-only task report.
+Both checkout and recorded `git rev-parse HEAD` match the exact implementation. The complete job log was inspected. This is published GitHub execution of the full repository, not a local task report.
 
 ```text
 npm ci                         PASS
 npm run check                  PASS
-full tests                     599
-pass                           598
+full tests                     623
+pass                           622
 fail                           0
 skipped                        1
-manifest targeted tests        69
-manifest targeted pass         69
+manifest targeted tests        93
+manifest targeted pass         93
 manifest targeted fail         0
 manifest targeted skipped      0
 ```
 
-The full-suite skip is the absent external VCP adapter and is not external acceptance. The targeted command is `node --test tests/production-change-manifest*.test.mjs`, including Unicode, shell-continuation, dynamic-values, review-closure and scalar-boundaries regression files.
+The sole skip is the absent external VCP adapter, not external acceptance. The unchanged targeted command is `node --test tests/production-change-manifest*.test.mjs`; no test-name filter or new skip was introduced. Thirteen unified-boundary groups and eleven raw-source/CLI groups join the retained hostile suites.
 
 ```json
 {
@@ -298,38 +319,32 @@ The full-suite skip is the absent external VCP adapter and is not external accep
 }
 ```
 
-The machine manifest is unchanged from `14726a2...`, blob `a80f7a715cac9b3493d2373293bfff18fd83ce57`; the old `32fa0a5d...` digest is historical and does not verify the current manifest.
+Manifest blob remains `a80f7a715cac9b3493d2373293bfff18fd83ce57`. No source-policy change alters its current digest. The old `32fa0a5d...` digest is historical.
 
-### WO-06D current scanner and regression correction
+### Verified source and coverage
 
-The implementation changes only `src/production-change-manifest-v1.mjs` (18 additions / 4 deletions) and adds `tests/production-change-manifest-scalar-boundaries.test.mjs` (136 lines). Existing tests, dependency declarations, workflow permissions and production bindings are unchanged.
+Current semantic validator blob: `f21f86bc9bac9e08cca00e725cbf7db0c8c93854`; unified boundary: `4756d357614d7d85ab51f58f0767246f03b4488d`; raw adapter: `f07eeb38da40fb7481129c828c3fa87f254f36e0`; unified tests: `e163ec2c955d8d6b47d4ee1adb3af8c0c5693408`; raw tests: `09e8524a58ad1ca0c11cab4394e5283518a3fb51`. Reused parser `src/callback-json-v1.mjs` is unchanged at `c3dacf1aaa9ea76fd3ae49d9a420a35e0eaeb681`.
 
-YAML single-quoted doubled apostrophes are now consumed as pairs representing one literal character without toggling out of quote state. The six-letter plus ten-apostrophe example reaches 16 UTF-16 units and triggers `SECRET_MATERIAL_DETECTED`. This logic is confined to config parsing; identical adjacent shell quote syntax retains shell semantics.
+Boundary tests cover five problem classes across four evidence surfaces, all credential names/cases, fragmentation/layout/length variants, forbidden characters, declaration-path isolation, safe summary vocabulary, no mutation and no sensitive diagnostic echo. Historical hostile samples remain. Former short-literal negatives now require rejection under the documented narrower input contract; runtime-authorizer assertions remain independent.
 
-Shell words now retain nonseparator whitespace as content: only ASCII space/tab and unescaped LF end the whitespace-delimited value. NBSP, CR, VT, FF and other tested Unicode whitespace are counted. The assignment matcher also skips only ASCII horizontal formatting after the delimiter, preserving a leading NBSP after `=`. Quoted/escaped characters and backslash-LF continuation retain their existing behavior. This conservative scanner is not a complete shell evaluator.
+Raw tests reject hidden earlier evidence, complete gates/secrets/authorization duplicates and equal-valued repeats, including decoded-equivalent keys. They cover independent object scopes, apparent properties inside strings, 100 generated unique documents, syntax/encoding/BOM/depth/size and unchanged-format digest. The exact exploit is demonstrated on the old native-parse path and rejected on the new loader.
 
-Six new regression groups cover all five keys, case-varied/quoted YAML keys, 9/10/11 quote pairs, leading/trailing/repeated/all-apostrophe values, backslashes, astral Unicode and authorizer-aligned thresholds, YAML-versus-shell distinction, 14 literal-whitespace characters at leading/middle/trailing positions and 15/16/17 units, real ASCII word breaks, quoting/escaping, continuations and prior unsupported-syntax rejection. Fixtures use the actual in-memory authorizer but execute no shell snippets or provider calls. All 69 targeted tests pass.
+Real CLI tests run copied script/input files in temporary layouts using actual source modules. They verify duplicate manifest/schema keys, malformed bytes, missing input and hostile schema-error paths produce nonzero exit, no stdout, source echo or digest. Normal input retains the non-authorizing verdict. Checkout authority files are not changed. Six pure-source groups additionally passed locally under Node22.16.0; that is not the complete acceptance, which is run #109 on Node24.21.0. No supplied shell/config text is executed and no real secret or provider is used.
 
-Local isolated scanner tests failed five of the six new groups against the exact original source and passed all six against the patch. This local extraction is not full repository acceptance; run #105 exercises the public validator with real schema/manifest and the complete repository suite.
+### Remaining review and final-head gate
 
-Current source blob: `5e76483c24acd5a78a1b38afa498dc7b372f6114`; scalar-boundaries test blob: `2f66863754bbfde9b8497eb1e6f2a4ff606fd915`. The original source was verified against blob `65831991116280d657f8ad47e0f25b6265cba271` before editing. Prior multiline/escaped-key, dynamic syntax, block-scalar, UTF-16, continuation and DingTalk prerequisite regressions remain green; no blanket completeness claim follows.
+This batch implements and tests the five scanner findings `4104724822`, `4104786571`, `4105069439`, `4105112228`, `4105165136` plus duplicate-source P1 `4105771369` under one design. Their exact reply/resolve operations must follow final-head success; this file does not pre-claim them. Intermediate evidence P2 `4105672730` is covered by this synchronization, subject to final-head verification.
 
-### Remaining implementation and review work
+Target-fence P1 comments `4103936494` / `4104786562` remain unimplemented and open. They require every target database/attachment writer to be frozen/drained through final parity, Switch and read-only checks, with same-fence continuity, enforced ordering, success-only release and fail-closed retention. Pre-request capability/plan is distinct from outputs of an authorized freeze. This input batch does not provide that capability or authorize it.
 
-The two P2 types are implementation-corrected: YAML comments `4104553788` / `4104786582`, and shell-separator comments `4104553803` / `4104786593`. Their four threads require evidence replies/resolution after exact final-head verification; this document does not pre-claim those mutations.
+The boundary is not universal detection of unlabelled secrets or arbitrary/covert encodings. Frozen semantic binding and source-grounded review still matter. CI success does not imply zero unresolved threads or independent clean review; subsequent live findings stay in the PR/thread record.
 
-Separate unimplemented P1s are target-wide cutover fencing (`4103936494` / `4104786562`), continued Bearer header scanning (`4104724822`), and shell append assignment matching (`4104786571`). That is three problem types represented by four observed P1 threads. The Bearer issue is backslash-newline continuation; the previous PR description incorrectly called it leading whitespace.
+This docs-only synchronization follows run #109 success. Its resulting exact SHA must independently pass the unchanged workflow. Record final SHA/run in the PR/check record, not self-referentially here. Request one independent final-head review after the batch is complete, not one per example. Merge still requires explicit human instruction, unchanged exact head, exact-head CI success, zero unresolved threads, current-head Codex clean, OPEN / mergeable / not merged and `expected_head_sha`. No merge or production operation is authorized.
 
-The fence correction must cover all target database/attachment writers, drain in-flight mutations, bind final parity to the same fence through Switch/read-only verification, enforce order as a sequence, release only after success and retain fail-closed fencing on failure/uncertainty. Capability/plan precede authorization; the actual freeze and fresh parity belong within explicitly authorized execution. This scanner correction implements none of that production capability.
+### Historical evidence boundary
 
-This docs-only synchronization follows implementation run #105 success. Its resulting final SHA requires its own successful exact-head workflow; final SHA/run belong in the PR/check record to avoid self-reference. Before any separately requested merge require unchanged exact head, successful exact-head CI, zero unresolved threads, Codex clean for that SHA, OPEN / mergeable / not merged, and explicit human merge instruction. Use `expected_head_sha`; no merge is requested here. Additional live findings must be assessed separately.
+The complete preceding work order remains at `36a8a0a3000e8fb750fe60196eddb7a1c97a960c`, blob `e87946c85c3da462fcc45166773a2a77fdc4eccb`, including all earlier chronological detail. The early [HISTORICAL_cb456114 snapshot](WO-06_PREDEPLOY_INTEGRATED_READINESS.HISTORICAL_cb456114.md), blob `0bf6b062b68ff4c0f2953ad18b3b4cc9282d4490`, is unchanged. WO-06A/B/C above are retained checkpoints, not newly performed external/container acceptance. No duplicate snapshot is created.
 
-### WO-06D historical review evidence boundary
+Retained WO-06D checkpoints: dynamic values `9f13b160...` / #99 `36131969264`, docs `0782e22e...` / #100 `36132684480`, 587/586/0/1 and 57/57; multiline/escaped-key/DingTalk `7abad25e...` / #103 `36137024497`, docs `14726a2a...` / #104 `36137791590`, 593/592/0/1 and 63/63; scalar boundaries `61b1695466abeb62402392588ac42626fd08a06c` / #105 `36141921053`, docs `36a8a0a3000e8fb750fe60196eddb7a1c97a960c` / #106 `36142458740`, 599/598/0/1 and 69/69. Full prior failure/correction provenance remains in the referenced Git revision. Historical current/PASS/short-value-acceptance wording is not the new input policy.
 
-The entire early work order, including WO-06A/B/C details and chronological hardening evidence, remains byte-for-byte in [the historical cb456114 snapshot](WO-06_PREDEPLOY_INTEGRATED_READINESS.HISTORICAL_cb456114.md), blob `0bf6b062b68ff4c0f2953ad18b3b4cc9282d4490`. WO-06A/B/C above remain retained checkpoints, not fresh external or container acceptance performed by this scanner correction.
-
-The dynamic-values checkpoint was implementation `9f13b160bb43d3db37f30fc03bc42c635d0e181f`, run #99 `36131969264`, then docs head `0782e22eb361325a4038b1158329cc21d2a4d1bf`, run #100 `36132684480`: 587/586/0/1 full and 57/57 targeted, digest `sha256:32fa0a5d754c157345561e9a5e1f6fcd274f8f0f94b96f3f605df4aef609cd47`, source/test blobs `9dd5efa0659544add4d7c49e9633290a1e348806` / `bfccd6ed9fbed687b1639a27ecd42451ba42f16a`.
-
-The multiline/escaped-key/DingTalk checkpoint was implementation `7abad25e55ea459cb38f8e5b8b92d8d870307199`, run #103 `36137024497`, then docs head `14726a2a1dac20c4c8b5496b0ae5527e23f28ae3`, run #104 `36137791590`: 593/592/0/1 full and 63/63 targeted, with the current `029f63f5...` manifest digest. Its initial commit `3f6fca1713e96b24e3533d7139d0fd7965855a69` failed run `36135791873` on an old PROD-12 exact-array assertion; `7abad25...` updated only that expected proof list. Prior source/review-test/main-test blobs were `65831991116280d657f8ad47e0f25b6265cba271` / `f857cd9d18af49d008c2b6e83786fa8d9e37c7e0` / `1009bc032f8b3210768800b616f228f277c7b052`. The complete prior work order remains at Git commit `14726a2...`, blob `34c83230c7002a58a84a9d27645264a43f3bd13b`; no duplicate snapshot is created.
-
-Historical current/PASS/requestable wording cannot override run #105, the current machine manifest or live review state. `docs/DEPLOYMENT_PREFLIGHT.md` remains historical context, not authorization authority. The missing local-only commit `86f6e0793b06baa2f70c7cccf9e327877801bc4a` supplies no accepted publication or CI evidence; this correction starts from published `14726a2...` and does not claim to recover it.
+The unified change is `4c2ec4d4a4fef5425f074ad5137a899b0d982195`, followed by preserved independent auth assertions at `d0632e26e9f6f546dcd46aaa5b3d5cdadae60a13` and raw-source admission at `3f454f9fb41a5a65b6125360783cc804be15adb9`. Run #109 validates the combined implementation. The inaccessible local-only `86f6e0793b06baa2f70c7cccf9e327877801bc4a` is not publication/CI evidence. `docs/DEPLOYMENT_PREFLIGHT.md` cannot override current authority.
