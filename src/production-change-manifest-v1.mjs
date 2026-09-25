@@ -929,7 +929,9 @@ const FORBIDDEN_SECRET_PATTERNS = Object.freeze([
   /replace-with-random-/iu,
 ]);
 
-const ROLE_TOKEN_ASSIGNMENT = /(?:"(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)"|'(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)'|(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN))\s*([:=])[^\S\r\n]*/giu;
+// Skip only ASCII horizontal formatting after the delimiter; a leading NBSP
+// in an equals-assignment is part of the shell value and must be counted.
+const ROLE_TOKEN_ASSIGNMENT = /(?:"(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)"|'(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)'|(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN))\s*([:=])[ \t]*/giu;
 
 // Escaped or folded quoted assignment keys are unsupported in evidence text.
 // Reject before matching literal role names: even one escaped character can
@@ -959,7 +961,7 @@ function shellAssignmentValueLength(text) {
       length += char.length;
       continue;
     }
-    if (quote === null && (char === '\r' || char === '\n')) break;
+    if (quote === null && char === '\n') break;
     // Dynamic shell values cannot be sized safely without evaluating input.
     // Reject active dollar/backtick syntax before whitespace can truncate it.
     // Escaped characters were consumed above; single-quoted text is literal.
@@ -977,7 +979,9 @@ function shellAssignmentValueLength(text) {
       quote = char;
       continue;
     }
-    if (/\s/u.test(char)) break;
+    // Bash blanks are SP/TAB; LF was handled above. NBSP, CR, VT, FF and
+    // other Unicode whitespace remain literal word content, not separators.
+    if (char === ' ' || char === '\t') break;
     length += char.length;
   }
   return length;
@@ -998,7 +1002,9 @@ function configAssignmentValueLength(text) {
   let length = 0;
   let quote = null;
   let escaped = false;
-  for (const char of line) {
+  const chars = [...line];
+  for (let index = 0; index < chars.length; index += 1) {
+    const char = chars[index];
     if (escaped) {
       length += char.length;
       escaped = false;
@@ -1009,6 +1015,14 @@ function configAssignmentValueLength(text) {
       continue;
     }
     if (quote !== null) {
+      // Within a YAML single-quoted scalar, doubled quotes encode one
+      // literal apostrophe. Consume the pair without leaving quote state.
+      // This rule is config-only: adjacent shell quotes are not escapes.
+      if (quote === "'" && char === "'" && chars[index + 1] === "'") {
+        length += 1;
+        index += 1;
+        continue;
+      }
       if (char === quote) quote = null;
       else length += char.length;
       continue;
