@@ -639,7 +639,7 @@ test('initial preflight is exempt from all later-stage revalidation checks', () 
   );
   assert.deepEqual(
     base.authorizationPacket.actionSpecificRevalidation['PROD-12-DINGTALK-PROVIDER-INTEGRATION'],
-    ['SECRET_STORAGE', 'DINGTALK_RUNTIME_ADAPTER_CONFIGURATION', 'EXTERNAL_READINESS_GATES', 'ROLLBACK_TARGETS'],
+    ['SECRET_STORAGE', 'DINGTALK_RUNTIME_ADAPTER_CONFIGURATION', 'EXTERNAL_READINESS_GATES', 'ROLLBACK_TARGETS', 'DEPLOYMENT_CHAIN_COMPLETION_PROOF'],
   );
   assert.deepEqual(
     base.authorizationPacket.actionSpecificRevalidation['PROD-13-CUTOVER-SWITCH'],
