@@ -195,7 +195,7 @@ The manifest blob remains `a80f7a715cac9b3493d2373293bfff18fd83ce57`. The input-
 | File | Git blob at the verified implementation |
 | --- | --- |
 | `src/production-change-manifest-v1.mjs` | `f21f86bc9bac9e08cca00e725cbf7db0c8c93854` |
-| `src/production-evidence-input-boundary-v1.mjs` | `4756d357614d7d85ab51f58f0767246f03b4488d` |
+| `src/production-evidence-input-boundary-v1.mjs` | `f16fb7ed2473a416d32bc6737ffe658e5cac8694` |
 | `src/production-manifest-json-v1.mjs` | `f07eeb38da40fb7481129c828c3fa87f254f36e0` |
 | `tests/production-change-manifest-input-boundary.test.mjs` | `e163ec2c955d8d6b47d4ee1adb3af8c0c5693408` |
 | `tests/production-change-manifest-json-source.test.mjs` | `09e8524a58ad1ca0c11cab4394e5283518a3fb51` |

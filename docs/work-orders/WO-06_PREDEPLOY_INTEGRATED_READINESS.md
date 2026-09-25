@@ -323,7 +323,7 @@ Manifest blob remains `a80f7a715cac9b3493d2373293bfff18fd83ce57`. No source-poli
 
 ### Verified source and coverage
 
-Current semantic validator blob: `f21f86bc9bac9e08cca00e725cbf7db0c8c93854`; unified boundary: `4756d357614d7d85ab51f58f0767246f03b4488d`; raw adapter: `f07eeb38da40fb7481129c828c3fa87f254f36e0`; unified tests: `e163ec2c955d8d6b47d4ee1adb3af8c0c5693408`; raw tests: `09e8524a58ad1ca0c11cab4394e5283518a3fb51`. Reused parser `src/callback-json-v1.mjs` is unchanged at `c3dacf1aaa9ea76fd3ae49d9a420a35e0eaeb681`.
+Current semantic validator blob: `f21f86bc9bac9e08cca00e725cbf7db0c8c93854`; unified boundary: `f16fb7ed2473a416d32bc6737ffe658e5cac8694`; raw adapter: `f07eeb38da40fb7481129c828c3fa87f254f36e0`; unified tests: `e163ec2c955d8d6b47d4ee1adb3af8c0c5693408`; raw tests: `09e8524a58ad1ca0c11cab4394e5283518a3fb51`. Reused parser `src/callback-json-v1.mjs` is unchanged at `c3dacf1aaa9ea76fd3ae49d9a420a35e0eaeb681`.
 
 Boundary tests cover five problem classes across four evidence surfaces, all credential names/cases, fragmentation/layout/length variants, forbidden characters, declaration-path isolation, safe summary vocabulary, no mutation and no sensitive diagnostic echo. Historical hostile samples remain. Former short-literal negatives now require rejection under the documented narrower input contract; runtime-authorizer assertions remain independent.
 
