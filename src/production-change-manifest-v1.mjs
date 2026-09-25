@@ -27,6 +27,10 @@ const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
     "status": "BLOCKED",
     "evidence": "BLOCKED_EXTERNAL_RUNTIME"
   },
+  "VCP_DEPLOYABLE_ADAPTER_WIRING": {
+    "status": "BLOCKED",
+    "evidence": "REAL_VCP_ADAPTER_RUNTIME_WIRING_NOT_IMPLEMENTED"
+  },
   "WO06C_KIOSK_DEVICE": {
     "status": "BLOCKED",
     "evidence": "BLOCKED_DEVICE"
@@ -115,6 +119,10 @@ const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
     "status": "BLOCKED",
     "evidence": "REAL_PRODUCTION_INPUT_NOT_VALIDATED"
   },
+  "POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION": {
+    "status": "BLOCKED",
+    "evidence": "REQUIRES_VERIFIED_PROD_13_AND_POST_CUTOVER_ATTACHMENT_PARITY"
+  },
   "PRODUCTION_DEPLOYMENT_GATE": {
     "status": "BLOCKED",
     "evidence": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE"
@@ -124,7 +132,7 @@ const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
 const EXPECTED_REQUESTABLE = Object.freeze([]);
 
 const EXPECTED_DEPLOYMENT_BLOCKERS = Object.freeze([
-  "WO06C_VCP_EXTERNAL",
+  "VCP_DEPLOYABLE_ADAPTER_WIRING",
   "KIOSK_DEPLOYABLE_AUTH_WIRING",
   "PRODUCTION_TARGET_FACTS",
   "PRODUCTION_DATA_MIGRATION",
@@ -193,7 +201,7 @@ const EXPECTED_ACTION_REVALIDATION = Object.freeze({
     "DISK_PORT_ROUTE_CONFLICTS",
     "BUILT_IMAGE_DIGEST",
     "SECRET_STORAGE",
-    "EXTERNAL_READINESS_GATES",
+    "VCP_RUNTIME_ADAPTER_CONFIGURATION",
     "ROLLBACK_TARGETS"
   ]),
   "PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE": Object.freeze([
@@ -224,6 +232,11 @@ const EXPECTED_ACTION_REVALIDATION = Object.freeze({
     "PRE_SWITCH_ROUTED_TLS_PROBE",
     "ALL_ORPHAN_CLEANUP_ENTRY_POINTS_STILL_DISABLED",
     "ROLLBACK_TARGETS"
+  ]),
+  "PROD-14-RESTORE-ORPHAN-CLEANUP": Object.freeze([
+    "CUTOVER_COMPLETION_PROOF",
+    "POST_CUTOVER_ATTACHMENT_PARITY",
+    "CLEANUP_RESTORATION_CONFIG"
   ])
 });
 
@@ -271,7 +284,9 @@ const EXPECTED_INVARIANTS = Object.freeze([
   "CUTOVER_REQUIRES_IMMEDIATE_SERVICE_HEALTH_AND_ROUTE_PROBE",
   "PRE_CUTOVER_RUNTIME_DISALLOWS_ORPHAN_CLEANUP",
   "PRE_CUTOVER_ORPHAN_CLEANUP_GUARD_COVERS_ALL_ENTRY_POINTS",
-  "DINGTALK_PROVIDER_ACTION_REQUIRES_DEPLOYABLE_RUNTIME_ADAPTER"
+  "DINGTALK_PROVIDER_ACTION_REQUIRES_DEPLOYABLE_RUNTIME_ADAPTER",
+  "VCP_EXTERNAL_COMPATIBILITY_FOLLOWS_DEPLOYABLE_ADAPTER_ENABLEMENT",
+  "ORPHAN_CLEANUP_RESTORATION_REQUIRES_POST_CUTOVER_ATTACHMENT_PARITY"
 ]);
 
 const EXPECTED_ROLLBACK_ORDER = Object.freeze([
@@ -291,6 +306,7 @@ const EXPECTED_ROLLBACK_ORDER = Object.freeze([
 // safer, narrower, or easier to authorize without invalidating the packet.
 const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
   "PROD-01-TARGET-READONLY-PREFLIGHT": {
+    "id": "PROD-01-TARGET-READONLY-PREFLIGHT",
     "title": "Read-only target host preflight",
     "category": "TARGET",
     "risk": "LOW",
@@ -314,6 +330,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "PROD-02-CREATE-ISOLATED-APP-STORAGE": {
+    "id": "PROD-02-CREATE-ISOLATED-APP-STORAGE",
     "title": "Create isolated application directory and persistent volume",
     "category": "FILESYSTEM",
     "risk": "MEDIUM",
@@ -339,6 +356,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "PROD-03-GENERATE-INSTALL-TOKENS": {
+    "id": "PROD-03-GENERATE-INSTALL-TOKENS",
     "title": "Generate and install four role tokens",
     "category": "SECRET",
     "risk": "HIGH",
@@ -362,6 +380,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "PROD-04-BUILD-IMAGE": {
+    "id": "PROD-04-BUILD-IMAGE",
     "title": "Build production image from approved authority source",
     "category": "BUILD",
     "risk": "MEDIUM",
@@ -386,6 +405,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "PROD-05-START-ISOLATED-CONTAINER": {
+    "id": "PROD-05-START-ISOLATED-CONTAINER",
     "title": "Start isolated application container",
     "category": "RUNTIME",
     "risk": "HIGH",
@@ -419,6 +439,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "PROD-06-LOOPBACK-HEALTH-SMOKE": {
+    "id": "PROD-06-LOOPBACK-HEALTH-SMOKE",
     "title": "Run production-host loopback health smoke",
     "category": "RUNTIME",
     "risk": "LOW",
@@ -443,6 +464,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "PROD-07-CONFIGURE-REVERSE-PROXY-TLS": {
+    "id": "PROD-07-CONFIGURE-REVERSE-PROXY-TLS",
     "title": "Add isolated reverse-proxy route and HTTPS binding",
     "category": "NETWORK",
     "risk": "HIGH",
@@ -476,6 +498,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "PROD-08-FIREWALL-SECURITY-GROUP": {
+    "id": "PROD-08-FIREWALL-SECURITY-GROUP",
     "title": "Change firewall or security group only if required",
     "category": "NETWORK",
     "risk": "CRITICAL",
@@ -500,6 +523,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "PROD-09-PRODUCTION-DATA-IMPORT": {
+    "id": "PROD-09-PRODUCTION-DATA-IMPORT",
     "title": "Import or migrate real production workbench data",
     "category": "DATA",
     "risk": "CRITICAL",
@@ -540,6 +564,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "PROD-10-ENABLE-VCP-REMOTE-SYNC": {
+    "id": "PROD-10-ENABLE-VCP-REMOTE-SYNC",
     "title": "Enable VCP remote synchronization",
     "category": "INTEGRATION",
     "risk": "HIGH",
@@ -547,7 +572,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "status": "BLOCKED_PREREQUISITE",
     "authorityTarget": "Exact VCP runtime adapter configuration and one approved service endpoint",
     "preconditions": [
-      "WO06C_VCP_EXTERNAL",
+      "VCP_DEPLOYABLE_ADAPTER_WIRING",
       "PRODUCTION_TARGET_FACTS",
       "INTEGRATION_DEPLOYMENT_READINESS",
       "PRODUCTION_DEPLOYMENT_GATE"
@@ -559,6 +584,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "ROLLBACK-09-DISABLE-VCP-CONFIG"
     ],
     "evidenceRequired": [
+      "VCP_RUNTIME_WIRING_PROOF",
       "VCP_ADAPTER_REVISION",
       "SERVICE_ENDPOINT",
       "PRINCIPAL_SCOPE",
@@ -567,6 +593,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE": {
+    "id": "PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE",
     "title": "Enable real Kiosk device and identity mapping",
     "category": "INTEGRATION",
     "risk": "HIGH",
@@ -595,6 +622,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "PROD-12-DINGTALK-PROVIDER-INTEGRATION": {
+    "id": "PROD-12-DINGTALK-PROVIDER-INTEGRATION",
     "title": "Configure and validate DingTalk provider integration",
     "category": "INTEGRATION",
     "risk": "HIGH",
@@ -622,6 +650,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "PROD-13-CUTOVER-SWITCH": {
+    "id": "PROD-13-CUTOVER-SWITCH",
     "title": "Perform production cutover or Switch",
     "category": "CUTOVER",
     "risk": "CRITICAL",
@@ -658,9 +687,9 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "CUTOVER_PLAN",
       "FORWARD_CHAIN_COMPLETION_PROOF",
       "VCP_KIOSK_ENABLEMENT_COMPLETION_PROOF",
-      "POST_SWITCH_RECOVERY_DESIGN",
-      "DUAL_READ_COMPATIBLE_WRITE_RECOVERY_PROOF",
       "SWITCH_RECORD",
+      "DUAL_READ_COMPATIBLE_WRITE_RECOVERY_PROOF",
+      "POST_SWITCH_RECOVERY_DESIGN",
       "PRE_CUTOVER_BACKUP",
       "CLIENT_SWITCH_LIST",
       "ROLLBACK_TRIGGER",
@@ -670,10 +699,36 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "PRE_SWITCH_ATTACHMENT_PARITY_PROOF",
       "PRE_SWITCH_HEALTH_STATUS",
       "PRE_SWITCH_ROUTED_TLS_STATUS",
-      "PRE_SWITCH_ORPHAN_CLEANUP_GUARD_PROOF"
+      "PRE_SWITCH_ORPHAN_CLEANUP_GUARD_PROOF",
+      "POST_CUTOVER_CLEANUP_RESTORATION_PLAN"
+    ]
+  },
+  "PROD-14-RESTORE-ORPHAN-CLEANUP": {
+    "id": "PROD-14-RESTORE-ORPHAN-CLEANUP",
+    "title": "Restore normal orphan-upload cleanup after cutover",
+    "category": "RUNTIME",
+    "risk": "HIGH",
+    "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+    "status": "BLOCKED_PREREQUISITE",
+    "authorityTarget": "Exact orphan-upload cleanup controls of the newly authoritative production service only",
+    "preconditions": [
+      "POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION"
+    ],
+    "effects": [
+      "Restore startup, periodic, saveUpload-triggered, and submitRequest-triggered orphan cleanup only after cutover completion and post-cutover attachment parity are verified"
+    ],
+    "rollbackActionIds": [],
+    "evidenceRequired": [
+      "CUTOVER_COMPLETION_PROOF",
+      "POST_CUTOVER_ATTACHMENT_PARITY_PROOF",
+      "STARTUP_ORPHAN_CLEANUP_RESTORED",
+      "PERIODIC_ORPHAN_CLEANUP_RESTORED",
+      "REQUEST_TRIGGERED_ORPHAN_CLEANUP_RESTORED",
+      "POST_RESTORE_HEALTH_STATUS"
     ]
   },
   "ROLLBACK-01-REMOVE-NEW-ROUTE": {
+    "id": "ROLLBACK-01-REMOVE-NEW-ROUTE",
     "title": "Remove newly added reverse-proxy route",
     "category": "ROLLBACK",
     "risk": "HIGH",
@@ -691,6 +746,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "ROLLBACK-02-STOP-NEW-CONTAINER": {
+    "id": "ROLLBACK-02-STOP-NEW-CONTAINER",
     "title": "Stop and remove newly started application container",
     "category": "ROLLBACK",
     "risk": "MEDIUM",
@@ -710,6 +766,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "ROLLBACK-09-DISABLE-VCP-CONFIG": {
+    "id": "ROLLBACK-09-DISABLE-VCP-CONFIG",
     "title": "Disable VCP configuration introduced by PROD-10",
     "category": "ROLLBACK",
     "risk": "HIGH",
@@ -728,6 +785,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "ROLLBACK-10-DISABLE-KIOSK-CONFIG": {
+    "id": "ROLLBACK-10-DISABLE-KIOSK-CONFIG",
     "title": "Disable Kiosk configuration introduced by PROD-11",
     "category": "ROLLBACK",
     "risk": "HIGH",
@@ -745,6 +803,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "ROLLBACK-11-DISABLE-DINGTALK-CONFIG": {
+    "id": "ROLLBACK-11-DISABLE-DINGTALK-CONFIG",
     "title": "Disable DingTalk configuration introduced by PROD-12",
     "category": "ROLLBACK",
     "risk": "HIGH",
@@ -763,6 +822,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "ROLLBACK-04-PRESERVE-DATA-VOLUME": {
+    "id": "ROLLBACK-04-PRESERVE-DATA-VOLUME",
     "title": "Preserve new data volume and stop mutation",
     "category": "ROLLBACK",
     "risk": "LOW",
@@ -780,6 +840,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "ROLLBACK-05-REVERT-FIREWALL-RULE": {
+    "id": "ROLLBACK-05-REVERT-FIREWALL-RULE",
     "title": "Revert only the newly changed firewall/security-group rule",
     "category": "ROLLBACK",
     "risk": "CRITICAL",
@@ -796,6 +857,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "ROLLBACK-06-REVOKE-ROLE-TOKENS": {
+    "id": "ROLLBACK-06-REVOKE-ROLE-TOKENS",
     "title": "Revoke and remove generated role-token configuration",
     "category": "ROLLBACK",
     "risk": "HIGH",
@@ -813,6 +875,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH": {
+    "id": "ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH",
     "title": "Restore previous authoritative endpoint, data path, and client mappings",
     "category": "ROLLBACK",
     "risk": "CRITICAL",
@@ -833,6 +896,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "ROLLBACK-08-REMOVE-BUILT-IMAGE": {
+    "id": "ROLLBACK-08-REMOVE-BUILT-IMAGE",
     "title": "Remove image built by PROD-04",
     "category": "ROLLBACK",
     "risk": "MEDIUM",
@@ -854,15 +918,88 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
 }));
 
 const FORBIDDEN_SECRET_PATTERNS = Object.freeze([
-  /Bearer\s+[^\r\n]{16,}/iu,
-  /(?:"(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)"|'(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)'|(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN))\s*[:=]\s*(?:"[^"]{8,}"|'[^']{8,}'|[^\s]{16,})/iu,
+  /Bearer\\s+[^\\r\\n]{16,}/iu,
   /sk-[A-Za-z0-9_-]{16,}/u,
   /replace-with-random-/iu,
 ]);
 
+const ROLE_TOKEN_ASSIGNMENT = /(?:"(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)"|'(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)'|(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN))\\s*([:=])\\s*/giu;
+
+function shellAssignmentValueLength(text) {
+  let length = 0;
+  let quote = null;
+  let escaped = false;
+  for (const char of text) {
+    if (char === '\\r' || char === '\\n') break;
+    if (escaped) {
+      length += 1;
+      escaped = false;
+      continue;
+    }
+    if (char === '\\\\' && quote !== "'") {
+      escaped = true;
+      continue;
+    }
+    if (quote !== null) {
+      if (char === quote) quote = null;
+      else length += 1;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (/\\s/u.test(char)) break;
+    length += 1;
+  }
+  return length;
+}
+
+function configAssignmentValueLength(text) {
+  const line = text.split(/\\r?\\n/u, 1)[0].trim();
+  let length = 0;
+  let quote = null;
+  let escaped = false;
+  for (const char of line) {
+    if (escaped) {
+      length += 1;
+      escaped = false;
+      continue;
+    }
+    if (char === '\\\\' && quote !== "'") {
+      escaped = true;
+      continue;
+    }
+    if (quote !== null) {
+      if (char === quote) quote = null;
+      else length += 1;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    length += 1;
+  }
+  return length;
+}
+
+function containsRoleTokenAssignmentSecret(text) {
+  for (const match of text.matchAll(ROLE_TOKEN_ASSIGNMENT)) {
+    const start = (match.index ?? 0) + match[0].length;
+    const remainder = text.slice(start);
+    const length = match[1] === '='
+      ? shellAssignmentValueLength(remainder)
+      : configAssignmentValueLength(remainder);
+    if (length >= 16) return true;
+  }
+  return false;
+}
+
 function containsForbiddenSecretMaterial(value) {
   if (typeof value === 'string') {
-    return FORBIDDEN_SECRET_PATTERNS.some(pattern => pattern.test(value));
+    return containsRoleTokenAssignmentSecret(value)
+      || FORBIDDEN_SECRET_PATTERNS.some(pattern => pattern.test(value));
   }
   if (Array.isArray(value)) return value.some(containsForbiddenSecretMaterial);
   if (value && typeof value === 'object') {
