@@ -52,7 +52,7 @@ test('production change manifest validates with deployment request blocked and n
   assert.deepEqual(
     [...base.authorizationPacket.deploymentBlockingGateIds].sort(),
     [
-      'WO06C_VCP_EXTERNAL',
+      'VCP_DEPLOYABLE_ADAPTER_WIRING',
       'KIOSK_DEPLOYABLE_AUTH_WIRING',
       'PRODUCTION_TARGET_FACTS',
       'PRODUCTION_DATA_MIGRATION',
@@ -88,6 +88,9 @@ test('secret scanner rejects ordinary Bearer and token-shaped material inside sc
     ['unquoted token with comma', 'ADMIN_TOKEN=abc,defghijklmnop'],
     ['unquoted token with semicolon', 'VIEWER_TOKEN=abc;defghijklmnop'],
     ['yaml unquoted token with punctuation', 'SCHEDULER_TOKEN: abc,defghijklmnop'],
+    ['shell concatenated double-quoted token', 'ADMIN_TOKEN=abc"correct horse battery staple"'],
+    ['shell concatenated single-quoted token', "VIEWER_TOKEN=abc'correct horse battery staple'"],
+    ['shell multi-segment token', 'SUBMITTER_TOKEN="correct horse"abc123456'],
     ['openai-shaped token', 'sk-abcdefghijklmnopqrstuvwx1234567890'],
   ]) {
     const changed = structuredClone(base);
@@ -113,6 +116,7 @@ test('manifest rejects blanket approval and incomplete blocker surfaces', () => 
 
   for (const blockerId of [
     'WO06C_VCP_EXTERNAL',
+    'VCP_DEPLOYABLE_ADAPTER_WIRING',
     'DINGTALK_TARGET_BINDING',
     'DINGTALK_DEPLOYABLE_ADAPTER_WIRING',
     'CUTOVER_FORWARD_CHAIN',
@@ -125,6 +129,7 @@ test('manifest rejects blanket approval and incomplete blocker surfaces', () => 
     'HEALTH_SMOKE_READINESS',
     'PROXY_BACKEND_READINESS',
     'PRODUCTION_IMPORT_STORAGE_READINESS',
+    'POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION',
     'INTEGRATION_DEPLOYMENT_READINESS',
   ]) {
     const missing = structuredClone(base);
@@ -187,7 +192,7 @@ test('high-risk production actions cannot drop the unresolved target-facts prere
 test('every production action keeps its complete frozen prerequisite set', () => {
   for (const [actionId, gate] of [
     ['PROD-09-PRODUCTION-DATA-IMPORT', 'PRODUCTION_DATA_MIGRATION'],
-    ['PROD-10-ENABLE-VCP-REMOTE-SYNC', 'WO06C_VCP_EXTERNAL'],
+    ['PROD-10-ENABLE-VCP-REMOTE-SYNC', 'VCP_DEPLOYABLE_ADAPTER_WIRING'],
     ['PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE', 'KIOSK_DEPLOYABLE_AUTH_WIRING'],
     ['PROD-13-CUTOVER-SWITCH', 'PRODUCTION_DEPLOYMENT_GATE'],
   ]) {
@@ -418,6 +423,55 @@ test('critical action risk, side effect and evidence contract cannot be understa
   }
 });
 
+test('VCP deployable wiring precedes post-enable external compatibility proof', () => {
+  const wiring = base.gates.find(candidate => candidate.id === 'VCP_DEPLOYABLE_ADAPTER_WIRING');
+  assert.ok(wiring);
+  assert.equal(wiring.status, 'BLOCKED');
+  assert.equal(wiring.evidence, 'REAL_VCP_ADAPTER_RUNTIME_WIRING_NOT_IMPLEMENTED');
+
+  const compatibility = base.gates.find(candidate => candidate.id === 'WO06C_VCP_EXTERNAL');
+  assert.ok(compatibility);
+  assert.equal(compatibility.status, 'BLOCKED');
+
+  const vcp = action(base, 'PROD-10-ENABLE-VCP-REMOTE-SYNC');
+  assert.equal(vcp.preconditions.includes('VCP_DEPLOYABLE_ADAPTER_WIRING'), true);
+  assert.equal(vcp.preconditions.includes('WO06C_VCP_EXTERNAL'), false);
+  assert.equal(vcp.evidenceRequired.includes('VCP_RUNTIME_WIRING_PROOF'), true);
+  assert.equal(vcp.evidenceRequired.includes('PULL_PUSH_VERIFY_RESULT'), true);
+  assert.equal(
+    base.authorizationPacket.actionSpecificRevalidation[
+      'PROD-10-ENABLE-VCP-REMOTE-SYNC'
+    ].includes('VCP_RUNTIME_ADAPTER_CONFIGURATION'),
+    true,
+  );
+  assert.equal(
+    base.authorizationPacket.actionSpecificRevalidation[
+      'PROD-10-ENABLE-VCP-REMOTE-SYNC'
+    ].includes('EXTERNAL_READINESS_GATES'),
+    false,
+  );
+
+  const cutover = action(base, 'PROD-13-CUTOVER-SWITCH');
+  assert.equal(cutover.preconditions.includes('WO06C_VCP_EXTERNAL'), true);
+  assert.equal(base.authorizationPacket.deploymentBlockingGateIds.includes('WO06C_VCP_EXTERNAL'), false);
+  assert.equal(
+    base.authorizationPacket.deploymentBlockingGateIds.includes('VCP_DEPLOYABLE_ADAPTER_WIRING'),
+    true,
+  );
+
+  const oldCycle = structuredClone(base);
+  action(oldCycle, 'PROD-10-ENABLE-VCP-REMOTE-SYNC').preconditions =
+    action(oldCycle, 'PROD-10-ENABLE-VCP-REMOTE-SYNC').preconditions
+      .map(id => id === 'VCP_DEPLOYABLE_ADAPTER_WIRING' ? 'WO06C_VCP_EXTERNAL' : id);
+  expectRejected(oldCycle, 'ACTION_PRECONDITIONS_INVALID', 'VCP compatibility cannot precede enablement');
+
+  const forged = structuredClone(base);
+  forged.gates.find(candidate => candidate.id === 'VCP_DEPLOYABLE_ADAPTER_WIRING').status =
+    'SATISFIED';
+  expectRejected(forged, 'GATE_STATUS_INVALID', 'VCP wiring cannot self-promote');
+});
+
+
 test('VCP guarded push is irreversible even though adapter configuration can be disabled', () => {
   const vcp = action(base, 'PROD-10-ENABLE-VCP-REMOTE-SYNC');
   assert.equal(vcp.sideEffect, 'IRREVERSIBLE_OR_EXTERNAL');
@@ -641,8 +695,8 @@ test('initial preflight is exempt from all later-stage revalidation checks', () 
     'production import cannot drop backup rollback proof',
   );
 
-  const missingExternal = structuredClone(base);
-  missingExternal.authorizationPacket.actionSpecificRevalidation[
+  const missingVcpRuntime = structuredClone(base);
+  missingVcpRuntime.authorizationPacket.actionSpecificRevalidation[
     'PROD-10-ENABLE-VCP-REMOTE-SYNC'
   ] = [
     'TARGET_HOST_IDENTITY',
@@ -652,9 +706,9 @@ test('initial preflight is exempt from all later-stage revalidation checks', () 
     'ROLLBACK_TARGETS',
   ];
   expectRejected(
-    missingExternal,
+    missingVcpRuntime,
     'ACTION_REVALIDATION_INVALID',
-    'VCP enablement cannot drop external readiness',
+    'VCP enablement cannot drop runtime adapter configuration',
   );
 
   const buildCycle = structuredClone(base);
@@ -841,6 +895,82 @@ test('pre-cutover runtime cannot start until destructive orphan cleanup is disab
     candidate => candidate.id === 'PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL',
   ).status = 'SATISFIED';
   expectRejected(forged, 'GATE_STATUS_INVALID', 'cleanup-control gate cannot self-promote');
+});
+
+
+test('orphan cleanup restoration is a separate post-cutover action with parity protection', () => {
+  const gate = base.gates.find(
+    candidate => candidate.id === 'POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION',
+  );
+  assert.ok(gate);
+  assert.equal(gate.status, 'BLOCKED');
+  assert.equal(
+    gate.evidence,
+    'REQUIRES_VERIFIED_PROD_13_AND_POST_CUTOVER_ATTACHMENT_PARITY',
+  );
+
+  const cutover = action(base, 'PROD-13-CUTOVER-SWITCH');
+  assert.equal(
+    cutover.evidenceRequired.includes('POST_CUTOVER_CLEANUP_RESTORATION_PLAN'),
+    true,
+  );
+
+  const restore = action(base, 'PROD-14-RESTORE-ORPHAN-CLEANUP');
+  assert.equal(restore.status, 'BLOCKED_PREREQUISITE');
+  assert.equal(restore.sideEffect, 'IRREVERSIBLE_OR_EXTERNAL');
+  assert.deepEqual(
+    restore.preconditions,
+    ['POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION'],
+  );
+  assert.deepEqual(restore.rollbackActionIds, []);
+  for (const evidence of [
+    'CUTOVER_COMPLETION_PROOF',
+    'POST_CUTOVER_ATTACHMENT_PARITY_PROOF',
+    'STARTUP_ORPHAN_CLEANUP_RESTORED',
+    'PERIODIC_ORPHAN_CLEANUP_RESTORED',
+    'REQUEST_TRIGGERED_ORPHAN_CLEANUP_RESTORED',
+    'POST_RESTORE_HEALTH_STATUS',
+  ]) {
+    assert.equal(restore.evidenceRequired.includes(evidence), true, evidence);
+  }
+  assert.deepEqual(
+    base.authorizationPacket.actionSpecificRevalidation[
+      'PROD-14-RESTORE-ORPHAN-CLEANUP'
+    ],
+    [
+      'CUTOVER_COMPLETION_PROOF',
+      'POST_CUTOVER_ATTACHMENT_PARITY',
+      'CLEANUP_RESTORATION_CONFIG',
+    ],
+  );
+
+  const premature = structuredClone(base);
+  action(premature, 'PROD-14-RESTORE-ORPHAN-CLEANUP').preconditions = [];
+  expectRejected(
+    premature,
+    'ACTION_PRECONDITIONS_INVALID',
+    'cleanup restoration cannot occur before cutover/parity readiness',
+  );
+
+  const droppedParity = structuredClone(base);
+  action(droppedParity, 'PROD-14-RESTORE-ORPHAN-CLEANUP').evidenceRequired =
+    action(droppedParity, 'PROD-14-RESTORE-ORPHAN-CLEANUP').evidenceRequired
+      .filter(id => id !== 'POST_CUTOVER_ATTACHMENT_PARITY_PROOF');
+  expectRejected(
+    droppedParity,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'post-cutover attachment parity cannot be dropped',
+  );
+
+  const forged = structuredClone(base);
+  forged.gates.find(
+    candidate => candidate.id === 'POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION',
+  ).status = 'SATISFIED';
+  expectRejected(
+    forged,
+    'GATE_STATUS_INVALID',
+    'post-cutover cleanup restoration cannot self-promote',
+  );
 });
 
 
