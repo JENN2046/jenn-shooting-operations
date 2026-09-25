@@ -115,8 +115,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `2120b563b8fa08a95f1f76df0d0d32f48f1a4d13`
-- GitHub Actions run: `36118906501`
+- Head: `1b9edddb7b81a35ea9adbd7e2fc0f810c08fe524`
+- GitHub Actions run: `36120028211`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -125,8 +125,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          574
-pass                           573
+tests                          575
+pass                           574
 fail                           0
 skipped                        1
 ```
@@ -136,8 +136,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  44
-pass   44
+tests  45
+pass   45
 fail   0
 ```
 
@@ -146,7 +146,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:d6e6b3177fab3fa712c25b8a9e656adff5b9818444a42d66250784473b771596",
+  "manifestDigest": "sha256:b4cc09447e640f6493341b0d308267b4f5a8ab3863d72003eb214aea54981f47",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -156,6 +156,7 @@ Machine verdict:
     "WO06C_KIOSK_DEVICE",
     "KIOSK_DEPLOYABLE_AUTH_WIRING",
     "DINGTALK_TARGET_BINDING",
+    "DINGTALK_DEPLOYABLE_ADAPTER_WIRING",
     "CUTOVER_FORWARD_CHAIN",
     "CUTOVER_SWITCH_RECOVERY",
     "CUTOVER_SOURCE_CONSISTENCY",
@@ -187,7 +188,7 @@ Machine verdict:
 
 The validator also fresh-rejects:
 
-- ordinary Bearer/access-token/token-shaped secret material embedded in schema-valid free text, including Bearer credentials split by raw newline, tab, or CRLF whitespace before JSON serialization;
+- ordinary Bearer/access-token/token-shaped secret material embedded in schema-valid free text, including Bearer credentials split by raw newline, tab, or CRLF whitespace and complete Bearer values containing punctuation or spaces;
 - assignments to the four declared deployment role-token names: `VIEWER_TOKEN`, `SUBMITTER_TOKEN`, `SCHEDULER_TOKEN`, and `ADMIN_TOKEN`, with case-insensitive names, optional single/double quotes around the key, either `=` or `:` delimiters, matching quoted values, and complete delimiter-bounded unquoted values including punctuation such as commas and semicolons;
 - secret fields, pre-populated approved action IDs and blanket approval;
 - missing or extra entries in the exhaustive `blockingGateIds` surface, including action-specific blocked gates;
@@ -1281,3 +1282,40 @@ manifest digest  sha256:d6e6b3177fab3fa712c25b8a9e656adff5b9818444a42d6625078447
 ```
 
 No cleanup operation, staging write, production mutation, or credential value was executed or introduced.
+
+
+## DingTalk deployable-adapter blocker
+
+Exact-current review on `c29093ac...` confirmed that target binding alone is insufficient because the approved production entrypoint has no real DingTalk adapter, credentials, or runtime composition.
+
+WO-06D now freezes:
+
+```text
+DINGTALK_DEPLOYABLE_ADAPTER_WIRING = BLOCKED
+evidence = REAL_DINGTALK_ADAPTER_CREDENTIALS_AND_RUNTIME_WIRING_NOT_IMPLEMENTED
+```
+
+`PROD-12-DINGTALK-PROVIDER-INTEGRATION` additionally requires the deployable-adapter gate, `DINGTALK_RUNTIME_ADAPTER_CONFIGURATION` pre-request revalidation, and `DINGTALK_RUNTIME_WIRING_PROOF`. The action remains non-requestable until a reviewed real adapter/runtime implementation exists.
+
+## Complete Bearer credential scanning
+
+Bearer detection now scans the complete value through the end of the logical line instead of assuming an unenforced token alphabet. It therefore rejects usable values containing punctuation or spaces, including:
+
+```text
+Bearer abc,defghijklmnop
+Bearer abc;defghijklmnop
+Bearer correct horse battery staple
+```
+
+Existing newline/tab/CRLF Bearer regressions remain preserved.
+
+Exact implementation-bearing evidence:
+
+```text
+head             1b9edddb7b81a35ea9adbd7e2fc0f810c08fe524
+run              36120028211
+result           success
+full suite       575 tests / 574 pass / 0 fail / 1 expected VCP skip
+manifest suite   45 / 45 PASS
+manifest digest  sha256:b4cc09447e640f6493341b0d308267b4f5a8ab3863d72003eb214aea54981f47
+```
