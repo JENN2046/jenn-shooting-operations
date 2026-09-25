@@ -588,7 +588,7 @@
       "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
       "status": "BLOCKED_PREREQUISITE",
       "requiresExplicitAuthorization": true,
-      "authorityTarget": "Exact approved production route/data/client switch only",
+      "authorityTarget": "Exact approved source and target service database/upload write barriers and production route/data/client switch only",
       "preconditions": [
         "WO06C_VCP_EXTERNAL",
         "WO06C_KIOSK_DEVICE",
@@ -604,12 +604,12 @@
       "effects": [
         "After exact PROD-13 authorization, acquire one persistent target-wide write-admission fence bound to the target database, upload volume, writer inventory, operation and fence epoch; block every staging, API, integration, callback, background and direct-storage writer",
         "With the same fence held, drain all in-flight database and attachment mutations across all processes; reject incomplete coverage or uncertain drain, and keep every orphan-cleanup entry point disabled",
-        "Under the same fence, confirm continued source quiescence or complete only the separately authorized bounded final synchronization; revoke its exclusive writer permission and drain again before final parity",
-        "Under the same fence and zero remaining writers, recompute source-target database and attachment parity and bind proof to source snapshot, target identities, target revision, attachment digests, operation and fence epoch; reject divergent staging facts",
-        "Immediately before Switch, prove the same fence and proof bindings remain valid, no intervening writes occurred, cleanup stays disabled, source consistency holds, and read-only loopback health and routed TLS probes pass",
-        "While retaining the same fence, switch only the exactly approved endpoint, data and client mappings and promote the staging route; record the switch without releasing target writes",
-        "Keep the same fence through read-only post-Switch health, route, client mapping and database-attachment parity verification; any failure, timeout, restart, fence loss or uncertainty invalidates parity and retains closed write admission without automatic retry",
-        "Only after every post-Switch read-only check succeeds, record completion and release that exact fence into the approved production write policy; otherwise retain closed admission independently of process or container lifetime; cleanup stays disabled until separately authorized PROD-14"
+        "Under the same fence, hold a source-wide write barrier and drain every source writer before final sync/parity; separately authorized bounded final synchronization requires this barrier through Switch and old-source demotion; revoke the sync writer and drain again before parity",
+        "Under the same fence and zero remaining writers, recompute database and attachment parity; bind proof to source snapshot and write-barrier epoch, target identities, target revision, attachment digests, operation and target fence epoch; reject divergent staging facts",
+        "Immediately before Switch, prove the same fence and source barrier remain held with matching proof bindings and no intervening writes on either side; keep cleanup disabled and verify read-only loopback health and routed TLS probes",
+        "While retaining the same fence and source barrier, switch only the approved endpoint, data and client mappings and promote the staging route; verify old-source demotion and persist its denied-write policy without releasing target writes",
+        "Keep both barriers through read-only post-Switch health, route, client mapping and database-attachment parity checks; any failure, timeout, restart, fence loss or uncertainty invalidates parity and retains closed admission on both sides without automatic retry",
+        "Only after every read-only check succeeds and old-source demotion is proven, release that target fence into approved production writes; keep old-source writes denied; otherwise retain closed admission independently of process or container lifetime; cleanup stays disabled until authorized PROD-14"
       ],
       "rollbackActionIds": [
         "ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH",
@@ -649,7 +649,12 @@
         "PRE_SWITCH_SAME_FENCE_PROOF",
         "POST_SWITCH_SAME_FENCE_PROOF",
         "READ_ONLY_POST_SWITCH_VERIFICATION",
-        "TARGET_FENCE_RELEASE_PROOF"
+        "TARGET_FENCE_RELEASE_PROOF",
+        "SOURCE_WRITE_BARRIER_CAPABILITY_PROOF",
+        "SOURCE_WRITE_BARRIER_ACQUISITION_AND_DRAIN_PROOF",
+        "SOURCE_BARRIER_PARITY_BINDING_PROOF",
+        "SOURCE_BARRIER_HELD_THROUGH_DEMOTION",
+        "OLD_SOURCE_WRITE_ADMISSION_REMAINS_CLOSED"
       ]
     },
     {
@@ -1129,6 +1134,7 @@
     "CUTOVER_FENCE_OUTPUTS_FOLLOW_EXACT_AUTHORIZATION",
     "CLEANUP_RESTORATION_REQUIRES_COAUTHORIZED_DISABLE_AND_DRAIN",
     "CLEANUP_DISABLE_ROLLBACK_DOES_NOT_RESTORE_DELETED_FACTS",
-    "VALIDATION_SCHEMA_IS_BOUND_TO_FROZEN_VALIDATOR_AUTHORITY"
+    "VALIDATION_SCHEMA_IS_BOUND_TO_FROZEN_VALIDATOR_AUTHORITY",
+    "SOURCE_AND_TARGET_WRITE_BARRIERS_SPAN_PARITY_SWITCH_AND_DEMOTION"
   ]
 }

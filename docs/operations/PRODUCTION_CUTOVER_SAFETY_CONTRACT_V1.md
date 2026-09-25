@@ -25,7 +25,9 @@ Before requesting PROD-13, bind the exact database, upload volume, service, writ
 
 `FINAL_PARITY_UNDER_FENCE_PLAN` replaces the former pre-request final-parity result. Acquiring the fence, draining writers, generating the actual final parity proof, switching, and releasing are effects inside the exact authorized PROD-13 operation. Their output receipts cannot be prerequisites for requesting that same operation.
 
-Existing pre-request source-consistency evidence must establish continued source quiescence or an already authorized coordination capability. It cannot substitute for the fresh final database and attachment parity measured after the target is fenced. If a bounded final synchronization is needed, its exact authority must already exist; PROD-13 does not imply a new data-import approval.
+Existing pre-request `FINAL_SOURCE_QUIESCENCE_OR_SYNC_PROOF` must bind either continuously held source write exclusion or a verified coordination capability and exact plan that excludes every source writer before final synchronization/parity and through old-source demotion. A momentary source check or completed sync is insufficient. The source capability and plan are pre-request facts; acquisition/drain receipts are produced only inside the authorized operation. `CUTOVER_SOURCE_CONSISTENCY` remains BLOCKED until that capability is verified in a later authority revision. If bounded final synchronization is needed, its exact authority must already exist; PROD-13 does not imply a new data-import approval.
+
+PROD-13 authority explicitly includes the exact source and target database/upload write barriers. Source exclusion covers ordinary requests, uploads, integrations, callbacks, cleanup, background work and direct storage writers across processes, not just the synchronization worker. Bind the source barrier identity/epoch and snapshot to the same operation as the target fence. Both barriers span final parity, Switch and read-only verification. On success the old source stays write-disabled, including stale clients and direct old-endpoint access; only the target opens for approved production writes. A separately designed and authorized recovery path is required before any later old-source return to authority.
 
 ## Ordered execution contract
 
@@ -35,12 +37,12 @@ The validator compares PROD-13 `effects` as an exact ordered array, not as a set
 | --- | --- |
 | 1 | After exact authorization, acquire persistent admission fencing for the bound target database and upload volume, all writers, operation, and fence epoch. |
 | 2 | Keep that fence and drain all in-flight database and attachment mutations across all processes. Keep every orphan-cleanup entry point disabled. |
-| 3 | Confirm continued source quiescence. If separately authorized bounded final synchronization is used, admit only its exclusive writer, then revoke it and drain again. |
-| 4 | With zero remaining writers, recompute source-target database and attachment parity. Bind the proof to the source snapshot, target identities, target revision, attachment digests, operation, and fence epoch. |
-| 5 | Immediately before Switch, confirm the same fence and proof bindings, no intervening writes, source consistency, cleanup guard, and read-only loopback and routed TLS health. |
-| 6 | Retain the fence while promoting only the exact approved endpoint, data path, and client mappings. Record the Switch without reopening writes. |
-| 7 | Retain the same fence through read-only post-Switch health, routing, client-mapping, database, and attachment verification. |
-| 8 | Only complete success permits recorded release of that exact fence into the approved production write policy. Cleanup remains disabled until separately authorized PROD-14. |
+| 3 | Hold source-wide write exclusion and drain source writers. Any separately authorized final sync runs only with that barrier retained through Switch/demotion; revoke its exclusive target writer and drain again before parity. |
+| 4 | With zero remaining writers, recompute source-target database and attachment parity. Bind the proof to source snapshot and barrier epoch, target identities/revision/attachment digests, operation, and target fence epoch. |
+| 5 | Immediately before Switch, confirm both barriers and all proof bindings, no intervening writes on either side, cleanup guard, and read-only loopback/routed TLS health. |
+| 6 | Retain both barriers while promoting only the approved mappings. Record and verify old-source demotion with persistent denied writes; do not reopen target writes yet. |
+| 7 | Retain both barriers through read-only post-Switch health, routing, client-mapping, database, and attachment verification; all failure/uncertainty holds both sides closed. |
+| 8 | Only complete success and proven old-source demotion permit target-fence release into approved production writes. Old-source writes stay denied; cleanup stays disabled until authorized PROD-14. |
 
 The exclusive synchronization writer is not a standing bypass. `FINAL_SYNC_WRITER_REVOKED_AND_DRAINED` means proof that no such writer exists on the offline path, or that its exact permission was revoked and its work drained when synchronization was used. It does not require performing a synchronization merely to obtain evidence.
 
@@ -48,11 +50,11 @@ A database revision alone does not prove attachment stability. Receipt bindings 
 
 ## Failure and recovery
 
-Failure, timeout, restart, fence loss, unknown ownership, incomplete drain, unexpected writers, or inconsistent receipts invalidate the final parity proof. The default remains CLOSED write admission. No lease expiry, process exit, new-container removal, or automatic retry may reopen admission. The required deployed capability must retain this state independently of the process or container being replaced.
+Failure, timeout, restart, source-barrier or target-fence loss, unknown ownership, incomplete drain, unexpected writers, or inconsistent receipts invalidate the final parity proof. The default remains CLOSED write admission on both sides. No lease expiry, process exit, new-container removal, or automatic retry may reopen either side. The required deployed controls must retain this state independently of the process or container being replaced.
 
-Before Switch, leave the old authority in place and retain the fenced target for inspection. After Switch, use only the separately designed and explicitly bound authority-recovery capability; the current manifest continues to block that unavailable capability. Hold target admission closed through recovery and do not use stale parity to release it. Read-only verification cannot silently invoke a write probe, integration event, or cleanup.
+Before Switch, leave the old authority mapping in place but do not automatically resume its writes; retain both barriers and the target for inspection. After Switch, use only the separately designed and explicitly bound authority-recovery capability; the current manifest continues to block that unavailable capability. Hold both sides closed through recovery and do not use stale parity to release either. Read-only verification cannot silently invoke a write probe, integration event, or cleanup. Releasing the target on success never releases the old source.
 
-These are required semantics of the future executor and deployed fence, not claims that the repository now executes or experimentally proves them. This revision enforces the definition's binding and order. Production acceptance must demonstrate real writer coverage, drain behavior, persistence across failures, identity continuity, and safe release before execution becomes requestable.
+These are required semantics of the future executor and deployed barriers, not claims that the repository now executes or experimentally proves them. This revision enforces the definition's binding and order. Production acceptance must demonstrate real writer coverage, drain behavior, persistence across failures, identity continuity, source demotion, and safe target-only release before execution becomes requestable. The offline and synchronized branches both require source exclusion; synchronization without that guarantee remains unsupported and blocked.
 
 ## Cleanup restoration and coauthorized recovery
 
@@ -71,5 +73,7 @@ PROD-14 and rollback-12 effects are order-sensitive too. The forward action stay
 Retain the existing hostile-input and production-boundary regression corpus. Update only assertions made obsolete by the reviewed contract changes. Add tests for capability removal/self-promotion, every new proof and plan binding, all pairwise cutover step swaps, step removal/duplication, fail-open substitutions, cleanup recovery scope/order, and unchanged old recovery boundaries.
 
 Schema tests jointly change candidate schema and manifest authority fields, remove schema constants/constraints, inject an unsupported schema/reference, and mutate supplied schema objects after validator construction. An isolated real CLI test must reject a forged pair with nonzero exit, empty stdout, fixed error output and no digest, while normal formatting variants still succeed. Fixtures are synthetic; tests perform no production operations and never execute shell/config snippets.
+
+Source-barrier regressions additionally reject target-only fencing, one-time source checks, synchronization without source exclusion, source-barrier omission from proof bindings, premature source/target release and old-source write resumption after demotion. Existing three-class regression groups remain unchanged.
 
 Publish one combined implementation checkpoint, run exact-head repository and targeted CI, synchronize acceptance/work-order evidence from that successful run, and run the docs-only final head independently. Resolve review threads only with this evidence. Final independent review and merge checks must use the exact current head, not an ancestor's green result.
