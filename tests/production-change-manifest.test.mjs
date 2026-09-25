@@ -53,7 +53,7 @@ test('production change manifest validates with deployment request blocked and n
     [...base.authorizationPacket.deploymentBlockingGateIds].sort(),
     [
       'WO06C_VCP_EXTERNAL',
-      'WO06C_KIOSK_DEVICE',
+      'KIOSK_DEPLOYABLE_AUTH_WIRING',
       'PRODUCTION_TARGET_FACTS',
       'PRODUCTION_DATA_MIGRATION',
       'PRODUCTION_DEPLOYMENT_GATE',
@@ -175,7 +175,7 @@ test('every production action keeps its complete frozen prerequisite set', () =>
   for (const [actionId, gate] of [
     ['PROD-09-PRODUCTION-DATA-IMPORT', 'PRODUCTION_DATA_MIGRATION'],
     ['PROD-10-ENABLE-VCP-REMOTE-SYNC', 'WO06C_VCP_EXTERNAL'],
-    ['PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE', 'WO06C_KIOSK_DEVICE'],
+    ['PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE', 'KIOSK_DEPLOYABLE_AUTH_WIRING'],
     ['PROD-13-CUTOVER-SWITCH', 'PRODUCTION_DEPLOYMENT_GATE'],
   ]) {
     const changed = structuredClone(base);
@@ -382,6 +382,54 @@ test('VCP guarded push is irreversible even though adapter configuration can be 
     'ACTION_SIDE_EFFECT_INVALID',
     'guarded VCP push persists facts that config rollback cannot undo',
   );
+});
+
+
+test('Kiosk deployable auth wiring precedes post-enable real-device acceptance', () => {
+  const gate = base.gates.find(candidate => candidate.id === 'KIOSK_DEPLOYABLE_AUTH_WIRING');
+  assert.ok(gate);
+  assert.equal(gate.status, 'BLOCKED');
+  assert.equal(gate.evidence, 'PRODUCTION_ENTRYPOINT_AUTH_INJECTION_NOT_IMPLEMENTED');
+
+  const kiosk = action(base, 'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE');
+  assert.equal(kiosk.preconditions.includes('KIOSK_DEPLOYABLE_AUTH_WIRING'), true);
+  assert.equal(kiosk.preconditions.includes('WO06C_KIOSK_DEVICE'), false);
+  assert.equal(kiosk.evidenceRequired.includes('KIOSK_AUTH_RUNTIME_WIRING_PROOF'), true);
+  assert.equal(kiosk.evidenceRequired.includes('REAL_DEVICE_ACCEPTANCE'), true);
+  assert.equal(
+    base.authorizationPacket.actionSpecificRevalidation[
+      'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE'
+    ].includes('KIOSK_AUTH_RUNTIME_CONFIGURATION'),
+    true,
+  );
+
+  const cutover = action(base, 'PROD-13-CUTOVER-SWITCH');
+  assert.equal(cutover.preconditions.includes('WO06C_KIOSK_DEVICE'), true);
+  assert.equal(base.authorizationPacket.deploymentBlockingGateIds.includes('WO06C_KIOSK_DEVICE'), false);
+  assert.equal(
+    base.authorizationPacket.deploymentBlockingGateIds.includes('KIOSK_DEPLOYABLE_AUTH_WIRING'),
+    true,
+  );
+
+  const oldCycle = structuredClone(base);
+  action(oldCycle, 'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE').preconditions =
+    action(oldCycle, 'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE').preconditions
+      .map(id => id === 'KIOSK_DEPLOYABLE_AUTH_WIRING' ? 'WO06C_KIOSK_DEVICE' : id);
+  expectRejected(oldCycle, 'ACTION_PRECONDITIONS_INVALID', 'Kiosk acceptance cannot precede enablement');
+
+  const droppedProof = structuredClone(base);
+  action(droppedProof, 'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE').evidenceRequired =
+    action(droppedProof, 'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE').evidenceRequired
+      .filter(id => id !== 'KIOSK_AUTH_RUNTIME_WIRING_PROOF');
+  expectRejected(
+    droppedProof,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'Kiosk auth wiring proof cannot be dropped',
+  );
+
+  const forged = structuredClone(base);
+  forged.gates.find(candidate => candidate.id === 'KIOSK_DEPLOYABLE_AUTH_WIRING').status = 'SATISFIED';
+  expectRejected(forged, 'GATE_STATUS_INVALID', 'Kiosk auth wiring cannot self-promote');
 });
 
 
