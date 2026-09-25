@@ -273,12 +273,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36118906501` on implementation-bearing head `2120b563b8fa08a95f1f76df0d0d32f48f1a4d13` passed:
+GitHub Actions run `36120028211` on implementation-bearing head `1b9edddb7b81a35ea9adbd7e2fc0f810c08fe524` passed:
 
-- full `npm run check`: 574 tests / 573 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 44/44 PASS;
+- full `npm run check`: 575 tests / 574 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 45/45 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:d6e6b3177fab3fa712c25b8a9e656adff5b9818444a42d66250784473b771596`;
+- manifest digest: `sha256:b4cc09447e640f6493341b0d308267b4f5a8ab3863d72003eb214aea54981f47`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -782,3 +782,14 @@ PROD-05 must prove every cleanup entry point is disabled, PROD-07 revalidates th
 Unquoted assignment detection now consumes the complete non-whitespace value instead of stopping at comma/semicolon punctuation. Deployable values such as `ADMIN_TOKEN=abc,defghijklmnop` are rejected with `SECRET_MATERIAL_DETECTED`.
 
 Implementation evidence for both corrections: head `2120b563b8fa08a95f1f76df0d0d32f48f1a4d13`, run `36118906501`, full suite 574/573/0/1, manifest suite 44/44, digest `sha256:d6e6b3177fab3fa712c25b8a9e656adff5b9818444a42d66250784473b771596`.
+
+
+### WO-06D DingTalk deployable adapter gate
+
+`PROD-12-DINGTALK-PROVIDER-INTEGRATION` remains blocked by `DINGTALK_DEPLOYABLE_ADAPTER_WIRING` until a reviewed real adapter, credentials/runtime configuration, and production entrypoint composition exist. Target binding alone cannot make the provider action requestable.
+
+### WO-06D complete Bearer credential scanning
+
+Bearer secret detection now scans the complete logical-line credential value rather than a restricted alphabet, while preserving multiline/CRLF coverage. Punctuation and space-bearing values are rejected.
+
+Implementation evidence: head `1b9edddb7b81a35ea9adbd7e2fc0f810c08fe524`, run `36120028211`, full suite 575/574/0/1, manifest suite 45/45, digest `sha256:b4cc09447e640f6493341b0d308267b4f5a8ab3863d72003eb214aea54981f47`.
