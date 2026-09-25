@@ -219,7 +219,8 @@ const EXPECTED_INVARIANTS = Object.freeze([
   "INITIAL_TARGET_PREFLIGHT_HAS_NO_LATER_STAGE_REVALIDATION",
   "PRODUCTION_IMPORT_REQUIRES_OFFLINE_OR_VERIFIED_COORDINATED_SOURCE_STATE",
   "PRODUCTION_IMPORT_REQUIRES_ABSENT_TARGET_SQLITE_PATH",
-  "PRODUCTION_IMPORT_PRECEDES_CONTAINER_INITIALIZATION"
+  "PRODUCTION_IMPORT_PRECEDES_CONTAINER_INITIALIZATION",
+  "IMAGE_ROLLBACK_REQUIRES_CONTAINER_OBJECT_REMOVAL"
 ]);
 
 const EXPECTED_ROLLBACK_ORDER = Object.freeze([
@@ -609,19 +610,21 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     ]
   },
   "ROLLBACK-02-STOP-NEW-CONTAINER": {
-    "title": "Stop newly started application container",
+    "title": "Stop and remove newly started application container",
     "category": "ROLLBACK",
     "risk": "MEDIUM",
     "sideEffect": "REVERSIBLE",
     "status": "ROLLBACK_ONLY",
-    "authorityTarget": "Only the newly started container from this deployment",
+    "authorityTarget": "Only the newly started container object from this deployment; named data volume is excluded from deletion",
     "preconditions": [],
     "effects": [
-      "Stop new runtime; preserve data volume"
+      "Stop and remove only the new container object so it releases its image reference; preserve the named data volume"
     ],
     "rollbackActionIds": [],
     "evidenceRequired": [
       "CONTAINER_STOPPED",
+      "CONTAINER_REMOVED",
+      "IMAGE_REFERENCE_RELEASED",
       "DATA_VOLUME_PRESERVED"
     ]
   },
@@ -762,6 +765,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "rollbackActionIds": [],
     "evidenceRequired": [
       "IMAGE_DIGEST_MATCH",
+      "CONTAINER_REFERENCE_ABSENT",
       "IMAGE_NOT_IN_USE",
       "IMAGE_REMOVED"
     ]

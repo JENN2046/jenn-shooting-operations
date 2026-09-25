@@ -1108,6 +1108,73 @@ test('PROD-02 storage creation is intentionally retained rather than misclassifi
 });
 
 
+test('container rollback removes the exact container object before image removal while preserving volume', () => {
+  const rollback = action(base, 'ROLLBACK-02-STOP-NEW-CONTAINER');
+  assert.equal(rollback.status, 'ROLLBACK_ONLY');
+  assert.equal(
+    rollback.title,
+    'Stop and remove newly started application container',
+  );
+  assert.equal(
+    rollback.authorityTarget.includes('named data volume is excluded from deletion'),
+    true,
+  );
+  assert.equal(
+    rollback.effects.some(value => value.includes('releases its image reference')),
+    true,
+  );
+  for (const evidence of [
+    'CONTAINER_STOPPED',
+    'CONTAINER_REMOVED',
+    'IMAGE_REFERENCE_RELEASED',
+    'DATA_VOLUME_PRESERVED',
+  ]) {
+    assert.equal(rollback.evidenceRequired.includes(evidence), true, evidence);
+  }
+
+  const order = base.rollbackPlan.orderedActionIds;
+  assert.equal(
+    order.indexOf('ROLLBACK-02-STOP-NEW-CONTAINER')
+      < order.indexOf('ROLLBACK-08-REMOVE-BUILT-IMAGE'),
+    true,
+  );
+
+  const imageRollback = action(base, 'ROLLBACK-08-REMOVE-BUILT-IMAGE');
+  assert.equal(
+    imageRollback.evidenceRequired.includes('CONTAINER_REFERENCE_ABSENT'),
+    true,
+  );
+
+  const stopOnly = structuredClone(base);
+  action(stopOnly, 'ROLLBACK-02-STOP-NEW-CONTAINER').evidenceRequired =
+    ['CONTAINER_STOPPED', 'DATA_VOLUME_PRESERVED'];
+  expectRejected(
+    stopOnly,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'stopping without container removal cannot release image reference',
+  );
+
+  const unsafeTarget = structuredClone(base);
+  action(unsafeTarget, 'ROLLBACK-02-STOP-NEW-CONTAINER').authorityTarget =
+    'New container and its named data volume';
+  expectRejected(
+    unsafeTarget,
+    'AUTHORITY_TARGET_INVALID',
+    'container rollback must not widen into named-volume deletion',
+  );
+
+  const missingImageReferenceProof = structuredClone(base);
+  action(missingImageReferenceProof, 'ROLLBACK-08-REMOVE-BUILT-IMAGE').evidenceRequired =
+    action(missingImageReferenceProof, 'ROLLBACK-08-REMOVE-BUILT-IMAGE').evidenceRequired
+      .filter(id => id !== 'CONTAINER_REFERENCE_ABSENT');
+  expectRejected(
+    missingImageReferenceProof,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'image removal requires proof the container reference is absent',
+  );
+});
+
+
 test('PROD-04 image creation has exact digest-bound rollback authority', () => {
   assert.deepEqual(
     action(base, 'PROD-04-BUILD-IMAGE').rollbackActionIds,
@@ -1117,7 +1184,12 @@ test('PROD-04 image creation has exact digest-bound rollback authority', () => {
   assert.equal(rollback.status, 'ROLLBACK_ONLY');
   assert.equal(rollback.requiresExplicitAuthorization, false);
   assert.equal(rollback.authorityTarget.includes('exact image digest created by PROD-04'), true);
-  for (const evidence of ['IMAGE_DIGEST_MATCH', 'IMAGE_NOT_IN_USE', 'IMAGE_REMOVED']) {
+  for (const evidence of [
+    'IMAGE_DIGEST_MATCH',
+    'CONTAINER_REFERENCE_ABSENT',
+    'IMAGE_NOT_IN_USE',
+    'IMAGE_REMOVED',
+  ]) {
     assert.equal(rollback.evidenceRequired.includes(evidence), true, evidence);
   }
   assert.deepEqual(
