@@ -323,6 +323,12 @@ test('DingTalk candidates cannot become requestable before exact app/provider an
     candidate.preconditions = ['WO06C_DINGTALK_PROVIDER'];
     changed.authorizationPacket.requestableActionIds.push('PROD-12-DINGTALK-PROVIDER-INTEGRATION');
 
+    // Preserve the original non-declarative fixture and its early rejection.
+    assert.deepEqual(validate(changed), {
+      ok: false, issues: [{ code: 'SECRET_MATERIAL_DETECTED', path: '/' }],
+    });
+    // An admitted spelling must still exercise every independent authority guard.
+    candidate.authorityTarget = authorityTarget.replace(' -> ', ' to ');
     const result = validate(changed);
     assert.equal(result.ok, false, authorityTarget);
     const codes = issueCodes(result);
@@ -384,6 +390,12 @@ test('hostile combined mutation cannot widen target, requestability and rollback
   candidate.rollbackActionIds = ['ROLLBACK-01-REMOVE-NEW-ROUTE'];
   changed.gates[0].evidence = 'Bearer 12345678901234567890123456789012';
 
+  // Credential-bearing input is rejected before semantic diagnostics or hashing.
+  assert.deepEqual(validate(changed), {
+    ok: false, issues: [{ code: 'SECRET_MATERIAL_DETECTED', path: '/' }],
+  });
+  // Removing only the forbidden snippet does not permit any semantic widening.
+  changed.gates[0].evidence = base.gates[0].evidence;
   const result = validate(changed);
   assert.equal(result.ok, false);
   const codes = issueCodes(result);
@@ -393,7 +405,6 @@ test('hostile combined mutation cannot widen target, requestability and rollback
     'ACTION_PRECONDITIONS_INVALID',
     'ROLLBACK_BINDING_INVALID',
     'REQUESTABLE_STATUS_SET_INVALID',
-    'SECRET_MATERIAL_DETECTED',
   ]) assert.equal(codes.has(code), true, code);
 });
 
