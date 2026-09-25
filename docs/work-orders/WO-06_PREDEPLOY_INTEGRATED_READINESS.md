@@ -273,12 +273,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36120028211` on implementation-bearing head `1b9edddb7b81a35ea9adbd7e2fc0f810c08fe524` passed:
+GitHub Actions run `36121925574` on implementation-bearing head `0ed1ea690f1451c8f39fc4ef1fd5cc9627e903de` passed:
 
-- full `npm run check`: 575 tests / 574 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 45/45 PASS;
+- full `npm run check`: 577 tests / 576 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 47/47 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:b4cc09447e640f6493341b0d308267b4f5a8ab3863d72003eb214aea54981f47`;
+- manifest digest: `sha256:32fa0a5d754c157345561e9a5e1f6fcd274f8f0f94b96f3f605df4aef609cd47`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -793,3 +793,18 @@ Implementation evidence for both corrections: head `2120b563b8fa08a95f1f76df0d0d
 Bearer secret detection now scans the complete logical-line credential value rather than a restricted alphabet, while preserving multiline/CRLF coverage. Punctuation and space-bearing values are rejected.
 
 Implementation evidence: head `1b9edddb7b81a35ea9adbd7e2fc0f810c08fe524`, run `36120028211`, full suite 575/574/0/1, manifest suite 45/45, digest `sha256:b4cc09447e640f6493341b0d308267b4f5a8ab3863d72003eb214aea54981f47`.
+
+
+### WO-06D VCP wiring before compatibility proof
+
+`PROD-10-ENABLE-VCP-REMOTE-SYNC` now depends on `VCP_DEPLOYABLE_ADAPTER_WIRING`, not the post-enable `WO06C_VCP_EXTERNAL` compatibility gate. The real pull → guarded push → verification pull remains PROD-10 completion evidence, while `WO06C_VCP_EXTERNAL` remains a cutover prerequisite.
+
+### WO-06D post-cutover orphan cleanup restoration
+
+A separate exact action, `PROD-14-RESTORE-ORPHAN-CLEANUP`, owns restoration of startup, periodic, `saveUpload`, and `submitRequest` cleanup after Switch. It remains blocked by `POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION` until cutover completion and post-cutover attachment parity are verified.
+
+### WO-06D shell-concatenated role-token scanning
+
+Role-token secret detection now parses the full assignment RHS, including concatenated quoted/unquoted shell segments such as `ADMIN_TOKEN=abc"correct horse battery staple"`, instead of treating quoted and unquoted values as mutually exclusive regex branches.
+
+Implementation evidence: head `0ed1ea690f1451c8f39fc4ef1fd5cc9627e903de`, run `36121925574`, full suite 577/576/0/1, manifest suite 47/47, digest `sha256:32fa0a5d754c157345561e9a5e1f6fcd274f8f0f94b96f3f605df4aef609cd47`.
