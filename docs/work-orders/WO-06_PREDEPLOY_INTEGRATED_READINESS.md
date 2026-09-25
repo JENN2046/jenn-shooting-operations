@@ -273,12 +273,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36095441794` on implementation-bearing head `ab5df127d0cb92405205cf2b87bb55ac00468b13` passed:
+GitHub Actions run `36099561361` on implementation-bearing head `20a5337ddb621a6ed2dc92f270a898a69a695e91` passed:
 
-- full `npm run check`: 565 tests / 564 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 35/35 PASS;
+- full `npm run check`: 566 tests / 565 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 36/36 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d0395a50d2a`;
+- manifest digest: `sha256:70bc3ed0fb17de09d65b25a8b65c1191e287faf10532d899f54af80a37659df7`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -442,6 +442,7 @@ CONTAINER_START_READINESS
 HEALTH_SMOKE_READINESS
 PROXY_BACKEND_READINESS
 PRODUCTION_IMPORT_STORAGE_READINESS
+PRODUCTION_IMPORT_TARGET_ABSENCE
 PRODUCTION_IMPORT_SOURCE_CONSISTENCY
 INTEGRATION_DEPLOYMENT_READINESS
 ```
@@ -660,3 +661,26 @@ submitter_token = "..."
 The quoted alternatives require matching quotes, which closes the bypass without loosening the delimiter rules for unquoted values.
 
 Implementation evidence: head `ab5df127d0cb92405205cf2b87bb55ac00468b13`, run `36095441794`, full suite 565/564/0/1, manifest suite 35/35, digest `sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d0395a50d2a`.
+
+
+### WO-06D import target absence before runtime start
+
+Production import now requires the target SQLite path to be absent before PROD-05 can initialize the runtime database:
+
+```text
+PRODUCTION_IMPORT_TARGET_ABSENCE = BLOCKED
+REQUIRES_TARGET_SQLITE_PATH_ABSENT_BEFORE_PROD_05
+IMPORT_TARGET_SQLITE_ABSENCE_PROOF
+```
+
+Container start now requires verified completion of PROD-09 in addition to storage, tokens, and image:
+
+```text
+CONTAINER_START_READINESS = BLOCKED
+REQUIRES_VERIFIED_PROD_02_03_04_09
+PRODUCTION_IMPORT_COMPLETION_PROOF
+```
+
+The frozen order is therefore production import before container initialization. This avoids the isolated-apply ambiguity where an empty runtime-created SQLite file is treated as an existing completed target candidate.
+
+Implementation evidence: head `20a5337ddb621a6ed2dc92f270a898a69a695e91`, run `36099561361`, full suite 566/565/0/1, manifest suite 36/36, digest `sha256:70bc3ed0fb17de09d65b25a8b65c1191e287faf10532d899f54af80a37659df7`.

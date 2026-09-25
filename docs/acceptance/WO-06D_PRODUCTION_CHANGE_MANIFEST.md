@@ -62,7 +62,7 @@ The deployment authorization request remains blocked by the dedicated deployment
 
 This subset is frozen separately as `deploymentBlockingGateIds`.
 
-`blockingGateIds` has a different, exhaustive meaning: it must equal **every gate whose current status is `BLOCKED`**. It therefore also contains the action-specific blockers `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, `PROXY_BACKEND_READINESS`, `PRODUCTION_IMPORT_STORAGE_READINESS`, `PRODUCTION_IMPORT_SOURCE_CONSISTENCY`, and `INTEGRATION_DEPLOYMENT_READINESS`. The validator derives the expected exhaustive set from the gate statuses, so a newly blocked gate cannot be omitted from the CLI checklist.
+`blockingGateIds` has a different, exhaustive meaning: it must equal **every gate whose current status is `BLOCKED`**. It therefore also contains the action-specific blockers `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, `PROXY_BACKEND_READINESS`, `PRODUCTION_IMPORT_STORAGE_READINESS`, `PRODUCTION_IMPORT_TARGET_ABSENCE`, `PRODUCTION_IMPORT_SOURCE_CONSISTENCY`, and `INTEGRATION_DEPLOYMENT_READINESS`. The validator derives the expected exhaustive set from the gate statuses, so a newly blocked gate cannot be omitted from the CLI checklist.
 
 WO-06C still classifies the local DingTalk provider boundary as `READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION`, but WO-06D separately freezes `DINGTALK_TARGET_BINDING = BLOCKED` because no concrete app/provider identity plus bounded test destination has been supplied. Provider readiness therefore does not make `PROD-12` requestable.
 
@@ -115,8 +115,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `ab5df127d0cb92405205cf2b87bb55ac00468b13`
-- GitHub Actions run: `36095441794`
+- Head: `20a5337ddb621a6ed2dc92f270a898a69a695e91`
+- GitHub Actions run: `36099561361`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -125,8 +125,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          565
-pass                           564
+tests                          566
+pass                           565
 fail                           0
 skipped                        1
 ```
@@ -136,8 +136,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  35
-pass   35
+tests  36
+pass   36
 fail   0
 ```
 
@@ -146,7 +146,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d0395a50d2a",
+  "manifestDigest": "sha256:70bc3ed0fb17de09d65b25a8b65c1191e287faf10532d899f54af80a37659df7",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -162,6 +162,7 @@ Machine verdict:
     "HEALTH_SMOKE_READINESS",
     "PROXY_BACKEND_READINESS",
     "PRODUCTION_IMPORT_STORAGE_READINESS",
+    "PRODUCTION_IMPORT_TARGET_ABSENCE",
     "PRODUCTION_IMPORT_SOURCE_CONSISTENCY",
     "INTEGRATION_DEPLOYMENT_READINESS",
     "PRODUCTION_TARGET_FACTS",
@@ -977,3 +978,58 @@ manifest digest  sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d03
 ```
 
 The manifest body is unchanged, so its digest remains stable. No credential value or production mutation was introduced.
+
+
+## Import target absence + pre-runtime ordering
+
+Exact-current review on `115e9fc...` identified that starting PROD-05 before PROD-09 initializes the target SQLite database. The isolated apply path treats any existing target as a completed migration candidate, so a freshly initialized empty runtime database is not a valid unused migration target.
+
+The current contract now requires exact target absence before import:
+
+```text
+PRODUCTION_IMPORT_TARGET_ABSENCE = BLOCKED
+evidence = REQUIRES_TARGET_SQLITE_PATH_ABSENT_BEFORE_PROD_05
+
+PROD-09.preconditions += PRODUCTION_IMPORT_TARGET_ABSENCE
+PROD-09.actionSpecificRevalidation += IMPORT_TARGET_SQLITE_ABSENCE_PROOF
+PROD-09.evidenceRequired += IMPORT_TARGET_SQLITE_ABSENCE_PROOF
+```
+
+Runtime startup is also sequenced after import completion:
+
+```text
+CONTAINER_START_READINESS = BLOCKED
+evidence = REQUIRES_VERIFIED_PROD_02_03_04_09
+
+PROD-05.evidenceRequired += PRODUCTION_IMPORT_COMPLETION_PROOF
+```
+
+The resulting deployment path is:
+
+```text
+target binding
+→ preflight
+→ target facts
+→ storage / tokens / image
+→ production import into absent target
+→ container start
+→ loopback health
+→ proxy / TLS
+→ integrations
+→ cutover
+```
+
+This prevents PROD-05 from creating the SQLite file before PROD-09 has completed, and prevents PROD-09 from targeting any already-existing SQLite file.
+
+Exact implementation-bearing evidence:
+
+```text
+head             20a5337ddb621a6ed2dc92f270a898a69a695e91
+run              36099561361
+result           success
+full suite       566 tests / 565 pass / 0 fail / 1 expected VCP skip
+manifest suite   36 / 36 PASS
+manifest digest  sha256:70bc3ed0fb17de09d65b25a8b65c1191e287faf10532d899f54af80a37659df7
+```
+
+No container was started, no SQLite target was created, and no production import or mutation was executed.
