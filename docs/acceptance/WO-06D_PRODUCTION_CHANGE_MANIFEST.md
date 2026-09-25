@@ -83,8 +83,8 @@ Rollback order is frozen as:
 ```text
 remove new route
 → revert only the newly changed firewall/security-group rule
-→ stop new container
-→ remove the exact PROD-04 image digest after proving it is unused
+→ stop and remove the exact new container object while preserving its named volume
+→ remove the exact PROD-04 image digest after proving all container references are absent
 → revoke/remove role-token runtime bindings created by PROD-03
 → disable only VCP configuration introduced by PROD-10
 → disable only Kiosk configuration introduced by PROD-11
@@ -115,8 +115,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `20a5337ddb621a6ed2dc92f270a898a69a695e91`
-- GitHub Actions run: `36099561361`
+- Head: `f4d04336a0e18ef2fe3a90840a444d2f3da6e4d2`
+- GitHub Actions run: `36100548171`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -125,8 +125,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          566
-pass                           565
+tests                          567
+pass                           566
 fail                           0
 skipped                        1
 ```
@@ -136,8 +136,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  36
-pass   36
+tests  37
+pass   37
 fail   0
 ```
 
@@ -146,7 +146,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:70bc3ed0fb17de09d65b25a8b65c1191e287faf10532d899f54af80a37659df7",
+  "manifestDigest": "sha256:8851d97dd4379ee9d0e5bcd31623e53419d154c700fa35ef26bf5e193ad92e48",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -1033,3 +1033,51 @@ manifest digest  sha256:70bc3ed0fb17de09d65b25a8b65c1191e287faf10532d899f54af80a
 ```
 
 No container was started, no SQLite target was created, and no production import or mutation was executed.
+
+
+## Container-object removal before image rollback
+
+Exact-current review on `4f8b95ad...` identified that stopping the new container did not release its Docker image reference. A stopped container still blocks removal of its image.
+
+`ROLLBACK-02-STOP-NEW-CONTAINER` now freezes stronger semantics:
+
+```text
+title:
+  Stop and remove newly started application container
+
+authorityTarget:
+  Only the newly started container object from this deployment;
+  named data volume is excluded from deletion
+
+effects:
+  Stop and remove only the new container object so it releases its image reference;
+  preserve the named data volume
+
+evidence:
+  CONTAINER_STOPPED
+  CONTAINER_REMOVED
+  IMAGE_REFERENCE_RELEASED
+  DATA_VOLUME_PRESERVED
+```
+
+`ROLLBACK-08-REMOVE-BUILT-IMAGE` additionally requires:
+
+```text
+CONTAINER_REFERENCE_ABSENT
+IMAGE_NOT_IN_USE
+```
+
+The frozen rollback order remains container cleanup before image removal, but the first step now removes the container object rather than leaving a stopped reference behind.
+
+Exact implementation-bearing evidence:
+
+```text
+head             f4d04336a0e18ef2fe3a90840a444d2f3da6e4d2
+run              36100548171
+result           success
+full suite       567 tests / 566 pass / 0 fail / 1 expected VCP skip
+manifest suite   37 / 37 PASS
+manifest digest  sha256:8851d97dd4379ee9d0e5bcd31623e53419d154c700fa35ef26bf5e193ad92e48
+```
+
+No container, image, or named volume was changed or deleted.

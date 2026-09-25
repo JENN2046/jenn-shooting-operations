@@ -273,12 +273,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36099561361` on implementation-bearing head `20a5337ddb621a6ed2dc92f270a898a69a695e91` passed:
+GitHub Actions run `36100548171` on implementation-bearing head `f4d04336a0e18ef2fe3a90840a444d2f3da6e4d2` passed:
 
-- full `npm run check`: 566 tests / 565 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 36/36 PASS;
+- full `npm run check`: 567 tests / 566 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 37/37 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:70bc3ed0fb17de09d65b25a8b65c1191e287faf10532d899f54af80a37659df7`;
+- manifest digest: `sha256:8851d97dd4379ee9d0e5bcd31623e53419d154c700fa35ef26bf5e193ad92e48`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -339,8 +339,8 @@ The global rollback plan now explicitly includes `ROLLBACK-05-REVERT-FIREWALL-RU
 ```text
 remove new route
 → revert new firewall/security-group rule
-→ stop new container
-→ remove the exact PROD-04 image digest after proving it is unused
+→ stop and remove the exact new container object while preserving its named volume
+→ remove the exact PROD-04 image digest after proving container references are absent and the image is unused
 → revoke/remove role-token runtime bindings created by PROD-03
 → disable only VCP configuration introduced by PROD-10
 → disable only Kiosk configuration introduced by PROD-11
@@ -684,3 +684,12 @@ PRODUCTION_IMPORT_COMPLETION_PROOF
 The frozen order is therefore production import before container initialization. This avoids the isolated-apply ambiguity where an empty runtime-created SQLite file is treated as an existing completed target candidate.
 
 Implementation evidence: head `20a5337ddb621a6ed2dc92f270a898a69a695e91`, run `36099561361`, full suite 566/565/0/1, manifest suite 36/36, digest `sha256:70bc3ed0fb17de09d65b25a8b65c1191e287faf10532d899f54af80a37659df7`.
+
+
+### WO-06D container removal before image rollback
+
+Rollback 02 now stops **and removes** the exact container object created by PROD-05 while explicitly excluding the named data volume from deletion. Evidence must prove `CONTAINER_REMOVED` and `IMAGE_REFERENCE_RELEASED` in addition to stop and volume-preservation proof.
+
+Rollback 08 then requires `CONTAINER_REFERENCE_ABSENT` before the existing `IMAGE_NOT_IN_USE` / image-removal checks.
+
+Implementation evidence: head `f4d04336a0e18ef2fe3a90840a444d2f3da6e4d2`, run `36100548171`, full suite 567/566/0/1, manifest suite 37/37, digest `sha256:8851d97dd4379ee9d0e5bcd31623e53419d154c700fa35ef26bf5e193ad92e48`.
