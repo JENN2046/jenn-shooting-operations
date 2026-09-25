@@ -115,8 +115,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `728e480e6e9b3735d9a29d23c233e8451dc0763b`
-- GitHub Actions run: `36105600123`
+- Head: `2120b563b8fa08a95f1f76df0d0d32f48f1a4d13`
+- GitHub Actions run: `36118906501`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -125,8 +125,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          572
-pass                           571
+tests                          574
+pass                           573
 fail                           0
 skipped                        1
 ```
@@ -136,8 +136,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  42
-pass   42
+tests  44
+pass   44
 fail   0
 ```
 
@@ -146,7 +146,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:e597afee08452496caea4526740eaac026109b6e6dbf90e02043f1447d4ef93b",
+  "manifestDigest": "sha256:d6e6b3177fab3fa712c25b8a9e656adff5b9818444a42d66250784473b771596",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -158,8 +158,11 @@ Machine verdict:
     "DINGTALK_TARGET_BINDING",
     "CUTOVER_FORWARD_CHAIN",
     "CUTOVER_SWITCH_RECOVERY",
+    "CUTOVER_SOURCE_CONSISTENCY",
+    "CUTOVER_LIVE_SERVICE_READINESS",
     "TARGET_HOST_BINDING",
     "CONTAINER_START_READINESS",
+    "PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL",
     "HEALTH_SMOKE_READINESS",
     "PROXY_BACKEND_READINESS",
     "PRE_CUTOVER_ROUTE_WRITE_RESTRICTION",
@@ -185,7 +188,7 @@ Machine verdict:
 The validator also fresh-rejects:
 
 - ordinary Bearer/access-token/token-shaped secret material embedded in schema-valid free text, including Bearer credentials split by raw newline, tab, or CRLF whitespace before JSON serialization;
-- assignments to the four declared deployment role-token names: `VIEWER_TOKEN`, `SUBMITTER_TOKEN`, `SCHEDULER_TOKEN`, and `ADMIN_TOKEN`, with case-insensitive names, optional single/double quotes around the key, either `=` or `:` delimiters, and unquoted, matching-double-quoted, or matching-single-quoted credential values;
+- assignments to the four declared deployment role-token names: `VIEWER_TOKEN`, `SUBMITTER_TOKEN`, `SCHEDULER_TOKEN`, and `ADMIN_TOKEN`, with case-insensitive names, optional single/double quotes around the key, either `=` or `:` delimiters, matching quoted values, and complete delimiter-bounded unquoted values including punctuation such as commas and semicolons;
 - secret fields, pre-populated approved action IDs and blanket approval;
 - missing or extra entries in the exhaustive `blockingGateIds` surface, including action-specific blocked gates;
 - drift in the separate deployment-level `deploymentBlockingGateIds` subset;
@@ -1217,3 +1220,64 @@ No role credential was added, no VCP push was executed, and no production data o
 Frozen invariant: `KIOSK_EVENT_WRITES_ARE_NOT_REVERSED_BY_CONFIG_ROLLBACK`.
 
 Implementation evidence: head `88239a6ae500908551972a9841b94e832075ef1b`, run `36104515602`, full suite 571/570/0/1, manifest suite 41/41, digest `sha256:1c8d005f1cc0675d63d705e14a4cd737dcb06868cd7cf4964789462978223fa5`.
+
+
+## Request-triggered orphan-cleanup control
+
+Exact-current review on `8903228719...` identified that disabling only startup and periodic orphan cleanup was insufficient: `saveUpload()` and `submitRequest()` can also call `cleanupOrphanUploads()` and therefore delete imported, unclaimed attachments during bounded staging writes.
+
+The frozen cleanup guard now covers **every cleanup entry point**:
+
+```text
+PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL = BLOCKED
+evidence =
+  ALL_STARTUP_PERIODIC_AND_REQUEST_TRIGGERED_ORPHAN_CLEANUP_DISABLE_NOT_IMPLEMENTED
+```
+
+PROD-05 requires:
+
+```text
+STARTUP_ORPHAN_CLEANUP_DISABLED
+PERIODIC_ORPHAN_CLEANUP_DISABLED
+REQUEST_TRIGGERED_ORPHAN_CLEANUP_DISABLED
+ALL_ORPHAN_CLEANUP_ENTRY_POINTS_DISABLED_PROOF
+```
+
+The guard is then revalidated at staging exposure and again immediately before Switch:
+
+```text
+PROD-07:
+  ALL_ORPHAN_CLEANUP_ENTRY_POINTS_STILL_DISABLED
+  STAGING_REQUEST_PATH_CLEANUP_DISABLED_PROOF
+
+PROD-13:
+  ALL_ORPHAN_CLEANUP_ENTRY_POINTS_STILL_DISABLED
+  PRE_SWITCH_ORPHAN_CLEANUP_GUARD_PROOF
+```
+
+The current repository does not claim this runtime guard is implemented; the gate stays BLOCKED until all startup, periodic, `saveUpload`, and `submitRequest` cleanup entry points are disabled through cutover.
+
+## Complete unquoted role-token scanning
+
+The secret detector now scans the complete non-whitespace value for unquoted role-token assignments rather than stopping at comma/semicolon punctuation. Examples such as:
+
+```text
+ADMIN_TOKEN=abc,defghijklmnop
+VIEWER_TOKEN=abc;defghijklmnop
+SCHEDULER_TOKEN: abc,defghijklmnop
+```
+
+are rejected with `SECRET_MATERIAL_DETECTED` when the complete value reaches the deployable token-length threshold.
+
+Exact implementation-bearing evidence for both corrections:
+
+```text
+head             2120b563b8fa08a95f1f76df0d0d32f48f1a4d13
+run              36118906501
+result           success
+full suite       574 tests / 573 pass / 0 fail / 1 expected VCP skip
+manifest suite   44 / 44 PASS
+manifest digest  sha256:d6e6b3177fab3fa712c25b8a9e656adff5b9818444a42d66250784473b771596
+```
+
+No cleanup operation, staging write, production mutation, or credential value was executed or introduced.
