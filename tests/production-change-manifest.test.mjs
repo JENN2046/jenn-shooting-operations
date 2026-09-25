@@ -385,6 +385,35 @@ test('VCP guarded push is irreversible even though adapter configuration can be 
 });
 
 
+test('Kiosk event submissions are irreversible even though device configuration can be disabled', () => {
+  const kiosk = action(base, 'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE');
+  assert.equal(kiosk.sideEffect, 'IRREVERSIBLE_OR_EXTERNAL');
+  assert.equal(
+    kiosk.effects.some(value => value.includes('persist production runs, reviews, receipts, and audit facts')),
+    true,
+  );
+  assert.deepEqual(kiosk.rollbackActionIds, ['ROLLBACK-10-DISABLE-KIOSK-CONFIG']);
+
+  const rollback = action(base, 'ROLLBACK-10-DISABLE-KIOSK-CONFIG');
+  assert.equal(
+    rollback.effects.some(value => value.includes('Disable only the Kiosk integration configuration')),
+    true,
+  );
+  assert.equal(
+    rollback.effects.some(value => /run|review|receipt|audit/iu.test(value)),
+    false,
+  );
+
+  const understated = structuredClone(base);
+  action(understated, 'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE').sideEffect = 'REVERSIBLE';
+  expectRejected(
+    understated,
+    'ACTION_SIDE_EFFECT_INVALID',
+    'Kiosk event writes persist facts that config rollback cannot undo',
+  );
+});
+
+
 test('initial preflight is exempt from all later-stage revalidation checks', () => {
   assert.deepEqual(
     base.authorizationPacket.mustRevalidateBeforeRequest,

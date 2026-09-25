@@ -235,7 +235,8 @@ const EXPECTED_INVARIANTS = Object.freeze([
   "IMAGE_ROLLBACK_REQUIRES_CONTAINER_OBJECT_REMOVAL",
   "PRODUCTION_IMPORT_REQUIRES_ATTACHMENT_BYTES_IN_TARGET_VOLUME",
   "PRE_CUTOVER_ROUTE_BLOCKS_PUBLIC_WRITES_UNTIL_SWITCH",
-  "VCP_GUARDED_PUSH_WRITES_ARE_NOT_REVERSED_BY_CONFIG_ROLLBACK"
+  "VCP_GUARDED_PUSH_WRITES_ARE_NOT_REVERSED_BY_CONFIG_ROLLBACK",
+  "KIOSK_EVENT_WRITES_ARE_NOT_REVERSED_BY_CONFIG_ROLLBACK"
 ]);
 
 const EXPECTED_ROLLBACK_ORDER = Object.freeze([
@@ -528,7 +529,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "title": "Enable real Kiosk device and identity mapping",
     "category": "INTEGRATION",
     "risk": "HIGH",
-    "sideEffect": "REVERSIBLE",
+    "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
     "status": "BLOCKED_PREREQUISITE",
     "authorityTarget": "Exact approved Kiosk device/browser and trusted identity mapping",
     "preconditions": [
@@ -538,7 +539,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
     "effects": [
-      "Allow real device to read and submit authorized run events"
+      "Allow real device to read and submit authorized run events; accepted or review-required submissions may persist production runs, reviews, receipts, and audit facts that configuration rollback does not remove"
     ],
     "rollbackActionIds": [
       "ROLLBACK-10-DISABLE-KIOSK-CONFIG"
