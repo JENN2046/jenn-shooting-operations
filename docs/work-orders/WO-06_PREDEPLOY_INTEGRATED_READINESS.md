@@ -1,7 +1,7 @@
 # WO-06：部署前综合预检
 
 - Authority base: `8d5747439ccdfb29dd78ae294c1df82cba6476a3`
-- 状态：`IN_PROGRESS / WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS / WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS / WO-06C_LOCAL_EXTERNAL_BOUNDARY_PASS / WO-06C_EXTERNAL_VALIDATION_PENDING / WO-06D_MANIFEST_PACKET_VALID / MERGE_PENDING / REVIEW_CLOSURE_BLOCKED / BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
+- 状态：`IN_PROGRESS / WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS / WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS / WO-06C_LOCAL_EXTERNAL_BOUNDARY_PASS / WO-06C_EXTERNAL_VALIDATION_PENDING / WO-06D_MANIFEST_PACKET_VALID / MERGE_PENDING / FINAL_REVIEW_PENDING / BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
 - 目标：证明系统是否具备进入“申请部署授权”的条件，不执行部署。
 - 硬边界：不接生产 DB、不写真实凭据、不调用真实钉钉/VCP provider、不发布、不切流、不做 Switch。
 
@@ -175,14 +175,33 @@ No VCP runtime access, device operation, credential/provider call, public callba
 ## WO-06D：PRODUCTION_CHANGE_MANIFEST_AND_AUTHORIZATION_PACKET
 
 - Authority base: `56f18930b8a89b19cdbfdde24d090649329d50c9`
-- 状态：`WO-06D_MANIFEST_PACKET_VALID / MERGE_PENDING / REVIEW_CLOSURE_BLOCKED / DEPLOYMENT_AUTHORIZATION_REQUEST_BLOCKED`
+- 状态：`WO-06D_MANIFEST_PACKET_VALID / MERGE_PENDING / FINAL_REVIEW_PENDING / DEPLOYMENT_AUTHORIZATION_REQUEST_BLOCKED`
 - Authority candidate: `docs/operations/production-change-manifest.v1.json`
 - Acceptance: [WO-06D current acceptance](../acceptance/WO-06D_PRODUCTION_CHANGE_MANIFEST.md)
-- Shared input contract: [Production Evidence Input Boundary V1](../operations/PRODUCTION_EVIDENCE_INPUT_BOUNDARY_V1.md)
+- Safety design: [Production Cutover Safety Contract V1](../operations/PRODUCTION_CUTOVER_SAFETY_CONTRACT_V1.md)
+- Retained input design: [Production Evidence Input Boundary V1](../operations/PRODUCTION_EVIDENCE_INPUT_BOUNDARY_V1.md)
 
-The manifest freezes unresolved production targets, four secret classes without values, exact action IDs/targets, prerequisites, risk/effects, evidence and source-scoped rollback. Input admission and definition validation are not production authorization, implemented external capabilities or independent review closure.
+WO-06A/B/C above are retained checkpoints, not freshly executed container/external acceptance. This WO-06D batch implements repository contract controls only. Its still-unimplemented production capabilities stay explicitly blocked.
 
-### Unchanged authorization semantics
+### One contract revision for three review classes
+
+The complete design and failure semantics are in `docs/operations/PRODUCTION_CUTOVER_SAFETY_CONTRACT_V1.md`; this evidence does not duplicate that authority specification.
+
+| Class | Implemented contract and regression control | Production capability status |
+| --- | --- | --- |
+| Target-writer race, comments `4103936494` / `4104786562` | Eight exact ordered PROD-13 effects bind authorization, persistent all-writer fencing, database/attachment drain, source consistency, same-fence final parity, immediate health/TLS, Switch, read-only verification and success-only release. Reordering is rejected. | `CUTOVER_TARGET_WRITE_FENCE_CAPABILITY = BLOCKED`; deployed fence/drain/failure retention not implemented or accepted here. |
+| Schema trust, comment `4105956155` | Complete canonical schema identity is pinned in reviewed validator source before compilation. A copied admitted snapshot prevents subsequent caller mutation. Joint schema/manifest alteration cannot self-authorize. | Repository validation control implemented; not production authorization or a defense against rewriting trusted validator code itself. |
+| Cleanup recovery, comment `4105956167` | PROD-14 binds only rollback 12, which denies new cleanup at all four entries, cancels schedules, drains in-flight work and restores captured disabled configuration. Only approved PROD-14 derives it; ordered recovery puts it first in the applicable subset. | `RESTORED_CLEANUP_DISABLE_CAPABILITY = BLOCKED`; deployed disable-and-drain behavior remains unimplemented/unverified. |
+
+`FINAL_PARITY_UNDER_FENCE_PLAN` replaces the old pre-request final-parity result. Acquisition, drain, final parity and release receipts are generated after exact authorization, not required before requesting their producing action. The final proof binds source snapshot, database/upload-volume identities, target revision, attachment digests, operation and fence epoch. Staging, API, integration/callback, background and direct-storage writers are covered. A separately authorized exclusive final-sync writer, when needed, must be revoked and drained before parity; the offline path proves its absence.
+
+Failure, restart, timeout, fence loss or uncertainty invalidates parity and retains CLOSED admission independently of process/container lifetime. No automatic retry or lease-expiry release. Divergent staging facts stop cutover, not authorize deletion. Cleanup remains disabled through successful Switch until separately authorized PROD-14. Existing post-Switch authority recovery stays independently blocked.
+
+PROD-14 captures disabled configuration and verifies disable/drain recovery before restoring any control. Its effects and rollback-12 effects are order-sensitive. The rollback strategy is `STOP_CLEANUP_THEN_ROUTE_RUNTIME_PRESERVE_DATA`; it executes only the approved/applicable derived subset. Disabling cleanup cannot restore deleted files, so PROD-14 remains `IRREVERSIBLE_OR_EXTERNAL`.
+
+### Preserved boundaries
+
+The packet remains non-authorizing:
 
 ```text
 approvalModel = EXACT_ACTION_IDS_AND_TARGETS_ONLY
@@ -196,88 +215,46 @@ deploymentAuthorizationRequest = BLOCKED_PREREQUISITES
 deploymentGate = BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 ```
 
-`AUTHORITY_HEAD` remains the only global pre-request check. Host/conflict facts apply after PROD-01; build source/base digest applies at PROD-04; built-image checks apply downstream. Backup, secret, external and rollback checks remain action-specific. PROD-12 retains prior `DEPLOYMENT_CHAIN_COMPLETION_PROOF`. This correction changes no production action, gate or authorization rule.
+`AUTHORITY_HEAD` is still the only global pre-request check. PROD-01 does not require its own discovered facts. VCP/Kiosk retain deployable wiring -> separately authorized enablement -> real acceptance -> cutover. Their post-enable compatibility/device gates stay BLOCKED and remain cutover prerequisites, not deployment-level blockers. PROD-12 retains exact target/wiring and completed-deployment requirements. PROD-09 still requires source consistency, absent target SQLite, isolated storage and attachment parity before startup. Container removal precedes unused-image removal; named data is preserved.
 
-### Current production blockers
+The manifest now has 31 gates, 27 exhaustive BLOCKED gates and 25 actions. The deployment subset stays exactly the five gates shown in the machine verdict. No old gate is promoted. Schema content changes only its rollback-strategy constant; the complete schema is now pinned.
 
-The five deployment-level blockers remain exactly:
+Raw duplicate rejection and declaration-only evidence admission are unchanged. Both files are read once as bytes; matching the schema pin and parsing its admitted snapshot do not replace raw-source checks. Unsupported credential/config/header snippets remain rejected at every length. Runtime authentication, dependencies and workflow permissions are unchanged. All invalid semantic results now return without a digest. This remains bounded admission, not universal detection of unlabelled secrets or covert encodings.
 
-```text
-VCP_DEPLOYABLE_ADAPTER_WIRING
-KIOSK_DEPLOYABLE_AUTH_WIRING
-PRODUCTION_TARGET_FACTS
-PRODUCTION_DATA_MIGRATION
-PRODUCTION_DEPLOYMENT_GATE
-```
+### Fresh implementation-bearing evidence
 
-Exhaustive `blockingGateIds` separately contains all 25 BLOCKED gates, reproduced below. `POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION` belongs to PROD-14, not the deployment subset. No gate is promoted, deleted or newly added.
-
-VCP retains wiring -> separately authorized PROD-10 -> real pull / guarded push / verification pull -> compatibility PASS -> cutover. `WO06C_VCP_EXTERNAL` stays blocked, exhaustive and required by PROD-13; it is not a deployment-level blocker or a prerequisite of its own producing action. Kiosk retains deployable authentication -> PROD-11 -> real-device acceptance -> cutover. No real compatibility operation was executed.
-
-No action is requested, approved or requestable. PROD-01 requires exact `TARGET_HOST_BINDING`, not its own discovered facts. PROD-12 keeps `UNRESOLVED_DINGTALK_TARGET_BINDING` and `BLOCKED_PREREQUISITE`. Its exact prerequisites remain `WO06C_DINGTALK_PROVIDER`, `DINGTALK_TARGET_BINDING`, `DINGTALK_DEPLOYABLE_ADAPTER_WIRING`, `PRODUCTION_TARGET_FACTS`, `INTEGRATION_DEPLOYMENT_READINESS` and `PRODUCTION_DEPLOYMENT_GATE`. Deployment-chain proof is required before request and as evidence, not a prerequisite requiring PROD-12's own send. Existing runtime/secret/external/rollback and bounded provider/wiring/destination/send checks remain intact.
-
-### Retained execution and recovery
-
-PROD-09 requires offline/quiescent source state or verified coordination, absent target SQLite, prepared isolated storage, attachment-byte copy capability and source/target manifests plus record/file parity. Import precedes PROD-05 startup.
-
-PROD-07 remains staging-only; limited staging writes are not a target-wide fence. PROD-13's target-side race remains unimplemented in comments `4103936494` / `4104786562`. All destructive orphan-cleanup entries, including startup, timer, `saveUpload` and `submitRequest`, remain disabled through cutover and are re-proved at PROD-05/07/13. PROD-14 owns separate post-cutover restoration after protected parity.
-
-PROD-10/11 remain irreversible/external. Rollback removes the exact new route and changed firewall rule, stops/removes the exact new container before its unused exact image, revokes introduced token bindings, disables only origin-scoped integration configurations, and preserves named data. Volume deletion remains forbidden. Blocked post-Switch authority recovery is not available capability.
-
-### One input boundary for all scanner findings and raw-source duplicates
-
-The machine manifest admits declarative summaries and exact credential declarations only, not shell/config/header snippets or credential values. Partial shell/YAML parsing and header length guessing are removed. See the shared design for the complete admission matrix and rationale.
-
-```text
-original UTF-8 bytes
--> duplicate-rejecting JSON source admission
--> strict schema
--> declarative text and exact declaration-path admission
--> frozen semantic contract
--> valid verdict and stable digest
-```
-
-`src/production-manifest-json-v1.mjs` reuses the existing pure callback JSON parser unchanged, with no callback/provider behavior. Original source is limited to 1 MiB, decoded fatally, and not normalized or repaired. Repeated decoded keys are rejected per object before overwriting, including nested, equal-valued and escaped-equivalent keys. Separate objects may reuse names. Invalid syntax, UTF-8/BOM, trailing tokens and excess depth fail closed.
-
-The CLI reads schema and manifest once as bytes and uses the raw loader for both. It does not run whole-object native `JSON.parse` first or hash a reread file. Lower-level parsed-object validation does not prove source integrity; file/text callers must enter through raw admission.
-
-`src/production-evidence-input-boundary-v1.mjs` admits only Unicode letters/marks/numbers, ASCII space and `. , : ; ( ) / + _ -` in decoded strings and keys. Reserved credential labels are forbidden outside exact `secrets[index].id`, indices 0 through 3, regardless of value length or layout. Existing strict secret schema prevents extra value fields. Quoting, backslashes, equals signs, controls, non-ASCII whitespace and line breaks are rejected rather than decoded or joined.
-
-All five reported classes therefore share one boundary: continued header, append assignment, plain-scalar backslash, continued key and split name/value. Short/empty/placeholder credential snippets are intentionally rejected too. Existing negative controls were migrated to this stricter policy, with independent runtime-authorizer assertions retained. No server token rule changes and no new YAML/shell dependency are involved.
-
-For schema-valid text rejection, `SECRET_MATERIAL_DETECTED` appears only at `/`, before semantic diagnostics or digest. It also represents unsupported syntax, not proof of a real secret. Raw failures use fixed `MANIFEST_JSON_DUPLICATE_KEY`, `MANIFEST_JSON_INVALID` or `MANIFEST_JSON_TOO_LARGE`. The CLI reduces all errors to fixed root paths, suppresses source/exception details, produces no stdout/digest on rejection and exits nonzero. I/O/compile failure is `MANIFEST_SOURCE_VALIDATION_ERROR`.
-
-### WO-06D fresh implementation-bearing evidence
-
-- Exact head: `3f454f9fb41a5a65b6125360783cc804be15adb9`
-- Parent: `d0632e26e9f6f546dcd46aaa5b3d5cdadae60a13`
-- Batch starting checkpoint: `36a8a0a3000e8fb750fe60196eddb7a1c97a960c`
-- GitHub Actions run #109: `36152821332`
-- Workflow: `WO-06D Production Authorization Packet`; event `push`; conclusion `success`
-- Verified job: `108130052543`
+- Implementation SHA: `86aabe9dc15e9c8c0cc82ff166b6551e45a463e3`
+- Parent checkpoint: `4d21ff89ee16a3662061132cb7c2983a7c53e3cf`
+- GitHub Actions run #113: `36162028011`
+- Job: `108160656968`
+- Workflow: `.github/workflows/wo06d-production-authorization.yml`
+- Event: `push`; conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
+- Runner: Ubuntu `24.04.5`, Linux `6.17.0-1022-azure`
 
-Both checkout and recorded `git rev-parse HEAD` match the exact implementation. The complete job log was inspected. This is published GitHub execution of the full repository, not a local task report.
+The full job log was inspected. Both checkout and recorded `git rev-parse HEAD` match the implementation SHA. All workflow steps succeeded on this exact published commit, not an unpublished local task result.
 
 ```text
 npm ci                         PASS
 npm run check                  PASS
-full tests                     623
-pass                           622
+full tests                     636
+pass                           635
 fail                           0
 skipped                        1
-manifest targeted tests        93
-manifest targeted pass         93
+manifest targeted tests        106
+manifest targeted pass         106
 manifest targeted fail         0
 manifest targeted skipped      0
 ```
 
-The sole skip is the absent external VCP adapter, not external acceptance. The unchanged targeted command is `node --test tests/production-change-manifest*.test.mjs`; no test-name filter or new skip was introduced. Thirteen unified-boundary groups and eleven raw-source/CLI groups join the retained hostile suites.
+The only full-suite skip remains the missing external VCP adapter; it is not compatibility PASS. The unchanged targeted command is `node --test tests/production-change-manifest*.test.mjs`. Thirteen new safety-contract groups join the previous 93 targeted tests. Existing test groups and hostile input fixtures remain; only expectations made obsolete by this reviewed safety contract were synchronized. No dependency, workflow permission, runtime-authentication change, test-name filter or new skip was introduced.
+
+### Machine verdict
 
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:029f63f56fa46faa8fbd0f68ede496dadc01526a83887ea81005e4642ee2ee7c",
+  "manifestDigest": "sha256:d9db0806c49189529543c952c7955f35aeb62a90063c32529c1f7e0b4dc83ad3",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -307,6 +284,8 @@ The sole skip is the absent external VCP adapter, not external acceptance. The u
     "PRODUCTION_TARGET_FACTS",
     "PRODUCTION_DATA_MIGRATION",
     "POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION",
+    "CUTOVER_TARGET_WRITE_FENCE_CAPABILITY",
+    "RESTORED_CLEANUP_DISABLE_CAPABILITY",
     "PRODUCTION_DEPLOYMENT_GATE"
   ],
   "deploymentBlockingGateIds": [
@@ -319,32 +298,33 @@ The sole skip is the absent external VCP adapter, not external acceptance. The u
 }
 ```
 
-Manifest blob remains `a80f7a715cac9b3493d2373293bfff18fd83ce57`. No source-policy change alters its current digest. The old `32fa0a5d...` digest is historical.
+### Verified source identities
 
-### Verified source and coverage
+| File | Verified Git blob |
+| --- | --- |
+| `contracts/production-change-manifest.v1.schema.json` | `1b5a0e0b9d74384016792893842eb415fa0c893b` |
+| `docs/operations/production-change-manifest.v1.json` | `a015def4442fc1206e8ac3cc3c52e29830a42b86` |
+| `src/production-change-manifest-v1.mjs` | `fd38287ea4fcf1bcd1f3f0490964f837066da5f2` |
+| `tests/production-change-manifest.test.mjs` | `6e174d42b7662678619945224cd9156a29a1adfb` |
+| `tests/production-change-manifest-safety-contract.test.mjs` | `23ea1c718c66070914730e96debbe47cc91e713f` |
+| `docs/operations/PRODUCTION_CUTOVER_SAFETY_CONTRACT_V1.md` | `d95d9c2841dd971dd0d60e6faf994db85f4859fb` |
 
-Current semantic validator blob: `f21f86bc9bac9e08cca00e725cbf7db0c8c93854`; unified boundary: `f16fb7ed2473a416d32bc6737ffe658e5cac8694`; raw adapter: `f07eeb38da40fb7481129c828c3fa87f254f36e0`; unified tests: `e163ec2c955d8d6b47d4ee1adb3af8c0c5693408`; raw tests: `09e8524a58ad1ca0c11cab4394e5283518a3fb51`. Reused parser `src/callback-json-v1.mjs` is unchanged at `c3dacf1aaa9ea76fd3ae49d9a420a35e0eaeb681`.
+Unchanged input modules remain `src/production-evidence-input-boundary-v1.mjs` at `f16fb7ed2473a416d32bc6737ffe658e5cac8694` and `src/production-manifest-json-v1.mjs` at `f07eeb38da40fb7481129c828c3fa87f254f36e0`. The complete canonical schema SHA-256 pinned by the validator is `2627409f8a0d6b7342bfe9ce0ffe616e5697e8f7d26c79aacd9263f2f07aaf9e`; this is a schema identity, not the manifest digest.
 
-Boundary tests cover five problem classes across four evidence surfaces, all credential names/cases, fragmentation/layout/length variants, forbidden characters, declaration-path isolation, safe summary vocabulary, no mutation and no sensitive diagnostic echo. Historical hostile samples remain. Former short-literal negatives now require rejection under the documented narrower input contract; runtime-authorizer assertions remain independent.
+### Coverage and limits
 
-Raw tests reject hidden earlier evidence, complete gates/secrets/authorization duplicates and equal-valued repeats, including decoded-equivalent keys. They cover independent object scopes, apparent properties inside strings, 100 generated unique documents, syntax/encoding/BOM/depth/size and unchanged-format digest. The exact exploit is demonstrated on the old native-parse path and rejected on the new loader.
+The new 13-group matrix covers both blocked capabilities, every new proof/plan binding, all 28 pairwise cutover step swaps, omitted/duplicated steps, fail-open substitutions, cleanup scope/order and old recovery boundaries. Schema tests jointly forge schema/manifest states, remove schema constants/constraints, substitute invalid/permissive/external-reference schemas, preserve formatting equivalence and test post-construction mutation. An isolated real CLI test requires nonzero exit, empty stdout, fixed root-path errors and no digest for the forged pair; normal input remains valid and blocked.
 
-Real CLI tests run copied script/input files in temporary layouts using actual source modules. They verify duplicate manifest/schema keys, malformed bytes, missing input and hostile schema-error paths produce nonzero exit, no stdout, source echo or digest. Normal input retains the non-authorizing verdict. Checkout authority files are not changed. Six pure-source groups additionally passed locally under Node22.16.0; that is not the complete acceptance, which is run #109 on Node24.21.0. No supplied shell/config text is executed and no real secret or provider is used.
+Existing groups and hostile-input samples are retained. Only obsolete exact expectations were synchronized. Synthetic CLI fixtures use real source modules without modifying checkout authority. No supplied shell/config text executes. These tests validate definitions and bindings, not deployed writer fencing or real cleanup recovery. No production operation, credential, migration, integration, network mutation or cutover occurred.
 
-### Remaining review and final-head gate
+### Final review and merge gate
 
-This batch implements and tests the five scanner findings `4104724822`, `4104786571`, `4105069439`, `4105112228`, `4105165136` plus duplicate-source P1 `4105771369` under one design. Their exact reply/resolve operations must follow final-head success; this file does not pre-claim them. Intermediate evidence P2 `4105672730` is covered by this synchronization, subject to final-head verification.
+This evidence is synchronized only after implementation run #113 success. The resulting docs-only exact head must pass the same workflow independently. Final SHA/run belong in the PR/check record and replies, not inside that same commit. Reply/resolve and one independent review follow final-head CI; no zero-thread or clean-review result is pre-claimed here.
 
-Target-fence P1 comments `4103936494` / `4104786562` remain unimplemented and open. They require every target database/attachment writer to be frozen/drained through final parity, Switch and read-only checks, with same-fence continuity, enforced ordering, success-only release and fail-closed retention. Pre-request capability/plan is distinct from outputs of an authorized freeze. This input batch does not provide that capability or authorize it.
-
-The boundary is not universal detection of unlabelled secrets or arbitrary/covert encodings. Frozen semantic binding and source-grounded review still matter. CI success does not imply zero unresolved threads or independent clean review; subsequent live findings stay in the PR/thread record.
-
-This docs-only synchronization follows run #109 success. Its resulting exact SHA must independently pass the unchanged workflow. Record final SHA/run in the PR/check record, not self-referentially here. Request one independent final-head review after the batch is complete, not one per example. Merge still requires explicit human instruction, unchanged exact head, exact-head CI success, zero unresolved threads, current-head Codex clean, OPEN / mergeable / not merged and `expected_head_sha`. No merge or production operation is authorized.
+The user has authorized merge only after these gates pass. Recheck unchanged exact head, successful exact-head workflow, zero unresolved threads, independent Codex clean for that SHA, OPEN / mergeable / not merged; merge with `expected_head_sha`. Merge does not grant production authorization. Subsequent live review inventory is maintained in PR/thread records rather than rewriting static test evidence for every comment.
 
 ### Historical evidence boundary
 
-The complete preceding work order remains at `36a8a0a3000e8fb750fe60196eddb7a1c97a960c`, blob `e87946c85c3da462fcc45166773a2a77fdc4eccb`, including all earlier chronological detail. The early [HISTORICAL_cb456114 snapshot](WO-06_PREDEPLOY_INTEGRATED_READINESS.HISTORICAL_cb456114.md), blob `0bf6b062b68ff4c0f2953ad18b3b4cc9282d4490`, is unchanged. WO-06A/B/C above are retained checkpoints, not newly performed external/container acceptance. No duplicate snapshot is created.
+The complete previous evidence remains in Git at `4d21ff89ee16a3662061132cb7c2983a7c53e3cf`. Its input-boundary implementation `3f454f9fb41a5a65b6125360783cc804be15adb9` passed run #109 `36152821332`, and its final docs passed #112 `36156164951`, with 623/622/0/1 and targeted 93/93. Those results and manifest digest `sha256:029f63f56fa46faa8fbd0f68ede496dadc01526a83887ea81005e4642ee2ee7c` are historical, not evidence for the current safety revision.
 
-Retained WO-06D checkpoints: dynamic values `9f13b160...` / #99 `36131969264`, docs `0782e22e...` / #100 `36132684480`, 587/586/0/1 and 57/57; multiline/escaped-key/DingTalk `7abad25e...` / #103 `36137024497`, docs `14726a2a...` / #104 `36137791590`, 593/592/0/1 and 63/63; scalar boundaries `61b1695466abeb62402392588ac42626fd08a06c` / #105 `36141921053`, docs `36a8a0a3000e8fb750fe60196eddb7a1c97a960c` / #106 `36142458740`, 599/598/0/1 and 69/69. Full prior failure/correction provenance remains in the referenced Git revision. Historical current/PASS/short-value-acceptance wording is not the new input policy.
-
-The unified change is `16bc1a8ce94a53003bb12881d24b8ae9a57b630f`, followed by boundary/authority assertion separation at `d0632e26e9f6f546dcd46aaa5b3d5cdadae60a13` and raw-source admission at `3f454f9fb41a5a65b6125360783cc804be15adb9`. These parent links are verified from Git commit objects. Run #109 validates the combined implementation. The inaccessible local-only `86f6e0793b06baa2f70c7cccf9e327877801bc4a` is not publication/CI evidence. `docs/DEPLOYMENT_PREFLIGHT.md` cannot override current authority.
+Earlier complete chronology remains at `36a8a0a3000e8fb750fe60196eddb7a1c97a960c` and in the unchanged `HISTORICAL_cb456114` files. No new snapshot is created. Verified input ancestry remains `16bc1a8ce94a53003bb12881d24b8ae9a57b630f` -> `d0632e26e9f6f546dcd46aaa5b3d5cdadae60a13` -> `3f454f9fb41a5a65b6125360783cc804be15adb9`. Local-only `86f6e0793b06baa2f70c7cccf9e327877801bc4a` is not publication/CI evidence. Old no-fence/no-cleanup-rollback/unpinned-schema claims and older digests do not override current definitions; `docs/DEPLOYMENT_PREFLIGHT.md` cannot override current authority.
