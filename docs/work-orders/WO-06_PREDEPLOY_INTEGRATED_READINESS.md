@@ -273,12 +273,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36102203534` on implementation-bearing head `169d3b0b5341543160a77932ea312f0171e8adc8` passed:
+GitHub Actions run `36103380648` on implementation-bearing head `3e9bd502c0c607767e5d431c1504b08dd5df7537` passed:
 
-- full `npm run check`: 569 tests / 568 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 39/39 PASS;
+- full `npm run check`: 570 tests / 569 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 40/40 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:fab1175a83759252da74451ae236b23a4bd90e5be32ce4b1aa897c8e633ba7c2`;
+- manifest digest: `sha256:b44c408eb8a3216d55a54cb6cd890d05f41f04a0bc16132922e17f7ba5f0a220`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -730,3 +730,28 @@ REQUIRES_PUBLIC_WRITE_BLOCK_OR_BOUNDED_STAGING_ACCESS
 PROD-13 revalidates that the restriction is still active immediately before Switch. The route may become general production authority only inside the exact approved cutover action.
 
 Implementation evidence for both corrections: head `169d3b0b5341543160a77932ea312f0171e8adc8`, run `36102203534`, full suite 569/568/0/1, manifest suite 39/39, digest `sha256:fab1175a83759252da74451ae236b23a4bd90e5be32ce4b1aa897c8e633ba7c2`.
+
+
+### WO-06D colon-delimited role-token scanning
+
+The role-token detector now treats both `=` and `:` as credential assignment delimiters and recognizes optional single/double quotes around the key. JSON/YAML-style material such as:
+
+```text
+"ADMIN_TOKEN": "..."
+ADMIN_TOKEN: ...
+'VIEWER_TOKEN': '...'
+```
+
+is rejected with `SECRET_MATERIAL_DETECTED`.
+
+### WO-06D VCP guarded-push irreversibility
+
+`PROD-10-ENABLE-VCP-REMOTE-SYNC` is now `IRREVERSIBLE_OR_EXTERNAL`. Its required guarded push can persist revisioned task facts; disabling the adapter via `ROLLBACK-09` does not reverse those committed facts.
+
+The frozen invariant is:
+
+```text
+VCP_GUARDED_PUSH_WRITES_ARE_NOT_REVERSED_BY_CONFIG_ROLLBACK
+```
+
+Implementation evidence: head `3e9bd502c0c607767e5d431c1504b08dd5df7537`, run `36103380648`, full suite 570/569/0/1, manifest suite 40/40, digest `sha256:b44c408eb8a3216d55a54cb6cd890d05f41f04a0bc16132922e17f7ba5f0a220`.

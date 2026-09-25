@@ -115,8 +115,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `169d3b0b5341543160a77932ea312f0171e8adc8`
-- GitHub Actions run: `36102203534`
+- Head: `3e9bd502c0c607767e5d431c1504b08dd5df7537`
+- GitHub Actions run: `36103380648`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -125,8 +125,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          569
-pass                           568
+tests                          570
+pass                           569
 fail                           0
 skipped                        1
 ```
@@ -136,8 +136,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  39
-pass   39
+tests  40
+pass   40
 fail   0
 ```
 
@@ -146,7 +146,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:fab1175a83759252da74451ae236b23a4bd90e5be32ce4b1aa897c8e633ba7c2",
+  "manifestDigest": "sha256:b44c408eb8a3216d55a54cb6cd890d05f41f04a0bc16132922e17f7ba5f0a220",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -184,7 +184,7 @@ Machine verdict:
 The validator also fresh-rejects:
 
 - ordinary Bearer/access-token/token-shaped secret material embedded in schema-valid free text, including Bearer credentials split by raw newline, tab, or CRLF whitespace before JSON serialization;
-- assignments to the four declared deployment role-token names: `VIEWER_TOKEN`, `SUBMITTER_TOKEN`, `SCHEDULER_TOKEN`, and `ADMIN_TOKEN`, with case-insensitive names, whitespace around `=`, and unquoted, matching-double-quoted, or matching-single-quoted credential values;
+- assignments to the four declared deployment role-token names: `VIEWER_TOKEN`, `SUBMITTER_TOKEN`, `SCHEDULER_TOKEN`, and `ADMIN_TOKEN`, with case-insensitive names, optional single/double quotes around the key, either `=` or `:` delimiters, and unquoted, matching-double-quoted, or matching-single-quoted credential values;
 - secret fields, pre-populated approved action IDs and blanket approval;
 - missing or extra entries in the exhaustive `blockingGateIds` surface, including action-specific blocked gates;
 - drift in the separate deployment-level `deploymentBlockingGateIds` subset;
@@ -1156,3 +1156,54 @@ manifest digest  sha256:fab1175a83759252da74451ae236b23a4bd90e5be32ce4b1aa897c8e
 ```
 
 No attachment bytes were copied, no route was exposed, and no production write or cutover was executed.
+
+
+## Colon-delimited role-token secret detection
+
+Exact-current review on `c2a5ba13...` identified that JSON/YAML-style token assignments could bypass the assignment detector because only `=` was recognized.
+
+The secret scanner now rejects both delimiters and common key quoting forms:
+
+```text
+ADMIN_TOKEN=value
+ADMIN_TOKEN: value
+"ADMIN_TOKEN": "value"
+'VIEWER_TOKEN': 'value'
+scheduler_token : "value"
+```
+
+The identifier remains case-insensitive; the scanner still runs on original string values before JSON serialization. Single/double-quoted values require matching closing quotes, while unquoted values retain delimiter restrictions.
+
+Hostile regressions cover YAML, JSON, quoted-key, and mixed-case colon-delimited role-token material, all requiring `SECRET_MATERIAL_DETECTED`.
+
+## VCP guarded-push side-effect classification
+
+The same review confirmed that `PULL_PUSH_VERIFY_RESULT` includes a guarded VCP push that persists revisioned task facts. The integration test demonstrates revision advancement and a stored task after push.
+
+`PROD-10-ENABLE-VCP-REMOTE-SYNC` is therefore frozen as:
+
+```text
+sideEffect = IRREVERSIBLE_OR_EXTERNAL
+rollback = ROLLBACK-09-DISABLE-VCP-CONFIG
+```
+
+Its effect explicitly states that guarded push may persist new revisioned task facts that configuration rollback does not remove. `ROLLBACK-09` disables only the VCP adapter configuration; it is not represented as a data rollback.
+
+A new invariant freezes this distinction:
+
+```text
+VCP_GUARDED_PUSH_WRITES_ARE_NOT_REVERSED_BY_CONFIG_ROLLBACK
+```
+
+Exact implementation-bearing evidence for both corrections:
+
+```text
+head             3e9bd502c0c607767e5d431c1504b08dd5df7537
+run              36103380648
+result           success
+full suite       570 tests / 569 pass / 0 fail / 1 expected VCP skip
+manifest suite   40 / 40 PASS
+manifest digest  sha256:b44c408eb8a3216d55a54cb6cd890d05f41f04a0bc16132922e17f7ba5f0a220
+```
+
+No role credential was added, no VCP push was executed, and no production data or integration state was mutated.
