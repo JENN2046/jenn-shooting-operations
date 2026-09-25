@@ -441,7 +441,7 @@
       "title": "Enable VCP remote synchronization",
       "category": "INTEGRATION",
       "risk": "HIGH",
-      "sideEffect": "REVERSIBLE",
+      "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
       "status": "BLOCKED_PREREQUISITE",
       "requiresExplicitAuthorization": true,
       "authorityTarget": "Exact VCP runtime adapter configuration and one approved service endpoint",
@@ -452,7 +452,7 @@
         "PRODUCTION_DEPLOYMENT_GATE"
       ],
       "effects": [
-        "Allow VCP to pull and guarded-push against the deployed service"
+        "Allow VCP to pull and guarded-push against the deployed service; guarded push may persist new revisioned task facts that configuration rollback does not remove"
       ],
       "rollbackActionIds": [
         "ROLLBACK-09-DISABLE-VCP-CONFIG"
@@ -934,6 +934,7 @@
     "PRODUCTION_IMPORT_PRECEDES_CONTAINER_INITIALIZATION",
     "IMAGE_ROLLBACK_REQUIRES_CONTAINER_OBJECT_REMOVAL",
     "PRODUCTION_IMPORT_REQUIRES_ATTACHMENT_BYTES_IN_TARGET_VOLUME",
-    "PRE_CUTOVER_ROUTE_BLOCKS_PUBLIC_WRITES_UNTIL_SWITCH"
+    "PRE_CUTOVER_ROUTE_BLOCKS_PUBLIC_WRITES_UNTIL_SWITCH",
+    "VCP_GUARDED_PUSH_WRITES_ARE_NOT_REVERSED_BY_CONFIG_ROLLBACK"
   ]
 }

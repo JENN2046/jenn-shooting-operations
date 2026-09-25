@@ -75,6 +75,10 @@ test('secret scanner rejects ordinary Bearer and token-shaped material inside sc
     ['quoted admin role token', 'ADMIN_TOKEN="abcdefghijklmnopqrstuvwxyz123456"'],
     ['single-quoted viewer role token', "VIEWER_TOKEN='abcdefghijklmnopqrstuvwxyz123456'"],
     ['quoted mixed-case submitter role token', 'submitter_token = "abcdefghijklmnopqrstuvwxyz123456"'],
+    ['yaml admin role token', 'ADMIN_TOKEN: abcdefghijklmnopqrstuvwxyz123456'],
+    ['json admin role token', '"ADMIN_TOKEN": "abcdefghijklmnopqrstuvwxyz123456"'],
+    ['single-quoted yaml viewer token', "'VIEWER_TOKEN': 'abcdefghijklmnopqrstuvwxyz123456'"],
+    ['yaml mixed-case scheduler token', 'scheduler_token : "abcdefghijklmnopqrstuvwxyz123456"'],
     ['openai-shaped token', 'sk-abcdefghijklmnopqrstuvwx1234567890'],
   ]) {
     const changed = structuredClone(base);
@@ -351,6 +355,35 @@ test('critical action risk, side effect and evidence contract cannot be understa
     expectRejected(changed, code, `PROD-09 ${field}`);
   }
 });
+
+test('VCP guarded push is irreversible even though adapter configuration can be disabled', () => {
+  const vcp = action(base, 'PROD-10-ENABLE-VCP-REMOTE-SYNC');
+  assert.equal(vcp.sideEffect, 'IRREVERSIBLE_OR_EXTERNAL');
+  assert.equal(
+    vcp.effects.some(value => value.includes('persist new revisioned task facts')),
+    true,
+  );
+  assert.deepEqual(vcp.rollbackActionIds, ['ROLLBACK-09-DISABLE-VCP-CONFIG']);
+
+  const rollback = action(base, 'ROLLBACK-09-DISABLE-VCP-CONFIG');
+  assert.equal(
+    rollback.effects.some(value => value.includes('Disable only the VCP integration configuration')),
+    true,
+  );
+  assert.equal(
+    rollback.effects.some(value => /task|revision|data fact/iu.test(value)),
+    false,
+  );
+
+  const understated = structuredClone(base);
+  action(understated, 'PROD-10-ENABLE-VCP-REMOTE-SYNC').sideEffect = 'REVERSIBLE';
+  expectRejected(
+    understated,
+    'ACTION_SIDE_EFFECT_INVALID',
+    'guarded VCP push persists facts that config rollback cannot undo',
+  );
+});
+
 
 test('initial preflight is exempt from all later-stage revalidation checks', () => {
   assert.deepEqual(

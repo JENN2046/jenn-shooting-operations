@@ -234,7 +234,8 @@ const EXPECTED_INVARIANTS = Object.freeze([
   "PRODUCTION_IMPORT_PRECEDES_CONTAINER_INITIALIZATION",
   "IMAGE_ROLLBACK_REQUIRES_CONTAINER_OBJECT_REMOVAL",
   "PRODUCTION_IMPORT_REQUIRES_ATTACHMENT_BYTES_IN_TARGET_VOLUME",
-  "PRE_CUTOVER_ROUTE_BLOCKS_PUBLIC_WRITES_UNTIL_SWITCH"
+  "PRE_CUTOVER_ROUTE_BLOCKS_PUBLIC_WRITES_UNTIL_SWITCH",
+  "VCP_GUARDED_PUSH_WRITES_ARE_NOT_REVERSED_BY_CONFIG_ROLLBACK"
 ]);
 
 const EXPECTED_ROLLBACK_ORDER = Object.freeze([
@@ -500,7 +501,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "title": "Enable VCP remote synchronization",
     "category": "INTEGRATION",
     "risk": "HIGH",
-    "sideEffect": "REVERSIBLE",
+    "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
     "status": "BLOCKED_PREREQUISITE",
     "authorityTarget": "Exact VCP runtime adapter configuration and one approved service endpoint",
     "preconditions": [
@@ -510,7 +511,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
     "effects": [
-      "Allow VCP to pull and guarded-push against the deployed service"
+      "Allow VCP to pull and guarded-push against the deployed service; guarded push may persist new revisioned task facts that configuration rollback does not remove"
     ],
     "rollbackActionIds": [
       "ROLLBACK-09-DISABLE-VCP-CONFIG"
@@ -802,7 +803,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
 
 const FORBIDDEN_SECRET_PATTERNS = Object.freeze([
   /Bearer\s+[A-Za-z0-9._~+/=-]{16,}/iu,
-  /(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)\s*=\s*(?:"[^"\s,;]{8,}"|'[^'\s,;]{8,}'|[^\s"',;]{8,})/iu,
+  /(?:"(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)"|'(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)'|(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN))\s*[:=]\s*(?:"[^"\s,;]{8,}"|'[^'\s,;]{8,}'|[^\s"',;]{8,})/iu,
   /sk-[A-Za-z0-9_-]{16,}/u,
   /replace-with-random-/iu,
 ]);
