@@ -760,7 +760,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
 
 const FORBIDDEN_SECRET_PATTERNS = Object.freeze([
   /Bearer\s+[A-Za-z0-9._~+/=-]{16,}/iu,
-  /access_token\s*=\s*[^\s"',;]{8,}/iu,
+  /(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)\s*=\s*[^\s"',;]{8,}/iu,
   /sk-[A-Za-z0-9_-]{16,}/u,
   /replace-with-random-/iu,
 ]);

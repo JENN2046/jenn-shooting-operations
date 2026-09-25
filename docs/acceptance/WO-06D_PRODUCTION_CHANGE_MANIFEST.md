@@ -62,7 +62,7 @@ The deployment authorization request remains blocked by the dedicated deployment
 
 This subset is frozen separately as `deploymentBlockingGateIds`.
 
-`blockingGateIds` has a different, exhaustive meaning: it must equal **every gate whose current status is `BLOCKED`**. It therefore also contains the action-specific blockers `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, `PROXY_BACKEND_READINESS`, `PRODUCTION_IMPORT_STORAGE_READINESS`, and `INTEGRATION_DEPLOYMENT_READINESS`. The validator derives the expected exhaustive set from the gate statuses, so a newly blocked gate cannot be omitted from the CLI checklist.
+`blockingGateIds` has a different, exhaustive meaning: it must equal **every gate whose current status is `BLOCKED`**. It therefore also contains the action-specific blockers `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, `PROXY_BACKEND_READINESS`, `PRODUCTION_IMPORT_STORAGE_READINESS`, `PRODUCTION_IMPORT_SOURCE_CONSISTENCY`, and `INTEGRATION_DEPLOYMENT_READINESS`. The validator derives the expected exhaustive set from the gate statuses, so a newly blocked gate cannot be omitted from the CLI checklist.
 
 WO-06C still classifies the local DingTalk provider boundary as `READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION`, but WO-06D separately freezes `DINGTALK_TARGET_BINDING = BLOCKED` because no concrete app/provider identity plus bounded test destination has been supplied. Provider readiness therefore does not make `PROD-12` requestable.
 

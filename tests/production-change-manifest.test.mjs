@@ -68,6 +68,10 @@ test('secret scanner rejects ordinary Bearer and token-shaped material inside sc
     ['bearer tab', 'Bearer\t12345678901234567890123456789012'],
     ['bearer CRLF', 'Bearer\r\n12345678901234567890123456789012'],
     ['access token', 'access_token = abcdefghijklmnopqrstuvwxyz123456'],
+    ['viewer role token', 'VIEWER_TOKEN=abcdefghijklmnopqrstuvwxyz123456'],
+    ['submitter role token', 'SUBMITTER_TOKEN = abcdefghijklmnopqrstuvwxyz123456'],
+    ['scheduler role token', 'scheduler_token\t=\tabcdefghijklmnopqrstuvwxyz123456'],
+    ['admin role token', 'ADMIN_TOKEN=abcdefghijklmnopqrstuvwxyz123456'],
     ['openai-shaped token', 'sk-abcdefghijklmnopqrstuvwx1234567890'],
   ]) {
     const changed = structuredClone(base);
