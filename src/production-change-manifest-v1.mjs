@@ -2,6 +2,10 @@ import { createHash } from 'node:crypto';
 import Ajv2020 from 'ajv/dist/2020.js';
 import { containsForbiddenEvidenceInput } from './production-evidence-input-boundary-v1.mjs';
 
+// Canonical complete schema identity. A new schema requires an explicitly reviewed
+// validator revision; a manifest/schema pair cannot choose its own trust anchor.
+const EXPECTED_SCHEMA_SHA256 = '2627409f8a0d6b7342bfe9ce0ffe616e5697e8f7d26c79aacd9263f2f07aaf9e';
+
 const EXPECTED_AUTHORITY_BASE = "56f18930b8a89b19cdbfdde24d090649329d50c9";
 
 const EXPECTED_SECRET_IDS = Object.freeze([
@@ -124,6 +128,14 @@ const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
     "status": "BLOCKED",
     "evidence": "REQUIRES_VERIFIED_PROD_13_AND_POST_CUTOVER_ATTACHMENT_PARITY"
   },
+  "CUTOVER_TARGET_WRITE_FENCE_CAPABILITY": {
+    "status": "BLOCKED",
+    "evidence": "ALL_TARGET_DATABASE_ATTACHMENT_WRITERS_FENCE_DRAIN_AND_FAIL_CLOSED_RETENTION_NOT_IMPLEMENTED"
+  },
+  "RESTORED_CLEANUP_DISABLE_CAPABILITY": {
+    "status": "BLOCKED",
+    "evidence": "EXACT_PROD_14_CLEANUP_DISABLE_AND_IN_FLIGHT_DRAIN_ROLLBACK_NOT_IMPLEMENTED"
+  },
   "PRODUCTION_DEPLOYMENT_GATE": {
     "status": "BLOCKED",
     "evidence": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE"
@@ -229,16 +241,25 @@ const EXPECTED_ACTION_REVALIDATION = Object.freeze({
     "EXTERNAL_READINESS_GATES",
     "PRE_CUTOVER_ROUTE_RESTRICTION_STILL_ACTIVE",
     "FINAL_SOURCE_QUIESCENCE_OR_SYNC_PROOF",
-    "FINAL_SOURCE_TARGET_PARITY",
+    "FINAL_PARITY_UNDER_FENCE_PLAN",
     "PRE_SWITCH_LOOPBACK_HEALTH",
     "PRE_SWITCH_ROUTED_TLS_PROBE",
     "ALL_ORPHAN_CLEANUP_ENTRY_POINTS_STILL_DISABLED",
-    "ROLLBACK_TARGETS"
+    "ROLLBACK_TARGETS",
+    "TARGET_STORAGE_IDENTITIES",
+    "TARGET_WRITER_INVENTORY",
+    "TARGET_WRITE_FENCE_CAPABILITY_PROOF",
+    "TARGET_WRITE_FENCE_PLAN",
+    "TARGET_FENCE_FAILURE_RETENTION_PLAN",
+    "TARGET_FENCE_RELEASE_PLAN"
   ]),
   "PROD-14-RESTORE-ORPHAN-CLEANUP": Object.freeze([
     "CUTOVER_COMPLETION_PROOF",
     "POST_CUTOVER_ATTACHMENT_PARITY",
-    "CLEANUP_RESTORATION_CONFIG"
+    "CLEANUP_RESTORATION_CONFIG",
+    "CLEANUP_DISABLE_CAPABILITY_PROOF",
+    "CLEANUP_PRE_RESTORE_DISABLED_STATE",
+    "ROLLBACK_TARGETS"
   ])
 });
 
@@ -288,10 +309,19 @@ const EXPECTED_INVARIANTS = Object.freeze([
   "PRE_CUTOVER_ORPHAN_CLEANUP_GUARD_COVERS_ALL_ENTRY_POINTS",
   "DINGTALK_PROVIDER_ACTION_REQUIRES_DEPLOYABLE_RUNTIME_ADAPTER",
   "VCP_EXTERNAL_COMPATIBILITY_FOLLOWS_DEPLOYABLE_ADAPTER_ENABLEMENT",
-  "ORPHAN_CLEANUP_RESTORATION_REQUIRES_POST_CUTOVER_ATTACHMENT_PARITY"
+  "ORPHAN_CLEANUP_RESTORATION_REQUIRES_POST_CUTOVER_ATTACHMENT_PARITY",
+  "CUTOVER_PARITY_AND_SWITCH_SHARE_ONE_TARGET_WIDE_FENCE",
+  "CUTOVER_TARGET_FENCE_DRAINS_DATABASE_AND_ATTACHMENT_WRITERS",
+  "CUTOVER_FAILURE_RETAINS_FENCE_AND_INVALIDATES_PARITY",
+  "CUTOVER_FENCE_RELEASE_REQUIRES_SUCCESSFUL_READ_ONLY_VERIFICATION",
+  "CUTOVER_FENCE_OUTPUTS_FOLLOW_EXACT_AUTHORIZATION",
+  "CLEANUP_RESTORATION_REQUIRES_COAUTHORIZED_DISABLE_AND_DRAIN",
+  "CLEANUP_DISABLE_ROLLBACK_DOES_NOT_RESTORE_DELETED_FACTS",
+  "VALIDATION_SCHEMA_IS_BOUND_TO_FROZEN_VALIDATOR_AUTHORITY"
 ]);
 
 const EXPECTED_ROLLBACK_ORDER = Object.freeze([
+  "ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP",
   "ROLLBACK-01-REMOVE-NEW-ROUTE",
   "ROLLBACK-05-REVERT-FIREWALL-RULE",
   "ROLLBACK-02-STOP-NEW-CONTAINER",
@@ -672,11 +702,18 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "CUTOVER_LIVE_SERVICE_READINESS",
       "CUTOVER_FORWARD_CHAIN",
       "CUTOVER_SWITCH_RECOVERY",
+      "CUTOVER_TARGET_WRITE_FENCE_CAPABILITY",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
     "effects": [
-      "Change which production endpoint/data/client path is authoritative",
-      "Promote the staging route to general production authority only as part of the exact approved cutover after revalidating the pre-cutover write restriction"
+      "After exact PROD-13 authorization, acquire one persistent target-wide write-admission fence bound to the target database, upload volume, writer inventory, operation and fence epoch; block every staging, API, integration, callback, background and direct-storage writer",
+      "With the same fence held, drain all in-flight database and attachment mutations across all processes; reject incomplete coverage or uncertain drain, and keep every orphan-cleanup entry point disabled",
+      "Under the same fence, confirm continued source quiescence or complete only the separately authorized bounded final synchronization; revoke its exclusive writer permission and drain again before final parity",
+      "Under the same fence and zero remaining writers, recompute source-target database and attachment parity and bind proof to source snapshot, target identities, target revision, attachment digests, operation and fence epoch; reject divergent staging facts",
+      "Immediately before Switch, prove the same fence and proof bindings remain valid, no intervening writes occurred, cleanup stays disabled, source consistency holds, and read-only loopback health and routed TLS probes pass",
+      "While retaining the same fence, switch only the exactly approved endpoint, data and client mappings and promote the staging route; record the switch without releasing target writes",
+      "Keep the same fence through read-only post-Switch health, route, client mapping and database-attachment parity verification; any failure, timeout, restart, fence loss or uncertainty invalidates parity and retains closed write admission without automatic retry",
+      "Only after every post-Switch read-only check succeeds, record completion and release that exact fence into the approved production write policy; otherwise retain closed admission independently of process or container lifetime; cleanup stays disabled until separately authorized PROD-14"
     ],
     "rollbackActionIds": [
       "ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH",
@@ -706,7 +743,17 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "PRE_SWITCH_HEALTH_STATUS",
       "PRE_SWITCH_ROUTED_TLS_STATUS",
       "PRE_SWITCH_ORPHAN_CLEANUP_GUARD_PROOF",
-      "POST_CUTOVER_CLEANUP_RESTORATION_PLAN"
+      "POST_CUTOVER_CLEANUP_RESTORATION_PLAN",
+      "TARGET_WRITE_FENCE_CAPABILITY_PROOF",
+      "TARGET_WRITER_INVENTORY_PROOF",
+      "TARGET_WRITE_FENCE_ACQUISITION_PROOF",
+      "TARGET_DATABASE_ATTACHMENT_DRAIN_PROOF",
+      "FINAL_SYNC_WRITER_REVOKED_AND_DRAINED",
+      "FINAL_PARITY_FENCE_BINDING_PROOF",
+      "PRE_SWITCH_SAME_FENCE_PROOF",
+      "POST_SWITCH_SAME_FENCE_PROOF",
+      "READ_ONLY_POST_SWITCH_VERIFICATION",
+      "TARGET_FENCE_RELEASE_PROOF"
     ]
   },
   "PROD-14-RESTORE-ORPHAN-CLEANUP": {
@@ -718,19 +765,27 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "status": "BLOCKED_PREREQUISITE",
     "authorityTarget": "Exact orphan-upload cleanup controls of the newly authoritative production service only",
     "preconditions": [
-      "POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION"
+      "POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION",
+      "RESTORED_CLEANUP_DISABLE_CAPABILITY"
     ],
     "effects": [
-      "Restore startup, periodic, saveUpload-triggered, and submitRequest-triggered orphan cleanup only after cutover completion and post-cutover attachment parity are verified"
+      "After verified cutover completion and post-cutover attachment parity, capture the exact disabled cleanup configuration and verify its coauthorized disable-and-drain recovery capability before enabling any cleanup entry point",
+      "Restore only the approved startup, periodic, saveUpload-triggered and submitRequest-triggered cleanup controls; if restoration or post-restore verification fails, invoke the exact PROD-14-bound disable-and-drain rollback; already deleted files are not recoverable by configuration rollback"
     ],
-    "rollbackActionIds": [],
+    "rollbackActionIds": [
+      "ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP"
+    ],
     "evidenceRequired": [
       "CUTOVER_COMPLETION_PROOF",
       "POST_CUTOVER_ATTACHMENT_PARITY_PROOF",
       "STARTUP_ORPHAN_CLEANUP_RESTORED",
       "PERIODIC_ORPHAN_CLEANUP_RESTORED",
       "REQUEST_TRIGGERED_ORPHAN_CLEANUP_RESTORED",
-      "POST_RESTORE_HEALTH_STATUS"
+      "POST_RESTORE_HEALTH_STATUS",
+      "CLEANUP_DISABLE_CAPABILITY_PROOF",
+      "CLEANUP_PRE_RESTORE_DISABLED_STATE",
+      "CLEANUP_ROLLBACK_TARGET_BINDING",
+      "DELETION_IRREVERSIBILITY_ACKNOWLEDGED"
     ]
   },
   "ROLLBACK-01-REMOVE-NEW-ROUTE": {
@@ -920,6 +975,31 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "IMAGE_NOT_IN_USE",
       "IMAGE_REMOVED"
     ]
+  },
+  "ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP": {
+    "id": "ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP",
+    "title": "Disable and drain cleanup restored by PROD-14",
+    "category": "ROLLBACK",
+    "risk": "HIGH",
+    "sideEffect": "REVERSIBLE",
+    "status": "ROLLBACK_ONLY",
+    "authorityTarget": "Only the startup, periodic, saveUpload and submitRequest orphan-cleanup controls restored by the approved PROD-14 on its exact service and upload volume",
+    "preconditions": [],
+    "effects": [
+      "Immediately block new orphan-cleanup admissions at all four entry points restored by the bound PROD-14, cancel pending cleanup schedules, and drain in-flight cleanup work using the preverified recovery capability",
+      "Restore the captured pre-PROD-14 disabled cleanup configuration and verify no cleanup mutation continues; preserve database, upload volume and unrelated configuration; do not claim to recover already deleted records or files"
+    ],
+    "rollbackActionIds": [],
+    "evidenceRequired": [
+      "CLEANUP_ROLLBACK_TARGET_MATCH",
+      "ALL_RESTORED_CLEANUP_ENTRY_POINTS_DISABLED",
+      "CLEANUP_SCHEDULES_CANCELLED",
+      "CLEANUP_IN_FLIGHT_WORK_DRAINED",
+      "PRE_RESTORE_DISABLED_STATE_RESTORED",
+      "DATA_VOLUME_PRESERVED",
+      "UNRELATED_CONFIGURATION_UNCHANGED",
+      "DELETIONS_NOT_REVERSED_ACKNOWLEDGED"
+    ]
   }
 }));
 
@@ -964,8 +1044,23 @@ export function deriveCoauthorizedRollbackActionIds(actions, approvedActionIds) 
 }
 
 export function createProductionChangeManifestValidator(schema) {
+  // Admit identity before compiling any caller-supplied schema or external refs.
+  // Compile the admitted snapshot, not a reference that the caller can later edit.
+  let schemaSnapshot;
+  try {
+    const canonical = stableJson(schema);
+    if (createHash('sha256').update(canonical).digest('hex') !== EXPECTED_SCHEMA_SHA256) {
+      throw new Error('Schema authority mismatch');
+    }
+    schemaSnapshot = JSON.parse(canonical);
+  } catch {
+    return () => Object.freeze({
+      ok: false,
+      issues: Object.freeze([issue('SCHEMA_AUTHORITY_INVALID', '/')]),
+    });
+  }
   const ajv = new Ajv2020({ allErrors: true, strict: true, ownProperties: true });
-  const validateSchema = ajv.compile(schema);
+  const validateSchema = ajv.compile(schemaSnapshot);
 
   return function validateProductionChangeManifest(value) {
     const issues = [];
@@ -1053,7 +1148,15 @@ export function createProductionChangeManifestValidator(schema) {
         ['rollbackActionIds', 'ROLLBACK_BINDING_INVALID'],
         ['evidenceRequired', 'ACTION_EVIDENCE_REQUIRED_INVALID'],
       ]) {
-        if (!sameSet(action[field], expected[field])) {
+        const orderedEffects = field === 'effects' && (
+          actionId === 'PROD-13-CUTOVER-SWITCH'
+          || actionId === 'PROD-14-RESTORE-ORPHAN-CLEANUP'
+          || actionId === 'ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP'
+        );
+        const matches = orderedEffects
+          ? sameArray(action[field], expected[field])
+          : sameSet(action[field], expected[field]);
+        if (!matches) {
           issues.push(issue(code, '/actions/' + actionId + '/' + field));
         }
       }
@@ -1176,6 +1279,9 @@ export function createProductionChangeManifestValidator(schema) {
       }
     }
 
+    if (issues.length > 0) {
+      return Object.freeze({ ok: false, issues: Object.freeze(issues) });
+    }
     const text = stableJson(value);
     const digest = 'sha256:' + createHash('sha256').update(text).digest('hex');
     return Object.freeze({

@@ -141,7 +141,7 @@
       ],
       "properties": {
         "strategy": {
-          "const": "ROUTE_FIRST_STOP_RUNTIME_PRESERVE_DATA"
+          "const": "STOP_CLEANUP_THEN_ROUTE_RUNTIME_PRESERVE_DATA"
         },
         "orderedActionIds": {
           "type": "array",

@@ -662,11 +662,17 @@ test('initial preflight is exempt from all later-stage revalidation checks', () 
       'EXTERNAL_READINESS_GATES',
       'PRE_CUTOVER_ROUTE_RESTRICTION_STILL_ACTIVE',
       'FINAL_SOURCE_QUIESCENCE_OR_SYNC_PROOF',
-      'FINAL_SOURCE_TARGET_PARITY',
+      'FINAL_PARITY_UNDER_FENCE_PLAN',
       'PRE_SWITCH_LOOPBACK_HEALTH',
       'PRE_SWITCH_ROUTED_TLS_PROBE',
       'ALL_ORPHAN_CLEANUP_ENTRY_POINTS_STILL_DISABLED',
       'ROLLBACK_TARGETS',
+      'TARGET_STORAGE_IDENTITIES',
+      'TARGET_WRITER_INVENTORY',
+      'TARGET_WRITE_FENCE_CAPABILITY_PROOF',
+      'TARGET_WRITE_FENCE_PLAN',
+      'TARGET_FENCE_FAILURE_RETENTION_PLAN',
+      'TARGET_FENCE_RELEASE_PLAN',
     ],
   );
 
@@ -931,9 +937,9 @@ test('orphan cleanup restoration is a separate post-cutover action with parity p
   assert.equal(restore.sideEffect, 'IRREVERSIBLE_OR_EXTERNAL');
   assert.deepEqual(
     restore.preconditions,
-    ['POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION'],
+    ['POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION', 'RESTORED_CLEANUP_DISABLE_CAPABILITY'],
   );
-  assert.deepEqual(restore.rollbackActionIds, []);
+  assert.deepEqual(restore.rollbackActionIds, ['ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP']);
   for (const evidence of [
     'CUTOVER_COMPLETION_PROOF',
     'POST_CUTOVER_ATTACHMENT_PARITY_PROOF',
@@ -952,6 +958,9 @@ test('orphan cleanup restoration is a separate post-cutover action with parity p
       'CUTOVER_COMPLETION_PROOF',
       'POST_CUTOVER_ATTACHMENT_PARITY',
       'CLEANUP_RESTORATION_CONFIG',
+      'CLEANUP_DISABLE_CAPABILITY_PROOF',
+      'CLEANUP_PRE_RESTORE_DISABLED_STATE',
+      'ROLLBACK_TARGETS',
     ],
   );
 
@@ -1133,7 +1142,7 @@ test('pre-cutover HTTPS route blocks public writes until the exact cutover', () 
     true,
   );
   assert.equal(
-    cutover.effects.some(value => value.includes('Promote the staging route')),
+    cutover.effects.some(value => value.includes('promote the staging route')),
     true,
   );
 
@@ -1521,7 +1530,7 @@ test('cutover revalidates final source parity and immediate live service readine
 
   for (const check of [
     'FINAL_SOURCE_QUIESCENCE_OR_SYNC_PROOF',
-    'FINAL_SOURCE_TARGET_PARITY',
+    'FINAL_PARITY_UNDER_FENCE_PLAN',
     'PRE_SWITCH_LOOPBACK_HEALTH',
     'PRE_SWITCH_ROUTED_TLS_PROBE',
   ]) {
@@ -1717,6 +1726,7 @@ test('rollback authority is derived from approved forward actions without a seco
       'ROLLBACK-09-DISABLE-VCP-CONFIG',
       'ROLLBACK-10-DISABLE-KIOSK-CONFIG',
       'ROLLBACK-11-DISABLE-DINGTALK-CONFIG',
+      'ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP',
     ],
   );
 
@@ -1909,6 +1919,7 @@ test('PROD-04 image creation has exact digest-bound rollback authority', () => {
 
 test('global rollback order includes the exact firewall and role-token rollback points', () => {
   assert.deepEqual(base.rollbackPlan.orderedActionIds, [
+    'ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP',
     'ROLLBACK-01-REMOVE-NEW-ROUTE',
     'ROLLBACK-05-REVERT-FIREWALL-RULE',
     'ROLLBACK-02-STOP-NEW-CONTAINER',
@@ -1937,6 +1948,7 @@ test('global rollback order includes the exact firewall and role-token rollback 
 
   const misplaced = structuredClone(base);
   misplaced.rollbackPlan.orderedActionIds = [
+    'ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP',
     'ROLLBACK-01-REMOVE-NEW-ROUTE',
     'ROLLBACK-02-STOP-NEW-CONTAINER',
     'ROLLBACK-08-REMOVE-BUILT-IMAGE',
