@@ -854,7 +854,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
 }));
 
 const FORBIDDEN_SECRET_PATTERNS = Object.freeze([
-  /Bearer[ \t]+[^\r\n]{16,}/iu,
+  /Bearer\s+[^\r\n]{16,}/iu,
   /(?:"(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)"|'(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)'|(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN))\s*[:=]\s*(?:"[^"]{8,}"|'[^']{8,}'|[^\s]{16,})/iu,
   /sk-[A-Za-z0-9_-]{16,}/u,
   /replace-with-random-/iu,
