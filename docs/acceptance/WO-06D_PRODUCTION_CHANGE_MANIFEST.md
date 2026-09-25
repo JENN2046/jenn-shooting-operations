@@ -52,13 +52,13 @@ PRODUCTION_DATA_MIGRATION
 PRODUCTION_DEPLOYMENT_GATE
 ```
 
-This five-gate subset is emitted as `deploymentBlockingGateIds`. Separately, `blockingGateIds` must equal every gate currently marked `BLOCKED`; all 25 current entries are reproduced in the machine verdict below. The correction binds PROD-12 to existing blocked gates; it promotes no gate and adds no new gate.
+This five-gate subset is emitted as `deploymentBlockingGateIds`. Separately, `blockingGateIds` must equal every gate currently marked `BLOCKED`; all 25 current entries are reproduced in the machine verdict below. The scalar-boundary correction changes no manifest, action, gate, authorization array, workflow or runtime dependency.
 
 `WO06C_VCP_EXTERNAL` is blocked post-enable compatibility, not a deployment-level blocker or PROD-10 prerequisite. The sequence remains deployable VCP wiring → separately authorized PROD-10 → real pull / guarded push / verification pull → compatibility PASS → PROD-13 cutover. No such real operation has run. The gate remains exhaustive and a cutover prerequisite.
 
 Kiosk follows the analogous sequence: `KIOSK_DEPLOYABLE_AUTH_WIRING` precedes PROD-11; real-device acceptance can close `WO06C_KIOSK_DEVICE` afterward, before cutover. Neither compatibility gate is deleted or self-promoted.
 
-WO-06C local DingTalk readiness remains `READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION`, but exact app/provider/destination binding and deployable adapter/credential/runtime wiring remain blocked. PROD-12 now also requires `PRODUCTION_TARGET_FACTS`, `INTEGRATION_DEPLOYMENT_READINESS` and `PRODUCTION_DEPLOYMENT_GATE`. Local provider readiness therefore cannot bypass the production deployment chain.
+WO-06C local DingTalk readiness remains `READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION`, but exact app/provider/destination binding and deployable adapter/credential/runtime wiring remain blocked. PROD-12 also requires `PRODUCTION_TARGET_FACTS`, `INTEGRATION_DEPLOYMENT_READINESS` and `PRODUCTION_DEPLOYMENT_GATE`. Local provider readiness cannot bypass the production deployment chain.
 
 `POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION` is a PROD-14 prerequisite, not a sixth deployment-level blocker.
 
@@ -68,7 +68,7 @@ No action definition is currently requestable. The frozen requestable set is emp
 
 `PROD-01-TARGET-READONLY-PREFLIGHT` remains blocked by `TARGET_HOST_BINDING`, not `PRODUCTION_TARGET_FACTS`. One exact candidate host must first be structurally bound; a separately authorized preflight may then verify that identity and discover disk/port/container/proxy/TLS facts.
 
-`PROD-12-DINGTALK-PROVIDER-INTEGRATION` remains `BLOCKED_PREREQUISITE`, with `authorityTarget = UNRESOLVED_DINGTALK_TARGET_BINDING`. Its exact prerequisites are now:
+`PROD-12-DINGTALK-PROVIDER-INTEGRATION` remains `BLOCKED_PREREQUISITE`, with `authorityTarget = UNRESOLVED_DINGTALK_TARGET_BINDING`. Its exact prerequisites remain:
 
 ```text
 WO06C_DINGTALK_PROVIDER
@@ -79,13 +79,13 @@ INTEGRATION_DEPLOYMENT_READINESS
 PRODUCTION_DEPLOYMENT_GATE
 ```
 
-`DEPLOYMENT_CHAIN_COMPLETION_PROOF` is required both before requesting PROD-12 and in its completion evidence. It refers to the preceding deployment actions, not PROD-12's own send result. The existing secret-storage, runtime-adapter, external-readiness and rollback revalidation remains required. `DINGTALK_RUNTIME_WIRING_PROOF`, exact provider/destination scope and `SEND_RESULT` remain action evidence. No post-send result was introduced as a prerequisite for its own action, and no VCP/Kiosk pre-enable acceptance cycle was restored.
+`DEPLOYMENT_CHAIN_COMPLETION_PROOF` is required both before requesting PROD-12 and in its completion evidence. It refers to the preceding deployment actions, not PROD-12's own send result. The existing secret-storage, runtime-adapter, external-readiness and rollback revalidation remains required. `DINGTALK_RUNTIME_WIRING_PROOF`, exact provider/destination scope and `SEND_RESULT` remain action evidence. No post-send result is a prerequisite for its own action, and no VCP/Kiosk pre-enable acceptance cycle is restored.
 
 ## Retained execution and recovery boundaries
 
 PROD-09 still requires offline/quiescent source state or verified coordination, an absent target SQLite path, isolated storage and verified attachment-byte copying with source/target manifest and record/file parity. Import must complete before PROD-05 can initialize its runtime database.
 
-PROD-07 remains staging-only: public unauthenticated writes are blocked, with any allowed staging writes limited to exact bounded principals. PROD-13 rechecks that restriction. This is not a target-wide write freeze; the separate target-side race in comment `4103936494` remains open and unimplemented.
+PROD-07 remains staging-only: public unauthenticated writes are blocked, with any allowed staging writes limited to exact bounded principals. PROD-13 rechecks that restriction. This is not a target-wide write freeze; the separate target-side race in comments `4103936494` and `4104786562` remains open and unimplemented.
 
 All destructive orphan cleanup entry points, including startup, periodic timer, `saveUpload()` and `submitRequest()`, must remain disabled before cutover and be re-proved at PROD-05/07/13. PROD-14 separately owns restoration after cutover completion and protected attachment parity.
 
@@ -109,32 +109,31 @@ Data-volume deletion is forbidden. Blocked post-Switch authority restoration is 
 
 ## Fresh implementation-bearing evidence
 
-- Head: `7abad25e55ea459cb38f8e5b8b92d8d870307199`
-- Parent: `3f6fca1713e96b24e3533d7139d0fd7965855a69`
-- Correction starting head: `0782e22eb361325a4038b1158329cc21d2a4d1bf`
-- GitHub Actions run: `36137024497` (run #103)
+- Head: `61b1695466abeb62402392588ac42626fd08a06c`
+- Parent and correction starting head: `14726a2a1dac20c4c8b5496b0ae5527e23f28ae3`
+- GitHub Actions run: `36141921053` (run #105)
 - Workflow: `WO-06D Production Authorization Packet`
 - Event: `push`
 - Conclusion: `success`
-- Verified job: `108077434515`
+- Verified job: `108093583730`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
-The workflow checkout and recorded `git rev-parse HEAD` both identify the implementation SHA above. This is published exact-head GitHub evidence, not a local Codex task report.
+The workflow checkout and recorded `git rev-parse HEAD` both identify the implementation SHA above. The complete job log includes the six new scalar-boundary tests in both the full and targeted runs. This is published exact-head GitHub evidence, not a local Codex task report.
 
 ```text
 npm ci                         PASS
 npm run check                  PASS
-full tests                     593
-pass                           592
+full tests                     599
+pass                           598
 fail                           0
 skipped                        1
-manifest targeted tests        63
-manifest targeted pass         63
+manifest targeted tests        69
+manifest targeted pass         69
 manifest targeted fail         0
 manifest targeted skipped      0
 ```
 
-The single full-suite skip is the absent external VCP adapter; it is not compatibility PASS. The targeted command is `node --test tests/production-change-manifest*.test.mjs`, including Unicode, shell-continuation, dynamic-values and the new review-closure regression file.
+The single full-suite skip is the absent external VCP adapter; it is not compatibility PASS. The targeted command is `node --test tests/production-change-manifest*.test.mjs`, including Unicode, shell-continuation, dynamic-values, review-closure and scalar-boundaries regression files.
 
 ### Machine verdict
 
@@ -183,36 +182,38 @@ The single full-suite skip is the absent external VCP adapter; it is not compati
 }
 ```
 
-The manifest changed only to bind DingTalk to the existing production gates and deployment-chain proof. Its current Git blob is `a80f7a715cac9b3493d2373293bfff18fd83ce57`. The old `32fa0a5d...` digest is historical and must not be used to verify this revision.
+The manifest and its Git blob `a80f7a715cac9b3493d2373293bfff18fd83ce57` are unchanged from `14726a2...`. The old `32fa0a5d...` digest remains historical and does not verify this revision.
 
-### Scanner correction and verified coverage
+### Scalar-boundary correction and verified coverage
 
-The shell parser retains its conservative rejection of active unescaped dollar/backtick syntax before whitespace termination, without executing or evaluating input. Short single-quoted or escaped literal forms, UTF-16 counting and shell continuations remain supported. The config parser retains rejection of unsupported unquoted YAML scalar/tag/anchor/alias prefixes `|`, `>`, `!`, `&`, `*`.
+The implementation changes exactly two files: scanner source (18 added / 4 removed lines) and the new 136-line `tests/production-change-manifest-scalar-boundaries.test.mjs`. No existing test is removed or altered.
 
-The new correction closes two additional syntax bypasses:
+1. Inside a YAML single-quoted scalar, two consecutive apostrophes count as one literal character. The parser consumes both while remaining in single-quote state. This rule is restricted to colon/config parsing; adjacent shell quoted segments retain their different semantics. The reported six letters plus ten escaped apostrophes now measure 16 UTF-16 units and trigger `SECRET_MATERIAL_DETECTED`.
+2. The shell parser no longer uses JavaScript's broad whitespace class to terminate an unquoted value. Space, tab and unescaped LF retain their boundary behavior; NBSP, CR, VT, FF and the other tested Unicode whitespace are counted as literal word content. The assignment matcher also stops consuming non-ASCII whitespace after `=`, so a leading NBSP cannot disappear before value sizing. Existing quoted/escaped characters and backslash-LF continuation retain their handling. Conservative handling of other syntax is not a claim of full shell evaluation.
 
-1. Colon assignments preserve the physical newline after the delimiter. The config scanner rejects a remaining multiline snippet rather than measuring only its first physical line. This covers plain and quoted YAML continuation, LF/CRLF/CR, and a value starting on the next line. Terminal trailing newline/whitespace remains harmless. Rejection intentionally also covers ambiguous multi-entry snippets after a recognized token assignment; this is not YAML scope or folding evaluation.
-2. Quoted assignment keys containing backslash escapes or physical line breaks are rejected before matching literal role names. This intentionally rejects unsupported escaped-key syntax, rather than attempting partial JSON/YAML decoding or missing a role name concealed by one escaped character.
+Six new regression groups cover all five recognized token names, quoted/case-varied YAML keys, 9/10/11 doubled-quote pairs, leading/trailing/repeated/all-apostrophe scalars, literal backslashes, astral Unicode and 15/16-unit boundaries, explicit YAML-versus-shell distinction, 14 literal-whitespace characters in leading/middle/trailing positions at 15/16/17 units, genuine ASCII separators, quoted/escaped whitespace, continuations and prior unsupported-syntax rejection. Values are checked against the actual in-memory `createAuthorizer`; no shell snippet or provider call is executed.
 
-New file `tests/production-change-manifest-review-closure.test.mjs` adds six test groups covering all five token keys, multiline plain/quoted values, comments and conservative multi-entry rejection, each key-character Unicode escape and fully escaped keys, YAML x/U forms, normal short-value controls, UTF-16 boundaries, retained continuations/dynamic rejection, removal of DingTalk prerequisites/completion proof and non-authorizing state preservation. No synthetic shell input is executed and no real credential is used.
+Before publication, isolated local scanner tests reproduced five failures in the six new groups against the exact old source and passed all six against the patch. That local extraction was not a full repository acceptance; run #105 is the complete public-validator/schema/manifest and repository verification.
 
-Current source blob: `65831991116280d657f8ad47e0f25b6265cba271`; new test blob: `f857cd9d18af49d008c2b6e83786fa8d9e37c7e0`; aligned main-test blob: `1009bc032f8b3210768800b616f228f277c7b052`.
+Current source blob: `5e76483c24acd5a78a1b38afa498dc7b372f6114`; new scalar-boundaries test blob: `2f66863754bbfde9b8497eb1e6f2a4ff606fd915`. The original source was verified byte-for-byte against blob `65831991116280d657f8ad47e0f25b6265cba271` before editing.
 
-The validator continues to reject schema-level secrets, nonempty approval sets, blanket approval, incomplete blocker sets, target widening, prerequisite/status/evidence drift, wrong rollback bindings and combined semantic widening. These regression results do not close unrelated contract review findings.
-
-### Failed intermediate run and correction
-
-Implementation commit `3f6fca1713e96b24e3533d7139d0fd7965855a69` ran in `36135791873` and failed one existing exact-array assertion: the main test still expected PROD-12's previous revalidation list without `DEPLOYMENT_CHAIN_COMPLETION_PROOF`. The six new review-closure groups passed. Commit `7abad25e55ea459cb38f8e5b8b92d8d870307199` changes only that expected array to include the new required proof. No production gate, scanner guard, workflow or test was removed or weakened. Run #103 then passed the complete suite and all 63 manifest tests.
+The prior multiline/escaped-key, command-substitution, block-scalar, UTF-16, continuation and DingTalk prerequisite regressions remain green. Unsupported dynamic shell and YAML syntax is still rejected without evaluation. The validator continues to reject schema-level secrets, nonempty approval sets, blanket approval, incomplete blocker sets, target widening, prerequisite/status/evidence drift, wrong rollback bindings and combined semantic widening.
 
 ## Remaining independent review work
 
-Comment `4103936494` remains unimplemented: target writes must be frozen and drained from before final source/target and attachment parity through Switch and read-only post-switch verification. A staging ACL or source quiescence alone does not prevent target-side races. The ordered fence/drain/parity/switch/success-only-release contract and its deployable capability gate have not been added in this correction. Execution order must be machine-enforced rather than compared as a set, and a future change must not require an unauthorized freeze result before request.
+The two P2 problem types are addressed at the implementation level: YAML comments `4104553788` / `4104786582` and shell-separator comments `4104553803` / `4104786593`. Their four exact review threads require evidence replies and resolution after final-head verification; this document does not pre-claim those writes.
 
-Comment `4103894629` is addressed at the implementation level by the new PROD-12 bindings and regressions. Comments `4104348023` and `4104348028` are addressed by the multiline/escaped-key correction. Review-thread closure and an independent clean review must still be confirmed against the eventual exact final head. New findings from subsequent review must also be assessed; CI success is not independent review closure.
+Separate P1s remain unimplemented:
+
+- `4103936494` / `4104786562`: target-wide writer freeze/drain must span final parity through Switch and read-only verification. Include database and attachment writers, same-fence continuity, machine-enforced ordering, success-only release and fail-closed retention. Pre-request capability/plan checks must not require outputs of an unauthorized freeze.
+- `4104724822`: continued Bearer header text can be truncated at a physical newline. This is the backslash-newline continuation finding, not a leading-whitespace finding; the earlier PR description of it was inaccurate.
+- `4104786571`: shell `+=` token assignments are not matched. This separate syntax case is not fixed by whitespace counting.
+
+This is three remaining P1 problem types represented by four already-observed threads, not a zero-unresolved or clean-review claim. Subsequent live findings must also be assessed. CI success does not close unrelated review findings.
 
 ## Exit and final-head evidence rule
 
-This evidence synchronization is docs-only and follows implementation run #103 success. The resulting final PR head must independently pass the unchanged WO-06D workflow. Record that exact final SHA/run in the PR/check record, not self-referentially inside this same commit.
+This evidence synchronization is docs-only and follows implementation run #105 success. The resulting final PR head must independently pass the unchanged WO-06D workflow. Record that exact final SHA/run in the PR/check record, not self-referentially inside this same commit.
 
 Before any separately authorized merge, require current exact head, successful exact-head workflow, zero unresolved review threads, an independent Codex clean signal for that same head, and OPEN / mergeable / not merged. Only an explicit human merge instruction permits merge, with `expected_head_sha`. CI success alone is insufficient.
 
@@ -220,10 +221,10 @@ WO-06D authority closure and deployment authorization remain separate. `docs/DEP
 
 ## Historical review evidence boundary
 
-The complete pre-correction document, including every chronological hardening section and its original SHA/run/digest, is preserved byte-for-byte in [the historical cb456114 snapshot](WO-06D_PRODUCTION_CHANGE_MANIFEST.HISTORICAL_cb456114.md). Its Git blob is `1ee7813131fb0170497a06442d015655db29b5a8`, identical to this document at `cb456114e4d57d8ff12473da95737790a63e7118`.
+The complete early document, including chronological hardening sections and original SHA/run/digest evidence, remains byte-for-byte in [the historical cb456114 snapshot](WO-06D_PRODUCTION_CHANGE_MANIFEST.HISTORICAL_cb456114.md), blob `1ee7813131fb0170497a06442d015655db29b5a8`.
 
-The subsequent published dynamic-values scanner checkpoint was implementation `9f13b160bb43d3db37f30fc03bc42c635d0e181f`, run #99 `36131969264`, followed by docs head `0782e22eb361325a4038b1158329cc21d2a4d1bf`, run #100 `36132684480`. Those historical results were 587/586/0/1 full tests, 57/57 targeted and digest `sha256:32fa0a5d754c157345561e9a5e1f6fcd274f8f0f94b96f3f605df4aef609cd47`. Their prior source/test blobs were `9dd5efa0659544add4d7c49e9633290a1e348806` and `bfccd6ed9fbed687b1639a27ecd42451ba42f16a`. These snapshots do not override the fresh run #103 evidence above.
+The dynamic-values checkpoint was implementation `9f13b160bb43d3db37f30fc03bc42c635d0e181f`, run #99 `36131969264`, followed by docs head `0782e22eb361325a4038b1158329cc21d2a4d1bf`, run #100 `36132684480`: 587/586/0/1 full tests, 57/57 targeted, digest `sha256:32fa0a5d754c157345561e9a5e1f6fcd274f8f0f94b96f3f605df4aef609cd47`, source/test blobs `9dd5efa0659544add4d7c49e9633290a1e348806` / `bfccd6ed9fbed687b1639a27ecd42451ba42f16a`.
 
-All historical uses of "current", requestable sets, blocker lists, PASS and execution sequences apply only to their stated revisions. Original review comments and Git history remain additional provenance.
+The next checkpoint was implementation `7abad25e55ea459cb38f8e5b8b92d8d870307199`, run #103 `36137024497`, followed by docs head `14726a2a1dac20c4c8b5496b0ae5527e23f28ae3`, run #104 `36137791590`: 593/592/0/1 full tests and 63/63 targeted, with the same `029f63f5...` manifest digest used now. That correction added multiline and escaped-key rejection and DingTalk deployment prerequisites. Its initial commit `3f6fca1713e96b24e3533d7139d0fd7965855a69` failed run `36135791873` on one old exact-array assertion omitting the new PROD-12 proof; `7abad25...` changed only that assertion. Source/review-test/main-test blobs were `65831991116280d657f8ad47e0f25b6265cba271` / `f857cd9d18af49d008c2b6e83786fa8d9e37c7e0` / `1009bc032f8b3210768800b616f228f277c7b052`. The complete preceding acceptance remains in Git at `14726a2...`, blob `995122ec13627c983f9a6b57393587f97be7f7d2`; no additional duplicate snapshot is needed.
 
-The inaccessible local-only Codex commit `86f6e0793b06baa2f70c7cccf9e327877801bc4a` supplies no accepted publication or GitHub CI evidence. The current correction was independently authored from the published `0782e22...` parent; it does not claim to recover that missing artifact.
+Historical uses of current, requestable sets, blockers and PASS apply only to their stated revisions and do not override run #105, current machine authority or live review state. Original comments and Git history retain provenance. The inaccessible local-only commit `86f6e0793b06baa2f70c7cccf9e327877801bc4a` supplies no accepted publication or CI evidence; this correction starts from the published `14726a2...` parent and does not claim to recover that artifact.
