@@ -67,6 +67,9 @@ test('secret scanner rejects ordinary Bearer and token-shaped material inside sc
     ['bearer newline', 'Bearer\n12345678901234567890123456789012'],
     ['bearer tab', 'Bearer\t12345678901234567890123456789012'],
     ['bearer CRLF', 'Bearer\r\n12345678901234567890123456789012'],
+    ['bearer punctuation', 'Bearer abc,defghijklmnop'],
+    ['bearer spaces', 'Bearer correct horse battery staple'],
+    ['bearer semicolon', 'Bearer abc;defghijklmnop'],
     ['access token', 'access_token = abcdefghijklmnopqrstuvwxyz123456'],
     ['viewer role token', 'VIEWER_TOKEN=abcdefghijklmnopqrstuvwxyz123456'],
     ['submitter role token', 'SUBMITTER_TOKEN = abcdefghijklmnopqrstuvwxyz123456'],
@@ -111,6 +114,7 @@ test('manifest rejects blanket approval and incomplete blocker surfaces', () => 
   for (const blockerId of [
     'WO06C_VCP_EXTERNAL',
     'DINGTALK_TARGET_BINDING',
+    'DINGTALK_DEPLOYABLE_ADAPTER_WIRING',
     'CUTOVER_FORWARD_CHAIN',
     'CUTOVER_SWITCH_RECOVERY',
     'CUTOVER_SOURCE_CONSISTENCY',
@@ -243,6 +247,55 @@ test('target preflight depends on candidate host binding, not facts it is respon
   forgedBinding.gates.find(candidate => candidate.id === 'TARGET_HOST_BINDING').status = 'SATISFIED';
   expectRejected(forgedBinding, 'GATE_STATUS_INVALID', 'host binding cannot self-promote');
 });
+
+test('DingTalk provider action remains blocked until a deployable real adapter is wired', () => {
+  const gate = base.gates.find(
+    candidate => candidate.id === 'DINGTALK_DEPLOYABLE_ADAPTER_WIRING',
+  );
+  assert.ok(gate);
+  assert.equal(gate.status, 'BLOCKED');
+  assert.equal(
+    gate.evidence,
+    'REAL_DINGTALK_ADAPTER_CREDENTIALS_AND_RUNTIME_WIRING_NOT_IMPLEMENTED',
+  );
+
+  const ding = action(base, 'PROD-12-DINGTALK-PROVIDER-INTEGRATION');
+  assert.equal(ding.preconditions.includes('DINGTALK_DEPLOYABLE_ADAPTER_WIRING'), true);
+  assert.equal(ding.evidenceRequired.includes('DINGTALK_RUNTIME_WIRING_PROOF'), true);
+  assert.equal(
+    base.authorizationPacket.actionSpecificRevalidation[
+      'PROD-12-DINGTALK-PROVIDER-INTEGRATION'
+    ].includes('DINGTALK_RUNTIME_ADAPTER_CONFIGURATION'),
+    true,
+  );
+
+  const droppedGate = structuredClone(base);
+  action(droppedGate, 'PROD-12-DINGTALK-PROVIDER-INTEGRATION').preconditions =
+    action(droppedGate, 'PROD-12-DINGTALK-PROVIDER-INTEGRATION').preconditions
+      .filter(id => id !== 'DINGTALK_DEPLOYABLE_ADAPTER_WIRING');
+  expectRejected(
+    droppedGate,
+    'ACTION_PRECONDITIONS_INVALID',
+    'DingTalk runtime wiring gate cannot be dropped',
+  );
+
+  const droppedProof = structuredClone(base);
+  action(droppedProof, 'PROD-12-DINGTALK-PROVIDER-INTEGRATION').evidenceRequired =
+    action(droppedProof, 'PROD-12-DINGTALK-PROVIDER-INTEGRATION').evidenceRequired
+      .filter(id => id !== 'DINGTALK_RUNTIME_WIRING_PROOF');
+  expectRejected(
+    droppedProof,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'DingTalk runtime wiring proof cannot be dropped',
+  );
+
+  const forged = structuredClone(base);
+  forged.gates.find(
+    candidate => candidate.id === 'DINGTALK_DEPLOYABLE_ADAPTER_WIRING',
+  ).status = 'SATISFIED';
+  expectRejected(forged, 'GATE_STATUS_INVALID', 'DingTalk adapter wiring cannot self-promote');
+});
+
 
 test('DingTalk candidates cannot become requestable before exact app/provider and bounded destination binding', () => {
   const baseAction = action(base, 'PROD-12-DINGTALK-PROVIDER-INTEGRATION');
