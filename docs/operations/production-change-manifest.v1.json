@@ -84,6 +84,11 @@
       "evidence": "BLOCKED_EXTERNAL_RUNTIME"
     },
     {
+      "id": "VCP_DEPLOYABLE_ADAPTER_WIRING",
+      "status": "BLOCKED",
+      "evidence": "REAL_VCP_ADAPTER_RUNTIME_WIRING_NOT_IMPLEMENTED"
+    },
+    {
       "id": "WO06C_KIOSK_DEVICE",
       "status": "BLOCKED",
       "evidence": "BLOCKED_DEVICE"
@@ -192,6 +197,11 @@
       "id": "PRODUCTION_DATA_MIGRATION",
       "status": "BLOCKED",
       "evidence": "REAL_PRODUCTION_INPUT_NOT_VALIDATED"
+    },
+    {
+      "id": "POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION",
+      "status": "BLOCKED",
+      "evidence": "REQUIRES_VERIFIED_PROD_13_AND_POST_CUTOVER_ATTACHMENT_PARITY"
     },
     {
       "id": "PRODUCTION_DEPLOYMENT_GATE",
@@ -477,7 +487,7 @@
       "requiresExplicitAuthorization": true,
       "authorityTarget": "Exact VCP runtime adapter configuration and one approved service endpoint",
       "preconditions": [
-        "WO06C_VCP_EXTERNAL",
+        "VCP_DEPLOYABLE_ADAPTER_WIRING",
         "PRODUCTION_TARGET_FACTS",
         "INTEGRATION_DEPLOYMENT_READINESS",
         "PRODUCTION_DEPLOYMENT_GATE"
@@ -489,6 +499,7 @@
         "ROLLBACK-09-DISABLE-VCP-CONFIG"
       ],
       "evidenceRequired": [
+        "VCP_RUNTIME_WIRING_PROOF",
         "VCP_ADAPTER_REVISION",
         "SERVICE_ENDPOINT",
         "PRINCIPAL_SCOPE",
@@ -606,7 +617,33 @@
         "PRE_SWITCH_ATTACHMENT_PARITY_PROOF",
         "PRE_SWITCH_HEALTH_STATUS",
         "PRE_SWITCH_ROUTED_TLS_STATUS",
-        "PRE_SWITCH_ORPHAN_CLEANUP_GUARD_PROOF"
+        "PRE_SWITCH_ORPHAN_CLEANUP_GUARD_PROOF",
+        "POST_CUTOVER_CLEANUP_RESTORATION_PLAN"
+      ]
+    },
+    {
+      "id": "PROD-14-RESTORE-ORPHAN-CLEANUP",
+      "title": "Restore normal orphan-upload cleanup after cutover",
+      "category": "RUNTIME",
+      "risk": "HIGH",
+      "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Exact orphan-upload cleanup controls of the newly authoritative production service only",
+      "preconditions": [
+        "POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION"
+      ],
+      "effects": [
+        "Restore startup, periodic, saveUpload-triggered, and submitRequest-triggered orphan cleanup only after cutover completion and post-cutover attachment parity are verified"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "CUTOVER_COMPLETION_PROOF",
+        "POST_CUTOVER_ATTACHMENT_PARITY_PROOF",
+        "STARTUP_ORPHAN_CLEANUP_RESTORED",
+        "PERIODIC_ORPHAN_CLEANUP_RESTORED",
+        "REQUEST_TRIGGERED_ORPHAN_CLEANUP_RESTORED",
+        "POST_RESTORE_HEALTH_STATUS"
       ]
     },
     {
@@ -834,6 +871,7 @@
     "requestableActionIds": [],
     "blockingGateIds": [
       "WO06C_VCP_EXTERNAL",
+      "VCP_DEPLOYABLE_ADAPTER_WIRING",
       "WO06C_KIOSK_DEVICE",
       "KIOSK_DEPLOYABLE_AUTH_WIRING",
       "DINGTALK_TARGET_BINDING",
@@ -855,6 +893,7 @@
       "INTEGRATION_DEPLOYMENT_READINESS",
       "PRODUCTION_TARGET_FACTS",
       "PRODUCTION_DATA_MIGRATION",
+      "POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
     "mustRevalidateBeforeRequest": [
@@ -864,7 +903,7 @@
     "separateRollbackApprovalRequired": false,
     "derivedRollbackActionIds": [],
     "deploymentBlockingGateIds": [
-      "WO06C_VCP_EXTERNAL",
+      "VCP_DEPLOYABLE_ADAPTER_WIRING",
       "KIOSK_DEPLOYABLE_AUTH_WIRING",
       "PRODUCTION_TARGET_FACTS",
       "PRODUCTION_DATA_MIGRATION",
@@ -928,7 +967,7 @@
         "DISK_PORT_ROUTE_CONFLICTS",
         "BUILT_IMAGE_DIGEST",
         "SECRET_STORAGE",
-        "EXTERNAL_READINESS_GATES",
+        "VCP_RUNTIME_ADAPTER_CONFIGURATION",
         "ROLLBACK_TARGETS"
       ],
       "PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE": [
@@ -959,6 +998,11 @@
         "PRE_SWITCH_ROUTED_TLS_PROBE",
         "ALL_ORPHAN_CLEANUP_ENTRY_POINTS_STILL_DISABLED",
         "ROLLBACK_TARGETS"
+      ],
+      "PROD-14-RESTORE-ORPHAN-CLEANUP": [
+        "CUTOVER_COMPLETION_PROOF",
+        "POST_CUTOVER_ATTACHMENT_PARITY",
+        "CLEANUP_RESTORATION_CONFIG"
       ]
     }
   },
@@ -997,6 +1041,8 @@
     "CUTOVER_REQUIRES_IMMEDIATE_SERVICE_HEALTH_AND_ROUTE_PROBE",
     "PRE_CUTOVER_RUNTIME_DISALLOWS_ORPHAN_CLEANUP",
     "PRE_CUTOVER_ORPHAN_CLEANUP_GUARD_COVERS_ALL_ENTRY_POINTS",
-    "DINGTALK_PROVIDER_ACTION_REQUIRES_DEPLOYABLE_RUNTIME_ADAPTER"
+    "DINGTALK_PROVIDER_ACTION_REQUIRES_DEPLOYABLE_RUNTIME_ADAPTER",
+    "VCP_EXTERNAL_COMPATIBILITY_FOLLOWS_DEPLOYABLE_ADAPTER_ENABLEMENT",
+    "ORPHAN_CLEANUP_RESTORATION_REQUIRES_POST_CUTOVER_ATTACHMENT_PARITY"
   ]
 }
