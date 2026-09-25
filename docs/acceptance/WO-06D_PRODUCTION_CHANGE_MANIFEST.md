@@ -115,8 +115,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `a1eb4199cf7a7cbaf68e24b0a20ef72f2876e6ff`
-- GitHub Actions run: `36036138172`
+- Head: `088c1663119c2268136a3f228999fd25d20f9249`
+- GitHub Actions run: `36084900067`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -125,8 +125,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          564
-pass                           563
+tests                          565
+pass                           564
 fail                           0
 skipped                        1
 ```
@@ -136,8 +136,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  34
-pass   34
+tests  35
+pass   35
 fail   0
 ```
 
@@ -146,7 +146,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:ae134f0803e558ad15f8f19428158b450d8c745534cb2ebaeb8465d70144cf7e",
+  "manifestDigest": "sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d0395a50d2a",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -162,6 +162,7 @@ Machine verdict:
     "HEALTH_SMOKE_READINESS",
     "PROXY_BACKEND_READINESS",
     "PRODUCTION_IMPORT_STORAGE_READINESS",
+    "PRODUCTION_IMPORT_SOURCE_CONSISTENCY",
     "INTEGRATION_DEPLOYMENT_READINESS",
     "PRODUCTION_TARGET_FACTS",
     "PRODUCTION_DATA_MIGRATION",
@@ -862,3 +863,44 @@ manifest digest  sha256:ae134f0803e558ad15f8f19428158b450d8c745534cb2ebaeb8465d7
 ```
 
 No target preflight, credential operation, external integration, rollback, deployment request, or production mutation was executed.
+
+
+## Production-import source consistency gate
+
+Exact-current review on `46baa9e...` identified that PROD-09 could still be requested while the source service was accepting uploads or running cleanup. The frozen migration authority requires offline apply until cross-process upload/migration coordination exists and has been verified.
+
+WO-06D now freezes:
+
+```text
+PRODUCTION_IMPORT_SOURCE_CONSISTENCY = BLOCKED
+evidence =
+  REQUIRES_OFFLINE_SOURCE_QUIESCENCE_OR_VERIFIED_UPLOAD_MIGRATION_COORDINATION
+
+PROD-09.preconditions += PRODUCTION_IMPORT_SOURCE_CONSISTENCY
+PROD-09.actionSpecificRevalidation += SOURCE_QUIESCENCE_OR_COORDINATION_PROOF
+PROD-09.evidenceRequired += SOURCE_QUIESCENCE_OR_COORDINATION_PROOF
+```
+
+This means an authorized production import cannot begin merely because migration inputs, target facts, storage readiness, and the deployment gate are otherwise satisfied. Before request, the source must either be in an offline/quiescent maintenance state or have a separately verified coordination mechanism that prevents races with uploads and cleanup.
+
+`MAINTENANCE_WINDOW` remains execution evidence; it is no longer the only place where source-state consistency appears.
+
+Hostile regressions reject:
+
+- removing the source-consistency gate from PROD-09;
+- removing the source-state revalidation proof;
+- removing the source-state evidence requirement;
+- self-promoting the blocked gate to satisfied.
+
+Exact implementation-bearing evidence:
+
+```text
+head             088c1663119c2268136a3f228999fd25d20f9249
+run              36084900067
+result           success
+full suite       565 tests / 564 pass / 0 fail / 1 expected VCP skip
+manifest suite   35 / 35 PASS
+manifest digest  sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d0395a50d2a
+```
+
+No source service, upload volume, production database, migration apply, or other production mutation was touched.

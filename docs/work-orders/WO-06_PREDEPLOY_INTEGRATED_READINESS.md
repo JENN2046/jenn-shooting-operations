@@ -273,12 +273,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36036138172` on implementation-bearing head `a1eb4199cf7a7cbaf68e24b0a20ef72f2876e6ff` passed:
+GitHub Actions run `36084900067` on implementation-bearing head `088c1663119c2268136a3f228999fd25d20f9249` passed:
 
-- full `npm run check`: 564 tests / 563 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 34/34 PASS;
+- full `npm run check`: 565 tests / 564 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 35/35 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:ae134f0803e558ad15f8f19428158b450d8c745534cb2ebaeb8465d70144cf7e`;
+- manifest digest: `sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d0395a50d2a`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -612,3 +612,17 @@ Those checks are frozen only on later actions that require them. This preserves 
 Implementation evidence: head `a1eb4199cf7a7cbaf68e24b0a20ef72f2876e6ff`, run `36036138172`, full suite 564/563/0/1, manifest suite 34/34, digest `sha256:ae134f0803e558ad15f8f19428158b450d8c745534cb2ebaeb8465d70144cf7e`.
 
 The immediately prior run `36036021841` failed only on a duplicate validator closing token introduced during generated text replacement; the correction was syntax-only and did not weaken the revalidation contract.
+
+
+### WO-06D production-import source consistency
+
+Production import is now blocked on an explicit source-state gate derived from the migration authority:
+
+```text
+PRODUCTION_IMPORT_SOURCE_CONSISTENCY = BLOCKED
+REQUIRES_OFFLINE_SOURCE_QUIESCENCE_OR_VERIFIED_UPLOAD_MIGRATION_COORDINATION
+```
+
+PROD-09 additionally requires `SOURCE_QUIESCENCE_OR_COORDINATION_PROOF` both before request and in its evidence contract. Until verified cross-process upload/migration coordination exists, this requires an offline/quiescent maintenance window so the database snapshot and upload manifest cannot race with live uploads or cleanup.
+
+Implementation evidence: head `088c1663119c2268136a3f228999fd25d20f9249`, run `36084900067`, full suite 565/564/0/1, manifest suite 35/35, digest `sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d0395a50d2a`.
