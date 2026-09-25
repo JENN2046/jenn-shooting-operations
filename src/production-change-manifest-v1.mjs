@@ -217,7 +217,8 @@ const EXPECTED_ACTION_REVALIDATION = Object.freeze({
     "SECRET_STORAGE",
     "DINGTALK_RUNTIME_ADAPTER_CONFIGURATION",
     "EXTERNAL_READINESS_GATES",
-    "ROLLBACK_TARGETS"
+    "ROLLBACK_TARGETS",
+    "DEPLOYMENT_CHAIN_COMPLETION_PROOF"
   ]),
   "PROD-13-CUTOVER-SWITCH": Object.freeze([
     "TARGET_HOST_IDENTITY",
@@ -632,7 +633,10 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "preconditions": [
       "WO06C_DINGTALK_PROVIDER",
       "DINGTALK_TARGET_BINDING",
-      "DINGTALK_DEPLOYABLE_ADAPTER_WIRING"
+      "DINGTALK_DEPLOYABLE_ADAPTER_WIRING",
+      "PRODUCTION_TARGET_FACTS",
+      "INTEGRATION_DEPLOYMENT_READINESS",
+      "PRODUCTION_DEPLOYMENT_GATE"
     ],
     "effects": [
       "May perform real provider authentication and bounded integration traffic only after explicit authorization"
@@ -646,7 +650,8 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "TEST_DESTINATION",
       "SEND_RESULT",
       "CALLBACK_POLICY",
-      "SECRET_STORAGE_PROOF"
+      "SECRET_STORAGE_PROOF",
+      "DEPLOYMENT_CHAIN_COMPLETION_PROOF"
     ]
   },
   "PROD-13-CUTOVER-SWITCH": {
@@ -924,7 +929,19 @@ const FORBIDDEN_SECRET_PATTERNS = Object.freeze([
   /replace-with-random-/iu,
 ]);
 
-const ROLE_TOKEN_ASSIGNMENT = /(?:"(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)"|'(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)'|(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN))\s*([:=])\s*/giu;
+const ROLE_TOKEN_ASSIGNMENT = /(?:"(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)"|'(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)'|(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN))\s*([:=])[^\S\r\n]*/giu;
+
+// Escaped or folded quoted assignment keys are unsupported in evidence text.
+// Reject before matching literal role names: even one escaped character can
+// conceal a configured token key. This is syntax rejection, not evaluation.
+const QUOTED_ASSIGNMENT_KEY = /("(?:\\[\s\S]|[^"\\])*"|'(?:''|[^'])*')\s*[:=]/gu;
+
+function containsUnsupportedAssignmentKey(text) {
+  for (const match of text.matchAll(QUOTED_ASSIGNMENT_KEY)) {
+    if (/[\\\r\n]/u.test(match[1])) return true;
+  }
+  return false;
+}
 
 // for...of yields code points; char.length preserves the authorizer's UTF-16 units
 // in ordinary, quoted, and escaped segments without counting shell quote syntax.
@@ -967,7 +984,13 @@ function shellAssignmentValueLength(text) {
 }
 
 function configAssignmentValueLength(text) {
-  const line = text.split(/\r?\n/u, 1)[0].trim();
+  // Colon assignments support a single physical scalar line only. Reject the
+  // remaining multiline snippet conservatively, including plain/quoted YAML
+  // continuation and a value beginning on the next line. A terminal newline
+  // is harmless. Do not try to infer YAML indentation, folding or key scope.
+  const scalar = text.trimEnd();
+  if (/[\r\n]/u.test(scalar)) return Infinity;
+  const line = scalar.trim();
   // YAML block scalars and tagged/anchored/aliased values are unsupported.
   // Reject conservatively rather than sizing only their one-line header.
   // Quoted literal values do not enter this branch.
@@ -1000,6 +1023,7 @@ function configAssignmentValueLength(text) {
 }
 
 function containsRoleTokenAssignmentSecret(text) {
+  if (containsUnsupportedAssignmentKey(text)) return true;
   for (const match of text.matchAll(ROLE_TOKEN_ASSIGNMENT)) {
     const start = (match.index ?? 0) + match[0].length;
     const remainder = text.slice(start);
