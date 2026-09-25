@@ -44,6 +44,9 @@ approvalModel = EXACT_ACTION_IDS_AND_TARGETS_ONLY
 blanketApprovalAllowed = false
 requestedActionIds = []
 approvedActionIds = []
+requestableActionIds = []
+derivedRollbackActionIds = []
+authorizationPacket = FROZEN_NOT_REQUESTED
 deploymentAuthorizationRequest = BLOCKED_PREREQUISITES
 deploymentGate = BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 ```
@@ -54,17 +57,21 @@ Nothing in WO-06D is an authorization to execute an action.
 
 The deployment authorization request remains blocked by the dedicated deployment-level set:
 
-- VCP real compatibility: `WO06C_VCP_EXTERNAL`;
+- deployable VCP adapter wiring: `VCP_DEPLOYABLE_ADAPTER_WIRING`;
 - deployable Kiosk authentication wiring: `KIOSK_DEPLOYABLE_AUTH_WIRING`;
 - unresolved production host/route/storage facts: `PRODUCTION_TARGET_FACTS`;
 - unvalidated real production migration inputs: `PRODUCTION_DATA_MIGRATION`;
 - the explicit production deployment gate itself: `PRODUCTION_DEPLOYMENT_GATE`.
 
-This subset is frozen separately as `deploymentBlockingGateIds`.
+This exact five-gate subset is frozen separately as `deploymentBlockingGateIds`.
 
-`blockingGateIds` has a different, exhaustive meaning: it must equal **every gate whose current status is `BLOCKED`**. It therefore also contains the action-specific blockers `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, `PROXY_BACKEND_READINESS`, `PRE_CUTOVER_ROUTE_WRITE_RESTRICTION`, `KIOSK_DEPLOYABLE_AUTH_WIRING`, `PRODUCTION_IMPORT_STORAGE_READINESS`, `PRODUCTION_IMPORT_TARGET_ABSENCE`, `PRODUCTION_IMPORT_SOURCE_CONSISTENCY`, `PRODUCTION_ATTACHMENT_COPY_CAPABILITY`, and `INTEGRATION_DEPLOYMENT_READINESS`. The validator derives the expected exhaustive set from the gate statuses, so a newly blocked gate cannot be omitted from the CLI checklist.
+`WO06C_VCP_EXTERNAL` is a **post-enable compatibility gate**, not a deployment-level blocker or a PROD-10 prerequisite. It remains `BLOCKED_EXTERNAL_RUNTIME`: after deployable wiring and all other PROD-10 prerequisites are satisfied and exact authorization is granted, PROD-10 produces the real pull → guarded push → verification pull result. That result can close `WO06C_VCP_EXTERNAL`, which remains in the exhaustive blocker set and remains a PROD-13 cutover prerequisite. No such real operation has been executed.
 
-WO-06C still classifies the local DingTalk provider boundary as `READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION`, but WO-06D separately freezes `DINGTALK_TARGET_BINDING = BLOCKED` because no concrete app/provider identity plus bounded test destination has been supplied. Provider readiness therefore does not make `PROD-12` requestable.
+The Kiosk sequence follows the same separation: `KIOSK_DEPLOYABLE_AUTH_WIRING` precedes PROD-11 enablement; post-enable real-device acceptance closes `WO06C_KIOSK_DEVICE` before PROD-13. Neither external acceptance gate is removed or promoted by this summary correction.
+
+`blockingGateIds` has a different, exhaustive meaning: it must equal **every gate whose current status is `BLOCKED`**. The complete current 25-gate set is reproduced in the machine verdict below, including both post-enable compatibility gates, the five deployment-level blockers, and the remaining action-specific blockers. The validator derives the expected exhaustive set from gate statuses, so a newly blocked gate cannot be omitted from the CLI checklist. In particular, `POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION` is a PROD-14 prerequisite, not a sixth deployment-level blocker.
+
+WO-06C still classifies the local DingTalk provider boundary as `READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION`, but WO-06D separately freezes both `DINGTALK_TARGET_BINDING = BLOCKED` and `DINGTALK_DEPLOYABLE_ADAPTER_WIRING = BLOCKED`. No concrete app/provider identity plus bounded test destination has been supplied, and real adapter/credential/runtime wiring is not implemented. Provider readiness therefore does not make `PROD-12` requestable.
 
 ## Requestable actions
 
@@ -72,7 +79,7 @@ No action definition is currently requestable. The frozen requestable set is emp
 
 `PROD-01-TARGET-READONLY-PREFLIGHT` is `BLOCKED_PREREQUISITE` behind `TARGET_HOST_BINDING`, not `PRODUCTION_TARGET_FACTS`. This breaks the prerequisite cycle: one exact candidate host must be structurally bound first, then PROD-01 may verify that binding and discover the disk/port/container/proxy/TLS facts that later close `PRODUCTION_TARGET_FACTS`.
 
-`PROD-12-DINGTALK-PROVIDER-INTEGRATION` remains `BLOCKED_PREREQUISITE` with `authorityTarget = UNRESOLVED_DINGTALK_TARGET_BINDING` and prerequisite `DINGTALK_TARGET_BINDING`. It cannot become requestable until a concrete DingTalk app/provider identity and one bounded test destination are structurally bound in a separately reviewed authority revision.
+`PROD-12-DINGTALK-PROVIDER-INTEGRATION` remains `BLOCKED_PREREQUISITE` with `authorityTarget = UNRESOLVED_DINGTALK_TARGET_BINDING`. It requires both exact target binding and deployable adapter wiring, plus `DINGTALK_RUNTIME_ADAPTER_CONFIGURATION` pre-request revalidation and `DINGTALK_RUNTIME_WIRING_PROOF` completion evidence. These capabilities and targets require a separately reviewed authority revision; this packet grants none of them.
 
 All mutation/deployment/cutover actions remain blocked or conditional.
 
@@ -115,8 +122,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `0ed1ea690f1451c8f39fc4ef1fd5cc9627e903de`
-- GitHub Actions run: `36121925574`
+- Head: `cda455204aa91224f85ba87d12968726eb3a4006`
+- GitHub Actions run: `36125110628` (run #95)
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -125,19 +132,19 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          577
-pass                           576
+tests                          579
+pass                           578
 fail                           0
 skipped                        1
 ```
 
 The single skip remains the external VCP adapter and does not close WO-06C external validation.
 
-Manifest targeted tests:
+Manifest targeted tests (`node --test tests/production-change-manifest*.test.mjs`, including the Unicode regression file):
 
 ```text
-tests  47
-pass   47
+tests  49
+pass   49
 fail   0
 ```
 
@@ -192,6 +199,7 @@ The validator also fresh-rejects:
 
 - ordinary Bearer/access-token/token-shaped secret material embedded in schema-valid free text, including Bearer credentials split by raw newline, tab, or CRLF whitespace and complete Bearer values containing punctuation or spaces;
 - assignments to the four declared deployment role-token names: `VIEWER_TOKEN`, `SUBMITTER_TOKEN`, `SCHEDULER_TOKEN`, and `ADMIN_TOKEN`, with case-insensitive names, optional single/double quotes around the key, either `=` or `:` delimiters, and a parser that follows the complete assignment RHS including shell-concatenated quoted/unquoted segments;
+- astral Unicode credentials at the authorizer's 16-UTF-16-code-unit threshold, including ordinary, quoted, escaped and concatenated role-token segments and Bearer values;
 - secret fields, pre-populated approved action IDs and blanket approval;
 - missing or extra entries in the exhaustive `blockingGateIds` surface, including action-specific blocked gates;
 - drift in the separate deployment-level `deploymentBlockingGateIds` subset;
@@ -203,6 +211,14 @@ The validator also fresh-rejects:
 - rollback references to non-rollback actions;
 - additional or replaced production action IDs;
 - a hostile combined mutation that simultaneously widens target, requestability, prerequisites and rollback while embedding a Bearer secret.
+
+This evidence update is docs-only. The resulting final PR head must separately pass the WO-06D workflow and independent exact-head review. Its run and final review signal belong in the PR/check record, not an impossible self-referential SHA/run claim in this same document commit.
+
+## Current UTF-16 scanner and human-summary correction
+
+The two role-token parsers now accumulate `char.length` in all six ordinary, quoted, and escaped branches, matching `createAuthorizer`'s `string.length` unit. Bearer detection also counts UTF-16 units rather than Unicode code points. Synthetic eight-emoji fixtures in unquoted `ADMIN_TOKEN=` and quoted `VIEWER_TOKEN:` evidence now produce `SECRET_MATERIAL_DETECTED`; regressions also check the 15/16-unit boundary against the actual in-memory authorizer. No real credential is used.
+
+Both this document and the WO-06 work order now use `VCP_DEPLOYABLE_ADAPTER_WIRING` in the five-item current deployment blocker summary. `WO06C_VCP_EXTERNAL` remains blocked, post-enable, exhaustive, and required for cutover. The manifest JSON and digest are unchanged.
 
 ## PR-branch closure state
 
@@ -217,6 +233,10 @@ BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 
 After merge, a docs-only authority closure may publish WO-06D PASS if the final PR head also passes the unchanged workflow and independent review.
 
+
+## Historical review evidence boundary
+
+The remaining sections, from "Review hardening closure candidate" through "Shell-concatenated role-token scanning", preserve the chronological review record and their original head/run/digest evidence. Their uses of "current", requestable sets, blocker lists, and deployment sequences describe those historical revisions only and are not executable current instructions. Use the current summaries and machine verdict above and the current machine manifest for the present contract; later corrections supersede earlier snapshots without erasing their audit trail.
 
 ## Review hardening closure candidate
 

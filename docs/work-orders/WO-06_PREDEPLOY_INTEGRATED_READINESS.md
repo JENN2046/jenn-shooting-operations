@@ -231,6 +231,9 @@ approvalModel = EXACT_ACTION_IDS_AND_TARGETS_ONLY
 blanketApprovalAllowed = false
 requestedActionIds = []
 approvedActionIds = []
+requestableActionIds = []
+derivedRollbackActionIds = []
+authorizationPacket = FROZEN_NOT_REQUESTED
 deploymentAuthorizationRequest = BLOCKED_PREREQUISITES
 deploymentGate = BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 ```
@@ -239,21 +242,25 @@ Pre-request revalidation is intentionally split with `AUTHORITY_HEAD` as the onl
 
 The packet's deployment-level blocker subset is frozen as:
 
-- `WO06C_VCP_EXTERNAL`;
+- `VCP_DEPLOYABLE_ADAPTER_WIRING`;
 - `KIOSK_DEPLOYABLE_AUTH_WIRING`;
 - `PRODUCTION_TARGET_FACTS`;
 - `PRODUCTION_DATA_MIGRATION`;
 - `PRODUCTION_DEPLOYMENT_GATE`.
 
-This is emitted as `deploymentBlockingGateIds`.
+This exact five-gate set is emitted as `deploymentBlockingGateIds`.
 
-Separately, `blockingGateIds` is exhaustive across **every current `BLOCKED` gate**, including `WO06C_KIOSK_DEVICE`, `KIOSK_DEPLOYABLE_AUTH_WIRING`, `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, `PROXY_BACKEND_READINESS`, `PRE_CUTOVER_ROUTE_WRITE_RESTRICTION`, `PRODUCTION_IMPORT_STORAGE_READINESS`, `PRODUCTION_IMPORT_TARGET_ABSENCE`, `PRODUCTION_IMPORT_SOURCE_CONSISTENCY`, `PRODUCTION_ATTACHMENT_COPY_CAPABILITY`, and `INTEGRATION_DEPLOYMENT_READINESS`. The validator derives this exhaustive set from gate statuses.
+`WO06C_VCP_EXTERNAL` remains a blocked **post-enable compatibility gate**, not a deployment-level blocker or PROD-10 prerequisite. The sequence is deployable VCP wiring → separately authorized PROD-10 enablement → real pull / guarded push / verification pull → compatibility PASS → PROD-13 cutover. The real operation has not run, so `BLOCKED_EXTERNAL_RUNTIME` remains truthful. This gate stays in exhaustive `blockingGateIds` and in PROD-13 preconditions.
+
+Likewise, Kiosk deployable auth wiring precedes PROD-11 enablement; real-device acceptance closes `WO06C_KIOSK_DEVICE` afterward and is still required before cutover. Neither compatibility gate is deleted or self-promoted.
+
+Separately, `blockingGateIds` is exhaustive across **every current `BLOCKED` gate**. It contains 25 gates, including the five above, `WO06C_VCP_EXTERNAL`, `WO06C_KIOSK_DEVICE`, `DINGTALK_TARGET_BINDING`, `DINGTALK_DEPLOYABLE_ADAPTER_WIRING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `CUTOVER_SOURCE_CONSISTENCY`, `CUTOVER_LIVE_SERVICE_READINESS`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL`, `HEALTH_SMOKE_READINESS`, `PROXY_BACKEND_READINESS`, `PRE_CUTOVER_ROUTE_WRITE_RESTRICTION`, `PRODUCTION_IMPORT_STORAGE_READINESS`, `PRODUCTION_IMPORT_TARGET_ABSENCE`, `PRODUCTION_IMPORT_SOURCE_CONSISTENCY`, `PRODUCTION_ATTACHMENT_COPY_CAPABILITY`, `INTEGRATION_DEPLOYMENT_READINESS`, and `POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION`. The validator derives this exhaustive set from gate statuses. Post-cutover cleanup restoration belongs to PROD-14, not the five-gate deployment-level subset.
 
 No action definition is currently marked requestable. The frozen requestable set is empty.
 
 `PROD-01-TARGET-READONLY-PREFLIGHT` is `BLOCKED_PREREQUISITE` behind `TARGET_HOST_BINDING`. It no longer depends on `PRODUCTION_TARGET_FACTS`, because those are the facts the read-only preflight is responsible for discovering after one exact candidate host has been bound.
 
-`PROD-12-DINGTALK-PROVIDER-INTEGRATION` remains externally provider-ready at the WO-06C local boundary, but is `BLOCKED_PREREQUISITE` in WO-06D because `DINGTALK_TARGET_BINDING = BLOCKED`. No concrete app/provider identity or bounded test destination is present, so it is not requestable.
+`PROD-12-DINGTALK-PROVIDER-INTEGRATION` remains externally provider-ready at the WO-06C local boundary, but is `BLOCKED_PREREQUISITE` in WO-06D because both `DINGTALK_TARGET_BINDING` and `DINGTALK_DEPLOYABLE_ADAPTER_WIRING` remain blocked. Exact app/provider identity, a bounded test destination, real runtime adapter configuration, and wiring proof are required; local provider readiness alone cannot make it requestable.
 
 No action is requested or approved.
 
@@ -268,23 +275,32 @@ DEPLOYMENT_AUTHORIZATION_REQUEST = BLOCKED_PREREQUISITES
 BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 ```
 
-until all required external/target/data prerequisites are separately closed and the human gives exact current authorization.
+until the selected action's own prerequisites and exact targets are separately resolved in a reviewed authority revision and the human gives exact current authorization. Post-enable compatibility is completion/cutover evidence, not an input that must be produced by an unauthorized enablement operation.
 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36121925574` on implementation-bearing head `0ed1ea690f1451c8f39fc4ef1fd5cc9627e903de` passed:
+GitHub Actions run `36125110628` (run #95) on implementation-bearing head `cda455204aa91224f85ba87d12968726eb3a4006` passed:
 
-- full `npm run check`: 577 tests / 576 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 47/47 PASS;
+- full `npm run check`: 579 tests / 578 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 49/49 PASS, including `production-change-manifest-unicode.test.mjs`;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
 - manifest digest: `sha256:32fa0a5d754c157345561e9a5e1f6fcd274f8f0f94b96f3f605df4aef609cd47`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
 
-This PR branch remains `MERGE_PENDING`. It does not publish authority PASS before merge and does not request or approve any production action.
+This PR branch remains `MERGE_PENDING`. It does not publish authority PASS before merge and does not request or approve any production action. This evidence update is docs-only; the resulting final head requires its own successful workflow and independent exact-head review, recorded in the PR/check record rather than a self-referential claim inside the same commit.
 
+### WO-06D current UTF-16 and summary corrections
+
+Both role-token parsers count `char.length` in all ordinary, quoted and escaped branches to match `createAuthorizer`'s UTF-16 `string.length`. Bearer detection uses the same unit. Synthetic eight-emoji assignments are rejected with `SECRET_MATERIAL_DETECTED`, and hostile regressions compare the 15/16-unit boundary with the actual in-memory authorizer. No real token, external request, or production runtime is involved.
+
+The current deployment summary above now matches the machine packet exactly. `WO06C_VCP_EXTERNAL` remains post-enable compatibility and a cutover prerequisite; the manifest JSON/digest and all non-authorizing boundaries are unchanged.
+
+### WO-06D historical review evidence boundary
+
+The remaining WO-06D sections, from "review hardening" through "shell-concatenated role-token scanning", preserve chronological review evidence at their stated revisions. Their uses of "current", requestable sets, blocker lists, and deployment sequences describe historical snapshots only; they do not override the current summary, fresh evidence, or machine manifest above. Later corrections supersede earlier snapshots without deleting their audit trail.
 
 ### WO-06D review hardening
 
