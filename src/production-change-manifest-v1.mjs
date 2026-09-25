@@ -43,6 +43,10 @@ const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
     "status": "BLOCKED",
     "evidence": "EXACT_APP_PROVIDER_AND_TEST_DESTINATION_UNRESOLVED"
   },
+  "DINGTALK_DEPLOYABLE_ADAPTER_WIRING": {
+    "status": "BLOCKED",
+    "evidence": "REAL_DINGTALK_ADAPTER_CREDENTIALS_AND_RUNTIME_WIRING_NOT_IMPLEMENTED"
+  },
   "CUTOVER_FORWARD_CHAIN": {
     "status": "BLOCKED",
     "evidence": "REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_10_11_AND_PROD_08_IF_USED"
@@ -203,6 +207,7 @@ const EXPECTED_ACTION_REVALIDATION = Object.freeze({
   ]),
   "PROD-12-DINGTALK-PROVIDER-INTEGRATION": Object.freeze([
     "SECRET_STORAGE",
+    "DINGTALK_RUNTIME_ADAPTER_CONFIGURATION",
     "EXTERNAL_READINESS_GATES",
     "ROLLBACK_TARGETS"
   ]),
@@ -265,7 +270,8 @@ const EXPECTED_INVARIANTS = Object.freeze([
   "CUTOVER_REQUIRES_FINAL_SOURCE_TARGET_PARITY",
   "CUTOVER_REQUIRES_IMMEDIATE_SERVICE_HEALTH_AND_ROUTE_PROBE",
   "PRE_CUTOVER_RUNTIME_DISALLOWS_ORPHAN_CLEANUP",
-  "PRE_CUTOVER_ORPHAN_CLEANUP_GUARD_COVERS_ALL_ENTRY_POINTS"
+  "PRE_CUTOVER_ORPHAN_CLEANUP_GUARD_COVERS_ALL_ENTRY_POINTS",
+  "DINGTALK_PROVIDER_ACTION_REQUIRES_DEPLOYABLE_RUNTIME_ADAPTER"
 ]);
 
 const EXPECTED_ROLLBACK_ORDER = Object.freeze([
@@ -597,7 +603,8 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "authorityTarget": "UNRESOLVED_DINGTALK_TARGET_BINDING",
     "preconditions": [
       "WO06C_DINGTALK_PROVIDER",
-      "DINGTALK_TARGET_BINDING"
+      "DINGTALK_TARGET_BINDING",
+      "DINGTALK_DEPLOYABLE_ADAPTER_WIRING"
     ],
     "effects": [
       "May perform real provider authentication and bounded integration traffic only after explicit authorization"
@@ -606,6 +613,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "ROLLBACK-11-DISABLE-DINGTALK-CONFIG"
     ],
     "evidenceRequired": [
+      "DINGTALK_RUNTIME_WIRING_PROOF",
       "PROVIDER_CONFIG_SCOPE",
       "TEST_DESTINATION",
       "SEND_RESULT",
@@ -846,7 +854,7 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
 }));
 
 const FORBIDDEN_SECRET_PATTERNS = Object.freeze([
-  /Bearer\s+[A-Za-z0-9._~+/=-]{16,}/iu,
+  /Bearer[ \t]+[^\r\n]{16,}/iu,
   /(?:"(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)"|'(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)'|(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN))\s*[:=]\s*(?:"[^"]{8,}"|'[^']{8,}'|[^\s]{16,})/iu,
   /sk-[A-Za-z0-9_-]{16,}/u,
   /replace-with-random-/iu,
