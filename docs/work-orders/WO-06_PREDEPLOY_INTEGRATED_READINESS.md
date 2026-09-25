@@ -273,12 +273,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36100548171` on implementation-bearing head `f4d04336a0e18ef2fe3a90840a444d2f3da6e4d2` passed:
+GitHub Actions run `36102203534` on implementation-bearing head `169d3b0b5341543160a77932ea312f0171e8adc8` passed:
 
-- full `npm run check`: 567 tests / 566 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 37/37 PASS;
+- full `npm run check`: 569 tests / 568 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 39/39 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:8851d97dd4379ee9d0e5bcd31623e53419d154c700fa35ef26bf5e193ad92e48`;
+- manifest digest: `sha256:fab1175a83759252da74451ae236b23a4bd90e5be32ce4b1aa897c8e633ba7c2`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -441,9 +441,11 @@ TARGET_HOST_BINDING
 CONTAINER_START_READINESS
 HEALTH_SMOKE_READINESS
 PROXY_BACKEND_READINESS
+PRE_CUTOVER_ROUTE_WRITE_RESTRICTION
 PRODUCTION_IMPORT_STORAGE_READINESS
 PRODUCTION_IMPORT_TARGET_ABSENCE
 PRODUCTION_IMPORT_SOURCE_CONSISTENCY
+PRODUCTION_ATTACHMENT_COPY_CAPABILITY
 INTEGRATION_DEPLOYMENT_READINESS
 ```
 
@@ -693,3 +695,38 @@ Rollback 02 now stops **and removes** the exact container object created by PROD
 Rollback 08 then requires `CONTAINER_REFERENCE_ABSENT` before the existing `IMAGE_NOT_IN_USE` / image-removal checks.
 
 Implementation evidence: head `f4d04336a0e18ef2fe3a90840a444d2f3da6e4d2`, run `36100548171`, full suite 567/566/0/1, manifest suite 37/37, digest `sha256:8851d97dd4379ee9d0e5bcd31623e53419d154c700fa35ef26bf5e193ad92e48`.
+
+
+### WO-06D attachment-byte migration capability blocker
+
+The current migration apply path validates source attachment identity but does not copy attachment bytes into the isolated target upload volume. WO-06D therefore keeps:
+
+```text
+PRODUCTION_ATTACHMENT_COPY_CAPABILITY = BLOCKED
+TARGET_UPLOAD_BYTE_COPY_AND_VERIFICATION_NOT_IMPLEMENTED
+```
+
+PROD-09 cannot become requestable until a reviewed implementation binds the exact target upload volume, executes an attachment-copy plan, and proves source/target manifest plus record↔file parity.
+
+Required future evidence includes:
+
+```text
+SOURCE_UPLOAD_MANIFEST_DIGEST
+TARGET_UPLOAD_MANIFEST_DIGEST
+SOURCE_TARGET_UPLOAD_MANIFEST_MATCH
+ATTACHMENT_BYTE_COPY_COMPLETION_PROOF
+ATTACHMENT_RECORD_FILE_PARITY_PROOF
+```
+
+### WO-06D pre-cutover route write restriction
+
+PROD-07 is now a staging exposure only. Before cutover it must block public unauthenticated writes; any allowed pre-cutover write access must be bound to exact staging principals.
+
+```text
+PRE_CUTOVER_ROUTE_WRITE_RESTRICTION = BLOCKED
+REQUIRES_PUBLIC_WRITE_BLOCK_OR_BOUNDED_STAGING_ACCESS
+```
+
+PROD-13 revalidates that the restriction is still active immediately before Switch. The route may become general production authority only inside the exact approved cutover action.
+
+Implementation evidence for both corrections: head `169d3b0b5341543160a77932ea312f0171e8adc8`, run `36102203534`, full suite 569/568/0/1, manifest suite 39/39, digest `sha256:fab1175a83759252da74451ae236b23a4bd90e5be32ce4b1aa897c8e633ba7c2`.

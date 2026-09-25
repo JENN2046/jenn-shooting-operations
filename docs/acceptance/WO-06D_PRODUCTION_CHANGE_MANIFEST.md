@@ -62,7 +62,7 @@ The deployment authorization request remains blocked by the dedicated deployment
 
 This subset is frozen separately as `deploymentBlockingGateIds`.
 
-`blockingGateIds` has a different, exhaustive meaning: it must equal **every gate whose current status is `BLOCKED`**. It therefore also contains the action-specific blockers `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, `PROXY_BACKEND_READINESS`, `PRODUCTION_IMPORT_STORAGE_READINESS`, `PRODUCTION_IMPORT_TARGET_ABSENCE`, `PRODUCTION_IMPORT_SOURCE_CONSISTENCY`, and `INTEGRATION_DEPLOYMENT_READINESS`. The validator derives the expected exhaustive set from the gate statuses, so a newly blocked gate cannot be omitted from the CLI checklist.
+`blockingGateIds` has a different, exhaustive meaning: it must equal **every gate whose current status is `BLOCKED`**. It therefore also contains the action-specific blockers `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, `PROXY_BACKEND_READINESS`, `PRE_CUTOVER_ROUTE_WRITE_RESTRICTION`, `PRODUCTION_IMPORT_STORAGE_READINESS`, `PRODUCTION_IMPORT_TARGET_ABSENCE`, `PRODUCTION_IMPORT_SOURCE_CONSISTENCY`, `PRODUCTION_ATTACHMENT_COPY_CAPABILITY`, and `INTEGRATION_DEPLOYMENT_READINESS`. The validator derives the expected exhaustive set from the gate statuses, so a newly blocked gate cannot be omitted from the CLI checklist.
 
 WO-06C still classifies the local DingTalk provider boundary as `READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION`, but WO-06D separately freezes `DINGTALK_TARGET_BINDING = BLOCKED` because no concrete app/provider identity plus bounded test destination has been supplied. Provider readiness therefore does not make `PROD-12` requestable.
 
@@ -115,8 +115,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `f4d04336a0e18ef2fe3a90840a444d2f3da6e4d2`
-- GitHub Actions run: `36100548171`
+- Head: `169d3b0b5341543160a77932ea312f0171e8adc8`
+- GitHub Actions run: `36102203534`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -125,8 +125,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          567
-pass                           566
+tests                          569
+pass                           568
 fail                           0
 skipped                        1
 ```
@@ -136,8 +136,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  37
-pass   37
+tests  39
+pass   39
 fail   0
 ```
 
@@ -146,7 +146,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:8851d97dd4379ee9d0e5bcd31623e53419d154c700fa35ef26bf5e193ad92e48",
+  "manifestDigest": "sha256:fab1175a83759252da74451ae236b23a4bd90e5be32ce4b1aa897c8e633ba7c2",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -161,9 +161,11 @@ Machine verdict:
     "CONTAINER_START_READINESS",
     "HEALTH_SMOKE_READINESS",
     "PROXY_BACKEND_READINESS",
+    "PRE_CUTOVER_ROUTE_WRITE_RESTRICTION",
     "PRODUCTION_IMPORT_STORAGE_READINESS",
     "PRODUCTION_IMPORT_TARGET_ABSENCE",
     "PRODUCTION_IMPORT_SOURCE_CONSISTENCY",
+    "PRODUCTION_ATTACHMENT_COPY_CAPABILITY",
     "INTEGRATION_DEPLOYMENT_READINESS",
     "PRODUCTION_TARGET_FACTS",
     "PRODUCTION_DATA_MIGRATION",
@@ -1081,3 +1083,76 @@ manifest digest  sha256:8851d97dd4379ee9d0e5bcd31623e53419d154c700fa35ef26bf5e19
 ```
 
 No container, image, or named volume was changed or deleted.
+
+
+## Attachment-byte migration capability blocker
+
+Exact-current review on `9ae3c8dd...` identified that the current isolated SQLite apply path verifies source upload identity/manifest but does **not** copy upload bytes into the isolated target volume. Because `uploads` rows and their hashed files together form the attachment fact, database-only import could leave migrated rows pointing at absent files.
+
+WO-06D now fails closed on:
+
+```text
+PRODUCTION_ATTACHMENT_COPY_CAPABILITY = BLOCKED
+evidence = TARGET_UPLOAD_BYTE_COPY_AND_VERIFICATION_NOT_IMPLEMENTED
+
+PROD-09.preconditions += PRODUCTION_ATTACHMENT_COPY_CAPABILITY
+PROD-09.actionSpecificRevalidation += TARGET_UPLOAD_VOLUME_IDENTITY
+PROD-09.actionSpecificRevalidation += ATTACHMENT_COPY_PLAN
+```
+
+PROD-09 now also freezes the attachment-copy effect and post-copy proof set:
+
+```text
+SOURCE_UPLOAD_MANIFEST_DIGEST
+TARGET_UPLOAD_MANIFEST_DIGEST
+SOURCE_TARGET_UPLOAD_MANIFEST_MATCH
+ATTACHMENT_BYTE_COPY_COMPLETION_PROOF
+ATTACHMENT_RECORD_FILE_PARITY_PROOF
+```
+
+The current repository does not claim this capability exists. The blocker remains closed until a later reviewed implementation copies all bytes referenced by non-null `stored_name` values into the isolated target upload volume and verifies source/target parity.
+
+## Pre-cutover staging-route write restriction
+
+The same review found that PROD-07 could expose the isolated service before cutover while unauthenticated POST write endpoints remained available.
+
+WO-06D now freezes:
+
+```text
+PRE_CUTOVER_ROUTE_WRITE_RESTRICTION = BLOCKED
+evidence = REQUIRES_PUBLIC_WRITE_BLOCK_OR_BOUNDED_STAGING_ACCESS
+
+PROD-07.preconditions += PRE_CUTOVER_ROUTE_WRITE_RESTRICTION
+PROD-07.actionSpecificRevalidation += PRE_CUTOVER_ROUTE_ACCESS_POLICY
+```
+
+PROD-07 may expose only a staging HTTPS route where public unauthenticated writes are blocked. Any pre-cutover write capability must be limited to exact bounded staging principals and proved by:
+
+```text
+STAGING_ROUTE_ACCESS_POLICY
+PUBLIC_WRITE_ENDPOINTS_BLOCKED
+BOUNDED_STAGING_PRINCIPAL_SCOPE
+PRE_CUTOVER_WRITE_DENIAL_PROBE
+```
+
+Before PROD-13 cutover, the packet revalidates:
+
+```text
+PRE_CUTOVER_ROUTE_RESTRICTION_STILL_ACTIVE
+PRE_CUTOVER_ROUTE_RESTRICTION_PROOF
+```
+
+Only the exact approved cutover may promote the staging route to general production authority.
+
+Exact implementation-bearing evidence for both corrections:
+
+```text
+head             169d3b0b5341543160a77932ea312f0171e8adc8
+run              36102203534
+result           success
+full suite       569 tests / 568 pass / 0 fail / 1 expected VCP skip
+manifest suite   39 / 39 PASS
+manifest digest  sha256:fab1175a83759252da74451ae236b23a4bd90e5be32ce4b1aa897c8e633ba7c2
+```
+
+No attachment bytes were copied, no route was exposed, and no production write or cutover was executed.
