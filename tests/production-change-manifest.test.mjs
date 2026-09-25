@@ -79,6 +79,9 @@ test('secret scanner rejects ordinary Bearer and token-shaped material inside sc
     ['json admin role token', '"ADMIN_TOKEN": "abcdefghijklmnopqrstuvwxyz123456"'],
     ['single-quoted yaml viewer token', "'VIEWER_TOKEN': 'abcdefghijklmnopqrstuvwxyz123456'"],
     ['yaml mixed-case scheduler token', 'scheduler_token : "abcdefghijklmnopqrstuvwxyz123456"'],
+    ['quoted token with comma', 'ADMIN_TOKEN="abcdefgh,ijklmnop"'],
+    ['quoted token with spaces', 'VIEWER_TOKEN="correct horse battery staple"'],
+    ['single-quoted token with semicolon', "SCHEDULER_TOKEN='abcdefgh;ijklmnop'"],
     ['openai-shaped token', 'sk-abcdefghijklmnopqrstuvwx1234567890'],
   ]) {
     const changed = structuredClone(base);
@@ -107,8 +110,11 @@ test('manifest rejects blanket approval and incomplete blocker surfaces', () => 
     'DINGTALK_TARGET_BINDING',
     'CUTOVER_FORWARD_CHAIN',
     'CUTOVER_SWITCH_RECOVERY',
+    'CUTOVER_SOURCE_CONSISTENCY',
+    'CUTOVER_LIVE_SERVICE_READINESS',
     'TARGET_HOST_BINDING',
     'CONTAINER_START_READINESS',
+    'PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL',
     'HEALTH_SMOKE_READINESS',
     'PROXY_BACKEND_READINESS',
     'PRODUCTION_IMPORT_STORAGE_READINESS',
@@ -534,6 +540,10 @@ test('initial preflight is exempt from all later-stage revalidation checks', () 
       'BACKUP_ROLLBACK_PROOF',
       'EXTERNAL_READINESS_GATES',
       'PRE_CUTOVER_ROUTE_RESTRICTION_STILL_ACTIVE',
+      'FINAL_SOURCE_QUIESCENCE_OR_SYNC_PROOF',
+      'FINAL_SOURCE_TARGET_PARITY',
+      'PRE_SWITCH_LOOPBACK_HEALTH',
+      'PRE_SWITCH_ROUTED_TLS_PROBE',
       'ROLLBACK_TARGETS',
     ],
   );
@@ -662,6 +672,60 @@ test('hostile combined semantic widening still fails closed after schema admissi
     'ACTION_EVIDENCE_REQUIRED_INVALID',
     'AUTHORITY_TARGET_INVALID',
   ]) assert.equal(codes.has(code), true, code);
+});
+
+
+test('pre-cutover runtime cannot start until destructive orphan cleanup is disabled', () => {
+  const gate = base.gates.find(
+    candidate => candidate.id === 'PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL',
+  );
+  assert.ok(gate);
+  assert.equal(gate.status, 'BLOCKED');
+  assert.equal(
+    gate.evidence,
+    'STARTUP_AND_PERIODIC_ORPHAN_CLEANUP_DISABLE_NOT_IMPLEMENTED',
+  );
+
+  const start = action(base, 'PROD-05-START-ISOLATED-CONTAINER');
+  assert.equal(start.preconditions.includes('PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL'), true);
+  assert.equal(
+    start.effects.some(value => value.includes('orphan-upload cleanup disabled through cutover')),
+    true,
+  );
+  assert.equal(start.evidenceRequired.includes('STARTUP_ORPHAN_CLEANUP_DISABLED'), true);
+  assert.equal(start.evidenceRequired.includes('PERIODIC_ORPHAN_CLEANUP_DISABLED'), true);
+  assert.equal(
+    base.authorizationPacket.actionSpecificRevalidation[
+      'PROD-05-START-ISOLATED-CONTAINER'
+    ].includes('ORPHAN_CLEANUP_DISABLED'),
+    true,
+  );
+
+  const droppedGate = structuredClone(base);
+  action(droppedGate, 'PROD-05-START-ISOLATED-CONTAINER').preconditions =
+    action(droppedGate, 'PROD-05-START-ISOLATED-CONTAINER').preconditions
+      .filter(id => id !== 'PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL');
+  expectRejected(
+    droppedGate,
+    'ACTION_PRECONDITIONS_INVALID',
+    'pre-cutover cleanup-control gate cannot be dropped',
+  );
+
+  const droppedProof = structuredClone(base);
+  action(droppedProof, 'PROD-05-START-ISOLATED-CONTAINER').evidenceRequired =
+    action(droppedProof, 'PROD-05-START-ISOLATED-CONTAINER').evidenceRequired
+      .filter(id => id !== 'STARTUP_ORPHAN_CLEANUP_DISABLED');
+  expectRejected(
+    droppedProof,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'startup cleanup disable proof cannot be dropped',
+  );
+
+  const forged = structuredClone(base);
+  forged.gates.find(
+    candidate => candidate.id === 'PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL',
+  ).status = 'SATISFIED';
+  expectRejected(forged, 'GATE_STATUS_INVALID', 'cleanup-control gate cannot self-promote');
 });
 
 
@@ -1171,6 +1235,95 @@ test('VCP and Kiosk enablement remain blocked until the deployment chain is comp
     candidate => candidate.id === 'INTEGRATION_DEPLOYMENT_READINESS',
   ).status = 'SATISFIED';
   expectRejected(forgedGate, 'GATE_STATUS_INVALID', 'integration readiness cannot self-promote');
+});
+
+
+test('cutover revalidates final source parity and immediate live service readiness', () => {
+  const sourceGate = base.gates.find(
+    candidate => candidate.id === 'CUTOVER_SOURCE_CONSISTENCY',
+  );
+  assert.ok(sourceGate);
+  assert.equal(sourceGate.status, 'BLOCKED');
+  assert.equal(
+    sourceGate.evidence,
+    'REQUIRES_CONTINUED_SOURCE_QUIESCENCE_OR_VERIFIED_FINAL_SYNCHRONIZATION_PARITY',
+  );
+
+  const liveGate = base.gates.find(
+    candidate => candidate.id === 'CUTOVER_LIVE_SERVICE_READINESS',
+  );
+  assert.ok(liveGate);
+  assert.equal(liveGate.status, 'BLOCKED');
+  assert.equal(
+    liveGate.evidence,
+    'REQUIRES_IMMEDIATE_LOOPBACK_HEALTH_AND_ROUTED_TLS_PROBE',
+  );
+
+  const cutover = action(base, 'PROD-13-CUTOVER-SWITCH');
+  assert.equal(cutover.preconditions.includes('CUTOVER_SOURCE_CONSISTENCY'), true);
+  assert.equal(cutover.preconditions.includes('CUTOVER_LIVE_SERVICE_READINESS'), true);
+
+  for (const check of [
+    'FINAL_SOURCE_QUIESCENCE_OR_SYNC_PROOF',
+    'FINAL_SOURCE_TARGET_PARITY',
+    'PRE_SWITCH_LOOPBACK_HEALTH',
+    'PRE_SWITCH_ROUTED_TLS_PROBE',
+  ]) {
+    assert.equal(
+      base.authorizationPacket.actionSpecificRevalidation[
+        'PROD-13-CUTOVER-SWITCH'
+      ].includes(check),
+      true,
+      check,
+    );
+  }
+
+  for (const evidence of [
+    'PRE_SWITCH_SOURCE_TARGET_PARITY_PROOF',
+    'PRE_SWITCH_ATTACHMENT_PARITY_PROOF',
+    'PRE_SWITCH_HEALTH_STATUS',
+    'PRE_SWITCH_ROUTED_TLS_STATUS',
+  ]) {
+    assert.equal(cutover.evidenceRequired.includes(evidence), true, evidence);
+  }
+
+  const droppedSourceGate = structuredClone(base);
+  action(droppedSourceGate, 'PROD-13-CUTOVER-SWITCH').preconditions =
+    action(droppedSourceGate, 'PROD-13-CUTOVER-SWITCH').preconditions
+      .filter(id => id !== 'CUTOVER_SOURCE_CONSISTENCY');
+  expectRejected(
+    droppedSourceGate,
+    'ACTION_PRECONDITIONS_INVALID',
+    'cutover source-consistency gate cannot be dropped',
+  );
+
+  const droppedHealth = structuredClone(base);
+  droppedHealth.authorizationPacket.actionSpecificRevalidation[
+    'PROD-13-CUTOVER-SWITCH'
+  ] = droppedHealth.authorizationPacket.actionSpecificRevalidation[
+    'PROD-13-CUTOVER-SWITCH'
+  ].filter(id => id !== 'PRE_SWITCH_LOOPBACK_HEALTH');
+  expectRejected(
+    droppedHealth,
+    'ACTION_REVALIDATION_INVALID',
+    'pre-switch loopback health revalidation cannot be dropped',
+  );
+
+  const droppedParity = structuredClone(base);
+  action(droppedParity, 'PROD-13-CUTOVER-SWITCH').evidenceRequired =
+    action(droppedParity, 'PROD-13-CUTOVER-SWITCH').evidenceRequired
+      .filter(id => id !== 'PRE_SWITCH_ATTACHMENT_PARITY_PROOF');
+  expectRejected(
+    droppedParity,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'final attachment parity proof cannot be dropped',
+  );
+
+  for (const gateId of ['CUTOVER_SOURCE_CONSISTENCY', 'CUTOVER_LIVE_SERVICE_READINESS']) {
+    const forged = structuredClone(base);
+    forged.gates.find(candidate => candidate.id === gateId).status = 'SATISFIED';
+    expectRejected(forged, 'GATE_STATUS_INVALID', `${gateId} cannot self-promote`);
+  }
 });
 
 
