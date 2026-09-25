@@ -273,12 +273,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36105600123` on implementation-bearing head `728e480e6e9b3735d9a29d23c233e8451dc0763b` passed:
+GitHub Actions run `36118906501` on implementation-bearing head `2120b563b8fa08a95f1f76df0d0d32f48f1a4d13` passed:
 
-- full `npm run check`: 572 tests / 571 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 42/42 PASS;
+- full `npm run check`: 574 tests / 573 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 44/44 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:e597afee08452496caea4526740eaac026109b6e6dbf90e02043f1447d4ef93b`;
+- manifest digest: `sha256:d6e6b3177fab3fa712c25b8a9e656adff5b9818444a42d66250784473b771596`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -764,3 +764,21 @@ Implementation evidence: head `3e9bd502c0c607767e5d431c1504b08dd5df7537`, run `3
 Frozen invariant: `KIOSK_EVENT_WRITES_ARE_NOT_REVERSED_BY_CONFIG_ROLLBACK`.
 
 Implementation evidence: head `88239a6ae500908551972a9841b94e832075ef1b`, run `36104515602`, full suite 571/570/0/1, manifest suite 41/41, digest `sha256:1c8d005f1cc0675d63d705e14a4cd737dcb06868cd7cf4964789462978223fa5`.
+
+
+### WO-06D all-entry-point orphan cleanup guard
+
+The pre-cutover cleanup blocker now covers startup cleanup, the periodic timer, and request-triggered calls from `saveUpload()` and `submitRequest()`.
+
+```text
+PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL = BLOCKED
+ALL_STARTUP_PERIODIC_AND_REQUEST_TRIGGERED_ORPHAN_CLEANUP_DISABLE_NOT_IMPLEMENTED
+```
+
+PROD-05 must prove every cleanup entry point is disabled, PROD-07 revalidates the guard before staging writes can occur, and PROD-13 revalidates it again immediately before Switch.
+
+### WO-06D complete unquoted role-token scanning
+
+Unquoted assignment detection now consumes the complete non-whitespace value instead of stopping at comma/semicolon punctuation. Deployable values such as `ADMIN_TOKEN=abc,defghijklmnop` are rejected with `SECRET_MATERIAL_DETECTED`.
+
+Implementation evidence for both corrections: head `2120b563b8fa08a95f1f76df0d0d32f48f1a4d13`, run `36118906501`, full suite 574/573/0/1, manifest suite 44/44, digest `sha256:d6e6b3177fab3fa712c25b8a9e656adff5b9818444a42d66250784473b771596`.
