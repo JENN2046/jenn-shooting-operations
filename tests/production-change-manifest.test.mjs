@@ -406,6 +406,8 @@ test('initial preflight is exempt from all later-stage revalidation checks', () 
       'BACKUP_ROLLBACK_PROOF',
       'IMPORT_TARGET_SQLITE_ABSENCE_PROOF',
       'SOURCE_QUIESCENCE_OR_COORDINATION_PROOF',
+      'TARGET_UPLOAD_VOLUME_IDENTITY',
+      'ATTACHMENT_COPY_PLAN',
       'ROLLBACK_TARGETS',
     ],
   );
@@ -421,6 +423,7 @@ test('initial preflight is exempt from all later-stage revalidation checks', () 
       'BUILT_IMAGE_DIGEST',
       'BACKUP_ROLLBACK_PROOF',
       'EXTERNAL_READINESS_GATES',
+      'PRE_CUTOVER_ROUTE_RESTRICTION_STILL_ACTIVE',
       'ROLLBACK_TARGETS',
     ],
   );
@@ -451,6 +454,8 @@ test('initial preflight is exempt from all later-stage revalidation checks', () 
     'DISK_PORT_ROUTE_CONFLICTS',
     'IMPORT_TARGET_SQLITE_ABSENCE_PROOF',
     'SOURCE_QUIESCENCE_OR_COORDINATION_PROOF',
+    'TARGET_UPLOAD_VOLUME_IDENTITY',
+    'ATTACHMENT_COPY_PLAN',
     'ROLLBACK_TARGETS',
   ];
   expectRejected(
@@ -654,6 +659,98 @@ test('proxy exposure remains blocked until build, start, and health verification
 });
 
 
+test('pre-cutover HTTPS route blocks public writes until the exact cutover', () => {
+  const gate = base.gates.find(
+    candidate => candidate.id === 'PRE_CUTOVER_ROUTE_WRITE_RESTRICTION',
+  );
+  assert.ok(gate);
+  assert.equal(gate.status, 'BLOCKED');
+  assert.equal(
+    gate.evidence,
+    'REQUIRES_PUBLIC_WRITE_BLOCK_OR_BOUNDED_STAGING_ACCESS',
+  );
+
+  const proxy = action(base, 'PROD-07-CONFIGURE-REVERSE-PROXY-TLS');
+  assert.equal(proxy.preconditions.includes('PRE_CUTOVER_ROUTE_WRITE_RESTRICTION'), true);
+  assert.equal(
+    proxy.effects.some(value => value.includes('blocks public unauthenticated writes')),
+    true,
+  );
+  for (const evidence of [
+    'STAGING_ROUTE_ACCESS_POLICY',
+    'PUBLIC_WRITE_ENDPOINTS_BLOCKED',
+    'BOUNDED_STAGING_PRINCIPAL_SCOPE',
+    'PRE_CUTOVER_WRITE_DENIAL_PROBE',
+  ]) {
+    assert.equal(proxy.evidenceRequired.includes(evidence), true, evidence);
+  }
+  assert.equal(
+    base.authorizationPacket.actionSpecificRevalidation[
+      'PROD-07-CONFIGURE-REVERSE-PROXY-TLS'
+    ].includes('PRE_CUTOVER_ROUTE_ACCESS_POLICY'),
+    true,
+  );
+
+  const cutover = action(base, 'PROD-13-CUTOVER-SWITCH');
+  assert.equal(
+    base.authorizationPacket.actionSpecificRevalidation[
+      'PROD-13-CUTOVER-SWITCH'
+    ].includes('PRE_CUTOVER_ROUTE_RESTRICTION_STILL_ACTIVE'),
+    true,
+  );
+  assert.equal(
+    cutover.evidenceRequired.includes('PRE_CUTOVER_ROUTE_RESTRICTION_PROOF'),
+    true,
+  );
+  assert.equal(
+    cutover.effects.some(value => value.includes('Promote the staging route')),
+    true,
+  );
+
+  const droppedGate = structuredClone(base);
+  action(droppedGate, 'PROD-07-CONFIGURE-REVERSE-PROXY-TLS').preconditions =
+    action(droppedGate, 'PROD-07-CONFIGURE-REVERSE-PROXY-TLS').preconditions
+      .filter(id => id !== 'PRE_CUTOVER_ROUTE_WRITE_RESTRICTION');
+  expectRejected(
+    droppedGate,
+    'ACTION_PRECONDITIONS_INVALID',
+    'staging route write-restriction gate removed',
+  );
+
+  const droppedWriteProof = structuredClone(base);
+  action(droppedWriteProof, 'PROD-07-CONFIGURE-REVERSE-PROXY-TLS').evidenceRequired =
+    action(droppedWriteProof, 'PROD-07-CONFIGURE-REVERSE-PROXY-TLS').evidenceRequired
+      .filter(id => id !== 'PUBLIC_WRITE_ENDPOINTS_BLOCKED');
+  expectRejected(
+    droppedWriteProof,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'public write denial proof removed',
+  );
+
+  const droppedCutoverRevalidation = structuredClone(base);
+  droppedCutoverRevalidation.authorizationPacket.actionSpecificRevalidation[
+    'PROD-13-CUTOVER-SWITCH'
+  ] = droppedCutoverRevalidation.authorizationPacket.actionSpecificRevalidation[
+    'PROD-13-CUTOVER-SWITCH'
+  ].filter(id => id !== 'PRE_CUTOVER_ROUTE_RESTRICTION_STILL_ACTIVE');
+  expectRejected(
+    droppedCutoverRevalidation,
+    'ACTION_REVALIDATION_INVALID',
+    'cutover must revalidate staging restriction remains active',
+  );
+
+  const forgedGate = structuredClone(base);
+  forgedGate.gates.find(
+    candidate => candidate.id === 'PRE_CUTOVER_ROUTE_WRITE_RESTRICTION',
+  ).status = 'SATISFIED';
+  expectRejected(
+    forgedGate,
+    'GATE_STATUS_INVALID',
+    'route write-restriction gate cannot self-promote',
+  );
+});
+
+
 test('production import remains blocked until isolated storage preparation completes', () => {
   const gate = base.gates.find(
     candidate => candidate.id === 'PRODUCTION_IMPORT_STORAGE_READINESS',
@@ -767,6 +864,89 @@ test('production import requires an absent target SQLite path and precedes conta
     forgedGate,
     'GATE_STATUS_INVALID',
     'target absence gate cannot self-promote',
+  );
+});
+
+
+test('production import requires verified attachment-byte copy into the isolated target volume', () => {
+  const gate = base.gates.find(
+    candidate => candidate.id === 'PRODUCTION_ATTACHMENT_COPY_CAPABILITY',
+  );
+  assert.ok(gate);
+  assert.equal(gate.status, 'BLOCKED');
+  assert.equal(
+    gate.evidence,
+    'TARGET_UPLOAD_BYTE_COPY_AND_VERIFICATION_NOT_IMPLEMENTED',
+  );
+
+  const dataImport = action(base, 'PROD-09-PRODUCTION-DATA-IMPORT');
+  assert.equal(
+    dataImport.preconditions.includes('PRODUCTION_ATTACHMENT_COPY_CAPABILITY'),
+    true,
+  );
+  assert.equal(
+    dataImport.effects.some(value => value.includes('Copy every source upload byte')),
+    true,
+  );
+  for (const evidence of [
+    'SOURCE_UPLOAD_MANIFEST_DIGEST',
+    'TARGET_UPLOAD_MANIFEST_DIGEST',
+    'SOURCE_TARGET_UPLOAD_MANIFEST_MATCH',
+    'ATTACHMENT_BYTE_COPY_COMPLETION_PROOF',
+    'ATTACHMENT_RECORD_FILE_PARITY_PROOF',
+  ]) {
+    assert.equal(dataImport.evidenceRequired.includes(evidence), true, evidence);
+  }
+  for (const check of ['TARGET_UPLOAD_VOLUME_IDENTITY', 'ATTACHMENT_COPY_PLAN']) {
+    assert.equal(
+      base.authorizationPacket.actionSpecificRevalidation[
+        'PROD-09-PRODUCTION-DATA-IMPORT'
+      ].includes(check),
+      true,
+      check,
+    );
+  }
+
+  const droppedGate = structuredClone(base);
+  action(droppedGate, 'PROD-09-PRODUCTION-DATA-IMPORT').preconditions =
+    action(droppedGate, 'PROD-09-PRODUCTION-DATA-IMPORT').preconditions
+      .filter(id => id !== 'PRODUCTION_ATTACHMENT_COPY_CAPABILITY');
+  expectRejected(
+    droppedGate,
+    'ACTION_PRECONDITIONS_INVALID',
+    'attachment-copy capability gate removed',
+  );
+
+  const droppedTargetManifest = structuredClone(base);
+  action(droppedTargetManifest, 'PROD-09-PRODUCTION-DATA-IMPORT').evidenceRequired =
+    action(droppedTargetManifest, 'PROD-09-PRODUCTION-DATA-IMPORT').evidenceRequired
+      .filter(id => id !== 'TARGET_UPLOAD_MANIFEST_DIGEST');
+  expectRejected(
+    droppedTargetManifest,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'target upload manifest digest removed',
+  );
+
+  const droppedCopyPlan = structuredClone(base);
+  droppedCopyPlan.authorizationPacket.actionSpecificRevalidation[
+    'PROD-09-PRODUCTION-DATA-IMPORT'
+  ] = droppedCopyPlan.authorizationPacket.actionSpecificRevalidation[
+    'PROD-09-PRODUCTION-DATA-IMPORT'
+  ].filter(id => id !== 'ATTACHMENT_COPY_PLAN');
+  expectRejected(
+    droppedCopyPlan,
+    'ACTION_REVALIDATION_INVALID',
+    'attachment copy plan removed',
+  );
+
+  const forgedGate = structuredClone(base);
+  forgedGate.gates.find(
+    candidate => candidate.id === 'PRODUCTION_ATTACHMENT_COPY_CAPABILITY',
+  ).status = 'SATISFIED';
+  expectRejected(
+    forgedGate,
+    'GATE_STATUS_INVALID',
+    'attachment-copy capability cannot self-promote',
   );
 });
 

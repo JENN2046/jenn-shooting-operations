@@ -63,6 +63,10 @@ const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
     "status": "BLOCKED",
     "evidence": "REQUIRES_VERIFIED_PROD_04_05_06"
   },
+  "PRE_CUTOVER_ROUTE_WRITE_RESTRICTION": {
+    "status": "BLOCKED",
+    "evidence": "REQUIRES_PUBLIC_WRITE_BLOCK_OR_BOUNDED_STAGING_ACCESS"
+  },
   "PRODUCTION_IMPORT_STORAGE_READINESS": {
     "status": "BLOCKED",
     "evidence": "REQUIRES_VERIFIED_PROD_02"
@@ -74,6 +78,10 @@ const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
   "PRODUCTION_IMPORT_SOURCE_CONSISTENCY": {
     "status": "BLOCKED",
     "evidence": "REQUIRES_OFFLINE_SOURCE_QUIESCENCE_OR_VERIFIED_UPLOAD_MIGRATION_COORDINATION"
+  },
+  "PRODUCTION_ATTACHMENT_COPY_CAPABILITY": {
+    "status": "BLOCKED",
+    "evidence": "TARGET_UPLOAD_BYTE_COPY_AND_VERIFICATION_NOT_IMPLEMENTED"
   },
   "INTEGRATION_DEPLOYMENT_READINESS": {
     "status": "BLOCKED",
@@ -140,7 +148,8 @@ const EXPECTED_ACTION_REVALIDATION = Object.freeze({
     "TARGET_HOST_IDENTITY",
     "DISK_PORT_ROUTE_CONFLICTS",
     "BUILT_IMAGE_DIGEST",
-    "ROLLBACK_TARGETS"
+    "ROLLBACK_TARGETS",
+    "PRE_CUTOVER_ROUTE_ACCESS_POLICY"
   ]),
   "PROD-08-FIREWALL-SECURITY-GROUP": Object.freeze([
     "TARGET_HOST_IDENTITY",
@@ -153,6 +162,8 @@ const EXPECTED_ACTION_REVALIDATION = Object.freeze({
     "BACKUP_ROLLBACK_PROOF",
     "IMPORT_TARGET_SQLITE_ABSENCE_PROOF",
     "SOURCE_QUIESCENCE_OR_COORDINATION_PROOF",
+    "TARGET_UPLOAD_VOLUME_IDENTITY",
+    "ATTACHMENT_COPY_PLAN",
     "ROLLBACK_TARGETS"
   ]),
   "PROD-10-ENABLE-VCP-REMOTE-SYNC": Object.freeze([
@@ -182,6 +193,7 @@ const EXPECTED_ACTION_REVALIDATION = Object.freeze({
     "BUILT_IMAGE_DIGEST",
     "BACKUP_ROLLBACK_PROOF",
     "EXTERNAL_READINESS_GATES",
+    "PRE_CUTOVER_ROUTE_RESTRICTION_STILL_ACTIVE",
     "ROLLBACK_TARGETS"
   ])
 });
@@ -220,7 +232,9 @@ const EXPECTED_INVARIANTS = Object.freeze([
   "PRODUCTION_IMPORT_REQUIRES_OFFLINE_OR_VERIFIED_COORDINATED_SOURCE_STATE",
   "PRODUCTION_IMPORT_REQUIRES_ABSENT_TARGET_SQLITE_PATH",
   "PRODUCTION_IMPORT_PRECEDES_CONTAINER_INITIALIZATION",
-  "IMAGE_ROLLBACK_REQUIRES_CONTAINER_OBJECT_REMOVAL"
+  "IMAGE_ROLLBACK_REQUIRES_CONTAINER_OBJECT_REMOVAL",
+  "PRODUCTION_IMPORT_REQUIRES_ATTACHMENT_BYTES_IN_TARGET_VOLUME",
+  "PRE_CUTOVER_ROUTE_BLOCKS_PUBLIC_WRITES_UNTIL_SWITCH"
 ]);
 
 const EXPECTED_ROLLBACK_ORDER = Object.freeze([
@@ -396,10 +410,11 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
     "preconditions": [
       "PRODUCTION_TARGET_FACTS",
       "PROXY_BACKEND_READINESS",
+      "PRE_CUTOVER_ROUTE_WRITE_RESTRICTION",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
     "effects": [
-      "Expose the new loopback service through one approved HTTPS route"
+      "Expose the new loopback service only through a staging HTTPS route that blocks public unauthenticated writes; any pre-cutover write access is restricted to exact bounded staging principals"
     ],
     "rollbackActionIds": [
       "ROLLBACK-01-REMOVE-NEW-ROUTE"
@@ -410,7 +425,11 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "TLS_BINDING",
       "CONFIG_TEST",
       "NO_EXISTING_ROUTE_OVERWRITE",
-      "BACKEND_BUILD_START_HEALTH_PROOF"
+      "BACKEND_BUILD_START_HEALTH_PROOF",
+      "STAGING_ROUTE_ACCESS_POLICY",
+      "PUBLIC_WRITE_ENDPOINTS_BLOCKED",
+      "BOUNDED_STAGING_PRINCIPAL_SCOPE",
+      "PRE_CUTOVER_WRITE_DENIAL_PROBE"
     ]
   },
   "PROD-08-FIREWALL-SECURITY-GROUP": {
@@ -450,10 +469,12 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "PRODUCTION_IMPORT_STORAGE_READINESS",
       "PRODUCTION_IMPORT_TARGET_ABSENCE",
       "PRODUCTION_IMPORT_SOURCE_CONSISTENCY",
+      "PRODUCTION_ATTACHMENT_COPY_CAPABILITY",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
     "effects": [
-      "Create migrated production facts in an isolated target only after separate real-input validation"
+      "Create migrated production facts in an isolated target only after separate real-input validation",
+      "Copy every source upload byte referenced by a non-null stored_name into the isolated target upload volume and verify source/target attachment parity"
     ],
     "rollbackActionIds": [
       "ROLLBACK-04-PRESERVE-DATA-VOLUME"
@@ -467,7 +488,12 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "MAINTENANCE_WINDOW",
       "IMPORT_TARGET_SQLITE_ABSENCE_PROOF",
       "SOURCE_QUIESCENCE_OR_COORDINATION_PROOF",
-      "STORAGE_PREPARATION_COMPLETION_PROOF"
+      "STORAGE_PREPARATION_COMPLETION_PROOF",
+      "SOURCE_UPLOAD_MANIFEST_DIGEST",
+      "TARGET_UPLOAD_MANIFEST_DIGEST",
+      "SOURCE_TARGET_UPLOAD_MANIFEST_MATCH",
+      "ATTACHMENT_BYTE_COPY_COMPLETION_PROOF",
+      "ATTACHMENT_RECORD_FILE_PARITY_PROOF"
     ]
   },
   "PROD-10-ENABLE-VCP-REMOTE-SYNC": {
@@ -566,7 +592,8 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
     "effects": [
-      "Change which production endpoint/data/client path is authoritative"
+      "Change which production endpoint/data/client path is authoritative",
+      "Promote the staging route to general production authority only as part of the exact approved cutover after revalidating the pre-cutover write restriction"
     ],
     "rollbackActionIds": [
       "ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH",
@@ -589,7 +616,8 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "PRE_CUTOVER_BACKUP",
       "CLIENT_SWITCH_LIST",
       "ROLLBACK_TRIGGER",
-      "POST_CUTOVER_VERIFICATION"
+      "POST_CUTOVER_VERIFICATION",
+      "PRE_CUTOVER_ROUTE_RESTRICTION_PROOF"
     ]
   },
   "ROLLBACK-01-REMOVE-NEW-ROUTE": {
