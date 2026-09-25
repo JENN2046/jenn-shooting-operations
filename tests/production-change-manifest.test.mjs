@@ -547,6 +547,7 @@ test('initial preflight is exempt from all later-stage revalidation checks', () 
       'FINAL_SOURCE_TARGET_PARITY',
       'PRE_SWITCH_LOOPBACK_HEALTH',
       'PRE_SWITCH_ROUTED_TLS_PROBE',
+      'ALL_ORPHAN_CLEANUP_ENTRY_POINTS_STILL_DISABLED',
       'ROLLBACK_TARGETS',
     ],
   );
