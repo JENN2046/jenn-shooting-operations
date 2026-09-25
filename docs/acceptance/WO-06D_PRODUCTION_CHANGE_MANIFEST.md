@@ -55,14 +55,14 @@ Nothing in WO-06D is an authorization to execute an action.
 The deployment authorization request remains blocked by the dedicated deployment-level set:
 
 - VCP real compatibility: `WO06C_VCP_EXTERNAL`;
-- Kiosk real-device evidence: `WO06C_KIOSK_DEVICE`;
+- deployable Kiosk authentication wiring: `KIOSK_DEPLOYABLE_AUTH_WIRING`;
 - unresolved production host/route/storage facts: `PRODUCTION_TARGET_FACTS`;
 - unvalidated real production migration inputs: `PRODUCTION_DATA_MIGRATION`;
 - the explicit production deployment gate itself: `PRODUCTION_DEPLOYMENT_GATE`.
 
 This subset is frozen separately as `deploymentBlockingGateIds`.
 
-`blockingGateIds` has a different, exhaustive meaning: it must equal **every gate whose current status is `BLOCKED`**. It therefore also contains the action-specific blockers `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, `PROXY_BACKEND_READINESS`, `PRE_CUTOVER_ROUTE_WRITE_RESTRICTION`, `PRODUCTION_IMPORT_STORAGE_READINESS`, `PRODUCTION_IMPORT_TARGET_ABSENCE`, `PRODUCTION_IMPORT_SOURCE_CONSISTENCY`, `PRODUCTION_ATTACHMENT_COPY_CAPABILITY`, and `INTEGRATION_DEPLOYMENT_READINESS`. The validator derives the expected exhaustive set from the gate statuses, so a newly blocked gate cannot be omitted from the CLI checklist.
+`blockingGateIds` has a different, exhaustive meaning: it must equal **every gate whose current status is `BLOCKED`**. It therefore also contains the action-specific blockers `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, `PROXY_BACKEND_READINESS`, `PRE_CUTOVER_ROUTE_WRITE_RESTRICTION`, `KIOSK_DEPLOYABLE_AUTH_WIRING`, `PRODUCTION_IMPORT_STORAGE_READINESS`, `PRODUCTION_IMPORT_TARGET_ABSENCE`, `PRODUCTION_IMPORT_SOURCE_CONSISTENCY`, `PRODUCTION_ATTACHMENT_COPY_CAPABILITY`, and `INTEGRATION_DEPLOYMENT_READINESS`. The validator derives the expected exhaustive set from the gate statuses, so a newly blocked gate cannot be omitted from the CLI checklist.
 
 WO-06C still classifies the local DingTalk provider boundary as `READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION`, but WO-06D separately freezes `DINGTALK_TARGET_BINDING = BLOCKED` because no concrete app/provider identity plus bounded test destination has been supplied. Provider readiness therefore does not make `PROD-12` requestable.
 
@@ -115,8 +115,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `88239a6ae500908551972a9841b94e832075ef1b`
-- GitHub Actions run: `36104515602`
+- Head: `728e480e6e9b3735d9a29d23c233e8451dc0763b`
+- GitHub Actions run: `36105600123`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -125,8 +125,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          571
-pass                           570
+tests                          572
+pass                           571
 fail                           0
 skipped                        1
 ```
@@ -136,8 +136,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  41
-pass   41
+tests  42
+pass   42
 fail   0
 ```
 
@@ -146,7 +146,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:1c8d005f1cc0675d63d705e14a4cd737dcb06868cd7cf4964789462978223fa5",
+  "manifestDigest": "sha256:e597afee08452496caea4526740eaac026109b6e6dbf90e02043f1447d4ef93b",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -154,6 +154,7 @@ Machine verdict:
   "blockingGateIds": [
     "WO06C_VCP_EXTERNAL",
     "WO06C_KIOSK_DEVICE",
+    "KIOSK_DEPLOYABLE_AUTH_WIRING",
     "DINGTALK_TARGET_BINDING",
     "CUTOVER_FORWARD_CHAIN",
     "CUTOVER_SWITCH_RECOVERY",
@@ -173,7 +174,7 @@ Machine verdict:
   ],
   "deploymentBlockingGateIds": [
     "WO06C_VCP_EXTERNAL",
-    "WO06C_KIOSK_DEVICE",
+    "KIOSK_DEPLOYABLE_AUTH_WIRING",
     "PRODUCTION_TARGET_FACTS",
     "PRODUCTION_DATA_MIGRATION",
     "PRODUCTION_DEPLOYMENT_GATE"
