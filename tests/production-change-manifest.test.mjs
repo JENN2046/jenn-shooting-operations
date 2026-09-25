@@ -404,6 +404,7 @@ test('initial preflight is exempt from all later-stage revalidation checks', () 
       'TARGET_HOST_IDENTITY',
       'DISK_PORT_ROUTE_CONFLICTS',
       'BACKUP_ROLLBACK_PROOF',
+      'IMPORT_TARGET_SQLITE_ABSENCE_PROOF',
       'SOURCE_QUIESCENCE_OR_COORDINATION_PROOF',
       'ROLLBACK_TARGETS',
     ],
@@ -448,6 +449,7 @@ test('initial preflight is exempt from all later-stage revalidation checks', () 
   ] = [
     'TARGET_HOST_IDENTITY',
     'DISK_PORT_ROUTE_CONFLICTS',
+    'IMPORT_TARGET_SQLITE_ABSENCE_PROOF',
     'SOURCE_QUIESCENCE_OR_COORDINATION_PROOF',
     'ROLLBACK_TARGETS',
   ];
@@ -548,16 +550,20 @@ test('hostile combined semantic widening still fails closed after schema admissi
 });
 
 
-test('container startup remains blocked until storage, tokens, and image predecessors complete', () => {
+test('container startup remains blocked until storage, tokens, image, and production import complete', () => {
   const gate = base.gates.find(candidate => candidate.id === 'CONTAINER_START_READINESS');
   assert.ok(gate);
   assert.equal(gate.status, 'BLOCKED');
-  assert.equal(gate.evidence, 'REQUIRES_VERIFIED_PROD_02_03_04');
+  assert.equal(gate.evidence, 'REQUIRES_VERIFIED_PROD_02_03_04_09');
 
   const start = action(base, 'PROD-05-START-ISOLATED-CONTAINER');
   assert.equal(start.preconditions.includes('CONTAINER_START_READINESS'), true);
   assert.equal(
     start.evidenceRequired.includes('STORAGE_TOKEN_IMAGE_PREDECESSOR_PROOF'),
+    true,
+  );
+  assert.equal(
+    start.evidenceRequired.includes('PRODUCTION_IMPORT_COMPLETION_PROOF'),
     true,
   );
 
@@ -575,6 +581,16 @@ test('container startup remains blocked until storage, tokens, and image predece
     droppedProof,
     'ACTION_EVIDENCE_REQUIRED_INVALID',
     'container predecessor proof removed',
+  );
+
+  const droppedImportProof = structuredClone(base);
+  action(droppedImportProof, 'PROD-05-START-ISOLATED-CONTAINER').evidenceRequired =
+    action(droppedImportProof, 'PROD-05-START-ISOLATED-CONTAINER').evidenceRequired
+      .filter(id => id !== 'PRODUCTION_IMPORT_COMPLETION_PROOF');
+  expectRejected(
+    droppedImportProof,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'container cannot start before verified production import completion',
   );
 
   const forgedGate = structuredClone(base);
@@ -678,6 +694,82 @@ test('production import remains blocked until isolated storage preparation compl
   ).status = 'SATISFIED';
   expectRejected(forgedGate, 'GATE_STATUS_INVALID', 'import storage gate cannot self-promote');
 });
+
+test('production import requires an absent target SQLite path and precedes container initialization', () => {
+  const gate = base.gates.find(
+    candidate => candidate.id === 'PRODUCTION_IMPORT_TARGET_ABSENCE',
+  );
+  assert.ok(gate);
+  assert.equal(gate.status, 'BLOCKED');
+  assert.equal(
+    gate.evidence,
+    'REQUIRES_TARGET_SQLITE_PATH_ABSENT_BEFORE_PROD_05',
+  );
+
+  const dataImport = action(base, 'PROD-09-PRODUCTION-DATA-IMPORT');
+  assert.equal(
+    dataImport.preconditions.includes('PRODUCTION_IMPORT_TARGET_ABSENCE'),
+    true,
+  );
+  assert.equal(
+    dataImport.evidenceRequired.includes('IMPORT_TARGET_SQLITE_ABSENCE_PROOF'),
+    true,
+  );
+  assert.equal(
+    base.authorizationPacket.actionSpecificRevalidation[
+      'PROD-09-PRODUCTION-DATA-IMPORT'
+    ].includes('IMPORT_TARGET_SQLITE_ABSENCE_PROOF'),
+    true,
+  );
+
+  const containerGate = base.gates.find(
+    candidate => candidate.id === 'CONTAINER_START_READINESS',
+  );
+  assert.equal(containerGate.evidence, 'REQUIRES_VERIFIED_PROD_02_03_04_09');
+
+  const droppedGate = structuredClone(base);
+  action(droppedGate, 'PROD-09-PRODUCTION-DATA-IMPORT').preconditions =
+    action(droppedGate, 'PROD-09-PRODUCTION-DATA-IMPORT').preconditions
+      .filter(id => id !== 'PRODUCTION_IMPORT_TARGET_ABSENCE');
+  expectRejected(
+    droppedGate,
+    'ACTION_PRECONDITIONS_INVALID',
+    'import target absence gate removed',
+  );
+
+  const droppedRevalidation = structuredClone(base);
+  droppedRevalidation.authorizationPacket.actionSpecificRevalidation[
+    'PROD-09-PRODUCTION-DATA-IMPORT'
+  ] = droppedRevalidation.authorizationPacket.actionSpecificRevalidation[
+    'PROD-09-PRODUCTION-DATA-IMPORT'
+  ].filter(id => id !== 'IMPORT_TARGET_SQLITE_ABSENCE_PROOF');
+  expectRejected(
+    droppedRevalidation,
+    'ACTION_REVALIDATION_INVALID',
+    'import target absence proof removed',
+  );
+
+  const droppedEvidence = structuredClone(base);
+  action(droppedEvidence, 'PROD-09-PRODUCTION-DATA-IMPORT').evidenceRequired =
+    action(droppedEvidence, 'PROD-09-PRODUCTION-DATA-IMPORT').evidenceRequired
+      .filter(id => id !== 'IMPORT_TARGET_SQLITE_ABSENCE_PROOF');
+  expectRejected(
+    droppedEvidence,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'import target absence evidence removed',
+  );
+
+  const forgedGate = structuredClone(base);
+  forgedGate.gates.find(
+    candidate => candidate.id === 'PRODUCTION_IMPORT_TARGET_ABSENCE',
+  ).status = 'SATISFIED';
+  expectRejected(
+    forgedGate,
+    'GATE_STATUS_INVALID',
+    'target absence gate cannot self-promote',
+  );
+});
+
 
 test('production import requires offline source quiescence or verified upload/migration coordination', () => {
   const gate = base.gates.find(
