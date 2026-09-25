@@ -181,55 +181,59 @@ No VCP runtime access, device operation, credential/provider call, public callba
 - Safety design: [Production Cutover Safety Contract V1](../operations/PRODUCTION_CUTOVER_SAFETY_CONTRACT_V1.md)
 - Retained input design: [Production Evidence Input Boundary V1](../operations/PRODUCTION_EVIDENCE_INPUT_BOUNDARY_V1.md)
 
-WO-06A/B/C above are retained checkpoints, not freshly executed container/external acceptance. The current WO-06D evidence includes the three-class safety batch and source-barrier follow-up. Its still-unimplemented production capabilities stay explicitly blocked.
+WO-06A/B/C above are retained checkpoints, not freshly executed container/external acceptance. Current WO-06D evidence includes the three-class safety batch, source barrier and operation-bound final-sync correction. Production capabilities stay explicitly blocked.
 
 ### Current contract coverage
 
-The safety batch pins complete schema authority before compilation, requires ordered target-wide fence/drain/parity/Switch/read-only-verification/release effects, and binds PROD-14 solely to coauthorized rollback 12 for cleanup disable/cancel/drain and restoration of captured disabled configuration. Deleted data is not recovered by configuration rollback.
+The safety batch pins complete schema authority before compilation, requires ordered target fence/drain/parity/Switch/read-only-verification/release effects, and binds PROD-14 solely to coauthorized rollback 12 for cleanup disable/cancel/drain and restoration of captured disabled configuration. Deleted data is not recovered by configuration rollback.
 
-The subsequent source-barrier implementation is `4854d4d560fa8bea9029ce023ddbb63e1d60e1f0`. It corrects independent review comment `4106772579`: both offline and final-sync branches exclude and drain ordinary source database/upload writers before final sync/parity. Both barriers remain held through Switch, old-source demotion and read-only verification; only target writes open on success. Old-source writes remain denied, including stale clients and direct old-endpoint access. Failure or uncertain ownership retains both sides closed.
+The source-barrier implementation `4854d4d560fa8bea9029ce023ddbb63e1d60e1f0` corrected comment `4106772579`. Both offline and final-sync branches exclude and drain ordinary source database/upload writers before final sync/parity. Both barriers persist through Switch, old-source demotion and read-only verification; only target writes open on success. Old-source writes remain denied, including stale clients and direct old-endpoint access. Failure or uncertain ownership keeps both sides closed.
 
-Five mandatory source-barrier proofs and invariant `SOURCE_AND_TARGET_WRITE_BARRIERS_SPAN_PARITY_SWITCH_AND_DEMOTION` are frozen. Two added source-barrier tests reject target-only fencing, momentary checks, unexcluded synchronization, missing proof/epoch, premature release and old-source write resumption. The earlier 13-group safety suite and existing core/input tests remain. These are contract tests, not deployed barrier or cleanup acceptance.
+Published implementation `2623a442c4d9c42fec68a4ce06f693af5b227e54` additionally addresses P1 `4107098930` and P2 `4107145082` together. Initial target-fence acquisition and database/attachment drain admit no sync exception. Only after source barrier acquisition/drain may a separately approved final-sync identity be admitted through that same fence in phase 3, bound to parent cutover, sync operation, source/target storage, both epochs, scope and finite bounds. Ordinary writers stay denied; no source writes are granted; offline mode admits no exception. Revocation, database drain, attachment drain and durable phase sealing precede parity. Later phases require zero active exception and mutation; delayed/replayed/stale grants and automatic retry or reopening are forbidden.
 
-`CUTOVER_SOURCE_CONSISTENCY`, `CUTOVER_TARGET_WRITE_FENCE_CAPABILITY`, `RESTORED_CLEANUP_DISABLE_CAPABILITY` and post-Switch recovery remain BLOCKED. Pre-request checks bind deployable capability and exact plans; acquisition, drain, final-parity and demotion receipts are outputs of authorized execution, not a reason to perform those effects before authorization.
+`CUTOVER_SOURCE_CONSISTENCY` now explicitly requires `REQUIRES_DEPLOYABLE_SOURCE_WRITE_BARRIER_AND_EXACT_OFFLINE_OR_OPERATION_BOUND_FINAL_SYNC_PLAN_THROUGH_OLD_SOURCE_DEMOTION`, identically pinned in manifest and validator. Completed sync parity alone cannot replace that capability/plan. The gate, target-fence capability, cleanup-disable capability and post-Switch recovery all remain BLOCKED.
+
+Pre-request checks bind source capability/plan plus final-sync operation/authority targets and an admission/revocation/drain/seal plan, not unauthorized execution results. Six explicit sync lifecycle/zero-active receipts are completion or offline-absence evidence. Five source-barrier proofs and the existing source/target invariant remain; the additional final-sync invariant freezes the narrow lifecycle.
+
+Two final-sync groups extend the two source-barrier tests. Existing safety/core assertions were aligned with the revised terms and receipts without removing the 28 pairwise cutover reorder checks. These are definition/validator tests, not deployed concurrency, barrier or cleanup acceptance. Detailed semantics remain in the linked safety design and acceptance document.
 
 ### Fresh implementation-bearing evidence
 
-This section mirrors the acceptance document's implementation evidence, counts, machine verdict and source identities. Detailed design and coverage remain in the linked acceptance/safety documents rather than a second independent narrative copy.
+This section mirrors the acceptance document's implementation evidence, counts, machine verdict and source identities.
 
-- Implementation SHA: `4854d4d560fa8bea9029ce023ddbb63e1d60e1f0`
-- Parent checkpoint: `b4dbb12fcad0c2618b006b5a81f7a096ea9d8881`
-- Implementation tree: `6199406bc84b705c65fee074b3f9037d188651f2`
-- GitHub Actions run #115: `36165638366`
-- Fresh rerun job: `108179830147`
+- Implementation SHA: `2623a442c4d9c42fec68a4ce06f693af5b227e54`
+- Parent checkpoint: `02429a5d00c98e9f1197946da10c8fdd66eaf1f4`
+- Implementation tree: `bf94a5a0adf98c8ca56ce39bfb4e0750bfa2c406`
+- GitHub Actions run #117: `36171063329`
+- Job: `108190419732`
 - Workflow: `.github/workflows/wo06d-production-authorization.yml`
-- Original event: `push`; fresh job rerun: `success`
+- Event: `push`; attempt: `1`; result: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 - Runner: Ubuntu `24.04.5`, Linux `6.17.0-1022-azure`
 
-The complete fresh rerun log was inspected. Checkout and recorded `git rev-parse HEAD` both match the implementation SHA. Every workflow step succeeded on this exact published commit. The original job `108172593988` also passed, but this current evidence records the fresh rerun requested for the source-barrier evidence correction.
+The complete job log was inspected. Checkout and recorded `git rev-parse HEAD` both match the published implementation SHA. Every workflow step succeeded. This is GitHub execution evidence, not the earlier worker's local-only result.
 
 ```text
 npm ci                         PASS
 npm run check                  PASS
-full tests                     638
-pass                           637
+full tests                     640
+pass                           639
 fail                           0
 skipped                        1
-manifest targeted tests        108
-manifest targeted pass         108
+manifest targeted tests        110
+manifest targeted pass         110
 manifest targeted fail         0
 manifest targeted skipped      0
 ```
 
-The only full-suite skip is the absent external VCP adapter, not compatibility PASS. The unchanged command `node --test tests/production-change-manifest*.test.mjs` includes the previous 93 targeted tests, 13 safety-contract groups and two source-barrier tests. Both source-barrier test names pass in both suites. This evidence correction changes no implementation, test, schema, manifest, dependency or workflow permission.
+The only full-suite skip is the absent external VCP adapter, not compatibility PASS. The unchanged command `node --test tests/production-change-manifest*.test.mjs` includes the previous 93 targeted tests, 13 safety-contract groups, two source-barrier tests and two final-sync-exception tests, totaling 110. Both final-sync and source-barrier test names pass in both suites. No dependency, workflow permission, runtime-authentication change, test-name filter or new skip was introduced. This subsequent evidence-only commit changes no implementation, test, schema or manifest.
 
 ### Machine verdict
 
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:ed797ad375fcec18575e14a2dd945f6aa472f0944bd52ccae19ba0e8faf0c004",
+  "manifestDigest": "sha256:77fd91b1da4febcd28ca379624a523f84758ace6dbb0420fd94a92cea78d88ac",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -275,17 +279,18 @@ The only full-suite skip is the absent external VCP adapter, not compatibility P
 
 ### Verified source identities
 
-These identities were read at the exact implementation SHA above and match the acceptance document.
+These identities were read from exact-ref file or commit responses for the implementation SHA above and match the acceptance document.
 
 | File | Verified Git blob |
 | --- | --- |
 | `contracts/production-change-manifest.v1.schema.json` | `1b5a0e0b9d74384016792893842eb415fa0c893b` |
-| `docs/operations/production-change-manifest.v1.json` | `50c6b1b0baf0f814ba47ba09ae664350da8b0ea1` |
-| `src/production-change-manifest-v1.mjs` | `453d12d38d5ab1cf31a14fe6fba2e7efe967c937` |
-| `tests/production-change-manifest.test.mjs` | `6e174d42b7662678619945224cd9156a29a1adfb` |
-| `tests/production-change-manifest-safety-contract.test.mjs` | `23ea1c718c66070914730e96debbe47cc91e713f` |
-| `tests/production-change-manifest-source-barrier.test.mjs` | `6b5e9c7d63e4341b5e090ff650e28c74b19b405e` |
-| `docs/operations/PRODUCTION_CUTOVER_SAFETY_CONTRACT_V1.md` | `339186d1d78a1295a012799cee0e5fdee283a379` |
+| `docs/operations/production-change-manifest.v1.json` | `b4eda292999261279a3b46ffe83b99d923c312d7` |
+| `src/production-change-manifest-v1.mjs` | `2e0b480f2d5014c104f0cf38b27e6c361e5e8fb6` |
+| `tests/production-change-manifest.test.mjs` | `6fa93fb5be12a55bff30cc8fc735891d54ac6e2f` |
+| `tests/production-change-manifest-safety-contract.test.mjs` | `f3359f4cb4b8117bd51b65a4ec04995ad833ba78` |
+| `tests/production-change-manifest-source-barrier.test.mjs` | `526521d5c873e6d11c1aecb64df1ed64448fb286` |
+| `tests/production-change-manifest-final-sync-exception.test.mjs` | `8d48982644d153ee8ad4abb527121b2641bda079` |
+| `docs/operations/PRODUCTION_CUTOVER_SAFETY_CONTRACT_V1.md` | `5fde2733e7dbca27ca28053b3f20d1d1e664b47a` |
 
 Canonical schema SHA-256: `2627409f8a0d6b7342bfe9ce0ffe616e5697e8f7d26c79aacd9263f2f07aaf9e`. This unchanged schema pin is not the manifest digest.
 
@@ -305,11 +310,13 @@ deploymentGate = BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 
 31 gates / 27 exhaustive BLOCKED gates / 25 actions. The deployment-level subset is exactly the five gates in the verdict. `WO06C_VCP_EXTERNAL` and `WO06C_KIOSK_DEVICE` remain post-enable acceptance and cutover prerequisites, not substitutes for the deployable-wiring gates. `AUTHORITY_HEAD` is the only global pre-request check; initial target preflight does not require its own output. Integration sequencing, source consistency, import-before-startup, attachment parity, source-scoped rollback and named-volume preservation remain intact. No production capability or gate is promoted.
 
-The source-barrier revision did not change schema content or its pin. Raw duplicate rejection, declaration-only evidence admission, fixed low-disclosure failures and no-digest invalid results remain unchanged. No production data, credentials, provider, device, SSH, network, deployment or cutover action was performed for this evidence correction.
+The final-sync revision did not change schema content or its pin. Raw duplicate rejection, declaration-only evidence admission, fixed low-disclosure failures and no-digest invalid results remain unchanged. No production data, credentials, provider, device, SSH, network, deployment or cutover action was performed for this evidence correction.
 
 The docs-only final commit must pass the unchanged workflow on its exact SHA, followed by an independent clean review and complete unresolved-thread check. Final SHA/run and merge outcome belong in PR/check records and replies, avoiding a self-referential evidence commit. The user's conditional merge authorization remains valid; it does not authorize deployment or Switch.
 
 ### Historical evidence boundary
+
+Source-barrier implementation `4854d4d560fa8bea9029ce023ddbb63e1d60e1f0` passed run #115 `36165638366`, fresh rerun job `108179830147`. Docs-only `02429a5d00c98e9f1197946da10c8fdd66eaf1f4` passed #116 `36168398516`, job `108181676602`, with 638/637/0/1 and 108/108. Its digest `sha256:ed797ad375fcec18575e14a2dd945f6aa472f0944bd52ccae19ba0e8faf0c004` and source identities remain available in both documents at that immutable ref. That review produced the two final-sync findings and was not clean. Those results do not validate the current revision. Local-only `d97006c0c2073da5f977c8d075293bcc6d5ee473` is not a GitHub CI identity; current evidence uses the actually published `2623a442c4d9c42fec68a4ce06f693af5b227e54`.
 
 The first safety batch, implementation `86aabe9dc15e9c8c0cc82ff166b6551e45a463e3` / run #113 `36162028011` and docs-only `b4dbb12fcad0c2618b006b5a81f7a096ea9d8881` / run #114 `36163156059`, passed 636/635/0/1 and 106/106. Its digest `sha256:d9db0806c49189529543c952c7955f35aeb62a90063c32529c1f7e0b4dc83ad3` predates source-barrier completion and is not the current digest. Its independent review contained a valid finding, not a clean signal.
 
