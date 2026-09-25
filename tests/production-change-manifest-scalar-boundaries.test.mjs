@@ -10,6 +10,8 @@ const schema = JSON.parse(readFileSync(
 const base = JSON.parse(readFileSync(
   new URL('../docs/operations/production-change-manifest.v1.json', import.meta.url), 'utf8',
 ));
+// Input Boundary V1 intentionally rejects inline credential values at every length.
+// Retain these historical fixtures; authorizer assertions still describe runtime only.
 const validate = createProductionChangeManifestValidator(schema);
 const keys = ['access_token', 'VIEWER_TOKEN', 'SUBMITTER_TOKEN', 'SCHEDULER_TOKEN', 'ADMIN_TOKEN'];
 
@@ -31,7 +33,7 @@ function yamlSingleQuoted(value) {
   return "'" + value.replaceAll("'", "''") + "'";
 }
 
-test('YAML doubled apostrophes count as scalar content at the authorizer threshold', () => {
+test('reference-only boundary rejects retained doubled-apostrophe fixtures at all lengths', () => {
   for (const key of keys) {
     for (const count of [9, 10, 11]) {
       const value = 'abc' + "'".repeat(count) + 'def';
@@ -39,14 +41,14 @@ test('YAML doubled apostrophes count as scalar content at the authorizer thresho
       const accepted = authorizerAccepts(value);
       assert.equal(accepted, count >= 10);
       for (const spelling of [key, `"${key}"`, `'${key.toLowerCase()}'`]) {
-        assert.equal(detectsSecret(`${spelling}: ${yamlSingleQuoted(value)}`), accepted,
+        assert.equal(detectsSecret(`${spelling}: ${yamlSingleQuoted(value)}`), true,
           `${key}, ${count} doubled pairs`);
       }
     }
   }
 });
 
-test('YAML quote pairs preserve leading trailing repeated and astral scalar units', () => {
+test('reference-only boundary rejects retained quote-pair edge and astral fixtures', () => {
   const values = [
     "'".repeat(15), "'".repeat(16),
     "'" + 'a'.repeat(14), "'" + 'a'.repeat(15),
@@ -59,20 +61,20 @@ test('YAML quote pairs preserve leading trailing repeated and astral scalar unit
     const accepted = authorizerAccepts(value);
     assert.equal(accepted, value.length >= 16);
     for (const key of keys) {
-      assert.equal(detectsSecret(`${key}: ${yamlSingleQuoted(value)}`), accepted,
+      assert.equal(detectsSecret(`${key}: ${yamlSingleQuoted(value)}`), true,
         `${key}, ${value.length} UTF-16 units`);
     }
   }
 });
 
-test('YAML doubled-quote decoding never leaks into adjacent shell quoting', () => {
+test('reference-only boundary rejects both YAML and shell spellings without decoding either', () => {
   for (const key of keys) {
     // Identical spellings have different scalar/word values in the two grammars.
     const spelling = "'abc" + "''".repeat(10) + "def'";
     assert.equal(detectsSecret(`${key}: ${spelling}`), true);
-    assert.equal(detectsSecret(`${key}=${spelling}`), false);
+    assert.equal(detectsSecret(`${key}=${spelling}`), true);
     assert.equal(detectsSecret(`${key}='abcdefgh''ijklmnop'`), true);
-    assert.equal(detectsSecret(`${key}: 'short''value'`), false);
+    assert.equal(detectsSecret(`${key}: 'short''value'`), true);
   }
 });
 
@@ -81,7 +83,7 @@ const literalWhitespace = [
   '\u202f', '\u205f', '\u3000', '\ufeff', '\r', '\v', '\f',
 ];
 
-test('shell nonseparator whitespace is counted at every position including after equals', () => {
+test('reference-only boundary rejects retained whitespace fixtures at every position and length', () => {
   for (const key of keys) {
     for (const whitespace of literalWhitespace) {
       for (const units of [15, 16, 17]) {
@@ -93,7 +95,7 @@ test('shell nonseparator whitespace is counted at every position including after
           assert.equal(value.length, units);
           const accepted = authorizerAccepts(value);
           assert.equal(accepted, units >= 16);
-          assert.equal(detectsSecret(`${key}=${value}`), accepted,
+          assert.equal(detectsSecret(`${key}=${value}`), true,
             `${key}, U+${whitespace.codePointAt(0).toString(16)}, ${units} units`);
         }
       }
@@ -101,10 +103,10 @@ test('shell nonseparator whitespace is counted at every position including after
   }
 });
 
-test('shell ASCII word breaks remain distinct from quoted escaped and continued content', () => {
+test('reference-only boundary rejects retained ASCII word-break and quoting fixtures', () => {
   for (const key of keys) {
     for (const separator of [' ', '\t', '\n']) {
-      assert.equal(detectsSecret(`${key}=abcdefgh${separator}ijklmnop`), false);
+      assert.equal(detectsSecret(`${key}=abcdefgh${separator}ijklmnop`), true);
     }
     for (const whitespace of [' ', '\t', '\r', '\u00a0']) {
       const value = 'abcdefgh' + whitespace + 'ijklmnop';
@@ -113,13 +115,13 @@ test('shell ASCII word breaks remain distinct from quoted escaped and continued 
       assert.equal(detectsSecret(`${key}=abcdefgh\\${whitespace}ijklmnop`), true);
     }
     assert.equal(detectsSecret(`${key}=abcdefgh\\\nijklmnop`), true);
-    assert.equal(detectsSecret(`${key}=abcdefg\\\nhijklmn`), false);
+    assert.equal(detectsSecret(`${key}=abcdefg\\\nhijklmn`), true);
     assert.equal(detectsSecret(`${key}=\u{1F600}\u{1F600}\u{1F600}\u{1F600}\u00a0abcdefg`), true);
-    assert.equal(detectsSecret(`${key}=\u{1F600}\u{1F600}\u{1F600}\u{1F600}\u00a0abcdef`), false);
+    assert.equal(detectsSecret(`${key}=\u{1F600}\u{1F600}\u{1F600}\u{1F600}\u00a0abcdef`), true);
   }
 });
 
-test('scalar boundary fixes retain prior unsupported-syntax and literal controls', () => {
+test('reference-only boundary retains prior hostile fixtures and tightens former literal controls', () => {
   for (const key of keys) {
     for (const text of [
       `${key}=abc"correct horse battery staple"`,
@@ -130,7 +132,7 @@ test('scalar boundary fixes retain prior unsupported-syntax and literal controls
       `"${key.slice(0, -1)}\\u${key.charCodeAt(key.length - 1).toString(16).padStart(4, '0')}": short`,
     ]) assert.equal(detectsSecret(text), true);
     for (const text of [`${key}=short`, `${key}: 'short'`, `${key}: "short"`, `${key}: short\n`]) {
-      assert.equal(detectsSecret(text), false);
+      assert.equal(detectsSecret(text), true);
     }
   }
 });

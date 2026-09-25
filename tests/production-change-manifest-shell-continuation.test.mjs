@@ -10,6 +10,8 @@ const schema = JSON.parse(readFileSync(
 const base = JSON.parse(readFileSync(
   new URL('../docs/operations/production-change-manifest.v1.json', import.meta.url), 'utf8',
 ));
+// Input Boundary V1 intentionally rejects inline credential values at every length.
+// Retain these historical fixtures; authorizer assertions still describe runtime only.
 const validate = createProductionChangeManifestValidator(schema);
 
 function detectsSecret(text) {
@@ -20,7 +22,7 @@ function detectsSecret(text) {
   return result.issues.some(issue => issue.code === 'SECRET_MATERIAL_DETECTED');
 }
 
-test('shell continuations join credential segments before UTF-16 threshold checks', () => {
+test('reference-only boundary rejects all retained shell continuation fixtures', () => {
   // Synthetic strings only. No shell execution, configured secret, or network.
   const continuation = '\\' + '\n';
   const formats = [
@@ -42,17 +44,17 @@ test('shell continuations join credential segments before UTF-16 threshold check
     ).allowed;
     assert.equal(accepted, value.length >= 16);
     for (const format of formats) {
-      assert.equal(detectsSecret(format(value.slice(0, 8), value.slice(8))), accepted,
+      assert.equal(detectsSecret(format(value.slice(0, 8), value.slice(8))), true,
         `continued assignment with ${value.length} UTF-16 units`);
     }
   }
 });
 
-test('shell newline and quote handling distinguishes continuations from literal value bytes', () => {
-  assert.equal(detectsSecret('ADMIN_TOKEN=abcdefgh\nijklmnop'), false,
-    'an ordinary newline ends an unquoted assignment');
-  assert.equal(detectsSecret('ADMIN_TOKEN=abcdefgh' + '\\\\' + '\nijklmnop'), false,
-    'an escaped backslash does not escape the following newline');
+test('reference-only boundary rejects both continued and separately written credential text', () => {
+  assert.equal(detectsSecret('ADMIN_TOKEN=abcdefgh\nijklmnop'), true,
+    'ordinary-newline credential snippets are also forbidden');
+  assert.equal(detectsSecret('ADMIN_TOKEN=abcdefgh' + '\\\\' + '\nijklmnop'), true,
+    'literal-backslash credential snippets are also forbidden');
   assert.equal(detectsSecret('ADMIN_TOKEN="abcdefgh\nijklmnop"'), true,
     'an unescaped newline inside quotes is part of the value');
   assert.equal(detectsSecret("VIEWER_TOKEN='abcdefgh" + '\\' + "\nijklmnop'"), true,

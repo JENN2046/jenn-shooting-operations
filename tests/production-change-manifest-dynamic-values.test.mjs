@@ -9,6 +9,8 @@ const schema = JSON.parse(readFileSync(
 const base = JSON.parse(readFileSync(
   new URL('../docs/operations/production-change-manifest.v1.json', import.meta.url), 'utf8',
 ));
+// Input Boundary V1 intentionally rejects inline credential values at every length.
+// Retain these historical fixtures; authorizer assertions still describe runtime only.
 const validate = createProductionChangeManifestValidator(schema);
 const tokenKeys = ['access_token', 'VIEWER_TOKEN', 'SUBMITTER_TOKEN', 'SCHEDULER_TOKEN', 'ADMIN_TOKEN'];
 
@@ -41,32 +43,31 @@ test('role assignments reject active shell substitutions before word termination
   }
 });
 
-test('shell literal quoting and escaped substitutions retain their literal length', () => {
+test('reference-only boundary rejects short literal quoting as well as dynamic credential values', () => {
   for (const key of tokenKeys) {
     for (const rhs of [
       "'$(x)'", "'`x`'", "'${x}'", "'$x'", '\\$x',
       '"\\$x"', '"\\`x\\`"', 'abc\\$x',
       "'$'x", "'ab'cd", '"ab"cd',
-    ]) assert.equal(detectsSecret(`${key}=${rhs}`), false);
+    ]) assert.equal(detectsSecret(`${key}=${rhs}`), true);
 
     assert.equal(detectsSecret(`${key}='$(printf abcdefghijklmnop)'`), true,
-      'long literal values still cross the secret threshold');
+      'all inline credential values are outside the declarative input boundary');
     assert.equal(detectsSecret(`${key}=\\$abcdefghijklmnop`), true,
       'escaping a dollar does not exempt a long literal credential');
-    assert.equal(detectsSecret(`${key}=abcdefgh\n$(printf abcdefghijklmnop)`), false,
-      'a separate unquoted line is not part of this assignment');
+    assert.equal(detectsSecret(`${key}=abcdefgh\n$(printf abcdefghijklmnop)`), true,
+      'the entire unsupported snippet is rejected, not only the first assignment');
   }
 });
 
-test('dynamic-syntax rejection preserves UTF-16 and continuation boundaries', () => {
+test('reference-only boundary rejects all retained length and continuation variants', () => {
   const continuation = '\\' + '\n';
   for (const key of tokenKeys) {
     for (const value of ['abcdefghijklmnop', 'abcdefghijklmno', '😀'.repeat(8), '😀'.repeat(7) + 'a']) {
-      const expected = value.length >= 16;
-      assert.equal(detectsSecret(`${key}=${value}`), expected);
-      assert.equal(detectsSecret(`${key}="${value}"`), expected);
-      assert.equal(detectsSecret(`${key}='${value}'`), expected);
-      assert.equal(detectsSecret(`${key}=${value.slice(0, 8)}${continuation}${value.slice(8)}`), expected);
+      assert.equal(detectsSecret(`${key}=${value}`), true);
+      assert.equal(detectsSecret(`${key}="${value}"`), true);
+      assert.equal(detectsSecret(`${key}='${value}'`), true);
+      assert.equal(detectsSecret(`${key}=${value.slice(0, 8)}${continuation}${value.slice(8)}`), true);
     }
   }
 });
@@ -94,10 +95,10 @@ test('YAML tags anchors and aliases cannot hide an unsupported token scalar', ()
   }
 });
 
-test('short ordinary config literals remain distinct from YAML scalar headers', () => {
+test('reference-only boundary no longer admits short ordinary credential config literals', () => {
   for (const key of tokenKeys) {
     for (const rhs of ['short', '"short"', "'short'", '"|"', "'>-'", '"&value"', "'*value'", '"$(x)"']) {
-      assert.equal(detectsSecret(`${key}: ${rhs}`), false);
+      assert.equal(detectsSecret(`${key}: ${rhs}`), true);
     }
     assert.equal(detectsSecret(`${key}: "${'😀'.repeat(8)}"`), true);
   }

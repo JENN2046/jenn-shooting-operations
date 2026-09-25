@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import Ajv2020 from 'ajv/dist/2020.js';
+import { containsForbiddenEvidenceInput } from './production-evidence-input-boundary-v1.mjs';
 
 const EXPECTED_AUTHORITY_BASE = "56f18930b8a89b19cdbfdde24d090649329d50c9";
 
@@ -922,145 +923,6 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
   }
 }));
 
-const FORBIDDEN_SECRET_PATTERNS = Object.freeze([
-  // Deliberately count UTF-16 code units, as createAuthorizer does via string.length.
-  /Bearer\s+[^\r\n]{16,}/i,
-  /sk-[A-Za-z0-9_-]{16,}/u,
-  /replace-with-random-/iu,
-]);
-
-// Skip only ASCII horizontal formatting after the delimiter; a leading NBSP
-// in an equals-assignment is part of the shell value and must be counted.
-const ROLE_TOKEN_ASSIGNMENT = /(?:"(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)"|'(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)'|(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN))\s*([:=])[ \t]*/giu;
-
-// Escaped or folded quoted assignment keys are unsupported in evidence text.
-// Reject before matching literal role names: even one escaped character can
-// conceal a configured token key. This is syntax rejection, not evaluation.
-const QUOTED_ASSIGNMENT_KEY = /("(?:\\[\s\S]|[^"\\])*"|'(?:''|[^'])*')\s*[:=]/gu;
-
-function containsUnsupportedAssignmentKey(text) {
-  for (const match of text.matchAll(QUOTED_ASSIGNMENT_KEY)) {
-    if (/[\\\r\n]/u.test(match[1])) return true;
-  }
-  return false;
-}
-
-// for...of yields code points; char.length preserves the authorizer's UTF-16 units
-// in ordinary, quoted, and escaped segments without counting shell quote syntax.
-function shellAssignmentValueLength(text) {
-  let length = 0;
-  let quote = null;
-  let escaped = false;
-  for (const char of text) {
-    if (escaped) {
-      escaped = false;
-      // Backslash-newline is removed before shell word parsing, not a word end.
-      if (char === '\n') continue;
-      // Inside double quotes, other backslashes remain part of the value.
-      if (quote === '"' && !['$', '`', '"', '\\'].includes(char)) length += 1;
-      length += char.length;
-      continue;
-    }
-    if (quote === null && char === '\n') break;
-    // Dynamic shell values cannot be sized safely without evaluating input.
-    // Reject active dollar/backtick syntax before whitespace can truncate it.
-    // Escaped characters were consumed above; single-quoted text is literal.
-    if (quote !== "'" && (char === '$' || char === '`')) return Infinity;
-    if (char === '\\' && quote !== "'") {
-      escaped = true;
-      continue;
-    }
-    if (quote !== null) {
-      if (char === quote) quote = null;
-      else length += char.length;
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    // Bash blanks are SP/TAB; LF was handled above. NBSP, CR, VT, FF and
-    // other Unicode whitespace remain literal word content, not separators.
-    if (char === ' ' || char === '\t') break;
-    length += char.length;
-  }
-  return length;
-}
-
-function configAssignmentValueLength(text) {
-  // Colon assignments support a single physical scalar line only. Reject the
-  // remaining multiline snippet conservatively, including plain/quoted YAML
-  // continuation and a value beginning on the next line. A terminal newline
-  // is harmless. Do not try to infer YAML indentation, folding or key scope.
-  const scalar = text.trimEnd();
-  if (/[\r\n]/u.test(scalar)) return Infinity;
-  const line = scalar.trim();
-  // YAML block scalars and tagged/anchored/aliased values are unsupported.
-  // Reject conservatively rather than sizing only their one-line header.
-  // Quoted literal values do not enter this branch.
-  if (/^[|>!&*]/u.test(line)) return Infinity;
-  let length = 0;
-  let quote = null;
-  let escaped = false;
-  const chars = [...line];
-  for (let index = 0; index < chars.length; index += 1) {
-    const char = chars[index];
-    if (escaped) {
-      length += char.length;
-      escaped = false;
-      continue;
-    }
-    if (char === '\\' && quote !== "'") {
-      escaped = true;
-      continue;
-    }
-    if (quote !== null) {
-      // Within a YAML single-quoted scalar, doubled quotes encode one
-      // literal apostrophe. Consume the pair without leaving quote state.
-      // This rule is config-only: adjacent shell quotes are not escapes.
-      if (quote === "'" && char === "'" && chars[index + 1] === "'") {
-        length += 1;
-        index += 1;
-        continue;
-      }
-      if (char === quote) quote = null;
-      else length += char.length;
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    length += char.length;
-  }
-  return length;
-}
-
-function containsRoleTokenAssignmentSecret(text) {
-  if (containsUnsupportedAssignmentKey(text)) return true;
-  for (const match of text.matchAll(ROLE_TOKEN_ASSIGNMENT)) {
-    const start = (match.index ?? 0) + match[0].length;
-    const remainder = text.slice(start);
-    const length = match[1] === '='
-      ? shellAssignmentValueLength(remainder)
-      : configAssignmentValueLength(remainder);
-    if (length >= 16) return true;
-  }
-  return false;
-}
-
-function containsForbiddenSecretMaterial(value) {
-  if (typeof value === 'string') {
-    return containsRoleTokenAssignmentSecret(value)
-      || FORBIDDEN_SECRET_PATTERNS.some(pattern => pattern.test(value));
-  }
-  if (Array.isArray(value)) return value.some(containsForbiddenSecretMaterial);
-  if (value && typeof value === 'object') {
-    return Object.values(value).some(containsForbiddenSecretMaterial);
-  }
-  return false;
-}
-
 function stableJson(value) {
   if (Array.isArray(value)) return '[' + value.map(stableJson).join(',') + ']';
   if (value && typeof value === 'object') {
@@ -1113,6 +975,15 @@ export function createProductionChangeManifestValidator(schema) {
         issues.push(issue('SCHEMA_INVALID', error.instancePath || '/'));
       }
       return Object.freeze({ ok: false, issues: Object.freeze(issues) });
+    }
+
+    // Reject unsupported evidence input before semantic diagnostics or hashing.
+    // The stable code also covers forbidden syntax, not proof of a real secret.
+    if (containsForbiddenEvidenceInput(value)) {
+      return Object.freeze({
+        ok: false,
+        issues: Object.freeze([issue('SECRET_MATERIAL_DETECTED', '/')]),
+      });
     }
 
     if (value.authorityBase !== EXPECTED_AUTHORITY_BASE) {
@@ -1303,10 +1174,6 @@ export function createProductionChangeManifestValidator(schema) {
       if (actionMap.get(actionId)?.status !== 'ROLLBACK_ONLY') {
         issues.push(issue('ROLLBACK_PLAN_INVALID', '/rollbackPlan/orderedActionIds'));
       }
-    }
-
-    if (containsForbiddenSecretMaterial(value)) {
-      issues.push(issue('SECRET_MATERIAL_DETECTED', '/'));
     }
 
     const text = stableJson(value);

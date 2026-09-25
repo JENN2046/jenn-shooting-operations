@@ -10,6 +10,8 @@ const schema = JSON.parse(readFileSync(
 const base = JSON.parse(readFileSync(
   new URL('../docs/operations/production-change-manifest.v1.json', import.meta.url), 'utf8',
 ));
+// Input Boundary V1 intentionally rejects inline credential values at every length.
+// Retain these historical fixtures; authorizer assertions still describe runtime only.
 const validate = createProductionChangeManifestValidator(schema);
 
 function detectsSecret(text) {
@@ -26,7 +28,7 @@ function authorizerAccepts(token) {
   return authorize({ headers: { authorization: `Bearer ${token}` } }, 'administrator').allowed;
 }
 
-test('role-token scanner measures ordinary quoted escaped and concatenated astral values in UTF-16 units', () => {
+test('reference-only boundary rejects retained astral assignment fixtures at both runtime length boundaries', () => {
   const astral = '\u{1F600}';
   const cases = [
     ['shell unquoted admin', value => `ADMIN_TOKEN=${value}`],
@@ -43,7 +45,7 @@ test('role-token scanner measures ordinary quoted escaped and concatenated astra
     assert.equal(value.length, units);
     assert.equal(authorizerAccepts(value), units === 16);
     for (const [label, format] of cases) {
-      assert.equal(detectsSecret(format(value)), units === 16, `${label}: ${units} UTF-16 units`);
+      assert.equal(detectsSecret(format(value)), true, `${label}: ${units} UTF-16 units`);
     }
   }
   // Exercise every escaped branch without assuming that config/shell escape
@@ -58,13 +60,13 @@ test('role-token scanner measures ordinary quoted escaped and concatenated astra
   }
 });
 
-test('Bearer scanner shares the authorizer UTF-16 threshold for astral and mixed Unicode values', () => {
+test('reference-only boundary rejects retained header fixtures independently of authorizer length', () => {
   const astral = '\u{1F600}';
   for (const value of [astral.repeat(8), 'ab' + astral.repeat(7), astral.repeat(7) + 'a']) {
     const accepted = authorizerAccepts(value);
     assert.equal(accepted, value.length >= 16);
     for (const separator of [' ', '\t', '\n', '\r\n']) {
-      assert.equal(detectsSecret(`Bearer${separator}${value}`), accepted,
+      assert.equal(detectsSecret(`Bearer${separator}${value}`), true,
         `Bearer separator ${JSON.stringify(separator)}: ${value.length} UTF-16 units`);
     }
   }

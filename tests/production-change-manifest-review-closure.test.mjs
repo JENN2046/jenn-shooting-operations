@@ -5,6 +5,8 @@ import { createProductionChangeManifestValidator } from '../src/production-chang
 
 const schema = JSON.parse(readFileSync(new URL('../contracts/production-change-manifest.v1.schema.json', import.meta.url), 'utf8'));
 const base = JSON.parse(readFileSync(new URL('../docs/operations/production-change-manifest.v1.json', import.meta.url), 'utf8'));
+// Input Boundary V1 intentionally rejects inline credential values at every length.
+// Retain these historical fixtures; authorizer assertions still describe runtime only.
 const validate = createProductionChangeManifestValidator(schema);
 const keys = ['access_token', 'VIEWER_TOKEN', 'SUBMITTER_TOKEN', 'SCHEDULER_TOKEN', 'ADMIN_TOKEN'];
 const synthetic = 'abcdefgh' + 'ijklmnop';
@@ -61,14 +63,14 @@ test('escaped quoted assignment keys cannot hide any recognized token key', () =
   }
 });
 
-test('ordinary single-line short values, escaped value characters and UTF-16 boundary remain supported', () => {
+test('reference-only boundary rejects retained short single-line credential fixtures too', () => {
   for (const key of keys) {
     for (const text of [
       `${key}: short`, `${key}: "short"`, `${key}: 'short'`,
       `${key}: short\n`, `${key}: short\r\n`, `${key}=short`,
       `"${key}": "a\\b"`, `${key}: ${'x'.repeat(15)}`, `${key}: ${'😀'.repeat(7)}x`,
     ]) {
-      assert.equal(codes(withText(text)).has('SECRET_MATERIAL_DETECTED'), false, JSON.stringify(text));
+      assert.equal(codes(withText(text)).has('SECRET_MATERIAL_DETECTED'), true, JSON.stringify(text));
     }
     secret(`${key}: ${'x'.repeat(16)}`);
     secret(`${key}: "${'😀'.repeat(8)}"`);
