@@ -943,6 +943,10 @@ function shellAssignmentValueLength(text) {
       continue;
     }
     if (quote === null && (char === '\r' || char === '\n')) break;
+    // Dynamic shell values cannot be sized safely without evaluating input.
+    // Reject active dollar/backtick syntax before whitespace can truncate it.
+    // Escaped characters were consumed above; single-quoted text is literal.
+    if (quote !== "'" && (char === '$' || char === '`')) return Infinity;
     if (char === '\\' && quote !== "'") {
       escaped = true;
       continue;
@@ -964,6 +968,10 @@ function shellAssignmentValueLength(text) {
 
 function configAssignmentValueLength(text) {
   const line = text.split(/\r?\n/u, 1)[0].trim();
+  // YAML block scalars and tagged/anchored/aliased values are unsupported.
+  // Reject conservatively rather than sizing only their one-line header.
+  // Quoted literal values do not enter this branch.
+  if (/^[|>!&*]/u.test(line)) return Infinity;
   let length = 0;
   let quote = null;
   let escaped = false;
