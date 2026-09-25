@@ -24,12 +24,12 @@ test('source barrier: both offline and final-sync paths hold source exclusion th
   assert.ok(action.preconditions.includes('CUTOVER_SOURCE_CONSISTENCY'));
   assert.equal(base.gates.find(gate => gate.id === 'CUTOVER_SOURCE_CONSISTENCY').status, 'BLOCKED');
   assert.equal(action.effects.length, 8);
-  assert.match(action.effects[2], /source-wide write barrier.*drain every source writer before final sync\/parity/u);
-  assert.match(action.effects[2], /final synchronization requires this barrier through Switch and old-source demotion/u);
-  assert.match(action.effects[3], /source snapshot and write-barrier epoch/u);
-  assert.match(action.effects[4], /source barrier remain held.*no intervening writes on either side/u);
+  assert.match(action.effects[2], /source database\/upload barrier is held and drained/u);
+  assert.match(action.effects[2], /separately approved operation-bound final-sync identity/u);
+  assert.match(action.effects[3], /source snapshot\/barrier epoch/u);
+  assert.match(action.effects[4], /source barrier remain held.*no intervening writes/u);
   assert.match(action.effects[5], /old-source demotion.*denied-write policy/u);
-  assert.match(action.effects[6], /Keep both barriers.*closed admission on both sides/u);
+  assert.match(action.effects[6], /Keep both barriers.*keeps both closed/u);
   assert.match(action.effects[7], /old-source demotion is proven.*keep old-source writes denied/u);
   for (const proof of [
     'SOURCE_WRITE_BARRIER_CAPABILITY_PROOF',
@@ -39,7 +39,7 @@ test('source barrier: both offline and final-sync paths hold source exclusion th
     'OLD_SOURCE_WRITE_ADMISSION_REMAINS_CLOSED',
   ]) {
     assert.ok(action.evidenceRequired.includes(proof), proof);
-    assert.equal(base.authorizationPacket.actionSpecificRevalidation[ID].includes(proof), false);
+    assert.equal(base.authorizationPacket.actionSpecificRevalidation[ID].includes(proof), proof === 'SOURCE_WRITE_BARRIER_CAPABILITY_PROOF');
     reject(value => { cutover(value).evidenceRequired = cutover(value).evidenceRequired.filter(id => id !== proof); }, 'ACTION_EVIDENCE_REQUIRED_INVALID');
   }
   assert.ok(base.invariants.includes('SOURCE_AND_TARGET_WRITE_BARRIERS_SPAN_PARITY_SWITCH_AND_DEMOTION'));

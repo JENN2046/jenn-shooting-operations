@@ -70,7 +70,10 @@ test('safety contract: cutover cannot drop fence capability, writer coverage or 
   for (const evidence of [
     'TARGET_WRITE_FENCE_CAPABILITY_PROOF', 'TARGET_WRITER_INVENTORY_PROOF',
     'TARGET_WRITE_FENCE_ACQUISITION_PROOF', 'TARGET_DATABASE_ATTACHMENT_DRAIN_PROOF',
-    'FINAL_SYNC_WRITER_REVOKED_AND_DRAINED', 'FINAL_PARITY_FENCE_BINDING_PROOF',
+    'FINAL_SYNC_EXCEPTION_ADMISSION_RECEIPT', 'FINAL_SYNC_EXCEPTION_REVOCATION_RECEIPT',
+    'FINAL_SYNC_DATABASE_DRAIN_RECEIPT', 'FINAL_SYNC_ATTACHMENT_DRAIN_RECEIPT',
+    'FINAL_SYNC_PHASE_SEALED_RECEIPT', 'ZERO_ACTIVE_SYNC_EXCEPTION_AND_MUTATION_PROOF',
+    'FINAL_PARITY_FENCE_BINDING_PROOF',
     'PRE_SWITCH_SAME_FENCE_PROOF', 'POST_SWITCH_SAME_FENCE_PROOF',
     'READ_ONLY_POST_SWITCH_VERIFICATION', 'TARGET_FENCE_RELEASE_PROOF',
     'PRE_SWITCH_SOURCE_TARGET_PARITY_PROOF', 'PRE_SWITCH_ATTACHMENT_PARITY_PROOF',
@@ -109,13 +112,13 @@ test('safety contract: authorization binds a deployable plan, not an unauthorize
 test('safety contract: every pairwise cutover effect reordering is rejected', () => {
   const effects = action(base, CUT).effects;
   assert.equal(effects.length, 8);
-  assert.match(effects[0], /After exact PROD-13 authorization.*persistent target-wide.*database.*upload volume.*epoch/u);
-  assert.match(effects[1], /drain all in-flight database and attachment.*all processes/u);
-  assert.match(effects[2], /separately authorized bounded final synchronization.*revoke.*drain again/u);
-  assert.match(effects[3], /zero remaining writers.*source snapshot.*target revision.*attachment digests.*epoch/u);
-  assert.match(effects[4], /Immediately before Switch.*same fence.*no intervening writes/u);
+  assert.match(effects[0], /After exact PROD-13 authorization.*persistent target fence.*target storage identities.*epoch/u);
+  assert.match(effects[1], /drain all initial in-flight target database and attachment.*every process/u);
+  assert.match(effects[2], /separately approved operation-bound final-sync identity.*revoke.*drain DB and attachments.*seal/u);
+  assert.match(effects[3], /zero active exceptions and zero in-flight mutations.*source snapshot.*target identities.*digests.*epoch/u);
+  assert.match(effects[4], /Immediately before Switch.*same target fence.*no intervening writes/u);
   assert.match(effects[5], /retaining the same fence.*without releasing target writes/u);
-  assert.match(effects[6], /read-only post-Switch.*failure, timeout, restart, fence loss or uncertainty.*without automatic retry/u);
+  assert.match(effects[6], /read-only post-Switch.*uncertain acquisition.*never retries sync or reopens admission automatically/u);
   assert.match(effects[7], /Only after every.*succeeds.*otherwise retain closed admission independently.*cleanup stays disabled/u);
   for (let left = 0; left < effects.length; left += 1) {
     for (let right = left + 1; right < effects.length; right += 1) {

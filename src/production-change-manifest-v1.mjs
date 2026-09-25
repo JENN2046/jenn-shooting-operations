@@ -66,7 +66,7 @@ const EXPECTED_GATE_BINDINGS = new Map(Object.entries({
   },
   "CUTOVER_SOURCE_CONSISTENCY": {
     "status": "BLOCKED",
-    "evidence": "REQUIRES_CONTINUED_SOURCE_QUIESCENCE_OR_VERIFIED_FINAL_SYNCHRONIZATION_PARITY"
+    "evidence": "REQUIRES_DEPLOYABLE_SOURCE_WRITE_BARRIER_AND_EXACT_OFFLINE_OR_OPERATION_BOUND_FINAL_SYNC_PLAN_THROUGH_OLD_SOURCE_DEMOTION"
   },
   "CUTOVER_LIVE_SERVICE_READINESS": {
     "status": "BLOCKED",
@@ -241,6 +241,10 @@ const EXPECTED_ACTION_REVALIDATION = Object.freeze({
     "EXTERNAL_READINESS_GATES",
     "PRE_CUTOVER_ROUTE_RESTRICTION_STILL_ACTIVE",
     "FINAL_SOURCE_QUIESCENCE_OR_SYNC_PROOF",
+    "SOURCE_WRITE_BARRIER_CAPABILITY_PROOF",
+    "SOURCE_WRITE_BARRIER_PLAN",
+    "FINAL_SYNC_OPERATION_AND_AUTHORITY_TARGETS",
+    "FINAL_SYNC_EXCEPTION_ADMISSION_REVOCATION_DRAIN_AND_SEAL_PLAN",
     "FINAL_PARITY_UNDER_FENCE_PLAN",
     "PRE_SWITCH_LOOPBACK_HEALTH",
     "PRE_SWITCH_ROUTED_TLS_PROBE",
@@ -318,7 +322,8 @@ const EXPECTED_INVARIANTS = Object.freeze([
   "CLEANUP_RESTORATION_REQUIRES_COAUTHORIZED_DISABLE_AND_DRAIN",
   "CLEANUP_DISABLE_ROLLBACK_DOES_NOT_RESTORE_DELETED_FACTS",
   "VALIDATION_SCHEMA_IS_BOUND_TO_FROZEN_VALIDATOR_AUTHORITY",
-  "SOURCE_AND_TARGET_WRITE_BARRIERS_SPAN_PARITY_SWITCH_AND_DEMOTION"
+  "SOURCE_AND_TARGET_WRITE_BARRIERS_SPAN_PARITY_SWITCH_AND_DEMOTION",
+  "FINAL_SYNC_EXCEPTION_IS_OPERATION_BOUND_PHASE_LIMITED_REVOKED_DRAINED_AND_SEALED_BEFORE_PARITY"
 ]);
 
 const EXPECTED_ROLLBACK_ORDER = Object.freeze([
@@ -707,15 +712,15 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
     "effects": [
-      "After exact PROD-13 authorization, acquire one persistent target-wide write-admission fence bound to the target database, upload volume, writer inventory, operation and fence epoch; block every staging, API, integration, callback, background and direct-storage writer",
-      "With the same fence held, drain all in-flight database and attachment mutations across all processes; reject incomplete coverage or uncertain drain, and keep every orphan-cleanup entry point disabled",
-      "Under the same fence, hold a source-wide write barrier and drain every source writer before final sync/parity; separately authorized bounded final synchronization requires this barrier through Switch and old-source demotion; revoke the sync writer and drain again before parity",
-      "Under the same fence and zero remaining writers, recompute database and attachment parity; bind proof to source snapshot and write-barrier epoch, target identities, target revision, attachment digests, operation and target fence epoch; reject divergent staging facts",
-      "Immediately before Switch, prove the same fence and source barrier remain held with matching proof bindings and no intervening writes on either side; keep cleanup disabled and verify read-only loopback health and routed TLS probes",
-      "While retaining the same fence and source barrier, switch only the approved endpoint, data and client mappings and promote the staging route; verify old-source demotion and persist its denied-write policy without releasing target writes",
-      "Keep both barriers through read-only post-Switch health, route, client mapping and database-attachment parity checks; any failure, timeout, restart, fence loss or uncertainty invalidates parity and retains closed admission on both sides without automatic retry",
-      "Only after every read-only check succeeds and old-source demotion is proven, release that target fence into approved production writes; keep old-source writes denied; otherwise retain closed admission independently of process or container lifetime; cleanup stays disabled until authorized PROD-14"
-    ],
+  "After exact PROD-13 authorization, acquire one persistent target fence bound to parent cutover, target storage identities, writer inventory, operation and target-fence epoch; deny every staging, admin, API, integration, callback, background and direct-storage writer with no sync exception active",
+  "With the same fence and no sync exception active, drain all initial in-flight target database and attachment mutations across every process; reject incomplete coverage or uncertain drain, keep ordinary writer denial continuous, and keep every orphan-cleanup entry point disabled",
+  "Only after the exact source database/upload barrier is held and drained, admit the separately approved operation-bound final-sync identity through that fence with both epochs, source/target identities, scope and finite bounds; then revoke, drain DB and attachments, and seal; offline grants none",
+  "With sync sealed, zero active exceptions and zero in-flight mutations, recompute database and attachment parity bound to source snapshot/barrier epoch, target identities/revision/digests, parent cutover, sync operation and target-fence epoch; reject delayed, replayed or stale-epoch grants",
+  "Immediately before Switch, prove the same target fence and source barrier remain held, sync stays sealed, no exception or mutation is active, and proof bindings match with no intervening writes; keep cleanup disabled and verify read-only loopback health and routed TLS",
+  "While retaining the same fence and source barrier with sync sealed and ordinary writers denied, switch only approved endpoint, data and client mappings and promote the staging route; verify old-source demotion and persist its denied-write policy without releasing target writes",
+  "Keep both barriers, zero active exceptions and zero in-flight mutations through read-only post-Switch checks; uncertain acquisition, sync/revocation, drain, restart, ownership, timeout or fence loss invalidates parity, keeps both closed, and never retries sync or reopens admission automatically",
+  "Only after every read-only check succeeds and old-source demotion is proven, release that target fence into approved production writes; keep old-source writes denied; otherwise retain closed admission independently of process or container lifetime; cleanup stays disabled until authorized PROD-14"
+],
     "rollbackActionIds": [
       "ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH",
       "ROLLBACK-01-REMOVE-NEW-ROUTE",
@@ -728,39 +733,44 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
       "ROLLBACK-04-PRESERVE-DATA-VOLUME"
     ],
     "evidenceRequired": [
-      "CUTOVER_PLAN",
-      "FORWARD_CHAIN_COMPLETION_PROOF",
-      "VCP_KIOSK_ENABLEMENT_COMPLETION_PROOF",
-      "SWITCH_RECORD",
-      "DUAL_READ_COMPATIBLE_WRITE_RECOVERY_PROOF",
-      "POST_SWITCH_RECOVERY_DESIGN",
-      "PRE_CUTOVER_BACKUP",
-      "CLIENT_SWITCH_LIST",
-      "ROLLBACK_TRIGGER",
-      "POST_CUTOVER_VERIFICATION",
-      "PRE_CUTOVER_ROUTE_RESTRICTION_PROOF",
-      "PRE_SWITCH_SOURCE_TARGET_PARITY_PROOF",
-      "PRE_SWITCH_ATTACHMENT_PARITY_PROOF",
-      "PRE_SWITCH_HEALTH_STATUS",
-      "PRE_SWITCH_ROUTED_TLS_STATUS",
-      "PRE_SWITCH_ORPHAN_CLEANUP_GUARD_PROOF",
-      "POST_CUTOVER_CLEANUP_RESTORATION_PLAN",
-      "TARGET_WRITE_FENCE_CAPABILITY_PROOF",
-      "TARGET_WRITER_INVENTORY_PROOF",
-      "TARGET_WRITE_FENCE_ACQUISITION_PROOF",
-      "TARGET_DATABASE_ATTACHMENT_DRAIN_PROOF",
-      "FINAL_SYNC_WRITER_REVOKED_AND_DRAINED",
-      "FINAL_PARITY_FENCE_BINDING_PROOF",
-      "PRE_SWITCH_SAME_FENCE_PROOF",
-      "POST_SWITCH_SAME_FENCE_PROOF",
-      "READ_ONLY_POST_SWITCH_VERIFICATION",
-      "TARGET_FENCE_RELEASE_PROOF",
-      "SOURCE_WRITE_BARRIER_CAPABILITY_PROOF",
-      "SOURCE_WRITE_BARRIER_ACQUISITION_AND_DRAIN_PROOF",
-      "SOURCE_BARRIER_PARITY_BINDING_PROOF",
-      "SOURCE_BARRIER_HELD_THROUGH_DEMOTION",
-      "OLD_SOURCE_WRITE_ADMISSION_REMAINS_CLOSED"
-    ]
+  "CUTOVER_PLAN",
+  "FORWARD_CHAIN_COMPLETION_PROOF",
+  "VCP_KIOSK_ENABLEMENT_COMPLETION_PROOF",
+  "SWITCH_RECORD",
+  "DUAL_READ_COMPATIBLE_WRITE_RECOVERY_PROOF",
+  "POST_SWITCH_RECOVERY_DESIGN",
+  "PRE_CUTOVER_BACKUP",
+  "CLIENT_SWITCH_LIST",
+  "ROLLBACK_TRIGGER",
+  "POST_CUTOVER_VERIFICATION",
+  "PRE_CUTOVER_ROUTE_RESTRICTION_PROOF",
+  "PRE_SWITCH_SOURCE_TARGET_PARITY_PROOF",
+  "PRE_SWITCH_ATTACHMENT_PARITY_PROOF",
+  "PRE_SWITCH_HEALTH_STATUS",
+  "PRE_SWITCH_ROUTED_TLS_STATUS",
+  "PRE_SWITCH_ORPHAN_CLEANUP_GUARD_PROOF",
+  "POST_CUTOVER_CLEANUP_RESTORATION_PLAN",
+  "TARGET_WRITE_FENCE_CAPABILITY_PROOF",
+  "TARGET_WRITER_INVENTORY_PROOF",
+  "TARGET_WRITE_FENCE_ACQUISITION_PROOF",
+  "TARGET_DATABASE_ATTACHMENT_DRAIN_PROOF",
+  "FINAL_SYNC_EXCEPTION_ADMISSION_RECEIPT",
+  "FINAL_SYNC_EXCEPTION_REVOCATION_RECEIPT",
+  "FINAL_SYNC_DATABASE_DRAIN_RECEIPT",
+  "FINAL_SYNC_ATTACHMENT_DRAIN_RECEIPT",
+  "FINAL_SYNC_PHASE_SEALED_RECEIPT",
+  "ZERO_ACTIVE_SYNC_EXCEPTION_AND_MUTATION_PROOF",
+  "FINAL_PARITY_FENCE_BINDING_PROOF",
+  "PRE_SWITCH_SAME_FENCE_PROOF",
+  "POST_SWITCH_SAME_FENCE_PROOF",
+  "READ_ONLY_POST_SWITCH_VERIFICATION",
+  "TARGET_FENCE_RELEASE_PROOF",
+  "SOURCE_WRITE_BARRIER_CAPABILITY_PROOF",
+  "SOURCE_WRITE_BARRIER_ACQUISITION_AND_DRAIN_PROOF",
+  "SOURCE_BARRIER_PARITY_BINDING_PROOF",
+  "SOURCE_BARRIER_HELD_THROUGH_DEMOTION",
+  "OLD_SOURCE_WRITE_ADMISSION_REMAINS_CLOSED"
+]
   },
   "PROD-14-RESTORE-ORPHAN-CLEANUP": {
     "id": "PROD-14-RESTORE-ORPHAN-CLEANUP",
