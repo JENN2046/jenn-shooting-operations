@@ -273,12 +273,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36103380648` on implementation-bearing head `3e9bd502c0c607767e5d431c1504b08dd5df7537` passed:
+GitHub Actions run `36104515602` on implementation-bearing head `88239a6ae500908551972a9841b94e832075ef1b` passed:
 
-- full `npm run check`: 570 tests / 569 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 40/40 PASS;
+- full `npm run check`: 571 tests / 570 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 41/41 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:b44c408eb8a3216d55a54cb6cd890d05f41f04a0bc16132922e17f7ba5f0a220`;
+- manifest digest: `sha256:1c8d005f1cc0675d63d705e14a4cd737dcb06868cd7cf4964789462978223fa5`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
@@ -755,3 +755,12 @@ VCP_GUARDED_PUSH_WRITES_ARE_NOT_REVERSED_BY_CONFIG_ROLLBACK
 ```
 
 Implementation evidence: head `3e9bd502c0c607767e5d431c1504b08dd5df7537`, run `36103380648`, full suite 570/569/0/1, manifest suite 40/40, digest `sha256:b44c408eb8a3216d55a54cb6cd890d05f41f04a0bc16132922e17f7ba5f0a220`.
+
+
+### WO-06D Kiosk event-write irreversibility
+
+`PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE` is now `IRREVERSIBLE_OR_EXTERNAL`. Real-device acceptance or offline replay can persist production runs, reviews, receipts, and audit records. `ROLLBACK-10-DISABLE-KIOSK-CONFIG` only disables the Kiosk configuration/identity mapping and does not delete those facts.
+
+Frozen invariant: `KIOSK_EVENT_WRITES_ARE_NOT_REVERSED_BY_CONFIG_ROLLBACK`.
+
+Implementation evidence: head `88239a6ae500908551972a9841b94e832075ef1b`, run `36104515602`, full suite 571/570/0/1, manifest suite 41/41, digest `sha256:1c8d005f1cc0675d63d705e14a4cd737dcb06868cd7cf4964789462978223fa5`.

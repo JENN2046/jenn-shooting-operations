@@ -115,8 +115,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `3e9bd502c0c607767e5d431c1504b08dd5df7537`
-- GitHub Actions run: `36103380648`
+- Head: `88239a6ae500908551972a9841b94e832075ef1b`
+- GitHub Actions run: `36104515602`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -125,8 +125,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          570
-pass                           569
+tests                          571
+pass                           570
 fail                           0
 skipped                        1
 ```
@@ -136,8 +136,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  40
-pass   40
+tests  41
+pass   41
 fail   0
 ```
 
@@ -146,7 +146,7 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:b44c408eb8a3216d55a54cb6cd890d05f41f04a0bc16132922e17f7ba5f0a220",
+  "manifestDigest": "sha256:1c8d005f1cc0675d63d705e14a4cd737dcb06868cd7cf4964789462978223fa5",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
@@ -1207,3 +1207,12 @@ manifest digest  sha256:b44c408eb8a3216d55a54cb6cd890d05f41f04a0bc16132922e17f7b
 ```
 
 No role credential was added, no VCP push was executed, and no production data or integration state was mutated.
+
+
+## Kiosk event-write irreversibility
+
+`PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE` is frozen as `IRREVERSIBLE_OR_EXTERNAL`. Real-device acceptance or offline replay can persist production runs, reviews, receipts, and audit facts; `ROLLBACK-10-DISABLE-KIOSK-CONFIG` disables only the Kiosk configuration and identity mapping and does not remove those committed facts.
+
+Frozen invariant: `KIOSK_EVENT_WRITES_ARE_NOT_REVERSED_BY_CONFIG_ROLLBACK`.
+
+Implementation evidence: head `88239a6ae500908551972a9841b94e832075ef1b`, run `36104515602`, full suite 571/570/0/1, manifest suite 41/41, digest `sha256:1c8d005f1cc0675d63d705e14a4cd737dcb06868cd7cf4964789462978223fa5`.
