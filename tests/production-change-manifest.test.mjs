@@ -82,6 +82,9 @@ test('secret scanner rejects ordinary Bearer and token-shaped material inside sc
     ['quoted token with comma', 'ADMIN_TOKEN="abcdefgh,ijklmnop"'],
     ['quoted token with spaces', 'VIEWER_TOKEN="correct horse battery staple"'],
     ['single-quoted token with semicolon', "SCHEDULER_TOKEN='abcdefgh;ijklmnop'"],
+    ['unquoted token with comma', 'ADMIN_TOKEN=abc,defghijklmnop'],
+    ['unquoted token with semicolon', 'VIEWER_TOKEN=abc;defghijklmnop'],
+    ['yaml unquoted token with punctuation', 'SCHEDULER_TOKEN: abc,defghijklmnop'],
     ['openai-shaped token', 'sk-abcdefghijklmnopqrstuvwx1234567890'],
   ]) {
     const changed = structuredClone(base);
@@ -683,21 +686,47 @@ test('pre-cutover runtime cannot start until destructive orphan cleanup is disab
   assert.equal(gate.status, 'BLOCKED');
   assert.equal(
     gate.evidence,
-    'STARTUP_AND_PERIODIC_ORPHAN_CLEANUP_DISABLE_NOT_IMPLEMENTED',
+    'ALL_STARTUP_PERIODIC_AND_REQUEST_TRIGGERED_ORPHAN_CLEANUP_DISABLE_NOT_IMPLEMENTED',
   );
 
   const start = action(base, 'PROD-05-START-ISOLATED-CONTAINER');
   assert.equal(start.preconditions.includes('PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL'), true);
   assert.equal(
-    start.effects.some(value => value.includes('orphan-upload cleanup disabled through cutover')),
+    start.effects.some(value => value.includes('every orphan-upload cleanup entry point disabled through cutover')),
     true,
   );
   assert.equal(start.evidenceRequired.includes('STARTUP_ORPHAN_CLEANUP_DISABLED'), true);
   assert.equal(start.evidenceRequired.includes('PERIODIC_ORPHAN_CLEANUP_DISABLED'), true);
+  assert.equal(start.evidenceRequired.includes('REQUEST_TRIGGERED_ORPHAN_CLEANUP_DISABLED'), true);
+  assert.equal(start.evidenceRequired.includes('ALL_ORPHAN_CLEANUP_ENTRY_POINTS_DISABLED_PROOF'), true);
   assert.equal(
     base.authorizationPacket.actionSpecificRevalidation[
       'PROD-05-START-ISOLATED-CONTAINER'
-    ].includes('ORPHAN_CLEANUP_DISABLED'),
+    ].includes('ALL_ORPHAN_CLEANUP_ENTRY_POINTS_DISABLED'),
+    true,
+  );
+
+  const proxy = action(base, 'PROD-07-CONFIGURE-REVERSE-PROXY-TLS');
+  assert.equal(
+    base.authorizationPacket.actionSpecificRevalidation[
+      'PROD-07-CONFIGURE-REVERSE-PROXY-TLS'
+    ].includes('ALL_ORPHAN_CLEANUP_ENTRY_POINTS_STILL_DISABLED'),
+    true,
+  );
+  assert.equal(
+    proxy.evidenceRequired.includes('STAGING_REQUEST_PATH_CLEANUP_DISABLED_PROOF'),
+    true,
+  );
+
+  const cutover = action(base, 'PROD-13-CUTOVER-SWITCH');
+  assert.equal(
+    base.authorizationPacket.actionSpecificRevalidation[
+      'PROD-13-CUTOVER-SWITCH'
+    ].includes('ALL_ORPHAN_CLEANUP_ENTRY_POINTS_STILL_DISABLED'),
+    true,
+  );
+  assert.equal(
+    cutover.evidenceRequired.includes('PRE_SWITCH_ORPHAN_CLEANUP_GUARD_PROOF'),
     true,
   );
 
@@ -719,6 +748,38 @@ test('pre-cutover runtime cannot start until destructive orphan cleanup is disab
     droppedProof,
     'ACTION_EVIDENCE_REQUIRED_INVALID',
     'startup cleanup disable proof cannot be dropped',
+  );
+
+  const droppedRequestProof = structuredClone(base);
+  action(droppedRequestProof, 'PROD-05-START-ISOLATED-CONTAINER').evidenceRequired =
+    action(droppedRequestProof, 'PROD-05-START-ISOLATED-CONTAINER').evidenceRequired
+      .filter(id => id !== 'REQUEST_TRIGGERED_ORPHAN_CLEANUP_DISABLED');
+  expectRejected(
+    droppedRequestProof,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'request-triggered cleanup disable proof cannot be dropped',
+  );
+
+  const droppedStagingGuard = structuredClone(base);
+  droppedStagingGuard.authorizationPacket.actionSpecificRevalidation[
+    'PROD-07-CONFIGURE-REVERSE-PROXY-TLS'
+  ] = droppedStagingGuard.authorizationPacket.actionSpecificRevalidation[
+    'PROD-07-CONFIGURE-REVERSE-PROXY-TLS'
+  ].filter(id => id !== 'ALL_ORPHAN_CLEANUP_ENTRY_POINTS_STILL_DISABLED');
+  expectRejected(
+    droppedStagingGuard,
+    'ACTION_REVALIDATION_INVALID',
+    'staging route cannot drop cleanup guard revalidation',
+  );
+
+  const droppedCutoverGuard = structuredClone(base);
+  action(droppedCutoverGuard, 'PROD-13-CUTOVER-SWITCH').evidenceRequired =
+    action(droppedCutoverGuard, 'PROD-13-CUTOVER-SWITCH').evidenceRequired
+      .filter(id => id !== 'PRE_SWITCH_ORPHAN_CLEANUP_GUARD_PROOF');
+  expectRejected(
+    droppedCutoverGuard,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'cutover cannot drop cleanup-guard proof',
   );
 
   const forged = structuredClone(base);
