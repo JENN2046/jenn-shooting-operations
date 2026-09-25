@@ -115,8 +115,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `556db8e8bf2c01a1fe507ba483d4ee1e07c3fc1d`
-- GitHub Actions run: `36085417668`
+- Head: `ab5df127d0cb92405205cf2b87bb55ac00468b13`
+- GitHub Actions run: `36095441794`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -181,7 +181,7 @@ Machine verdict:
 The validator also fresh-rejects:
 
 - ordinary Bearer/access-token/token-shaped secret material embedded in schema-valid free text, including Bearer credentials split by raw newline, tab, or CRLF whitespace before JSON serialization;
-- assignments to the four declared deployment role-token names: `VIEWER_TOKEN`, `SUBMITTER_TOKEN`, `SCHEDULER_TOKEN`, and `ADMIN_TOKEN`, with case-insensitive names and whitespace around `=`;
+- assignments to the four declared deployment role-token names: `VIEWER_TOKEN`, `SUBMITTER_TOKEN`, `SCHEDULER_TOKEN`, and `ADMIN_TOKEN`, with case-insensitive names, whitespace around `=`, and unquoted, matching-double-quoted, or matching-single-quoted credential values;
 - secret fields, pre-populated approved action IDs and blanket approval;
 - missing or extra entries in the exhaustive `blockingGateIds` surface, including action-specific blocked gates;
 - drift in the separate deployment-level `deploymentBlockingGateIds` subset;
@@ -939,3 +939,41 @@ manifest digest  sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d03
 ```
 
 No token value, secret, credential, or production mutation was introduced or executed.
+
+
+## Quoted role-token assignment detection
+
+Exact-current review on `f6fa15a1...` identified that assignment-shaped role credentials wrapped in normal shell quotes could bypass the detector.
+
+The assignment value grammar now rejects all three forms for `access_token` and each declared role token:
+
+```text
+TOKEN=value
+TOKEN="value"
+TOKEN='value'
+```
+
+Quoted branches require a matching closing quote, while the unquoted branch preserves the existing delimiter restrictions. Matching remains case-insensitive for the token identifier and still runs against original string values before JSON serialization.
+
+Hostile regressions cover:
+
+```text
+ADMIN_TOKEN="..."
+VIEWER_TOKEN='...'
+submitter_token = "..."
+```
+
+Each must produce `SECRET_MATERIAL_DETECTED`.
+
+Exact implementation-bearing evidence:
+
+```text
+head             ab5df127d0cb92405205cf2b87bb55ac00468b13
+run              36095441794
+result           success
+full suite       565 tests / 564 pass / 0 fail / 1 expected VCP skip
+manifest suite   35 / 35 PASS
+manifest digest  sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d0395a50d2a
+```
+
+The manifest body is unchanged, so its digest remains stable. No credential value or production mutation was introduced.

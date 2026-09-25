@@ -273,7 +273,7 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36085417668` on implementation-bearing head `556db8e8bf2c01a1fe507ba483d4ee1e07c3fc1d` passed:
+GitHub Actions run `36095441794` on implementation-bearing head `ab5df127d0cb92405205cf2b87bb55ac00468b13` passed:
 
 - full `npm run check`: 565 tests / 564 pass / 0 fail / 1 expected external-VCP skip;
 - production-manifest targeted tests: 35/35 PASS;
@@ -640,8 +640,23 @@ SCHEDULER_TOKEN
 ADMIN_TOKEN
 ```
 
-The matcher is case-insensitive, supports whitespace around `=`, and scans original string values before JSON escaping. Existing Bearer, `access_token`, OpenAI-shaped token, and placeholder checks remain intact.
+The matcher is case-insensitive, supports whitespace around `=`, accepts unquoted credentials only for detection, and also detects matching single-quoted or double-quoted assignment values before JSON escaping. Existing Bearer, `access_token`, OpenAI-shaped token, and placeholder checks remain intact.
 
 The current blocker summary also includes `PRODUCTION_IMPORT_SOURCE_CONSISTENCY`, keeping the human-readable summary aligned with the exhaustive machine blocker set.
 
 Implementation evidence: head `556db8e8bf2c01a1fe507ba483d4ee1e07c3fc1d`, run `36085417668`, full suite 565/564/0/1, manifest suite 35/35, digest `sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d0395a50d2a`.
+
+
+### WO-06D quoted role-token assignment scanning
+
+The role-token assignment detector now rejects credential values in ordinary shell quoting as well as unquoted form:
+
+```text
+ADMIN_TOKEN="..."
+VIEWER_TOKEN='...'
+submitter_token = "..."
+```
+
+The quoted alternatives require matching quotes, which closes the bypass without loosening the delimiter rules for unquoted values.
+
+Implementation evidence: head `ab5df127d0cb92405205cf2b87bb55ac00468b13`, run `36095441794`, full suite 565/564/0/1, manifest suite 35/35, digest `sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d0395a50d2a`.
