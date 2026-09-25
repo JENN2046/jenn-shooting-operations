@@ -918,13 +918,16 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
 }));
 
 const FORBIDDEN_SECRET_PATTERNS = Object.freeze([
-  /Bearer\s+[^\r\n]{16,}/iu,
+  // Deliberately count UTF-16 code units, as createAuthorizer does via string.length.
+  /Bearer\s+[^\r\n]{16,}/i,
   /sk-[A-Za-z0-9_-]{16,}/u,
   /replace-with-random-/iu,
 ]);
 
 const ROLE_TOKEN_ASSIGNMENT = /(?:"(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)"|'(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)'|(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN))\s*([:=])\s*/giu;
 
+// for...of yields code points; char.length preserves the authorizer's UTF-16 units
+// in ordinary, quoted, and escaped segments without counting shell quote syntax.
 function shellAssignmentValueLength(text) {
   let length = 0;
   let quote = null;
@@ -932,7 +935,7 @@ function shellAssignmentValueLength(text) {
   for (const char of text) {
     if (char === '\r' || char === '\n') break;
     if (escaped) {
-      length += 1;
+      length += char.length;
       escaped = false;
       continue;
     }
@@ -942,7 +945,7 @@ function shellAssignmentValueLength(text) {
     }
     if (quote !== null) {
       if (char === quote) quote = null;
-      else length += 1;
+      else length += char.length;
       continue;
     }
     if (char === '"' || char === "'") {
@@ -950,7 +953,7 @@ function shellAssignmentValueLength(text) {
       continue;
     }
     if (/\s/u.test(char)) break;
-    length += 1;
+    length += char.length;
   }
   return length;
 }
@@ -962,7 +965,7 @@ function configAssignmentValueLength(text) {
   let escaped = false;
   for (const char of line) {
     if (escaped) {
-      length += 1;
+      length += char.length;
       escaped = false;
       continue;
     }
@@ -972,14 +975,14 @@ function configAssignmentValueLength(text) {
     }
     if (quote !== null) {
       if (char === quote) quote = null;
-      else length += 1;
+      else length += char.length;
       continue;
     }
     if (char === '"' || char === "'") {
       quote = char;
       continue;
     }
-    length += 1;
+    length += char.length;
   }
   return length;
 }

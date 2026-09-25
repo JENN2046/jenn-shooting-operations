@@ -41,7 +41,7 @@ jobs:
         run: npm run check
 
       - name: Run manifest targeted tests
-        run: node --test tests/production-change-manifest.test.mjs
+        run: node --test tests/production-change-manifest*.test.mjs
 
       - name: Emit authorization packet verdict
         run: npm run validate:production-manifest
