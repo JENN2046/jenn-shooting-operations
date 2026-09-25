@@ -240,14 +240,14 @@ Pre-request revalidation is intentionally split with `AUTHORITY_HEAD` as the onl
 The packet's deployment-level blocker subset is frozen as:
 
 - `WO06C_VCP_EXTERNAL`;
-- `WO06C_KIOSK_DEVICE`;
+- `KIOSK_DEPLOYABLE_AUTH_WIRING`;
 - `PRODUCTION_TARGET_FACTS`;
 - `PRODUCTION_DATA_MIGRATION`;
 - `PRODUCTION_DEPLOYMENT_GATE`.
 
 This is emitted as `deploymentBlockingGateIds`.
 
-Separately, `blockingGateIds` is exhaustive across **every current `BLOCKED` gate**, including action-specific gates such as `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, `PROXY_BACKEND_READINESS`, `PRODUCTION_IMPORT_STORAGE_READINESS`, and `INTEGRATION_DEPLOYMENT_READINESS`. The validator derives this exhaustive set from gate statuses.
+Separately, `blockingGateIds` is exhaustive across **every current `BLOCKED` gate**, including `WO06C_KIOSK_DEVICE`, `KIOSK_DEPLOYABLE_AUTH_WIRING`, `DINGTALK_TARGET_BINDING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `HEALTH_SMOKE_READINESS`, `PROXY_BACKEND_READINESS`, `PRE_CUTOVER_ROUTE_WRITE_RESTRICTION`, `PRODUCTION_IMPORT_STORAGE_READINESS`, `PRODUCTION_IMPORT_TARGET_ABSENCE`, `PRODUCTION_IMPORT_SOURCE_CONSISTENCY`, `PRODUCTION_ATTACHMENT_COPY_CAPABILITY`, and `INTEGRATION_DEPLOYMENT_READINESS`. The validator derives this exhaustive set from gate statuses.
 
 No action definition is currently marked requestable. The frozen requestable set is empty.
 
@@ -273,12 +273,12 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36104515602` on implementation-bearing head `88239a6ae500908551972a9841b94e832075ef1b` passed:
+GitHub Actions run `36105600123` on implementation-bearing head `728e480e6e9b3735d9a29d23c233e8451dc0763b` passed:
 
-- full `npm run check`: 571 tests / 570 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 41/41 PASS;
+- full `npm run check`: 572 tests / 571 pass / 0 fail / 1 expected external-VCP skip;
+- production-manifest targeted tests: 42/42 PASS;
 - manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:1c8d005f1cc0675d63d705e14a4cd737dcb06868cd7cf4964789462978223fa5`;
+- manifest digest: `sha256:e597afee08452496caea4526740eaac026109b6e6dbf90e02043f1447d4ef93b`;
 - authorization packet: `FROZEN_NOT_REQUESTED`;
 - deployment request: `BLOCKED_PREREQUISITES`;
 - deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
