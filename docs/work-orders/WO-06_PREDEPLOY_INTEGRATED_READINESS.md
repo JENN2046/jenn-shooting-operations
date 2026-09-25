@@ -273,7 +273,7 @@ until all required external/target/data prerequisites are separately closed and 
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36084900067` on implementation-bearing head `088c1663119c2268136a3f228999fd25d20f9249` passed:
+GitHub Actions run `36085417668` on implementation-bearing head `556db8e8bf2c01a1fe507ba483d4ee1e07c3fc1d` passed:
 
 - full `npm run check`: 565 tests / 564 pass / 0 fail / 1 expected external-VCP skip;
 - production-manifest targeted tests: 35/35 PASS;
@@ -627,3 +627,21 @@ REQUIRES_OFFLINE_SOURCE_QUIESCENCE_OR_VERIFIED_UPLOAD_MIGRATION_COORDINATION
 PROD-09 additionally requires `SOURCE_QUIESCENCE_OR_COORDINATION_PROOF` both before request and in its evidence contract. Until verified cross-process upload/migration coordination exists, this requires an offline/quiescent maintenance window so the database snapshot and upload manifest cannot race with live uploads or cleanup.
 
 Implementation evidence: head `088c1663119c2268136a3f228999fd25d20f9249`, run `36084900067`, full suite 565/564/0/1, manifest suite 35/35, digest `sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d0395a50d2a`.
+
+
+### WO-06D declared role-token assignment scanning
+
+Secret detection now rejects assignment-shaped credential material for all four declared deployment token names:
+
+```text
+VIEWER_TOKEN
+SUBMITTER_TOKEN
+SCHEDULER_TOKEN
+ADMIN_TOKEN
+```
+
+The matcher is case-insensitive, supports whitespace around `=`, and scans original string values before JSON escaping. Existing Bearer, `access_token`, OpenAI-shaped token, and placeholder checks remain intact.
+
+The current blocker summary also includes `PRODUCTION_IMPORT_SOURCE_CONSISTENCY`, keeping the human-readable summary aligned with the exhaustive machine blocker set.
+
+Implementation evidence: head `556db8e8bf2c01a1fe507ba483d4ee1e07c3fc1d`, run `36085417668`, full suite 565/564/0/1, manifest suite 35/35, digest `sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d0395a50d2a`.

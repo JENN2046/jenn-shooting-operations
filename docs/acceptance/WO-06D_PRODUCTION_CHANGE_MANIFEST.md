@@ -115,8 +115,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `088c1663119c2268136a3f228999fd25d20f9249`
-- GitHub Actions run: `36084900067`
+- Head: `556db8e8bf2c01a1fe507ba483d4ee1e07c3fc1d`
+- GitHub Actions run: `36085417668`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -181,6 +181,7 @@ Machine verdict:
 The validator also fresh-rejects:
 
 - ordinary Bearer/access-token/token-shaped secret material embedded in schema-valid free text, including Bearer credentials split by raw newline, tab, or CRLF whitespace before JSON serialization;
+- assignments to the four declared deployment role-token names: `VIEWER_TOKEN`, `SUBMITTER_TOKEN`, `SCHEDULER_TOKEN`, and `ADMIN_TOKEN`, with case-insensitive names and whitespace around `=`;
 - secret fields, pre-populated approved action IDs and blanket approval;
 - missing or extra entries in the exhaustive `blockingGateIds` surface, including action-specific blocked gates;
 - drift in the separate deployment-level `deploymentBlockingGateIds` subset;
@@ -904,3 +905,37 @@ manifest digest  sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d03
 ```
 
 No source service, upload volume, production database, migration apply, or other production mutation was touched.
+
+
+## Declared role-token assignment detection
+
+Exact-current review on `af904b1e...` identified that the secret scanner recognized `access_token=` assignments but not assignments to the four role-token names declared by the manifest.
+
+The assignment detector now covers:
+
+```text
+access_token
+VIEWER_TOKEN
+SUBMITTER_TOKEN
+SCHEDULER_TOKEN
+ADMIN_TOKEN
+```
+
+Matching is case-insensitive and permits whitespace around the assignment operator. The scanner still runs against original string values before JSON serialization.
+
+Hostile regressions prove that schema-valid free text containing each of the four declared role-token assignments is rejected with `SECRET_MATERIAL_DETECTED`, including whitespace/case variants.
+
+The current blocker prose also now includes `PRODUCTION_IMPORT_SOURCE_CONSISTENCY`, matching the exhaustive machine-generated `blockingGateIds` set.
+
+Exact implementation-bearing evidence:
+
+```text
+head             556db8e8bf2c01a1fe507ba483d4ee1e07c3fc1d
+run              36085417668
+result           success
+full suite       565 tests / 564 pass / 0 fail / 1 expected VCP skip
+manifest suite   35 / 35 PASS
+manifest digest  sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d0395a50d2a
+```
+
+No token value, secret, credential, or production mutation was introduced or executed.
