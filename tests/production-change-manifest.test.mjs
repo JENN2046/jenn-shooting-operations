@@ -397,6 +397,7 @@ test('initial preflight is exempt from all later-stage revalidation checks', () 
       'TARGET_HOST_IDENTITY',
       'DISK_PORT_ROUTE_CONFLICTS',
       'BACKUP_ROLLBACK_PROOF',
+      'SOURCE_QUIESCENCE_OR_COORDINATION_PROOF',
       'ROLLBACK_TARGETS',
     ],
   );
@@ -440,6 +441,7 @@ test('initial preflight is exempt from all later-stage revalidation checks', () 
   ] = [
     'TARGET_HOST_IDENTITY',
     'DISK_PORT_ROUTE_CONFLICTS',
+    'SOURCE_QUIESCENCE_OR_COORDINATION_PROOF',
     'ROLLBACK_TARGETS',
   ];
   expectRejected(
@@ -669,6 +671,77 @@ test('production import remains blocked until isolated storage preparation compl
   ).status = 'SATISFIED';
   expectRejected(forgedGate, 'GATE_STATUS_INVALID', 'import storage gate cannot self-promote');
 });
+
+test('production import requires offline source quiescence or verified upload/migration coordination', () => {
+  const gate = base.gates.find(
+    candidate => candidate.id === 'PRODUCTION_IMPORT_SOURCE_CONSISTENCY',
+  );
+  assert.ok(gate);
+  assert.equal(gate.status, 'BLOCKED');
+  assert.equal(
+    gate.evidence,
+    'REQUIRES_OFFLINE_SOURCE_QUIESCENCE_OR_VERIFIED_UPLOAD_MIGRATION_COORDINATION',
+  );
+
+  const dataImport = action(base, 'PROD-09-PRODUCTION-DATA-IMPORT');
+  assert.equal(
+    dataImport.preconditions.includes('PRODUCTION_IMPORT_SOURCE_CONSISTENCY'),
+    true,
+  );
+  assert.equal(
+    dataImport.evidenceRequired.includes('SOURCE_QUIESCENCE_OR_COORDINATION_PROOF'),
+    true,
+  );
+  assert.equal(
+    base.authorizationPacket.actionSpecificRevalidation[
+      'PROD-09-PRODUCTION-DATA-IMPORT'
+    ].includes('SOURCE_QUIESCENCE_OR_COORDINATION_PROOF'),
+    true,
+  );
+
+  const droppedGate = structuredClone(base);
+  action(droppedGate, 'PROD-09-PRODUCTION-DATA-IMPORT').preconditions =
+    action(droppedGate, 'PROD-09-PRODUCTION-DATA-IMPORT').preconditions
+      .filter(id => id !== 'PRODUCTION_IMPORT_SOURCE_CONSISTENCY');
+  expectRejected(
+    droppedGate,
+    'ACTION_PRECONDITIONS_INVALID',
+    'production import source-consistency gate removed',
+  );
+
+  const droppedRevalidation = structuredClone(base);
+  droppedRevalidation.authorizationPacket.actionSpecificRevalidation[
+    'PROD-09-PRODUCTION-DATA-IMPORT'
+  ] = droppedRevalidation.authorizationPacket.actionSpecificRevalidation[
+    'PROD-09-PRODUCTION-DATA-IMPORT'
+  ].filter(id => id !== 'SOURCE_QUIESCENCE_OR_COORDINATION_PROOF');
+  expectRejected(
+    droppedRevalidation,
+    'ACTION_REVALIDATION_INVALID',
+    'production import source-state proof removed',
+  );
+
+  const droppedEvidence = structuredClone(base);
+  action(droppedEvidence, 'PROD-09-PRODUCTION-DATA-IMPORT').evidenceRequired =
+    action(droppedEvidence, 'PROD-09-PRODUCTION-DATA-IMPORT').evidenceRequired
+      .filter(id => id !== 'SOURCE_QUIESCENCE_OR_COORDINATION_PROOF');
+  expectRejected(
+    droppedEvidence,
+    'ACTION_EVIDENCE_REQUIRED_INVALID',
+    'production import source-state evidence removed',
+  );
+
+  const forgedGate = structuredClone(base);
+  forgedGate.gates.find(
+    candidate => candidate.id === 'PRODUCTION_IMPORT_SOURCE_CONSISTENCY',
+  ).status = 'SATISFIED';
+  expectRejected(
+    forgedGate,
+    'GATE_STATUS_INVALID',
+    'source consistency gate cannot self-promote',
+  );
+});
+
 
 test('VCP and Kiosk enablement remain blocked until the deployment chain is complete', () => {
   const gate = base.gates.find(candidate => candidate.id === 'INTEGRATION_DEPLOYMENT_READINESS');
