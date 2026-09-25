@@ -918,25 +918,25 @@ const EXPECTED_ACTION_BINDINGS = new Map(Object.entries({
 }));
 
 const FORBIDDEN_SECRET_PATTERNS = Object.freeze([
-  /Bearer\\s+[^\\r\\n]{16,}/iu,
+  /Bearer\s+[^\r\n]{16,}/iu,
   /sk-[A-Za-z0-9_-]{16,}/u,
   /replace-with-random-/iu,
 ]);
 
-const ROLE_TOKEN_ASSIGNMENT = /(?:"(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)"|'(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)'|(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN))\\s*([:=])\\s*/giu;
+const ROLE_TOKEN_ASSIGNMENT = /(?:"(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)"|'(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN)'|(?:access_token|VIEWER_TOKEN|SUBMITTER_TOKEN|SCHEDULER_TOKEN|ADMIN_TOKEN))\s*([:=])\s*/giu;
 
 function shellAssignmentValueLength(text) {
   let length = 0;
   let quote = null;
   let escaped = false;
   for (const char of text) {
-    if (char === '\\r' || char === '\\n') break;
+    if (char === '\r' || char === '\n') break;
     if (escaped) {
       length += 1;
       escaped = false;
       continue;
     }
-    if (char === '\\\\' && quote !== "'") {
+    if (char === '\\' && quote !== "'") {
       escaped = true;
       continue;
     }
@@ -949,14 +949,14 @@ function shellAssignmentValueLength(text) {
       quote = char;
       continue;
     }
-    if (/\\s/u.test(char)) break;
+    if (/\s/u.test(char)) break;
     length += 1;
   }
   return length;
 }
 
 function configAssignmentValueLength(text) {
-  const line = text.split(/\\r?\\n/u, 1)[0].trim();
+  const line = text.split(/\r?\n/u, 1)[0].trim();
   let length = 0;
   let quote = null;
   let escaped = false;
@@ -966,7 +966,7 @@ function configAssignmentValueLength(text) {
       escaped = false;
       continue;
     }
-    if (char === '\\\\' && quote !== "'") {
+    if (char === '\\' && quote !== "'") {
       escaped = true;
       continue;
     }
