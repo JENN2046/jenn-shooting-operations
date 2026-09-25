@@ -1,7 +1,7 @@
 # WO-06：部署前综合预检
 
 - Authority base: `8d5747439ccdfb29dd78ae294c1df82cba6476a3`
-- 状态：`IN_PROGRESS / WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS / WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS / WO-06C_LOCAL_EXTERNAL_BOUNDARY_PASS / WO-06C_EXTERNAL_VALIDATION_PENDING / WO-06D_MANIFEST_PACKET_VALID / MERGE_PENDING / BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
+- 状态：`IN_PROGRESS / WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS / WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS / WO-06C_LOCAL_EXTERNAL_BOUNDARY_PASS / WO-06C_EXTERNAL_VALIDATION_PENDING / WO-06D_MANIFEST_PACKET_VALID / MERGE_PENDING / REVIEW_CLOSURE_BLOCKED / BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`
 - 目标：证明系统是否具备进入“申请部署授权”的条件，不执行部署。
 - 硬边界：不接生产 DB、不写真实凭据、不调用真实钉钉/VCP provider、不发布、不切流、不做 Switch。
 
@@ -50,7 +50,9 @@
 
 ## Initial evidence matrix
 
-| Area | Current evidence | WO-06A classification | Owner |
+This matrix records the original WO-06A baseline, not a fresh container or external-integration run performed by the current WO-06D correction.
+
+| Area | Current evidence at WO-06A | WO-06A classification | Owner |
 | --- | --- | --- | --- |
 | Contract + full local tests | Run #3: Node 24.21.0, `npm run check`, 530 tests / 529 pass / 0 fail / 1 skip | `FRESH_PASS` | 06A |
 | Container build/start | Run #3: locked runtime deps, image build, empty-volume start, `/healthz` | `FRESH_PASS` | 06A |
@@ -62,7 +64,7 @@
 | VCP compatibility | integration test expects external `ShootingPlannerSyncService`; adapter absent in repo | `EXTERNAL_BLOCKED` | 06C |
 | Kiosk browser/device | static/browser evidence exists; acceptance says `BROWSER_AND_DEVICE_NOT_RUN` | `EXTERNAL_BLOCKED` for device | 06C |
 | DingTalk | local Outbox/Mock boundary `PASS_WITH_LIMITS / LOCAL_ONLY`; real provider not wired | `EXTERNAL_BLOCKED` | 06C |
-| Production change manifest | not yet frozen | `NOT_IN_SCOPE` | 06D |
+| Production change manifest | not yet frozen at this initial baseline | `NOT_IN_SCOPE` | 06D |
 | Production deployment | explicitly unauthorized | `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE` | separate human gate |
 
 ## Stop conditions
@@ -88,7 +90,6 @@
 
 06A PASS 只意味着“部署前证据基线可用”，不代表 WO-06 总体 PASS，更不代表授权部署。
 
-
 ## WO-06B：MIGRATION_BACKUP_RESTORE_ROLLBACK_FRESH_ACCEPTANCE
 
 - Authority base: `b66c6e0377531064b4e1db03dbc2067d4457acf0`
@@ -96,15 +97,11 @@
 
 ### Fresh evidence
 
-GitHub Actions run `35976098214` on final implementation-bearing head `b10a2ff8fac20d6ba892a5a8bfc3232c4189c73d` completed successfully with:
+The retained WO-06B checkpoint is GitHub Actions run `35976098214` on implementation-bearing head `b10a2ff8fac20d6ba892a5a8bfc3232c4189c73d`, which completed successfully with:
 
 - Ubuntu 24.04 / Linux `6.17.0-1022-azure`;
-- Node `24.21.0`;
-- npm `11.19.0`;
-- tzdata `2026c`;
-- ICU `78.3`;
+- Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`;
 - full `npm run check`: 530 tests / 529 pass / 0 fail / 1 expected external-VCP skip;
-- this evidence citation correction is docs-only; the resulting PR head must also pass the same workflow before merge, with that run attached to the PR/check record rather than creating an impossible self-referential run ID inside the same commit;
 - targeted migration/recovery suite: 126/126 PASS;
 - fresh full-chain acceptance: PASS.
 
@@ -122,21 +119,13 @@ source bytes               unchanged
 completed artifacts        unchanged on replay
 ```
 
-The target also retained zero `production_events` and zero `notification_outbox` rows, so historical migration did not fabricate runtime or notification facts.
+The target retained zero `production_events` and zero `notification_outbox` rows, so historical migration did not fabricate runtime or notification facts.
 
 ### Limits preserved
 
-This PASS applies only to fresh isolated fixture paths under the frozen WO-02D contract. It does not authorize or claim:
+This PASS applies only to isolated fixture paths under the frozen WO-02D contract. It does not authorize or claim production DB migration, online migration, real upload-volume migration, production backup/restore, Switch/cutover or deployment/release. This WO-06B checkpoint is retained evidence, not a new production recovery run in the current WO-06D scanner correction.
 
-- production DB migration;
-- online migration;
-- real upload-volume migration;
-- production backup/restore;
-- Switch/cutover;
-- deployment/release.
-
-WO-06C still owns VCP/Kiosk/DingTalk external readiness. WO-06D still owns the production change and authorization packet. The global deployment gate remains `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
-
+WO-06C owns external readiness. WO-06D owns the production-change definition and authorization packet. The global deployment gate remains blocked.
 
 ## WO-06C：VCP_KIOSK_DINGTALK_EXTERNAL_READINESS
 
@@ -146,20 +135,15 @@ WO-06C still owns VCP/Kiosk/DingTalk external readiness. WO-06D still owns the p
 
 ### Fresh local evidence
 
-GitHub Actions run `35981030282` on final implementation-bearing head `775b6072687c53d2135be8d069b650bb37771090` completed successfully with:
+The retained WO-06C checkpoint is GitHub Actions run `35981030282` on implementation-bearing head `775b6072687c53d2135be8d069b650bb37771090`, which completed successfully with:
 
 - Ubuntu 24.04 / Linux `6.17.0-1022-azure`;
-- Node `24.21.0`;
-- npm `11.19.0`;
-- tzdata `2026c`;
-- ICU `78.3`;
+- Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`;
 - full `npm run check`: 530 tests / 529 pass / 0 fail / 1 expected external-VCP skip;
 - Kiosk targeted suite: 118/118 PASS;
 - DingTalk/Outbox/Callback targeted suite: 64/64 PASS;
-- VCP integration test: 1 skipped because the external adapter is absent;
+- VCP integration test: skipped because the external adapter is absent;
 - local external-boundary harness: PASS.
-
-Machine verdict:
 
 ```text
 WO-06C_LOCAL_EXTERNAL_BOUNDARY_PASS
@@ -172,57 +156,30 @@ BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 
 ### Boundary facts
 
-VCP:
+VCP has only the integration consumer/test in the repository; external `ShootingPlannerSyncService` is absent. No real compatibility PASS is claimed.
 
-- the repository still contains only the integration consumer/test;
-- external `ShootingPlannerSyncService` is absent in this workspace;
-- therefore no real VCP compatibility PASS is claimed.
+Kiosk static `/kiosk` serves locally. The default runtime fails closed with `AUTH_NOT_CONFIGURED`; explicit trusted-principal injection reaches only the empty-resource read path. Real tablet/browser acceptance remains unexecuted.
 
-Kiosk:
-
-- static `/kiosk` entry serves locally;
-- default runtime remains fail-closed with `AUTH_NOT_CONFIGURED`;
-- explicit trusted-principal injection reaches the empty-resource current read path;
-- real tablet/browser scenarios remain unexecuted and must not be inferred from local tests.
-
-DingTalk:
-
-- unconfigured adapter deterministically returns `DINGTALK_NOT_CONFIGURED`;
-- local harness proves zero provider network calls;
-- callback runtime remains `NOT_WIRED`;
-- local Outbox/card/dispatcher/worker/callback boundaries are ready for a separately authorized provider-integration step.
+DingTalk's unconfigured adapter returns `DINGTALK_NOT_CONFIGURED`; the local harness proves zero provider calls. Callback runtime remains `NOT_WIRED`. Local Outbox/card/dispatcher/worker/callback boundaries are readiness evidence only.
 
 ### External closure still required
 
 WO-06C remains open until required external evidence is recorded:
 
-1. VCP real adapter compatibility run: pull → guarded push → verification pull;
-2. Kiosk real browser/device acceptance against the frozen WO-03 checklist;
-3. if authorized, DingTalk provider integration evidence without widening callback/domain authority.
+1. VCP real adapter pull → guarded push → verification pull;
+2. real Kiosk browser/device acceptance against the frozen WO-03 checklist;
+3. if separately authorized, bounded DingTalk integration evidence without widened callback/domain authority.
 
-No VCP runtime access, device operation, DingTalk credential/provider call, public callback endpoint, production identity mapping, deployment or cutover is authorized by this local PASS.
-
-The global deployment gate remains `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
-
+No VCP runtime access, device operation, credential/provider call, public callback endpoint, production identity mapping, deployment or cutover is authorized by local PASS. No new external acceptance run occurred in this correction.
 
 ## WO-06D：PRODUCTION_CHANGE_MANIFEST_AND_AUTHORIZATION_PACKET
 
 - Authority base: `56f18930b8a89b19cdbfdde24d090649329d50c9`
-- 状态：`WO-06D_MANIFEST_PACKET_VALID / MERGE_PENDING / DEPLOYMENT_AUTHORIZATION_REQUEST_BLOCKED`
+- 状态：`WO-06D_MANIFEST_PACKET_VALID / MERGE_PENDING / REVIEW_CLOSURE_BLOCKED / DEPLOYMENT_AUTHORIZATION_REQUEST_BLOCKED`
+- Authority candidate: `docs/operations/production-change-manifest.v1.json`
+- Acceptance: [WO-06D current acceptance](../acceptance/WO-06D_PRODUCTION_CHANGE_MANIFEST.md)
 
-### Authority candidate
-
-`docs/operations/production-change-manifest.v1.json`
-
-This manifest freezes:
-
-- unresolved production target facts instead of guessing them;
-- four secret classes without storing any secret values;
-- prerequisite gates from WO-06A/B/C;
-- exact production action IDs, risk, side effects and authority targets;
-- per-action evidence requirements and rollback bindings;
-- a rollback-first/no-data-deletion rule;
-- an embedded human authorization packet with exact-action-only semantics.
+The manifest freezes unresolved production target facts, four secret classes without values, prerequisite gates, exact action IDs/targets, risk/side effects, evidence, rollback bindings and an embedded exact-action human authorization packet. A valid definition is not a completed independent review or an implemented deployment capability.
 
 ### Authorization semantics
 
@@ -238,591 +195,138 @@ deploymentAuthorizationRequest = BLOCKED_PREREQUISITES
 deploymentGate = BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 ```
 
-Pre-request revalidation is intentionally split with `AUTHORITY_HEAD` as the only universal global check. Every other runtime/deployment fact is action-specific: host identity/conflicts only after PROD-01, source/base digest at PROD-04, built-image digest only downstream, backup proof only for data/cutover, secret storage only for secret-bearing actions, external readiness only for integrations/cutover, and rollback-target checks only where a forward action needs a concrete recovery scope.
+`AUTHORITY_HEAD` remains the only global pre-request check. Host/conflict facts apply after PROD-01; build source/base digest applies at PROD-04; built-image checks apply downstream. Backup, secret, external and rollback checks remain action-specific. The scanner correction changes none of those definitions.
 
-The packet's deployment-level blocker subset is frozen as:
+### Current blockers and requestability
 
-- `VCP_DEPLOYABLE_ADAPTER_WIRING`;
-- `KIOSK_DEPLOYABLE_AUTH_WIRING`;
-- `PRODUCTION_TARGET_FACTS`;
-- `PRODUCTION_DATA_MIGRATION`;
-- `PRODUCTION_DEPLOYMENT_GATE`.
+The five deployment-level blockers remain exactly:
 
-This exact five-gate set is emitted as `deploymentBlockingGateIds`.
+```text
+VCP_DEPLOYABLE_ADAPTER_WIRING
+KIOSK_DEPLOYABLE_AUTH_WIRING
+PRODUCTION_TARGET_FACTS
+PRODUCTION_DATA_MIGRATION
+PRODUCTION_DEPLOYMENT_GATE
+```
 
-`WO06C_VCP_EXTERNAL` remains a blocked **post-enable compatibility gate**, not a deployment-level blocker or PROD-10 prerequisite. The sequence is deployable VCP wiring → separately authorized PROD-10 enablement → real pull / guarded push / verification pull → compatibility PASS → PROD-13 cutover. The real operation has not run, so `BLOCKED_EXTERNAL_RUNTIME` remains truthful. This gate stays in exhaustive `blockingGateIds` and in PROD-13 preconditions.
+`WO06C_VCP_EXTERNAL` remains blocked post-enable compatibility, not a deployment-level blocker or PROD-10 prerequisite. Deployable wiring precedes separately authorized enablement and real pull / guarded push / verification pull; compatibility PASS is required before PROD-13. The real operation has not run. Kiosk retains the analogous deployable-auth-wiring → PROD-11 → real-device acceptance → cutover sequence.
 
-Likewise, Kiosk deployable auth wiring precedes PROD-11 enablement; real-device acceptance closes `WO06C_KIOSK_DEVICE` afterward and is still required before cutover. Neither compatibility gate is deleted or self-promoted.
+`blockingGateIds` is separately exhaustive across every current BLOCKED gate: all 25 entries are reproduced in the machine verdict below. `POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION` belongs to PROD-14, not the five deployment-level blockers.
 
-Separately, `blockingGateIds` is exhaustive across **every current `BLOCKED` gate**. It contains 25 gates, including the five above, `WO06C_VCP_EXTERNAL`, `WO06C_KIOSK_DEVICE`, `DINGTALK_TARGET_BINDING`, `DINGTALK_DEPLOYABLE_ADAPTER_WIRING`, `CUTOVER_FORWARD_CHAIN`, `CUTOVER_SWITCH_RECOVERY`, `CUTOVER_SOURCE_CONSISTENCY`, `CUTOVER_LIVE_SERVICE_READINESS`, `TARGET_HOST_BINDING`, `CONTAINER_START_READINESS`, `PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL`, `HEALTH_SMOKE_READINESS`, `PROXY_BACKEND_READINESS`, `PRE_CUTOVER_ROUTE_WRITE_RESTRICTION`, `PRODUCTION_IMPORT_STORAGE_READINESS`, `PRODUCTION_IMPORT_TARGET_ABSENCE`, `PRODUCTION_IMPORT_SOURCE_CONSISTENCY`, `PRODUCTION_ATTACHMENT_COPY_CAPABILITY`, `INTEGRATION_DEPLOYMENT_READINESS`, and `POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION`. The validator derives this exhaustive set from gate statuses. Post-cutover cleanup restoration belongs to PROD-14, not the five-gate deployment-level subset.
+No action is requestable, requested or approved. PROD-01 remains gated by exact `TARGET_HOST_BINDING`, not the target facts it must discover. PROD-12 still has unresolved exact DingTalk target binding and deployable wiring, with runtime configuration/wiring evidence required. Local provider readiness does not make it requestable; its missing deployment-chain prerequisite contract remains an open P1.
 
-No action definition is currently marked requestable. The frozen requestable set is empty.
+### Retained execution and recovery contract
 
-`PROD-01-TARGET-READONLY-PREFLIGHT` is `BLOCKED_PREREQUISITE` behind `TARGET_HOST_BINDING`. It no longer depends on `PRODUCTION_TARGET_FACTS`, because those are the facts the read-only preflight is responsible for discovering after one exact candidate host has been bound.
+PROD-09 requires offline/quiescent source state or verified coordination, an absent target SQLite path, isolated storage, target attachment-byte copy capability and source/target manifest plus record/file parity. Import precedes PROD-05 container initialization.
 
-`PROD-12-DINGTALK-PROVIDER-INTEGRATION` remains externally provider-ready at the WO-06C local boundary, but is `BLOCKED_PREREQUISITE` in WO-06D because both `DINGTALK_TARGET_BINDING` and `DINGTALK_DEPLOYABLE_ADAPTER_WIRING` remain blocked. Exact app/provider identity, a bounded test destination, real runtime adapter configuration, and wiring proof are required; local provider readiness alone cannot make it requestable.
+PROD-07 permits only restricted staging exposure. Public unauthenticated writes remain blocked; bounded staging writers are not equivalent to a target-wide freeze. The target-side final-parity race remains an open P1, not a capability completed by this correction.
 
-No action is requested or approved.
+Startup, timer, `saveUpload()` and `submitRequest()` destructive orphan cleanup must remain disabled and be re-proved at PROD-05/07/13. PROD-14 separately restores cleanup only after cutover completion and protected attachment parity.
+
+VCP/Kiosk enablement remains `IRREVERSIBLE_OR_EXTERNAL`; configuration rollback does not erase persisted business facts. The rollback order remains route removal → exact firewall rule restoration → exact container stop/removal with volume preservation → unused exact image removal → generated role-token binding removal → source-scoped VCP/Kiosk/DingTalk configuration rollback → volume preservation. Data-volume deletion remains forbidden, and blocked post-Switch authority recovery is not an available capability.
 
 ### Hard boundary
 
-WO-06D performs no production host access, credential generation, provider call, migration, container start, reverse-proxy change, firewall/security-group mutation, VCP/Kiosk enablement, cutover or deployment.
+No production host access, credential generation, provider call, migration, container start, reverse-proxy/TLS/firewall/security-group change, VCP/Kiosk enablement, cutover, deployment, release or merge is authorized or performed by this correction. Only repository code/tests/docs changed.
 
-A validated packet may still remain:
-
-```text
-DEPLOYMENT_AUTHORIZATION_REQUEST = BLOCKED_PREREQUISITES
-BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
-```
-
-until the selected action's own prerequisites and exact targets are separately resolved in a reviewed authority revision and the human gives exact current authorization. Post-enable compatibility is completion/cutover evidence, not an input that must be produced by an unauthorized enablement operation.
-
+The packet stays blocked until the selected action's exact targets and prerequisites are resolved in a reviewed authority revision and the human provides exact current authorization. Post-enable compatibility is completion/cutover evidence, not an input that must be generated by an unauthorized operation.
 
 ### WO-06D fresh evidence
 
-GitHub Actions run `36126894944` (run #97) on implementation-bearing head `16899f5532983a0e45a965dba3aa578ec466d5e4` passed:
+Published implementation head `9f13b160bb43d3db37f30fc03bc42c635d0e181f`, parent `cb456114e4d57d8ff12473da95737790a63e7118`, passed GitHub Actions run `36131969264` (run #99), job `108061064763`:
 
-- full `npm run check`: 581 tests / 580 pass / 0 fail / 1 expected external-VCP skip;
-- production-manifest targeted tests: 51/51 PASS, including `production-change-manifest-unicode.test.mjs` and `production-change-manifest-shell-continuation.test.mjs`;
-- manifest validator: `WO_06D_MANIFEST_VALID`;
-- manifest digest: `sha256:32fa0a5d754c157345561e9a5e1f6fcd274f8f0f94b96f3f605df4aef609cd47`;
-- authorization packet: `FROZEN_NOT_REQUESTED`;
-- deployment request: `BLOCKED_PREREQUISITES`;
-- deployment gate: `BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE`.
+```text
+workflow                       WO-06D Production Authorization Packet
+event                          push
+conclusion                     success
+npm ci                         PASS
+npm run check                  PASS
+full tests                     587
+pass                           586
+fail                           0
+skipped                        1
+manifest targeted tests        57
+manifest targeted pass         57
+manifest targeted fail         0
+manifest targeted skipped      0
+```
 
-This PR branch remains `MERGE_PENDING`. It does not publish authority PASS before merge and does not request or approve any production action. This evidence update is docs-only; the resulting final head requires its own successful workflow and independent exact-head review, recorded in the PR/check record rather than a self-referential claim inside the same commit.
+Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`. The checkout and recorded HEAD match the implementation SHA. The one expected external-VCP skip is not compatibility PASS. The targeted glob `node --test tests/production-change-manifest*.test.mjs` includes Unicode, shell-continuation and dynamic-values regressions.
 
-### WO-06D current UTF-16 and summary corrections
+### Machine verdict
 
-Both role-token parsers count `char.length` in all ordinary, quoted and escaped branches to match `createAuthorizer`'s UTF-16 `string.length`. Bearer detection uses the same unit. Synthetic eight-emoji assignments are rejected with `SECRET_MATERIAL_DETECTED`, and hostile regressions compare the 15/16-unit boundary with the actual in-memory authorizer. No real token, external request, or production runtime is involved.
+```json
+{
+  "status": "WO_06D_MANIFEST_VALID",
+  "manifestDigest": "sha256:32fa0a5d754c157345561e9a5e1f6fcd274f8f0f94b96f3f605df4aef609cd47",
+  "authorizationPacket": "FROZEN_NOT_REQUESTED",
+  "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
+  "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
+  "requestableActionIds": [],
+  "blockingGateIds": [
+    "WO06C_VCP_EXTERNAL",
+    "VCP_DEPLOYABLE_ADAPTER_WIRING",
+    "WO06C_KIOSK_DEVICE",
+    "KIOSK_DEPLOYABLE_AUTH_WIRING",
+    "DINGTALK_TARGET_BINDING",
+    "DINGTALK_DEPLOYABLE_ADAPTER_WIRING",
+    "CUTOVER_FORWARD_CHAIN",
+    "CUTOVER_SWITCH_RECOVERY",
+    "CUTOVER_SOURCE_CONSISTENCY",
+    "CUTOVER_LIVE_SERVICE_READINESS",
+    "TARGET_HOST_BINDING",
+    "CONTAINER_START_READINESS",
+    "PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL",
+    "HEALTH_SMOKE_READINESS",
+    "PROXY_BACKEND_READINESS",
+    "PRE_CUTOVER_ROUTE_WRITE_RESTRICTION",
+    "PRODUCTION_IMPORT_STORAGE_READINESS",
+    "PRODUCTION_IMPORT_TARGET_ABSENCE",
+    "PRODUCTION_IMPORT_SOURCE_CONSISTENCY",
+    "PRODUCTION_ATTACHMENT_COPY_CAPABILITY",
+    "INTEGRATION_DEPLOYMENT_READINESS",
+    "PRODUCTION_TARGET_FACTS",
+    "PRODUCTION_DATA_MIGRATION",
+    "POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION",
+    "PRODUCTION_DEPLOYMENT_GATE"
+  ],
+  "deploymentBlockingGateIds": [
+    "VCP_DEPLOYABLE_ADAPTER_WIRING",
+    "KIOSK_DEPLOYABLE_AUTH_WIRING",
+    "PRODUCTION_TARGET_FACTS",
+    "PRODUCTION_DATA_MIGRATION",
+    "PRODUCTION_DEPLOYMENT_GATE"
+  ]
+}
+```
 
-The shell parser now consumes escaped LF before logical-line termination: backslash-LF is removed and the credential continues. Ordinary unquoted newlines still end the assignment, while quoted literal newlines and applicable literal backslashes remain part of the value. Synthetic tests cover all five token keys, repeated continuations, quoted/unquoted concatenation, ASCII and astral Unicode at 15/16 UTF-16 units, escaped-backslash boundaries, and single/double-quote distinctions. These tests execute no shell command and use no real credential or external call.
+The machine JSON/blob/digest is unchanged by this scanner correction. Machine blob: `873e8daca8aca4a8d797da843060c7ef091d4c03`.
 
-The current deployment summary above now matches the machine packet exactly. `WO06C_VCP_EXTERNAL` remains post-enable compatibility and a cutover prerequisite; the manifest JSON/digest and all non-authorizing boundaries are unchanged.
+### WO-06D current scanner correction
+
+The shell parser rejects active unescaped dollar/backtick syntax before top-level whitespace can truncate a dynamic value. It does not evaluate shell input. Short single-quoted or escaped literal forms preserve their literal length; long literals still trigger the credential threshold. Active-dollar rejection is intentionally conservative, not a complete shell expansion parser.
+
+The config parser conservatively rejects unquoted YAML scalar/tag/anchor/alias prefixes `|`, `>`, `!`, `&`, `*`, including multiline headers with modifiers and comments. Quoted short literal indicators remain ordinary values. This is unsupported-syntax rejection, not YAML evaluation.
+
+Six new groups in `production-change-manifest-dynamic-values.test.mjs` cover all five token keys, nested/quoted/concatenated/multiline substitution, backticks, literal negatives, ASCII/astral 15/16 UTF-16 boundaries, continuations, YAML scalar modifiers/quoted keys/comments/tags/anchors/aliases and short config literals. Existing UTF-16 counting, Bearer punctuation, shell concatenation and continuation handling remain green. No test executes the synthetic shell strings or installs real credentials.
+
+Implementation source blob: `9dd5efa0659544add4d7c49e9633290a1e348806`; new test blob: `bfccd6ed9fbed687b1639a27ecd42451ba42f16a`.
+
+### Remaining implementation and review work
+
+The scanner correction does not implement either outstanding production-contract P1:
+
+- `4103894629`: bind PROD-12 to production target facts, verified deployment-chain readiness and the production deployment gate, preserving exact DingTalk target/wiring requirements and adding completion proof.
+- `4103936494`: require target-wide writer freeze/drain spanning final parity through Switch, same-fence verification and read-only post-switch checks, with success-only release and fail-closed retention. Its execution order must be enforced, not merely compared as a set. The current staging restriction/source checks do not close this race.
+
+No new gate/capability is claimed to exist here. Later review findings must also be checked against the exact current head. Current workflow success alone does not establish review closure or merge readiness.
+
+This docs-only synchronization follows implementation run #99 success. Its resulting final SHA requires its own successful exact-head workflow; final SHA/run belong in the PR/check record to avoid self-reference. Before any separately requested merge require unchanged exact head, successful exact-head CI, zero unresolved threads, Codex clean for that SHA, OPEN / mergeable / not merged, and explicit human merge instruction. Use `expected_head_sha`; no merge is requested here.
 
 ### WO-06D historical review evidence boundary
 
-The remaining WO-06D sections, from "review hardening" through "shell-concatenated role-token scanning", preserve chronological review evidence at their stated revisions. Their uses of "current", requestable sets, blocker lists, and deployment sequences describe historical snapshots only; they do not override the current summary, fresh evidence, or machine manifest above. Later corrections supersede earlier snapshots without deleting their audit trail.
+The entire prior work order, including full WO-06A/B/C details, every chronological WO-06D hardening section and the original SHA/run/digest trail, is preserved byte-for-byte in [the historical cb456114 snapshot](WO-06_PREDEPLOY_INTEGRATED_READINESS.HISTORICAL_cb456114.md). Its Git blob is `0bf6b062b68ff4c0f2953ad18b3b4cc9282d4490`, identical to the pre-correction file at `cb456114e4d57d8ff12473da95737790a63e7118`.
 
-### WO-06D review hardening
+Historical uses of "current", requestable sets, blockers and PASS apply only to their stated revisions and cannot override this current summary, actual branch checks or machine manifest. The prior acceptance snapshot is linked from the current WO-06D acceptance document. `docs/DEPLOYMENT_PREFLIGHT.md` remains historical, not authorization authority.
 
-The production authorization validator now freezes, for every frozen action ID:
-
-- requestability/status;
-- exact authority target;
-- exact prerequisite-gate set;
-- exact rollback-action set.
-
-The requestable status set is additionally checked bidirectionally against the frozen empty requestable set. Unknown/replaced action IDs are rejected. Secret scanning rejects Bearer material in schema-valid free text from the original string values before JSON escaping, including raw newline/tab/CRLF separators.
-
-The exact-head hostile regressions cover all 4×P1 + 1×P2 review findings plus combined multi-axis widening. The authorization packet remains:
-
-```text
-FROZEN_NOT_REQUESTED
-requestedActionIds = []
-approvedActionIds = []
-DEPLOYMENT_AUTHORIZATION_REQUEST = BLOCKED_PREREQUISITES
-BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
-```
-
-
-### WO-06D complete semantic freeze
-
-After re-review, the packet additionally freezes:
-
-- exact `authorityBase`;
-- target unresolved-fact set;
-- gate evidence;
-- global invariant set;
-- per-action title/category/risk/sideEffect/effects/evidenceRequired;
-- exact pre-request revalidation checklist.
-
-Together with the prior target/precondition/status/rollback hardening, this makes the production authorization definition fail closed across lineage, scope, risk, prerequisites, evidence and recovery semantics.
-
-Current packet state remains unchanged:
-
-```text
-FROZEN_NOT_REQUESTED
-requestedActionIds = []
-approvedActionIds = []
-DEPLOYMENT_AUTHORIZATION_REQUEST = BLOCKED_PREREQUISITES
-BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
-```
-
-
-### WO-06D firewall rollback-order hardening
-
-The global rollback plan now explicitly includes `ROLLBACK-05-REVERT-FIREWALL-RULE` immediately after removing the newly added reverse-proxy route:
-
-```text
-remove new route
-→ revert new firewall/security-group rule
-→ stop and remove the exact new container object while preserving its named volume
-→ remove the exact PROD-04 image digest after proving container references are absent and the image is unused
-→ revoke/remove role-token runtime bindings created by PROD-03
-→ disable only VCP configuration introduced by PROD-10
-→ disable only Kiosk configuration introduced by PROD-11
-→ disable only DingTalk configuration introduced by PROD-12
-→ preserve data volume
-```
-
-This closes the gap where a future authorized firewall mutation could otherwise survive a rollback sequence. Omission or misplacement of rollback 05 is covered by hostile regression and fails closed.
-
-
-### WO-06D DingTalk exact-target fail-closed correction
-
-The latest P1 established that a generic DingTalk target description is insufficient for `EXACT_ACTION_IDS_AND_TARGETS_ONLY`.
-
-WO-06D therefore does not fabricate a concrete DingTalk app/provider or recipient. Instead it freezes:
-
-```text
-DINGTALK_TARGET_BINDING = BLOCKED
-evidence = EXACT_APP_PROVIDER_AND_TEST_DESTINATION_UNRESOLVED
-
-PROD-12.status = BLOCKED_PREREQUISITE
-PROD-12.authorityTarget = UNRESOLVED_DINGTALK_TARGET_BINDING
-requestableActionIds = [PROD-01-TARGET-READONLY-PREFLIGHT]
-```
-
-Two different candidate DingTalk app/destination targets are exercised by hostile regression and both fail closed before requestability. The packet remains `FROZEN_NOT_REQUESTED`; requested/approved action arrays remain empty.
-
-
-### WO-06D production-host target + role-token rollback correction
-
-Exact-current Codex review identified that `PROD-01` was still requestable without a concrete host and that `PROD-03` lacked a rollback dedicated to its generated role-token bindings.
-
-Current machine contract now freezes:
-
-```text
-PROD-01.status = BLOCKED_PREREQUISITE
-PROD-01.authorityTarget = UNRESOLVED_PRODUCTION_HOST_IDENTITY
-requestableActionIds = []
-
-PROD-03.rollbackActionIds = [ROLLBACK-06-REVOKE-ROLE-TOKENS]
-```
-
-The validator rejects attempts to promote either a HOST_A or HOST_B candidate into requestability before exact host binding, rejects rebinding PROD-03 to the generic external-config rollback, and rejects omission of rollback 06 from the global rollback sequence.
-
-Implementation evidence: head `239527fbdd88e6aad27fc039ac1ab20d9165b138`, run `36015492997`, 553/552/0/1 full-suite result, 23/23 manifest suite, digest `sha256:4ae83ba4ce1fb4e6cace95b2768a011f36bd91efb4432b36bae49e92845b3531`.
-
-
-### WO-06D cutover chain + derived rollback authority
-
-Cutover is now blocked by the dedicated `CUTOVER_FORWARD_CHAIN` gate until verified completion evidence exists for the required forward deployment chain. `PROD-13` also requires `FORWARD_CHAIN_COMPLETION_PROOF`.
-
-Rollback authority is no longer a second-approval dead end:
-
-```text
-rollbackAuthorizationModel = BOUND_ROLLBACK_IDS_COAUTHORIZED_WITH_FORWARD_ACTION
-separateRollbackApprovalRequired = false
-derivedRollbackActionIds = []
-```
-
-Forward actions still require explicit human authorization. Rollback-only actions are authorized only as the exact rollback IDs bound to an approved forward action; the validator derives that set and rejects forged rollback authority.
-
-Implementation evidence: head `a9f80f38b2745ee739f6d35fae708172840cdefa`, run `36016721973`, 555/554/0/1 full suite, 25/25 manifest suite, digest `sha256:f3d912fa3afeb94473bee8d75583516a0899e45f69374d7754b8d0389e0f3575`.
-
-
-### WO-06D post-Switch authority recovery blocker
-
-The migration authority explicitly separates pre-Switch rollback from post-Switch business recovery. Post-Switch reversal requires a separately designed dual-read / compatible-write path and switch record.
-
-WO-06D now freezes:
-
-```text
-CUTOVER_SWITCH_RECOVERY = BLOCKED
-evidence = POST_SWITCH_DUAL_READ_COMPATIBLE_WRITE_AND_SWITCH_RECORD_NOT_DESIGNED
-
-PROD-13.preconditions += CUTOVER_SWITCH_RECOVERY
-PROD-13.rollbackActionIds += ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH
-
-ROLLBACK-07.status = BLOCKED_PREREQUISITE
-ROLLBACK-07.authorityTarget = UNRESOLVED_POST_SWITCH_AUTHORITY_RECOVERY_CAPABILITY
-```
-
-Rollback 07 is not executable, not in the global rollback order, and not derivable as rollback authority while blocked. It becomes a real rollback capability only through a later reviewed authority revision that provides the dual-read/compatible-write recovery proof and switch-record contract.
-
-Implementation evidence: head `11c172f50d6cf843eed391de400f473f43db1f04`, run `36020032853`, full suite 556/555/0/1, manifest suite 26/26, digest `sha256:91d0fd5fb681e402fd0fda67f211d6abc6002eab4eff3976e8c5c441d483de3e`.
-
-
-### WO-06D exhaustive blocker surface + proxy backend readiness
-
-`blockingGateIds` is now defined as the exhaustive set of all gates currently in `BLOCKED` state. `deploymentBlockingGateIds` separately preserves the five deployment-level blockers, so action-specific blockers remain visible without changing their meaning.
-
-Current action-specific blocked gates include:
-
-```text
-DINGTALK_TARGET_BINDING
-CUTOVER_FORWARD_CHAIN
-CUTOVER_SWITCH_RECOVERY
-TARGET_HOST_BINDING
-CONTAINER_START_READINESS
-HEALTH_SMOKE_READINESS
-PROXY_BACKEND_READINESS
-PRE_CUTOVER_ROUTE_WRITE_RESTRICTION
-PRODUCTION_IMPORT_STORAGE_READINESS
-PRODUCTION_IMPORT_TARGET_ABSENCE
-PRODUCTION_IMPORT_SOURCE_CONSISTENCY
-PRODUCTION_ATTACHMENT_COPY_CAPABILITY
-INTEGRATION_DEPLOYMENT_READINESS
-```
-
-`PROD-07-CONFIGURE-REVERSE-PROXY-TLS` now requires:
-
-```text
-PROXY_BACKEND_READINESS = BLOCKED
-evidence = REQUIRES_VERIFIED_PROD_04_05_06
-BACKEND_BUILD_START_HEALTH_PROOF
-```
-
-Therefore route/TLS exposure cannot be authorized before build, isolated-container start, and loopback health verification have completed successfully.
-
-Implementation evidence: head `3440cf3efdc6c5fa5a0ea1667ea21f43a99a7260`, run `36022131601`, full suite 557/556/0/1, manifest suite 27/27, digest `sha256:c10a179016e15aac94614fa6588e772b67b6f0dc533e1454603c6c98ef3cabbb`.
-
-
-### WO-06D target-preflight cycle + runtime predecessor chain
-
-The target preflight no longer depends on the facts it is meant to discover:
-
-```text
-TARGET_HOST_BINDING = BLOCKED
-evidence = EXACT_CANDIDATE_PRODUCTION_HOST_UNRESOLVED
-
-PROD-01.preconditions = [TARGET_HOST_BINDING]
-```
-
-After an exact candidate host is structurally bound, PROD-01 may verify that identity and discover the remaining target facts.
-
-Runtime startup is now sequenced by explicit predecessor gates:
-
-```text
-CONTAINER_START_READINESS = BLOCKED
-evidence = REQUIRES_VERIFIED_PROD_02_03_04
-
-HEALTH_SMOKE_READINESS = BLOCKED
-evidence = REQUIRES_VERIFIED_PROD_05
-```
-
-So the frozen path is:
-
-```text
-target binding
-→ preflight
-→ target facts
-→ storage/tokens/image
-→ container start
-→ loopback health
-→ proxy/TLS
-```
-
-Implementation evidence: head `5ea293522846b9be2b6e82803c0df3b56826d591`, run `36024210771`, full suite 559/558/0/1, manifest suite 29/29, digest `sha256:7de680a5e8b748faddc9cea087914acc5b26a22229c7e508c9f7c0bd492f01c3`.
-
-
-### WO-06D cutover integration completion + image rollback
-
-The cutover forward-chain proof now requires verified completion of PROD-10 and PROD-11 in addition to the previously frozen predecessor chain:
-
-```text
-REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_10_11_AND_PROD_08_IF_USED
-VCP_KIOSK_ENABLEMENT_COMPLETION_PROOF
-```
-
-WO-06C compatibility/readiness is therefore not treated as proof that VCP synchronization or Kiosk identity mapping has actually been enabled.
-
-`PROD-04-BUILD-IMAGE` now binds to `ROLLBACK-08-REMOVE-BUILT-IMAGE`. The rollback is restricted to the exact captured PROD-04 image digest and requires proof that no running container references it before removal. It is part of the frozen ordered rollback plan after stopping the new container.
-
-Implementation evidence: head `0ecdcfb56413c6303d292a65d2b2601fa5d701fa`, run `36025922987`, full suite 560/559/0/1, manifest suite 30/30, digest `sha256:29e56b86e43fa01117058b432d8f2df4ff3ddf994aa566c9d71059ee824345fe`.
-
-
-### WO-06D import storage + integration deployment-chain gates
-
-Production data import now requires verified isolated storage preparation:
-
-```text
-PRODUCTION_IMPORT_STORAGE_READINESS = BLOCKED
-evidence = REQUIRES_VERIFIED_PROD_02
-STORAGE_PREPARATION_COMPLETION_PROOF
-```
-
-VCP and Kiosk enablement now require the applicable deployment chain through real-data import:
-
-```text
-INTEGRATION_DEPLOYMENT_READINESS = BLOCKED
-evidence = REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_AND_PROD_08_IF_USED
-DEPLOYMENT_CHAIN_COMPLETION_PROOF
-```
-
-Both `PROD-10` and `PROD-11` carry this gate and proof, preventing external writes before storage, tokens, image, runtime, health, proxy and production dataset preparation are complete.
-
-Implementation evidence: head `450fba3eb6a7d6fbdbdf5b76f6245c59e62ed004`, run `36027812496`, full suite 562/561/0/1, manifest suite 32/32, digest `sha256:8ba31e0ab3a4d7afd0d0e505f4331714d366bd6bc21fddb982705d4e603a343b`.
-
-
-### WO-06D source-scoped integration rollback + raw secret scan + retained storage
-
-The shared external-config rollback has been removed. Integration rollback is now source-specific:
-
-```text
-PROD-10 → ROLLBACK-09-DISABLE-VCP-CONFIG
-PROD-11 → ROLLBACK-10-DISABLE-KIOSK-CONFIG
-PROD-12 → ROLLBACK-11-DISABLE-DINGTALK-CONFIG
-```
-
-Each rollback can affect only configuration introduced by its corresponding forward action. The ordered rollback plan lists the three capabilities separately, while derived rollback authority admits only the IDs bound to actually approved forward actions.
-
-Secret scanning now traverses original string values before stable JSON serialization. Bearer credentials split by raw newline, tab, or CRLF are explicitly rejected by hostile regression.
-
-Storage creation is intentionally retained:
-
-```text
-PROD-02.sideEffect = IRREVERSIBLE_OR_EXTERNAL
-PROD-02.rollbackActionIds = [ROLLBACK-04-PRESERVE-DATA-VOLUME]
-RETAINED_STORAGE_ARTIFACT_ACKNOWLEDGED
-```
-
-This makes the classification match the existing recovery rule: stop mutation and preserve the newly created directory/volume rather than destructively deleting deployment data.
-
-Implementation evidence: head `e864db2360c66dff91054df2e601614e37e0d885`, run `36030322588`, full suite 564/563/0/1, manifest suite 34/34, digest `sha256:312c7a6d738da3d01f4f332b9e556e92b00835b3960f574df80e7154df6144a9`.
-
-
-### WO-06D action-specific image digest revalidation
-
-The global pre-request checklist no longer requires an output image digest before one exists.
-
-```text
-PROD-04:
-  BUILD_SOURCE_AUTHORITY_COMMIT
-  BUILD_BASE_IMAGE_DIGEST
-
-PROD-05 / PROD-06 / PROD-07 / PROD-10 / PROD-11 / PROD-13:
-  BUILT_IMAGE_DIGEST
-```
-
-PROD-01 has no built-image revalidation requirement. The validator freezes both the global checklist and the exact action-specific map, so the build cannot require its own output digest and downstream actions cannot silently drop their built-image identity check.
-
-Implementation evidence: head `7cb0597171846f56f060d8289b147602dd6b8f1f`, run `36032380591`, full suite 564/563/0/1, manifest suite 34/34, digest `sha256:cd6f28259bff04abb06a7bc6c91f176ae3814e47bd9dcfd12fce3ce0341acdfc`.
-
-
-### WO-06D host-conflict revalidation after preflight
-
-`DISK_PORT_ROUTE_CONFLICTS` is no longer in the global pre-request checklist.
-
-After PROD-01 has discovered the host facts, the check is required only for later host-dependent actions:
-
-```text
-PROD-02 / PROD-03 / PROD-04 / PROD-05 / PROD-06 / PROD-07
-PROD-08 / PROD-09 / PROD-10 / PROD-11 / PROD-13
-→ DISK_PORT_ROUTE_CONFLICTS
-```
-
-PROD-01 therefore cannot depend on its own outputs, while later host mutations still fail closed if the preflight conflict facts are missing or stale. PROD-12 remains outside this host-specific revalidation path.
-
-Implementation evidence: head `efe576d66d9b2802cd5a81d2ca5ef0008dbafb18`, run `36033799141`, full suite 564/563/0/1, manifest suite 34/34, digest `sha256:c1b08096be43f98d0f791ee15419c3b22f9b57a6df880e87f18477fa353f2492`.
-
-
-### WO-06D initial preflight exempt from later-stage revalidation
-
-The global pre-request checklist is now:
-
-```text
-AUTHORITY_HEAD
-```
-
-PROD-01 has no action-specific revalidation entry. Its read-only inspection therefore does not require backup/rollback proof, external readiness, secret storage, rollback targets, built-image identity, or conflict facts that it is responsible for discovering.
-
-Those checks are frozen only on later actions that require them. This preserves fail-closed mutation/integration behavior without recreating a prerequisite cycle at the first preflight step.
-
-Implementation evidence: head `a1eb4199cf7a7cbaf68e24b0a20ef72f2876e6ff`, run `36036138172`, full suite 564/563/0/1, manifest suite 34/34, digest `sha256:ae134f0803e558ad15f8f19428158b450d8c745534cb2ebaeb8465d70144cf7e`.
-
-The immediately prior run `36036021841` failed only on a duplicate validator closing token introduced during generated text replacement; the correction was syntax-only and did not weaken the revalidation contract.
-
-
-### WO-06D production-import source consistency
-
-Production import is now blocked on an explicit source-state gate derived from the migration authority:
-
-```text
-PRODUCTION_IMPORT_SOURCE_CONSISTENCY = BLOCKED
-REQUIRES_OFFLINE_SOURCE_QUIESCENCE_OR_VERIFIED_UPLOAD_MIGRATION_COORDINATION
-```
-
-PROD-09 additionally requires `SOURCE_QUIESCENCE_OR_COORDINATION_PROOF` both before request and in its evidence contract. Until verified cross-process upload/migration coordination exists, this requires an offline/quiescent maintenance window so the database snapshot and upload manifest cannot race with live uploads or cleanup.
-
-Implementation evidence: head `088c1663119c2268136a3f228999fd25d20f9249`, run `36084900067`, full suite 565/564/0/1, manifest suite 35/35, digest `sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d0395a50d2a`.
-
-
-### WO-06D declared role-token assignment scanning
-
-Secret detection now rejects assignment-shaped credential material for all four declared deployment token names:
-
-```text
-VIEWER_TOKEN
-SUBMITTER_TOKEN
-SCHEDULER_TOKEN
-ADMIN_TOKEN
-```
-
-The matcher is case-insensitive, supports whitespace around `=`, accepts unquoted credentials only for detection, and also detects matching single-quoted or double-quoted assignment values before JSON escaping. Existing Bearer, `access_token`, OpenAI-shaped token, and placeholder checks remain intact.
-
-The current blocker summary also includes `PRODUCTION_IMPORT_SOURCE_CONSISTENCY`, keeping the human-readable summary aligned with the exhaustive machine blocker set.
-
-Implementation evidence: head `556db8e8bf2c01a1fe507ba483d4ee1e07c3fc1d`, run `36085417668`, full suite 565/564/0/1, manifest suite 35/35, digest `sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d0395a50d2a`.
-
-
-### WO-06D quoted role-token assignment scanning
-
-The role-token assignment detector now rejects credential values in ordinary shell quoting as well as unquoted form:
-
-```text
-ADMIN_TOKEN="..."
-VIEWER_TOKEN='...'
-submitter_token = "..."
-```
-
-The quoted alternatives require matching quotes, which closes the bypass without loosening the delimiter rules for unquoted values.
-
-Implementation evidence: head `ab5df127d0cb92405205cf2b87bb55ac00468b13`, run `36095441794`, full suite 565/564/0/1, manifest suite 35/35, digest `sha256:7f9b200d9874ef20ddbf449a17ba4c97b2b7d4ff24d774e45e8a7d0395a50d2a`.
-
-
-### WO-06D import target absence before runtime start
-
-Production import now requires the target SQLite path to be absent before PROD-05 can initialize the runtime database:
-
-```text
-PRODUCTION_IMPORT_TARGET_ABSENCE = BLOCKED
-REQUIRES_TARGET_SQLITE_PATH_ABSENT_BEFORE_PROD_05
-IMPORT_TARGET_SQLITE_ABSENCE_PROOF
-```
-
-Container start now requires verified completion of PROD-09 in addition to storage, tokens, and image:
-
-```text
-CONTAINER_START_READINESS = BLOCKED
-REQUIRES_VERIFIED_PROD_02_03_04_09
-PRODUCTION_IMPORT_COMPLETION_PROOF
-```
-
-The frozen order is therefore production import before container initialization. This avoids the isolated-apply ambiguity where an empty runtime-created SQLite file is treated as an existing completed target candidate.
-
-Implementation evidence: head `20a5337ddb621a6ed2dc92f270a898a69a695e91`, run `36099561361`, full suite 566/565/0/1, manifest suite 36/36, digest `sha256:70bc3ed0fb17de09d65b25a8b65c1191e287faf10532d899f54af80a37659df7`.
-
-
-### WO-06D container removal before image rollback
-
-Rollback 02 now stops **and removes** the exact container object created by PROD-05 while explicitly excluding the named data volume from deletion. Evidence must prove `CONTAINER_REMOVED` and `IMAGE_REFERENCE_RELEASED` in addition to stop and volume-preservation proof.
-
-Rollback 08 then requires `CONTAINER_REFERENCE_ABSENT` before the existing `IMAGE_NOT_IN_USE` / image-removal checks.
-
-Implementation evidence: head `f4d04336a0e18ef2fe3a90840a444d2f3da6e4d2`, run `36100548171`, full suite 567/566/0/1, manifest suite 37/37, digest `sha256:8851d97dd4379ee9d0e5bcd31623e53419d154c700fa35ef26bf5e193ad92e48`.
-
-
-### WO-06D attachment-byte migration capability blocker
-
-The current migration apply path validates source attachment identity but does not copy attachment bytes into the isolated target upload volume. WO-06D therefore keeps:
-
-```text
-PRODUCTION_ATTACHMENT_COPY_CAPABILITY = BLOCKED
-TARGET_UPLOAD_BYTE_COPY_AND_VERIFICATION_NOT_IMPLEMENTED
-```
-
-PROD-09 cannot become requestable until a reviewed implementation binds the exact target upload volume, executes an attachment-copy plan, and proves source/target manifest plus record↔file parity.
-
-Required future evidence includes:
-
-```text
-SOURCE_UPLOAD_MANIFEST_DIGEST
-TARGET_UPLOAD_MANIFEST_DIGEST
-SOURCE_TARGET_UPLOAD_MANIFEST_MATCH
-ATTACHMENT_BYTE_COPY_COMPLETION_PROOF
-ATTACHMENT_RECORD_FILE_PARITY_PROOF
-```
-
-### WO-06D pre-cutover route write restriction
-
-PROD-07 is now a staging exposure only. Before cutover it must block public unauthenticated writes; any allowed pre-cutover write access must be bound to exact staging principals.
-
-```text
-PRE_CUTOVER_ROUTE_WRITE_RESTRICTION = BLOCKED
-REQUIRES_PUBLIC_WRITE_BLOCK_OR_BOUNDED_STAGING_ACCESS
-```
-
-PROD-13 revalidates that the restriction is still active immediately before Switch. The route may become general production authority only inside the exact approved cutover action.
-
-Implementation evidence for both corrections: head `169d3b0b5341543160a77932ea312f0171e8adc8`, run `36102203534`, full suite 569/568/0/1, manifest suite 39/39, digest `sha256:fab1175a83759252da74451ae236b23a4bd90e5be32ce4b1aa897c8e633ba7c2`.
-
-
-### WO-06D colon-delimited role-token scanning
-
-The role-token detector now treats both `=` and `:` as credential assignment delimiters and recognizes optional single/double quotes around the key. JSON/YAML-style material such as:
-
-```text
-"ADMIN_TOKEN": "..."
-ADMIN_TOKEN: ...
-'VIEWER_TOKEN': '...'
-```
-
-is rejected with `SECRET_MATERIAL_DETECTED`.
-
-### WO-06D VCP guarded-push irreversibility
-
-`PROD-10-ENABLE-VCP-REMOTE-SYNC` is now `IRREVERSIBLE_OR_EXTERNAL`. Its required guarded push can persist revisioned task facts; disabling the adapter via `ROLLBACK-09` does not reverse those committed facts.
-
-The frozen invariant is:
-
-```text
-VCP_GUARDED_PUSH_WRITES_ARE_NOT_REVERSED_BY_CONFIG_ROLLBACK
-```
-
-Implementation evidence: head `3e9bd502c0c607767e5d431c1504b08dd5df7537`, run `36103380648`, full suite 570/569/0/1, manifest suite 40/40, digest `sha256:b44c408eb8a3216d55a54cb6cd890d05f41f04a0bc16132922e17f7ba5f0a220`.
-
-
-### WO-06D Kiosk event-write irreversibility
-
-`PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE` is now `IRREVERSIBLE_OR_EXTERNAL`. Real-device acceptance or offline replay can persist production runs, reviews, receipts, and audit records. `ROLLBACK-10-DISABLE-KIOSK-CONFIG` only disables the Kiosk configuration/identity mapping and does not delete those facts.
-
-Frozen invariant: `KIOSK_EVENT_WRITES_ARE_NOT_REVERSED_BY_CONFIG_ROLLBACK`.
-
-Implementation evidence: head `88239a6ae500908551972a9841b94e832075ef1b`, run `36104515602`, full suite 571/570/0/1, manifest suite 41/41, digest `sha256:1c8d005f1cc0675d63d705e14a4cd737dcb06868cd7cf4964789462978223fa5`.
-
-
-### WO-06D all-entry-point orphan cleanup guard
-
-The pre-cutover cleanup blocker now covers startup cleanup, the periodic timer, and request-triggered calls from `saveUpload()` and `submitRequest()`.
-
-```text
-PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL = BLOCKED
-ALL_STARTUP_PERIODIC_AND_REQUEST_TRIGGERED_ORPHAN_CLEANUP_DISABLE_NOT_IMPLEMENTED
-```
-
-PROD-05 must prove every cleanup entry point is disabled, PROD-07 revalidates the guard before staging writes can occur, and PROD-13 revalidates it again immediately before Switch.
-
-### WO-06D complete unquoted role-token scanning
-
-Unquoted assignment detection now consumes the complete non-whitespace value instead of stopping at comma/semicolon punctuation. Deployable values such as `ADMIN_TOKEN=abc,defghijklmnop` are rejected with `SECRET_MATERIAL_DETECTED`.
-
-Implementation evidence for both corrections: head `2120b563b8fa08a95f1f76df0d0d32f48f1a4d13`, run `36118906501`, full suite 574/573/0/1, manifest suite 44/44, digest `sha256:d6e6b3177fab3fa712c25b8a9e656adff5b9818444a42d66250784473b771596`.
-
-
-### WO-06D DingTalk deployable adapter gate
-
-`PROD-12-DINGTALK-PROVIDER-INTEGRATION` remains blocked by `DINGTALK_DEPLOYABLE_ADAPTER_WIRING` until a reviewed real adapter, credentials/runtime configuration, and production entrypoint composition exist. Target binding alone cannot make the provider action requestable.
-
-### WO-06D complete Bearer credential scanning
-
-Bearer secret detection now scans the complete logical-line credential value rather than a restricted alphabet, while preserving multiline/CRLF coverage. Punctuation and space-bearing values are rejected.
-
-Implementation evidence: head `1b9edddb7b81a35ea9adbd7e2fc0f810c08fe524`, run `36120028211`, full suite 575/574/0/1, manifest suite 45/45, digest `sha256:b4cc09447e640f6493341b0d308267b4f5a8ab3863d72003eb214aea54981f47`.
-
-
-### WO-06D VCP wiring before compatibility proof
-
-`PROD-10-ENABLE-VCP-REMOTE-SYNC` now depends on `VCP_DEPLOYABLE_ADAPTER_WIRING`, not the post-enable `WO06C_VCP_EXTERNAL` compatibility gate. The real pull → guarded push → verification pull remains PROD-10 completion evidence, while `WO06C_VCP_EXTERNAL` remains a cutover prerequisite.
-
-### WO-06D post-cutover orphan cleanup restoration
-
-A separate exact action, `PROD-14-RESTORE-ORPHAN-CLEANUP`, owns restoration of startup, periodic, `saveUpload`, and `submitRequest` cleanup after Switch. It remains blocked by `POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION` until cutover completion and post-cutover attachment parity are verified.
-
-### WO-06D shell-concatenated role-token scanning
-
-Role-token secret detection now parses the full assignment RHS, including concatenated quoted/unquoted shell segments such as `ADMIN_TOKEN=abc"correct horse battery staple"`, instead of treating quoted and unquoted values as mutually exclusive regex branches.
-
-Implementation evidence: head `0ed1ea690f1451c8f39fc4ef1fd5cc9627e903de`, run `36121925574`, full suite 577/576/0/1, manifest suite 47/47, digest `sha256:32fa0a5d754c157345561e9a5e1f6fcd274f8f0f94b96f3f605df4aef609cd47`.
+The inaccessible local-only Codex commit `86f6e0793b06baa2f70c7cccf9e327877801bc4a` supplies no accepted publication or GitHub CI evidence. The current scanner correction was independently authored from the published parent and verified by run #99.
