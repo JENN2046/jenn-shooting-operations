@@ -115,8 +115,8 @@ That state means the authorization packet is well-formed, not that deployment is
 
 ## Fresh implementation-bearing evidence
 
-- Head: `1b9edddb7b81a35ea9adbd7e2fc0f810c08fe524`
-- GitHub Actions run: `36120028211`
+- Head: `0ed1ea690f1451c8f39fc4ef1fd5cc9627e903de`
+- GitHub Actions run: `36121925574`
 - Conclusion: `success`
 - Runtime: Node `24.21.0`, npm `11.19.0`, tzdata `2026c`, ICU `78.3`
 
@@ -125,8 +125,8 @@ Repository gate:
 ```text
 npm ci                         PASS
 npm run check                  PASS
-tests                          575
-pass                           574
+tests                          577
+pass                           576
 fail                           0
 skipped                        1
 ```
@@ -136,8 +136,8 @@ The single skip remains the external VCP adapter and does not close WO-06C exter
 Manifest targeted tests:
 
 ```text
-tests  45
-pass   45
+tests  47
+pass   47
 fail   0
 ```
 
@@ -146,13 +146,14 @@ Machine verdict:
 ```json
 {
   "status": "WO_06D_MANIFEST_VALID",
-  "manifestDigest": "sha256:b4cc09447e640f6493341b0d308267b4f5a8ab3863d72003eb214aea54981f47",
+  "manifestDigest": "sha256:32fa0a5d754c157345561e9a5e1f6fcd274f8f0f94b96f3f605df4aef609cd47",
   "authorizationPacket": "FROZEN_NOT_REQUESTED",
   "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
   "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
   "requestableActionIds": [],
   "blockingGateIds": [
     "WO06C_VCP_EXTERNAL",
+    "VCP_DEPLOYABLE_ADAPTER_WIRING",
     "WO06C_KIOSK_DEVICE",
     "KIOSK_DEPLOYABLE_AUTH_WIRING",
     "DINGTALK_TARGET_BINDING",
@@ -174,10 +175,11 @@ Machine verdict:
     "INTEGRATION_DEPLOYMENT_READINESS",
     "PRODUCTION_TARGET_FACTS",
     "PRODUCTION_DATA_MIGRATION",
+    "POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION",
     "PRODUCTION_DEPLOYMENT_GATE"
   ],
   "deploymentBlockingGateIds": [
-    "WO06C_VCP_EXTERNAL",
+    "VCP_DEPLOYABLE_ADAPTER_WIRING",
     "KIOSK_DEPLOYABLE_AUTH_WIRING",
     "PRODUCTION_TARGET_FACTS",
     "PRODUCTION_DATA_MIGRATION",
@@ -189,7 +191,7 @@ Machine verdict:
 The validator also fresh-rejects:
 
 - ordinary Bearer/access-token/token-shaped secret material embedded in schema-valid free text, including Bearer credentials split by raw newline, tab, or CRLF whitespace and complete Bearer values containing punctuation or spaces;
-- assignments to the four declared deployment role-token names: `VIEWER_TOKEN`, `SUBMITTER_TOKEN`, `SCHEDULER_TOKEN`, and `ADMIN_TOKEN`, with case-insensitive names, optional single/double quotes around the key, either `=` or `:` delimiters, matching quoted values, and complete delimiter-bounded unquoted values including punctuation such as commas and semicolons;
+- assignments to the four declared deployment role-token names: `VIEWER_TOKEN`, `SUBMITTER_TOKEN`, `SCHEDULER_TOKEN`, and `ADMIN_TOKEN`, with case-insensitive names, optional single/double quotes around the key, either `=` or `:` delimiters, and a parser that follows the complete assignment RHS including shell-concatenated quoted/unquoted segments;
 - secret fields, pre-populated approved action IDs and blanket approval;
 - missing or extra entries in the exhaustive `blockingGateIds` surface, including action-specific blocked gates;
 - drift in the separate deployment-level `deploymentBlockingGateIds` subset;
@@ -1319,3 +1321,64 @@ full suite       575 tests / 574 pass / 0 fail / 1 expected VCP skip
 manifest suite   45 / 45 PASS
 manifest digest  sha256:b4cc09447e640f6493341b0d308267b4f5a8ab3863d72003eb214aea54981f47
 ```
+
+
+## VCP deployable wiring before post-enable compatibility
+
+Exact-current review on `3aa5bef3...` identified an authorization cycle: `WO06C_VCP_EXTERNAL` required the real pull → guarded push → verification pull that PROD-10 itself is authorized to perform.
+
+The contract now separates wiring from post-enable compatibility:
+
+```text
+VCP_DEPLOYABLE_ADAPTER_WIRING = BLOCKED
+evidence = REAL_VCP_ADAPTER_RUNTIME_WIRING_NOT_IMPLEMENTED
+```
+
+PROD-10 now requires `VCP_DEPLOYABLE_ADAPTER_WIRING`, not `WO06C_VCP_EXTERNAL`. Its pre-request revalidation is `VCP_RUNTIME_ADAPTER_CONFIGURATION`; `PULL_PUSH_VERIFY_RESULT` remains completion evidence produced by the authorized action.
+
+`WO06C_VCP_EXTERNAL` remains BLOCKED and is still a PROD-13 cutover prerequisite. The deployment-level blocker subset now uses the deployable-wiring gate instead of the post-enable compatibility gate.
+
+## Explicit post-cutover orphan-cleanup restoration
+
+Pre-cutover cleanup suppression is temporary protection, not a permanent production mode. A new exact action now owns restoration:
+
+```text
+PROD-14-RESTORE-ORPHAN-CLEANUP
+status = BLOCKED_PREREQUISITE
+sideEffect = IRREVERSIBLE_OR_EXTERNAL
+precondition = POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION
+```
+
+The gate remains blocked until PROD-13 is verified complete and post-cutover attachment parity is proven:
+
+```text
+POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION = BLOCKED
+REQUIRES_VERIFIED_PROD_13_AND_POST_CUTOVER_ATTACHMENT_PARITY
+```
+
+PROD-14 separately restores startup, periodic, `saveUpload`, and `submitRequest` cleanup and requires post-restore health evidence. PROD-13 itself now requires a `POST_CUTOVER_CLEANUP_RESTORATION_PLAN`, but does not silently re-enable cleanup under cutover authority.
+
+## Shell-concatenated role-token scanning
+
+Role-token detection now parses the complete assignment RHS instead of choosing one regex branch for quoted or unquoted values. Shell concatenation such as:
+
+```text
+ADMIN_TOKEN=abc"correct horse battery staple"
+VIEWER_TOKEN=abc'correct horse battery staple'
+SUBMITTER_TOKEN="correct horse"abc123456
+```
+
+is evaluated as one assignment value for secret-length detection and rejected with `SECRET_MATERIAL_DETECTED`.
+
+Exact implementation-bearing evidence:
+
+```text
+head             0ed1ea690f1451c8f39fc4ef1fd5cc9627e903de
+run              36121925574
+result           success
+full suite       577 tests / 576 pass / 0 fail / 1 expected VCP skip
+manifest suite   47 / 47 PASS
+manifest digest  sha256:32fa0a5d754c157345561e9a5e1f6fcd274f8f0f94b96f3f605df4aef609cd47
+```
+
+No VCP external write, cutover, cleanup restoration, or production mutation was executed.
