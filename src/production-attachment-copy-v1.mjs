@@ -408,6 +408,12 @@ function verifyAttachmentDatabaseParityResolved({
     fail('UPLOAD_DATABASE_FACTS_CHANGED_DURING_PARITY');
   }
 
+  if (faultInjector) faultInjector('after_final_database_recheck');
+
+  // One final filesystem pass comes after the last database read so byte/set
+  // drift that occurs during that DB read cannot escape into a receipt.
+  verifyFilesystem();
+
   assertDatabaseStable(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
   assertDatabaseStable(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
   assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
