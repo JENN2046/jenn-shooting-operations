@@ -815,7 +815,7 @@ test('pre-cutover runtime cannot start until destructive orphan cleanup is disab
   assert.equal(gate.status, 'BLOCKED');
   assert.equal(
     gate.evidence,
-    'ALL_STARTUP_PERIODIC_AND_REQUEST_TRIGGERED_ORPHAN_CLEANUP_DISABLE_NOT_IMPLEMENTED',
+    'REPOSITORY_ALL_ENTRY_POINT_DISABLE_DRAIN_IMPLEMENTED_DEPLOYMENT_ACCEPTANCE_PENDING',
   );
 
   const start = action(base, 'PROD-05-START-ISOLATED-CONTAINER');
