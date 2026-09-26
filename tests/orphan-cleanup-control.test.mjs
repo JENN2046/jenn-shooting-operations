@@ -295,6 +295,55 @@ test('disabled startup restores referenced cleanup tombstones without deleting u
 });
 
 
+test('disabled server startup fails until active cleanup markers are drained', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-startup-drain-'));
+  const databasePath = join(root, 'operations.sqlite');
+  const uploadRoot = join(root, 'uploads');
+  let seed;
+
+  try {
+    seed = new ScheduleStore({ filename: databasePath, uploadRoot });
+    seed.close();
+    seed = null;
+
+    const runsRoot = join(root, '.orphan-cleanup-control', 'runs');
+    const activeRun = join(runsRoot, 'rolling-peer-cleanup.json');
+    writeFileSync(activeRun, '{"runId":"rolling-peer-cleanup"}\n');
+
+    assert.throws(
+      () => createOperationsServer({
+        databasePath,
+        uploadRoot,
+        cleanupIntervalMs: 0,
+        orphanCleanupMode: 'disabled',
+      }),
+      error => error?.code === 'ORPHAN_CLEANUP_DRAIN_TIMEOUT',
+    );
+
+    const disabledMarker = join(root, '.orphan-cleanup-control', 'disabled.json');
+    assert.equal(existsSync(disabledMarker), true, 'startup failure must retain fail-closed disable marker');
+
+    unlinkSync(activeRun);
+
+    const service = createOperationsServer({
+      databasePath,
+      uploadRoot,
+      cleanupIntervalMs: 0,
+      orphanCleanupMode: 'disabled',
+    });
+    try {
+      const status = service.orphanCleanupControl.status();
+      assert.equal(status.enabled, false);
+      assert.equal(status.activeRuns, 0);
+    } finally {
+      service.store.close();
+    }
+  } finally {
+    try { seed?.close(); } catch {}
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('malformed persisted control marker keeps destructive cleanup fail-closed', () => {
   const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-invalid-control-'));
   const databasePath = join(root, 'operations.sqlite');
