@@ -482,6 +482,17 @@ function verifyAttachmentDatabaseParityResolved({
     parityDigest,
   });
 
+  // All remaining path/root identity checks must run before the closing
+  // content-level SQLite-family observation. Once both strong families are
+  // captured and compared, returning the already-computed receipt performs no
+  // further filesystem/database observation.
+  assertDatabaseStable(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
+  assertDatabaseStable(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
+  assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
+  assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
+
+  if (faultInjector) faultInjector('before_final_family_compare');
+
   const sourceFamilyAfterFinalWindow = captureDatabaseFamily(
     sourceDatabase,
     'SOURCE_UPLOAD_DATABASE_INVALID',
@@ -496,11 +507,6 @@ function verifyAttachmentDatabaseParityResolved({
   if (!sameSqlitePhysicalFamily(targetFamilyBeforeFinalWindow, targetFamilyAfterFinalWindow)) {
     fail('TARGET_UPLOAD_DATABASE_CHANGED_DURING_PARITY');
   }
-
-  assertDatabaseStable(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
-  assertDatabaseStable(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
-  assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
-  assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
 
   return candidateReceipt;
 }
