@@ -211,6 +211,31 @@ test('production receipt APIs reject caller-forged quiescence capabilities even 
   }
 });
 
+test('sandbox holders cannot reuse cap.constructor to mint LIVE_PROVIDER authority', () => {
+  const body = Buffer.from('constructor-mint-bypass');
+  const row = uploadFact({ id: 'UPLOAD-CONSTRUCTOR-BYPASS', body });
+  const fixture = createFixture([row]);
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    const paths = parityPaths(fixture);
+    const testCapability = fixture.testAuthority.mint(paths);
+    const scope = describeAttachmentParityScope(paths);
+
+    assert.throws(
+      () => new testCapability.constructor({
+        scopeDigest: scope.scopeDigest,
+        authorityClass: 'LIVE_PROVIDER',
+        assertHeld: () => true,
+      }),
+      error => error.code === 'ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED',
+    );
+
+    assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test('production capability authentication ignores WeakSet prototype monkeypatching', () => {
   const body = Buffer.from('weakset-monkeypatch');
   const row = uploadFact({ id: 'UPLOAD-WEAKSET-MONKEYPATCH', body });
