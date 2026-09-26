@@ -251,6 +251,19 @@ export function sameSqlitePhysicalFamily(left, right) {
   return sameSourceFamily(left, right);
 }
 
+export function sqlitePhysicalFamiliesAreDisjoint(left, right) {
+  for (const key of ['database', 'wal', 'shm', 'journal']) {
+    const leftMember = left?.[key];
+    const rightMember = right?.[key];
+    if (!leftMember || !rightMember) continue;
+    if (leftMember.device === rightMember.device
+        && leftMember.inode === rightMember.inode) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function readV1Source(pathInfo, { duringScan } = {}) {
   const beforeFamily = sourceFamily(pathInfo.realPath);
   const db = openReadOnly(pathInfo.realPath, 'INVALID_SOURCE');
