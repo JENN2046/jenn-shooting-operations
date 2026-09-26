@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { runCleanup } from '../scripts/cleanup-uploads.mjs';
@@ -286,6 +288,91 @@ test('disabled startup restores referenced cleanup tombstones without deleting u
     assert.equal(existsSync(storedPath), true, 'referenced staged bytes are restored for safety');
     assert.equal(existsSync(referencedStaged), false);
     assert.equal(existsSync(unreferencedStaged), true, 'unreferenced staged bytes are not destructively removed');
+  } finally {
+    try { store?.close(); } catch {}
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+test('malformed persisted control marker keeps destructive cleanup fail-closed', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-invalid-control-'));
+  const databasePath = join(root, 'operations.sqlite');
+  const uploadRoot = join(root, 'uploads');
+  let store;
+
+  try {
+    store = new ScheduleStore({ filename: databasePath, uploadRoot });
+    store.close();
+    store = null;
+
+    const marker = join(root, '.orphan-cleanup-control', 'disabled.json');
+    writeFileSync(marker, '{not-valid-json');
+
+    store = new ScheduleStore({
+      filename: databasePath,
+      uploadRoot,
+      orphanCleanupMode: 'inherit',
+    });
+    const status = store.getOrphanCleanupControlStatus();
+    assert.equal(status.enabled, false);
+    assert.equal(status.markerValid, false);
+
+    const cleanup = store.cleanupOrphanUploads();
+    assert.equal(cleanup.skipped, true);
+    assert.equal(cleanup.code, 'ORPHAN_CLEANUP_DISABLED');
+
+    const enable = store.enableOrphanCleanup({ expectedEpoch: 'anything' });
+    assert.equal(enable.ok, false);
+    assert.equal(enable.code, 'ORPHAN_CLEANUP_CONTROL_INVALID');
+    assert.equal(store.getOrphanCleanupControlStatus().enabled, false);
+  } finally {
+    try { store?.close(); } catch {}
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('CLI apply exits nonzero when persisted cleanup protection blocks deletion', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-cli-control-'));
+  const databasePath = join(root, 'operations.sqlite');
+  const uploadRoot = join(root, 'uploads');
+  let store;
+
+  try {
+    store = new ScheduleStore({
+      filename: databasePath,
+      uploadRoot,
+      clock: () => new Date('2026-09-20T08:00:00.000Z'),
+      idFactory: () => 'cleanup-cli-control',
+    });
+    const upload = store.saveUpload({
+      operationId: 'cleanup-cli-control-0001',
+      originalName: 'cli.txt',
+      contentType: 'text/plain',
+      kind: 'attachment',
+      buffer: Buffer.from('CLI cleanup must fail visibly while protected'),
+    });
+    const storedPath = join(uploadRoot, upload.upload.sha256 + '.txt');
+    const disabled = store.disableOrphanCleanup({ waitForDrainMs: 0 });
+    assert.equal(disabled.ok, true);
+    store.close();
+    store = null;
+
+    const script = fileURLToPath(new URL('../scripts/cleanup-uploads.mjs', import.meta.url));
+    const result = spawnSync(process.execPath, [script, '--apply', '--max-age-hours', '24'], {
+      env: {
+        ...process.env,
+        DATABASE_PATH: databasePath,
+        UPLOAD_ROOT: uploadRoot,
+      },
+      encoding: 'utf8',
+    });
+
+    assert.notEqual(result.status, 0);
+    const output = JSON.parse(result.stdout.trim());
+    assert.equal(output.skipped, true);
+    assert.equal(output.code, 'ORPHAN_CLEANUP_DISABLED');
+    assert.equal(existsSync(storedPath), true);
   } finally {
     try { store?.close(); } catch {}
     rmSync(root, { recursive: true, force: true });
