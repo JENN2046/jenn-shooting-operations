@@ -24,6 +24,11 @@ import {
   copyAndVerifyAttachments,
   verifyAttachmentDatabaseParity,
 } from '../src/production-attachment-copy-v1.mjs';
+import {
+  captureSqlitePhysicalFamily,
+  resolveExistingPath,
+  sameSqlitePhysicalFamily,
+} from '../src/migration-sqlite-v2.mjs';
 import { V1_SCHEMA_SQL } from '../src/sqlite-schema-v2.mjs';
 import {
   parseAttachmentCopyArgs,
@@ -357,6 +362,36 @@ test('database reads stay bound to the originally resolved target database inode
       })),
       error => error.code === 'TARGET_UPLOAD_DATABASE_INVALID',
     );
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('strong SQLite physical-family proof includes database content digest and detects writes', () => {
+  const body = Buffer.from('strong-family-write');
+  const row = uploadFact({ id: 'UPLOAD-STRONG-FAMILY', body });
+  const fixture = createFixture([row]);
+  try {
+    const targetInfo = resolveExistingPath(fixture.targetDatabasePath, 'file');
+    const before = captureSqlitePhysicalFamily(
+      targetInfo,
+      { includeDatabaseDigest: true },
+    );
+    assert.match(before.database.digest, /^sha256:[a-f0-9]{64}$/u);
+
+    const target = new DatabaseSync(fixture.targetDatabasePath);
+    try {
+      target.prepare('UPDATE uploads SET original_name = ? WHERE id = ?')
+        .run('strong-family-changed.bin', row.id);
+    } finally {
+      target.close();
+    }
+
+    const after = captureSqlitePhysicalFamily(
+      targetInfo,
+      { includeDatabaseDigest: true },
+    );
+    assert.equal(sameSqlitePhysicalFamily(before, after), false);
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }
