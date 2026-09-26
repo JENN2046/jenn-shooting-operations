@@ -8,6 +8,8 @@ This repository control prevents orphan-upload cleanup from mutating imported or
 
 All destructive orphan cleanup enters through the same persisted gate:
 
+The periodic interval is a retry scheduler, not authority. When configured, it stays scheduled across disabled and transition states; each tick must reacquire destructive cleanup admission through the persisted gate. A temporary transition therefore suppresses mutation without permanently stranding periodic cleanup after another process finishes enabling.
+
 - startup cleanup in `createOperationsServer`;
 - periodic cleanup;
 - `saveUpload()` triggered cleanup;
