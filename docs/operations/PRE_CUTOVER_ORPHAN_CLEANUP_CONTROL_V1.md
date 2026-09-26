@@ -40,7 +40,7 @@ The production entrypoint accepts:
 - `ORPHAN_CLEANUP_MODE=inherit|disabled|enabled`
 - `ORPHAN_CLEANUP_ENABLE_EPOCH=<exact-disabled-epoch>` when explicitly reopening a persisted disabled state.
 
-The compose definition exposes both variables without changing their default behavior.
+The compose definition exposes the cleanup mode/epoch and pins the cleanup domain. The `uploads:cleanup` maintenance command inherits `ORPHAN_CLEANUP_DOMAIN` from the same environment and passes it into `ScheduleStore`; an apply run must therefore observe the exact same disabled marker as the server.
 
 ## Admission and drain
 
