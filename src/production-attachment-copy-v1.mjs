@@ -366,15 +366,25 @@ function hashDescriptor(descriptor) {
   return `sha256:${hash.digest('hex')}`;
 }
 
-function assertHeldSnapshotMain(descriptor, expected, invalidCode) {
+function assertHeldSnapshotMain(
+  descriptor,
+  expectedSource,
+  invalidCode,
+  expectedSnapshotIdentity,
+) {
   let metadata;
   try {
     metadata = fstatSync(descriptor, { bigint: true });
   } catch {
     fail(invalidCode);
   }
-  if (!familyMemberMatches(metadata, expected)
-      || hashDescriptor(descriptor) !== expected.digest) {
+  if (!metadata.isFile()
+      || metadata.nlink !== 1n
+      || metadata.size.toString() !== expectedSource.size
+      || hashDescriptor(descriptor) !== expectedSource.digest
+      || (expectedSnapshotIdentity
+        && (metadata.dev !== expectedSnapshotIdentity.device
+          || metadata.ino !== expectedSnapshotIdentity.inode))) {
     fail(invalidCode);
   }
   return metadata;
@@ -536,7 +546,15 @@ function createBoundSqliteSnapshot(databaseInfo, invalidCode, {
     const afterFamily = captureDatabaseFamily(databaseInfo, invalidCode);
     assertCapturedMainDatabaseIdentity(afterFamily, databaseInfo, invalidCode);
     if (!sameSqlitePhysicalFamily(beforeFamily, afterFamily)) fail(invalidCode);
-    assertHeldSnapshotMain(snapshotDatabaseDescriptor, beforeFamily.database, invalidCode);
+    assertHeldSnapshotMain(
+      snapshotDatabaseDescriptor,
+      beforeFamily.database,
+      invalidCode,
+      Object.freeze({
+        device: heldSnapshotMain.dev,
+        inode: heldSnapshotMain.ino,
+      }),
+    );
 
     return Object.freeze({
       snapshotRoot,
@@ -600,6 +618,7 @@ function readUploadFacts(databaseInfo, invalidCode, {
       snapshot.snapshotDatabaseDescriptor,
       snapshot.family.database,
       invalidCode,
+      snapshot.snapshotMainIdentity,
     );
 
     if (faultInjector && stageLabel) {
