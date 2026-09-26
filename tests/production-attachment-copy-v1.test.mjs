@@ -22,6 +22,10 @@ import {
   verifyAttachmentDatabaseParity,
 } from '../src/production-attachment-copy-v1.mjs';
 import { V1_SCHEMA_SQL } from '../src/sqlite-schema-v2.mjs';
+import {
+  parseAttachmentCopyArgs,
+  runAttachmentCopyCommand,
+} from '../scripts/copy-production-attachments.mjs';
 
 const CREATED_AT = '2026-09-26T00:00:00.000Z';
 
@@ -352,6 +356,62 @@ test('rows without stored bytes require no target file but remain bound into dat
     assert.equal(receipt.uniqueFiles, 0);
     assert.equal(receipt.copiedFiles, 0);
     assert.equal(receipt.totalBytes, 0);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+
+test('attachment copy command requires explicit isolated-target acknowledgement for apply', () => {
+  assert.throws(
+    () => parseAttachmentCopyArgs([
+      '--apply',
+      '--source-db', '/tmp/source.sqlite',
+      '--source-upload-root', '/tmp/source-uploads',
+      '--target-db', '/tmp/target.sqlite',
+      '--target-upload-root', '/tmp/target-uploads',
+    ]),
+    error => error.code === 'ISOLATED_TARGET_ACK_REQUIRED',
+  );
+  assert.throws(
+    () => parseAttachmentCopyArgs([
+      '--verify-only',
+      '--source-db', '/tmp/source.sqlite',
+      '--source-upload-root', '/tmp/source-uploads',
+      '--target-db', '/tmp/target.sqlite',
+      '--target-upload-root', '/tmp/target-uploads',
+      '--acknowledge-isolated-target',
+    ]),
+    error => error.code === 'APPLY_ARGUMENT_NOT_ALLOWED',
+  );
+});
+
+test('attachment copy command apply and verify-only converge on the same parity digest', () => {
+  const body = Buffer.from('command-copy-fixture');
+  const row = uploadFact({ id: 'UPLOAD-COMMAND', body });
+  const fixture = createFixture([row]);
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    const common = [
+      '--source-db', fixture.sourceDatabasePath,
+      '--source-upload-root', fixture.sourceUploadRoot,
+      '--target-db', fixture.targetDatabasePath,
+      '--target-upload-root', fixture.targetUploadRoot,
+      '--format', 'json',
+    ];
+    const apply = runAttachmentCopyCommand([
+      '--apply',
+      ...common,
+      '--acknowledge-isolated-target',
+    ]);
+    assert.equal(apply.exitCode, 0);
+    assert.equal(apply.receipt.status, 'ATTACHMENT_COPY_PARITY_VERIFIED');
+
+    const verify = runAttachmentCopyCommand(['--verify-only', ...common]);
+    assert.equal(verify.exitCode, 0);
+    assert.equal(verify.receipt.status, 'ATTACHMENT_DATABASE_PARITY_VERIFIED');
+    assert.equal(verify.receipt.parityDigest, apply.receipt.parityDigest);
+    assert.equal(JSON.parse(apply.output).parityDigest, apply.receipt.parityDigest);
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }
