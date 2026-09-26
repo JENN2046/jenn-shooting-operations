@@ -5,13 +5,16 @@ import {
   fstatSync,
   fsyncSync,
   lstatSync,
+  mkdtempSync,
   openSync,
   readSync,
   readdirSync,
   realpathSync,
+  rmSync,
   statSync,
   writeSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, join, resolve, sep } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -34,10 +37,41 @@ import {
 
 const COPY_BUFFER_BYTES = 64 * 1024;
 const STORED_NAME = /^[a-f0-9]{64}\.[a-z0-9]+$/u;
-// Stage 3 intentionally exposes no mint for this set. Production receipt
-// issuance remains unavailable until a live quiescence provider is added
-// inside this authority boundary.
-const AUTHENTICATED_QUIESCENCE_CAPABILITIES = new WeakSet();
+const TEST_AUTHORITY = 'TEST_SANDBOX';
+const LIVE_AUTHORITY = 'LIVE_PROVIDER';
+
+class AttachmentParityCapability {
+  #scopeDigest;
+  #authorityClass;
+  #assertHeld;
+
+  constructor({ scopeDigest, authorityClass, assertHeld }) {
+    this.#scopeDigest = scopeDigest;
+    this.#authorityClass = authorityClass;
+    this.#assertHeld = assertHeld;
+    Object.freeze(this);
+  }
+
+  static inspect(value) {
+    try {
+      if (!(#scopeDigest in value)) return null;
+      return Object.freeze({
+        scopeDigest: value.#scopeDigest,
+        authorityClass: value.#authorityClass,
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  static assertHeld(value) {
+    try {
+      return value.#assertHeld() === true;
+    } catch {
+      return false;
+    }
+  }
+}
 
 function fail(code, result = 'INVALID_TARGET') {
   throw new MigrationError(code, result);
@@ -90,32 +124,32 @@ function parityScopeDigest(sourceDatabase, targetDatabase, sourceRoot, targetRoo
   });
 }
 
-function assertQuiescenceProbe(lease, scopeDigest) {
-  if (!lease
-      || lease.kind !== 'ATTACHMENT_PARITY_QUIESCENCE_V1'
-      || lease.scopeDigest !== scopeDigest
-      || typeof lease.assertHeld !== 'function') {
+function inspectCapability(capability, scopeDigest, allowedAuthorities) {
+  const inspected = AttachmentParityCapability.inspect(capability);
+  if (!inspected
+      || inspected.scopeDigest !== scopeDigest
+      || !allowedAuthorities.includes(inspected.authorityClass)) {
+    return null;
+  }
+  return inspected;
+}
+
+function assertCandidateQuiescenceCapability(capability, scopeDigest) {
+  if (!inspectCapability(capability, scopeDigest, [TEST_AUTHORITY, LIVE_AUTHORITY])) {
     fail('ATTACHMENT_PARITY_QUIESCENCE_REQUIRED', 'BLOCKED_PREREQUISITE');
   }
-  let held;
-  try {
-    held = lease.assertHeld();
-  } catch {
-    fail('ATTACHMENT_PARITY_QUIESCENCE_LOST', 'BLOCKED_PREREQUISITE');
-  }
-  if (held !== true) {
+  if (!AttachmentParityCapability.assertHeld(capability)) {
     fail('ATTACHMENT_PARITY_QUIESCENCE_LOST', 'BLOCKED_PREREQUISITE');
   }
 }
 
 function assertAuthenticatedQuiescenceCapability(capability, scopeDigest) {
-  if (!capability
-      || typeof capability !== 'object'
-      || !AUTHENTICATED_QUIESCENCE_CAPABILITIES.has(capability)
-      || capability.scopeDigest !== scopeDigest) {
+  if (!inspectCapability(capability, scopeDigest, [LIVE_AUTHORITY])) {
     fail('ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED', 'BLOCKED_PREREQUISITE');
   }
-  assertQuiescenceProbe(capability, scopeDigest);
+  if (!AttachmentParityCapability.assertHeld(capability)) {
+    fail('ATTACHMENT_PARITY_QUIESCENCE_LOST', 'BLOCKED_PREREQUISITE');
+  }
 }
 
 export function describeAttachmentParityScope({
@@ -132,6 +166,47 @@ export function describeAttachmentParityScope({
   return Object.freeze({
     schemaVersion: 1,
     scopeDigest: parityScopeDigest(sourceDatabase, targetDatabase, sourceRoot, targetRoot),
+  });
+}
+
+export function createAttachmentParityIsolatedTestAuthority() {
+  const sandboxRoot = realpathSync(mkdtempSync(join(tmpdir(), 'jenn-attachment-parity-test-')));
+  let active = true;
+
+  const ensureInsideSandbox = info => {
+    if (!pathWithin(info.realPath, sandboxRoot)) {
+      fail('ATTACHMENT_PARITY_TEST_SCOPE_INVALID', 'INVALID_USAGE');
+    }
+  };
+
+  return Object.freeze({
+    root: sandboxRoot,
+    mint({
+      sourceDatabasePath,
+      sourceUploadRoot,
+      targetDatabasePath,
+      targetUploadRoot,
+      heldState = { held: true },
+    } = {}) {
+      if (!active) fail('ATTACHMENT_PARITY_TEST_AUTHORITY_CLOSED', 'INVALID_USAGE');
+      const sourceDatabase = resolveExistingPath(sourceDatabasePath, 'file');
+      const targetDatabase = resolveExistingPath(targetDatabasePath, 'file');
+      const sourceRoot = resolveExistingPath(sourceUploadRoot, 'directory');
+      const targetRoot = resolveExistingPath(targetUploadRoot, 'directory');
+      for (const info of [sourceDatabase, targetDatabase, sourceRoot, targetRoot]) {
+        ensureInsideSandbox(info);
+      }
+      assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
+      return new AttachmentParityCapability({
+        scopeDigest: parityScopeDigest(sourceDatabase, targetDatabase, sourceRoot, targetRoot),
+        authorityClass: TEST_AUTHORITY,
+        assertHeld: () => active && heldState?.held === true,
+      });
+    },
+    close() {
+      active = false;
+      rmSync(sandboxRoot, { recursive: true, force: true });
+    },
   });
 }
 
@@ -435,20 +510,20 @@ function verifyAttachmentDatabaseParityResolved({
   sourceRoot,
   targetDatabase,
   targetRoot,
-  quiescenceLease,
+  quiescenceCapability,
   faultInjector,
 } = {}) {
   assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
   const scopeDigest = parityScopeDigest(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
-  assertQuiescenceProbe(quiescenceLease, scopeDigest);
+  assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
   assertDatabaseStable(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
   assertDatabaseStable(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
   assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
   assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
 
-  assertQuiescenceProbe(quiescenceLease, scopeDigest);
+  assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
   if (faultInjector) faultInjector('before_initial_database_read');
-  assertQuiescenceProbe(quiescenceLease, scopeDigest);
+  assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
 
   const sourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
   const targetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
@@ -488,10 +563,10 @@ function verifyAttachmentDatabaseParityResolved({
   };
 
   verifyFilesystem();
-  assertQuiescenceProbe(quiescenceLease, scopeDigest);
+  assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
 
   if (faultInjector) faultInjector('before_final_database_recheck');
-  assertQuiescenceProbe(quiescenceLease, scopeDigest);
+  assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
 
   const finalSourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
   const finalTargetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
@@ -505,7 +580,7 @@ function verifyAttachmentDatabaseParityResolved({
   // mutation window where bytes/set could drift while database facts were
   // being revalidated.
   verifyFilesystem();
-  assertQuiescenceProbe(quiescenceLease, scopeDigest);
+  assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
 
   // Capture the complete SQLite physical families before the last DB read.
   // This binds the final DB read and the last filesystem pass into one
@@ -540,7 +615,7 @@ function verifyAttachmentDatabaseParityResolved({
   }
 
   if (faultInjector) faultInjector('after_final_database_recheck');
-  assertQuiescenceProbe(quiescenceLease, scopeDigest);
+  assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
 
   // One final filesystem pass comes after the last database read so byte/set
   // drift that occurs during that DB read cannot escape into a receipt.
@@ -579,15 +654,15 @@ function verifyAttachmentDatabaseParityResolved({
   assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
 
   if (faultInjector) faultInjector('before_final_family_compare');
-  assertQuiescenceProbe(quiescenceLease, scopeDigest);
+  assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
 
   const sourceFamilyAfterFinalWindow = captureDatabaseFamily(
     sourceDatabase,
     'SOURCE_UPLOAD_DATABASE_INVALID',
   );
-  assertQuiescenceProbe(quiescenceLease, scopeDigest);
+  assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
   if (faultInjector) faultInjector('between_final_family_captures');
-  assertQuiescenceProbe(quiescenceLease, scopeDigest);
+  assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
   const targetFamilyAfterFinalWindow = captureDatabaseFamily(
     targetDatabase,
     'TARGET_UPLOAD_DATABASE_INVALID',
@@ -604,7 +679,7 @@ function verifyAttachmentDatabaseParityResolved({
   if (!sameSqlitePhysicalFamily(targetFamilyBeforeFinalWindow, targetFamilyAfterFinalWindow)) {
     fail('TARGET_UPLOAD_DATABASE_CHANGED_DURING_PARITY');
   }
-  assertQuiescenceProbe(quiescenceLease, scopeDigest);
+  assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
 
   return candidateReceipt;
 }
@@ -614,7 +689,7 @@ export function evaluateAttachmentDatabaseParityCandidate({
   sourceUploadRoot,
   targetDatabasePath,
   targetUploadRoot,
-  quiescenceLease,
+  quiescenceCapability,
   faultInjector,
 } = {}) {
   const sourceDatabase = resolveExistingPath(sourceDatabasePath, 'file');
@@ -627,7 +702,7 @@ export function evaluateAttachmentDatabaseParityCandidate({
     sourceRoot,
     targetDatabase,
     targetRoot,
-    quiescenceLease,
+    quiescenceCapability,
     faultInjector,
   });
 }
@@ -637,7 +712,7 @@ export function copyAttachmentsAndEvaluateParityCandidate({
   sourceUploadRoot,
   targetDatabasePath,
   targetUploadRoot,
-  quiescenceLease,
+  quiescenceCapability,
   faultInjector,
 } = {}) {
   const sourceDatabase = resolveExistingPath(sourceDatabasePath, 'file');
@@ -647,7 +722,7 @@ export function copyAttachmentsAndEvaluateParityCandidate({
 
   assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
   const scopeDigest = parityScopeDigest(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
-  assertQuiescenceProbe(quiescenceLease, scopeDigest);
+  assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
 
   const sourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
   const targetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
@@ -662,7 +737,7 @@ export function copyAttachmentsAndEvaluateParityCandidate({
   let copiedBytes = 0;
 
   for (const file of files) {
-    assertQuiescenceProbe(quiescenceLease, scopeDigest);
+    assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
     assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
     assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
 
@@ -733,22 +808,22 @@ export function copyAttachmentsAndEvaluateParityCandidate({
 
     fsyncDirectory(targetRoot.realPath);
     if (faultInjector) faultInjector('after_file_copy', file.storedName);
-    assertQuiescenceProbe(quiescenceLease, scopeDigest);
+    assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
     copiedFiles += 1;
     copiedBytes += file.size;
   }
 
   if (faultInjector) faultInjector('before_final_parity');
-  assertQuiescenceProbe(quiescenceLease, scopeDigest);
+  assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
   const parity = verifyAttachmentDatabaseParityResolved({
     sourceDatabase,
     sourceRoot,
     targetDatabase,
     targetRoot,
-    quiescenceLease,
+    quiescenceCapability,
     faultInjector,
   });
-  assertQuiescenceProbe(quiescenceLease, scopeDigest);
+  assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
 
   return Object.freeze({
     ...parity,
@@ -806,7 +881,7 @@ export function verifyAttachmentDatabaseParity({
     sourceRoot: domain.sourceRoot,
     targetDatabase: domain.targetDatabase,
     targetRoot: domain.targetRoot,
-    quiescenceLease: quiescenceCapability,
+    quiescenceCapability: quiescenceCapability,
     faultInjector,
   });
   assertAuthenticatedQuiescenceCapability(quiescenceCapability, domain.scopeDigest);
@@ -839,7 +914,7 @@ export function copyAndVerifyAttachments({
     sourceUploadRoot,
     targetDatabasePath,
     targetUploadRoot,
-    quiescenceLease: quiescenceCapability,
+    quiescenceCapability: quiescenceCapability,
     faultInjector,
   });
   assertAuthenticatedQuiescenceCapability(quiescenceCapability, domain.scopeDigest);
