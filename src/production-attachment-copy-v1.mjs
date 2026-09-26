@@ -347,6 +347,39 @@ const SQLITE_SNAPSHOT_MEMBERS = Object.freeze([
   Object.freeze({ key: 'journal', suffix: '-journal' }),
 ]);
 
+function assertFactSnapshotIsSidecarFree(family, invalidCode) {
+  if (family?.wal || family?.shm || family?.journal) {
+    fail(invalidCode, 'BLOCKED_PREREQUISITE');
+  }
+}
+
+function hashDescriptor(descriptor) {
+  const hash = createHash('sha256');
+  const buffer = Buffer.allocUnsafe(COPY_BUFFER_BYTES);
+  let position = 0;
+  while (true) {
+    const bytesRead = readSync(descriptor, buffer, 0, buffer.length, position);
+    if (bytesRead === 0) break;
+    hash.update(buffer.subarray(0, bytesRead));
+    position += bytesRead;
+  }
+  return `sha256:${hash.digest('hex')}`;
+}
+
+function assertHeldSnapshotMain(descriptor, expected, invalidCode) {
+  let metadata;
+  try {
+    metadata = fstatSync(descriptor, { bigint: true });
+  } catch {
+    fail(invalidCode);
+  }
+  if (!familyMemberMatches(metadata, expected)
+      || hashDescriptor(descriptor) !== expected.digest) {
+    fail(invalidCode);
+  }
+  return metadata;
+}
+
 function familyMemberMatches(metadata, expected) {
   if (!metadata?.isFile?.()
       || metadata.isSymbolicLink?.()
@@ -443,43 +476,109 @@ function createBoundSqliteSnapshot(databaseInfo, invalidCode, {
   faultInjector,
   stageLabel,
 } = {}) {
+  if (process.platform !== 'linux') {
+    fail('SQLITE_SNAPSHOT_DESCRIPTOR_BINDING_UNAVAILABLE', 'BLOCKED_PREREQUISITE');
+  }
+
   assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
   const beforeFamily = captureDatabaseFamily(databaseInfo, invalidCode);
   assertCapturedMainDatabaseIdentity(beforeFamily, databaseInfo, invalidCode);
+  assertFactSnapshotIsSidecarFree(beforeFamily, invalidCode);
 
   const snapshotRoot = mkdtempSync(join(tmpdir(), 'jenn-sqlite-facts-'));
-  const snapshotDatabasePath = join(snapshotRoot, 'snapshot.sqlite');
+  let snapshotRootDescriptor;
+  let snapshotDatabaseDescriptor;
   try {
+    const snapshotRootPathMetadata = lstatSync(snapshotRoot, { bigint: true });
+    snapshotRootDescriptor = openSync(
+      snapshotRoot,
+      fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW,
+    );
+    const snapshotRootOpened = fstatSync(snapshotRootDescriptor, { bigint: true });
+    if (!snapshotRootOpened.isDirectory()
+        || snapshotRootOpened.dev !== snapshotRootPathMetadata.dev
+        || snapshotRootOpened.ino !== snapshotRootPathMetadata.ino) {
+      fail(invalidCode);
+    }
+
+    const boundSnapshotDatabasePath = `/proc/self/fd/${snapshotRootDescriptor}/snapshot.sqlite`;
+
     for (let index = 0; index < SQLITE_SNAPSHOT_MEMBERS.length; index += 1) {
       assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
       const member = SQLITE_SNAPSHOT_MEMBERS[index];
       copyBoundSqliteFamilyMember({
         sourcePath: `${databaseInfo.realPath}${member.suffix}`,
-        targetPath: `${snapshotDatabasePath}${member.suffix}`,
+        targetPath: `${boundSnapshotDatabasePath}${member.suffix}`,
         expected: beforeFamily[member.key],
         invalidCode,
       });
     }
 
+    snapshotDatabaseDescriptor = openSync(
+      boundSnapshotDatabasePath,
+      fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
+    );
+    const heldSnapshotMain = assertHeldSnapshotMain(
+      snapshotDatabaseDescriptor,
+      beforeFamily.database,
+      invalidCode,
+    );
+
     assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
     if (faultInjector && stageLabel) {
-      faultInjector(`after_${stageLabel}_database_snapshot_copy`);
+      faultInjector(`after_${stageLabel}_database_snapshot_copy`, Object.freeze({
+        snapshotRoot,
+        boundSnapshotDatabasePath,
+      }));
     }
     assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
 
     const afterFamily = captureDatabaseFamily(databaseInfo, invalidCode);
     assertCapturedMainDatabaseIdentity(afterFamily, databaseInfo, invalidCode);
     if (!sameSqlitePhysicalFamily(beforeFamily, afterFamily)) fail(invalidCode);
+    assertHeldSnapshotMain(snapshotDatabaseDescriptor, beforeFamily.database, invalidCode);
 
     return Object.freeze({
       snapshotRoot,
-      snapshotDatabasePath,
+      snapshotRootDevice: snapshotRootOpened.dev,
+      snapshotRootInode: snapshotRootOpened.ino,
+      snapshotRootDescriptor,
+      snapshotDatabaseDescriptor,
+      snapshotDatabaseUri: `file:/proc/self/fd/${snapshotDatabaseDescriptor}?immutable=1`,
+      snapshotMainIdentity: Object.freeze({
+        device: heldSnapshotMain.dev,
+        inode: heldSnapshotMain.ino,
+      }),
       family: beforeFamily,
     });
   } catch (error) {
-    rmSync(snapshotRoot, { recursive: true, force: true });
+    if (snapshotDatabaseDescriptor !== undefined) {
+      try { closeSync(snapshotDatabaseDescriptor); } catch {}
+    }
+    if (snapshotRootDescriptor !== undefined) {
+      try { closeSync(snapshotRootDescriptor); } catch {}
+    }
+    try { rmSync(snapshotRoot, { recursive: true, force: true }); } catch {}
     throw error;
   }
+}
+
+function cleanupBoundSqliteSnapshot(snapshot) {
+  if (!snapshot) return;
+  if (snapshot.snapshotDatabaseDescriptor !== undefined) {
+    try { closeSync(snapshot.snapshotDatabaseDescriptor); } catch {}
+  }
+  if (snapshot.snapshotRootDescriptor !== undefined) {
+    try { closeSync(snapshot.snapshotRootDescriptor); } catch {}
+  }
+
+  try {
+    const current = lstatSync(snapshot.snapshotRoot, { bigint: true });
+    if (current.dev === snapshot.snapshotRootDevice
+        && current.ino === snapshot.snapshotRootInode) {
+      rmSync(snapshot.snapshotRoot, { recursive: true, force: true });
+    }
+  } catch {}
 }
 
 function readUploadFacts(databaseInfo, invalidCode, {
@@ -497,7 +596,25 @@ function readUploadFacts(databaseInfo, invalidCode, {
   let db;
   let inTransaction = false;
   try {
-    db = new DatabaseSync(snapshot.snapshotDatabasePath, { readOnly: true });
+    assertHeldSnapshotMain(
+      snapshot.snapshotDatabaseDescriptor,
+      snapshot.family.database,
+      invalidCode,
+    );
+
+    if (faultInjector && stageLabel) {
+      faultInjector(`before_${stageLabel}_snapshot_sqlite_open`, Object.freeze({
+        snapshotRoot: snapshot.snapshotRoot,
+      }));
+    }
+
+    assertHeldSnapshotMain(
+      snapshot.snapshotDatabaseDescriptor,
+      snapshot.family.database,
+      invalidCode,
+    );
+
+    db = new DatabaseSync(snapshot.snapshotDatabaseUri, { readOnly: true });
     db.exec('PRAGMA query_only = ON; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
     const queryOnly = db.prepare('PRAGMA query_only').get();
     if (Number(queryOnly?.query_only) !== 1) fail(invalidCode, 'INVALID_TARGET');
@@ -511,6 +628,12 @@ function readUploadFacts(databaseInfo, invalidCode, {
     `).all().map(row => Object.freeze({ ...row }));
     db.exec('COMMIT');
     inTransaction = false;
+
+    assertHeldSnapshotMain(
+      snapshot.snapshotDatabaseDescriptor,
+      snapshot.family.database,
+      invalidCode,
+    );
 
     assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
     const afterQueryFamily = captureDatabaseFamily(databaseInfo, invalidCode);
@@ -526,10 +649,9 @@ function readUploadFacts(databaseInfo, invalidCode, {
     fail(invalidCode);
   } finally {
     try { db?.close(); } catch {}
-    rmSync(snapshot.snapshotRoot, { recursive: true, force: true });
+    cleanupBoundSqliteSnapshot(snapshot);
   }
 }
-
 function normalizedUniqueFiles(rows, invalidCode) {
   const byName = new Map();
   for (const row of rows) {
