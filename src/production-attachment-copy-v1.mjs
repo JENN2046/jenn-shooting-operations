@@ -25,6 +25,7 @@ import {
   resolveExistingPath,
   sameFile,
   sameSqlitePhysicalFamily,
+  sqlitePhysicalFamiliesAreDisjoint,
 } from './migration-sqlite-v2.mjs';
 import {
   hasExactPermissions,
@@ -178,7 +179,10 @@ function assertDatabaseStable(info, code) {
 function captureDatabaseFamily(databaseInfo, code) {
   assertDatabaseStable(databaseInfo, code);
   try {
-    return captureSqlitePhysicalFamily(databaseInfo, { includeDatabaseDigest: true });
+    return captureSqlitePhysicalFamily(databaseInfo, {
+      includeDatabaseDigest: true,
+      requireSingleLink: true,
+    });
   } catch {
     fail(code);
   }
@@ -500,6 +504,12 @@ function verifyAttachmentDatabaseParityResolved({
     targetDatabase,
     'TARGET_UPLOAD_DATABASE_INVALID',
   );
+  if (!sqlitePhysicalFamiliesAreDisjoint(
+    sourceFamilyBeforeFinalWindow,
+    targetFamilyBeforeFinalWindow,
+  )) {
+    fail('SOURCE_TARGET_SQLITE_FAMILY_ALIAS');
+  }
 
   const finalSourceRowsAfterFilesystem = readUploadFacts(
     sourceDatabase,
@@ -567,6 +577,12 @@ function verifyAttachmentDatabaseParityResolved({
     targetDatabase,
     'TARGET_UPLOAD_DATABASE_INVALID',
   );
+  if (!sqlitePhysicalFamiliesAreDisjoint(
+    sourceFamilyAfterFinalWindow,
+    targetFamilyAfterFinalWindow,
+  )) {
+    fail('SOURCE_TARGET_SQLITE_FAMILY_ALIAS');
+  }
   if (!sameSqlitePhysicalFamily(sourceFamilyBeforeFinalWindow, sourceFamilyAfterFinalWindow)) {
     fail('SOURCE_UPLOAD_DATABASE_CHANGED_DURING_PARITY');
   }
