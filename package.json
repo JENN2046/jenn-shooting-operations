@@ -14,7 +14,8 @@
     "evaluate:shadow:fixtures": "node scripts/replay-shadow-evaluation.mjs",
     "evaluate:shadow:report": "node scripts/verify-shadow-low-disclosure.mjs",
     "validate:shadow": "node scripts/verify-shadow-low-disclosure.mjs --check",
-    "validate:production-manifest": "node scripts/validate-production-change-manifest.mjs"
+    "validate:production-manifest": "node scripts/validate-production-change-manifest.mjs",
+    "attachments:copy": "node scripts/copy-production-attachments.mjs"
   },
   "engines": {
     "node": ">=22.13.0"
