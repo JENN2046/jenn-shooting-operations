@@ -212,6 +212,69 @@ test('maintenance apply cannot bypass a persisted disabled cleanup control', () 
   }
 });
 
+test('cleanup control is isolated by database identity within one directory', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-db-identity-'));
+  const databasePathA = join(root, 'a.sqlite');
+  const databasePathB = join(root, 'b.sqlite');
+  const uploadRootA = join(root, 'uploads-a');
+  const uploadRootB = join(root, 'uploads-b');
+  let storeA;
+  let storeB;
+
+  try {
+    storeA = new ScheduleStore({ filename: databasePathA, uploadRoot: uploadRootA });
+    storeB = new ScheduleStore({ filename: databasePathB, uploadRoot: uploadRootB });
+
+    assert.notEqual(storeA.cleanupControlRoot, storeB.cleanupControlRoot);
+    assert.equal(storeA.cleanupControlRoot, cleanupControlRootFor(databasePathA));
+    assert.equal(storeB.cleanupControlRoot, cleanupControlRootFor(databasePathB));
+
+    const runsRootA = join(cleanupControlRootFor(databasePathA), 'runs');
+    mkdirSync(runsRootA, { recursive: true });
+    const activeRunA = join(runsRootA, 'database-a-active-run.json');
+    writeFileSync(activeRunA, '{"runId":"database-a-active-run"}\n');
+
+    const disabledB = storeB.disableOrphanCleanup({ reason: 'disable-b', waitForDrainMs: 0 });
+    assert.equal(disabledB.ok, true);
+    assert.equal(disabledB.enabled, false);
+    assert.equal(disabledB.activeRuns, 0);
+
+    const blockedA = storeA.disableOrphanCleanup({ reason: 'disable-a', waitForDrainMs: 0 });
+    assert.equal(blockedA.ok, false);
+    assert.equal(blockedA.code, 'ORPHAN_CLEANUP_DRAIN_TIMEOUT');
+    assert.equal(blockedA.activeRuns, 1);
+
+    unlinkSync(activeRunA);
+    const disabledA = storeA.disableOrphanCleanup({ reason: 'disable-a', waitForDrainMs: 0 });
+    assert.equal(disabledA.ok, true);
+    assert.equal(disabledA.enabled, false);
+    assert.notEqual(disabledA.epoch, disabledB.epoch);
+
+    const enabledB = storeB.enableOrphanCleanup({ expectedEpoch: disabledB.epoch });
+    assert.equal(enabledB.ok, true);
+    assert.equal(enabledB.enabled, true);
+
+    const stillDisabledA = storeA.getOrphanCleanupControlStatus();
+    assert.equal(stillDisabledA.enabled, false);
+    assert.equal(stillDisabledA.epoch, disabledA.epoch);
+
+    assert.equal(
+      existsSync(join(cleanupControlRootFor(databasePathA), 'disabled.json')),
+      true,
+      'enabling database B must not remove database A marker',
+    );
+    assert.equal(
+      existsSync(join(cleanupControlRootFor(databasePathB), 'disabled.json')),
+      false,
+      'database B marker should be removed only in database B namespace',
+    );
+  } finally {
+    try { storeA?.close(); } catch {}
+    try { storeB?.close(); } catch {}
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('disable stays fail-closed until every active cleanup marker is drained', () => {
   const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-drain-control-'));
   const databasePath = join(root, 'operations.sqlite');
