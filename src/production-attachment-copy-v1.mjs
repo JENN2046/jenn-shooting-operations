@@ -1,0 +1,440 @@
+import { randomUUID } from 'node:crypto';
+import {
+  closeSync,
+  constants as fsConstants,
+  fstatSync,
+  fsyncSync,
+  lstatSync,
+  openSync,
+  readSync,
+  readdirSync,
+  realpathSync,
+  statSync,
+  unlinkSync,
+  writeSync,
+} from 'node:fs';
+import { basename, join, resolve, sep } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+
+import {
+  MigrationError,
+  canonicalJson,
+  sha256Digest,
+} from './migration-v2.mjs';
+import {
+  resolveExistingPath,
+  sameFile,
+} from './migration-sqlite-v2.mjs';
+import {
+  supportsDirectoryFsync,
+} from './platform-filesystem.mjs';
+
+const COPY_BUFFER_BYTES = 64 * 1024;
+const STORED_NAME = /^[a-f0-9]{64}\.[a-z0-9]+$/u;
+
+function fail(code, result = 'INVALID_TARGET') {
+  throw new MigrationError(code, result);
+}
+
+function sameStat(left, right) {
+  return left.dev === right.dev
+    && left.ino === right.ino
+    && left.size === right.size
+    && left.mtimeNs === right.mtimeNs
+    && left.ctimeNs === right.ctimeNs;
+}
+
+function fsyncDirectory(path) {
+  if (!supportsDirectoryFsync()) return;
+  let descriptor;
+  try {
+    descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY);
+    fsyncSync(descriptor);
+  } catch {
+    fail('TARGET_UPLOAD_ROOT_CHANGED');
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+}
+
+function assertDirectoryStable(info, code) {
+  let current;
+  try {
+    current = statSync(info.realPath, { bigint: true });
+  } catch {
+    fail(code);
+  }
+  if (!current.isDirectory()
+      || current.dev.toString() !== info.device
+      || current.ino.toString() !== info.inode
+      || realpathSync(info.realPath) !== info.realPath) {
+    fail(code);
+  }
+}
+
+function safeStoredName(value) {
+  return typeof value === 'string'
+    && value.length > 0
+    && !value.includes('\0')
+    && basename(value) === value
+    && !value.includes('/')
+    && !value.includes('\\')
+    && STORED_NAME.test(value);
+}
+
+function readUploadFacts(databaseInfo, invalidCode) {
+  const before = statSync(databaseInfo.realPath, { bigint: true });
+  let db;
+  try {
+    db = new DatabaseSync(databaseInfo.realPath, { readOnly: true });
+    db.exec('PRAGMA query_only = ON; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
+    const queryOnly = db.prepare('PRAGMA query_only').get();
+    if (Number(queryOnly?.query_only) !== 1) fail(invalidCode, 'INVALID_TARGET');
+    db.exec('BEGIN');
+    const rows = db.prepare(`
+      SELECT id, operation_id, original_name, content_type, kind, size, sha256,
+             stored_name, claimed_task_id, created_at
+      FROM uploads
+      ORDER BY id
+    `).all().map(row => Object.freeze({ ...row }));
+    db.exec('COMMIT');
+    return Object.freeze(rows);
+  } catch (error) {
+    try { db?.exec('ROLLBACK'); } catch {}
+    if (error instanceof MigrationError) throw error;
+    fail(invalidCode);
+  } finally {
+    try { db?.close(); } catch {}
+    let after;
+    try {
+      after = statSync(databaseInfo.realPath, { bigint: true });
+    } catch {
+      fail(invalidCode);
+    }
+    if (!sameStat(before, after)) fail(invalidCode);
+  }
+}
+
+function normalizedUniqueFiles(rows, invalidCode) {
+  const byName = new Map();
+  for (const row of rows) {
+    if (row.stored_name === null) continue;
+    if (!safeStoredName(row.stored_name)
+        || !Number.isSafeInteger(row.size)
+        || row.size < 0
+        || typeof row.sha256 !== 'string'
+        || !/^[a-f0-9]{64}$/u.test(row.sha256)) {
+      fail(invalidCode);
+    }
+    const existing = byName.get(row.stored_name);
+    const fact = Object.freeze({
+      storedName: row.stored_name,
+      size: row.size,
+      sha256: row.sha256,
+    });
+    if (existing
+        && (existing.size !== fact.size || existing.sha256 !== fact.sha256)) {
+      fail('UPLOAD_DATABASE_FACTS_CONFLICT');
+    }
+    byName.set(row.stored_name, fact);
+  }
+  return Object.freeze([...byName.values()].sort((a, b) => (
+    a.storedName < b.storedName ? -1 : a.storedName > b.storedName ? 1 : 0
+  )));
+}
+
+function openStableFile(path, expected, code) {
+  let link;
+  try {
+    link = lstatSync(path, { bigint: true });
+  } catch {
+    fail(code);
+  }
+  if (!link.isFile() || link.isSymbolicLink()) fail(code);
+
+  let descriptor;
+  try {
+    descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    const opened = fstatSync(descriptor, { bigint: true });
+    if (!opened.isFile()
+        || opened.dev !== link.dev
+        || opened.ino !== link.ino
+        || opened.size !== BigInt(expected.size)) {
+      fail(code);
+    }
+    return { descriptor, before: opened };
+  } catch (error) {
+    if (descriptor !== undefined) closeSync(descriptor);
+    if (error instanceof MigrationError) throw error;
+    fail(code);
+  }
+}
+
+function hashStableFile(path, expected, code) {
+  const opened = openStableFile(path, expected, code);
+  const { descriptor, before } = opened;
+  const hash = new (await import('node:crypto')).createHash('sha256');
+  const buffer = Buffer.allocUnsafe(COPY_BUFFER_BYTES);
+  try {
+    while (true) {
+      const bytes = readSync(descriptor, buffer, 0, buffer.length, null);
+      if (bytes === 0) break;
+      hash.update(buffer.subarray(0, bytes));
+    }
+    const after = fstatSync(descriptor, { bigint: true });
+    if (!sameStat(before, after)) fail(code);
+    const digest = hash.digest('hex');
+    if (digest !== expected.sha256) fail(code);
+    return digest;
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+function verifyFileBytes(path, expected, code) {
+  const opened = openStableFile(path, expected, code);
+  const { descriptor, before } = opened;
+  const { createHash } = require('node:crypto');
+  const hash = createHash('sha256');
+  const buffer = Buffer.allocUnsafe(COPY_BUFFER_BYTES);
+  try {
+    while (true) {
+      const bytes = readSync(descriptor, buffer, 0, buffer.length, null);
+      if (bytes === 0) break;
+      hash.update(buffer.subarray(0, bytes));
+    }
+    const after = fstatSync(descriptor, { bigint: true });
+    if (!sameStat(before, after)) fail(code);
+    if (hash.digest('hex') !== expected.sha256) fail(code);
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+function scanTargetRoot(targetRootInfo, expectedFiles) {
+  const expected = new Set(expectedFiles.map(file => file.storedName));
+  let entries;
+  try {
+    entries = readdirSync(targetRootInfo.realPath, { withFileTypes: true });
+  } catch {
+    fail('TARGET_UPLOAD_ROOT_CHANGED');
+  }
+  for (const entry of entries) {
+    if (entry.name === '.cleanup') {
+      if (!entry.isDirectory() || entry.isSymbolicLink()) fail('TARGET_ATTACHMENT_ORPHAN');
+      const cleanupEntries = readdirSync(join(targetRootInfo.realPath, entry.name));
+      if (cleanupEntries.length > 0) fail('TARGET_ATTACHMENT_STAGING_PRESENT');
+      continue;
+    }
+    if (!entry.isFile() || entry.isSymbolicLink() || !expected.has(entry.name)) {
+      fail('TARGET_ATTACHMENT_ORPHAN');
+    }
+  }
+  if (entries.filter(entry => entry.name !== '.cleanup').length !== expected.size) {
+    fail('TARGET_ATTACHMENT_SET_MISMATCH');
+  }
+}
+
+function factsDigest(rows) {
+  return sha256Digest(rows.map(row => ({
+    id: row.id,
+    operation_id: row.operation_id,
+    original_name: row.original_name,
+    content_type: row.content_type,
+    kind: row.kind,
+    size: row.size,
+    sha256: row.sha256,
+    stored_name: row.stored_name,
+    claimed_task_id: row.claimed_task_id,
+    created_at: row.created_at,
+  })));
+}
+
+function bytesDigest(files) {
+  return sha256Digest(files.map(file => ({
+    storedName: file.storedName,
+    size: file.size,
+    sha256: file.sha256,
+  })));
+}
+
+export function verifyAttachmentDatabaseParity({
+  sourceDatabasePath,
+  sourceUploadRoot,
+  targetDatabasePath,
+  targetUploadRoot,
+} = {}) {
+  const sourceDatabase = resolveExistingPath(sourceDatabasePath, 'file');
+  const targetDatabase = resolveExistingPath(targetDatabasePath, 'file');
+  const sourceRoot = resolveExistingPath(sourceUploadRoot, 'directory');
+  const targetRoot = resolveExistingPath(targetUploadRoot, 'directory');
+
+  if (sameFile(sourceDatabase, targetDatabase)) fail('SOURCE_TARGET_DATABASE_CONFLICT', 'INVALID_USAGE');
+  if (sameFile(sourceRoot, targetRoot)) fail('SOURCE_TARGET_UPLOAD_ROOT_CONFLICT', 'INVALID_USAGE');
+
+  assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
+  assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
+
+  const sourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
+  const targetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
+  if (canonicalJson(sourceRows) !== canonicalJson(targetRows)) {
+    fail('UPLOAD_DATABASE_FACTS_MISMATCH');
+  }
+
+  const files = normalizedUniqueFiles(targetRows, 'TARGET_UPLOAD_DATABASE_INVALID');
+  for (const file of files) {
+    verifyFileBytes(join(sourceRoot.realPath, file.storedName), file, 'SOURCE_ATTACHMENT_MISMATCH');
+    verifyFileBytes(join(targetRoot.realPath, file.storedName), file, 'TARGET_ATTACHMENT_MISMATCH');
+  }
+  scanTargetRoot(targetRoot, files);
+
+  const uploadFactsDigest = factsDigest(targetRows);
+  const attachmentBytesDigest = bytesDigest(files);
+  const parityDigest = sha256Digest({
+    schemaVersion: 1,
+    uploadFactsDigest,
+    attachmentBytesDigest,
+  });
+
+  assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
+  assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
+
+  return Object.freeze({
+    status: 'ATTACHMENT_DATABASE_PARITY_VERIFIED',
+    schemaVersion: 1,
+    uploadRows: targetRows.length,
+    uniqueFiles: files.length,
+    totalBytes: files.reduce((sum, file) => sum + file.size, 0),
+    uploadFactsDigest,
+    attachmentBytesDigest,
+    parityDigest,
+  });
+}
+
+export function copyAndVerifyAttachments({
+  sourceDatabasePath,
+  sourceUploadRoot,
+  targetDatabasePath,
+  targetUploadRoot,
+  faultInjector,
+} = {}) {
+  const sourceDatabase = resolveExistingPath(sourceDatabasePath, 'file');
+  const targetDatabase = resolveExistingPath(targetDatabasePath, 'file');
+  const sourceRoot = resolveExistingPath(sourceUploadRoot, 'directory');
+  const targetRoot = resolveExistingPath(targetUploadRoot, 'directory');
+
+  if (sameFile(sourceDatabase, targetDatabase)) fail('SOURCE_TARGET_DATABASE_CONFLICT', 'INVALID_USAGE');
+  if (sameFile(sourceRoot, targetRoot)) fail('SOURCE_TARGET_UPLOAD_ROOT_CONFLICT', 'INVALID_USAGE');
+
+  const sourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
+  const targetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
+  if (canonicalJson(sourceRows) !== canonicalJson(targetRows)) {
+    fail('UPLOAD_DATABASE_FACTS_MISMATCH');
+  }
+
+  const files = normalizedUniqueFiles(sourceRows, 'SOURCE_UPLOAD_DATABASE_INVALID');
+  let copiedFiles = 0;
+  let reusedFiles = 0;
+  let copiedBytes = 0;
+
+  for (const file of files) {
+    assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
+    assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
+
+    const sourcePath = resolve(sourceRoot.realPath, file.storedName);
+    const targetPath = resolve(targetRoot.realPath, file.storedName);
+    if (!sourcePath.startsWith(`${sourceRoot.realPath}${sep}`)
+        || !targetPath.startsWith(`${targetRoot.realPath}${sep}`)) {
+      fail('UPLOAD_PATH_UNSAFE');
+    }
+
+    let existing = null;
+    try {
+      existing = lstatSync(targetPath, { bigint: true });
+    } catch (error) {
+      if (error?.code !== 'ENOENT') fail('TARGET_ATTACHMENT_CONFLICT');
+    }
+
+    if (existing) {
+      if (!existing.isFile() || existing.isSymbolicLink()) fail('TARGET_ATTACHMENT_CONFLICT');
+      verifyFileBytes(targetPath, file, 'TARGET_ATTACHMENT_CONFLICT');
+      reusedFiles += 1;
+      continue;
+    }
+
+    const source = openStableFile(sourcePath, file, 'SOURCE_ATTACHMENT_MISMATCH');
+    let targetDescriptor;
+    let created = false;
+    const buffer = Buffer.allocUnsafe(COPY_BUFFER_BYTES);
+    const { createHash } = require('node:crypto');
+    const hash = createHash('sha256');
+    let bytesWritten = 0;
+    try {
+      targetDescriptor = openSync(
+        targetPath,
+        fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW | fsConstants.O_WRONLY,
+        0o600,
+      );
+      created = true;
+      while (true) {
+        const bytes = readSync(source.descriptor, buffer, 0, buffer.length, null);
+        if (bytes === 0) break;
+        hash.update(buffer.subarray(0, bytes));
+        let offset = 0;
+        while (offset < bytes) {
+          offset += writeSync(targetDescriptor, buffer, offset, bytes - offset);
+        }
+        bytesWritten += bytes;
+      }
+      fsyncSync(targetDescriptor);
+      const sourceAfter = fstatSync(source.descriptor, { bigint: true });
+      if (!sameStat(source.before, sourceAfter)
+          || bytesWritten !== file.size
+          || hash.digest('hex') !== file.sha256) {
+        fail('SOURCE_ATTACHMENT_MISMATCH');
+      }
+    } catch (error) {
+      if (error instanceof MigrationError) throw error;
+      fail('TARGET_ATTACHMENT_COPY_FAILED');
+    } finally {
+      closeSync(source.descriptor);
+      if (targetDescriptor !== undefined) closeSync(targetDescriptor);
+      if (created) {
+        try {
+          verifyFileBytes(targetPath, file, 'TARGET_ATTACHMENT_COPY_FAILED');
+        } catch (error) {
+          try { unlinkSync(targetPath); } catch {}
+          throw error;
+        }
+      }
+    }
+
+    fsyncDirectory(targetRoot.realPath);
+    if (faultInjector) faultInjector('after_file_copy', file.storedName);
+    copiedFiles += 1;
+    copiedBytes += file.size;
+  }
+
+  if (faultInjector) faultInjector('before_final_parity');
+  const parity = verifyAttachmentDatabaseParity({
+    sourceDatabasePath: sourceDatabase.realPath,
+    sourceUploadRoot: sourceRoot.realPath,
+    targetDatabasePath: targetDatabase.realPath,
+    targetUploadRoot: targetRoot.realPath,
+  });
+
+  return Object.freeze({
+    ...parity,
+    status: 'ATTACHMENT_COPY_PARITY_VERIFIED',
+    copiedFiles,
+    reusedFiles,
+    copiedBytes,
+    copyProofDigest: sha256Digest({
+      schemaVersion: 1,
+      parityDigest: parity.parityDigest,
+      copiedFiles,
+      reusedFiles,
+      copiedBytes,
+    }),
+  });
+}
