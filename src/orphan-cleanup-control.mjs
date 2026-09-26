@@ -269,49 +269,60 @@ export function createOrphanCleanupControl({
   }
 
   function beginRun() {
-    if (!writable) return Object.freeze({ ok: false, code: 'ORPHAN_CLEANUP_CONTROL_READ_ONLY', control: status() });
-    const before = status();
-    if (!before.enabled) {
+    if (!writable) {
       return Object.freeze({
         ok: false,
-        code: before.transitionLocked ? 'ORPHAN_CLEANUP_TRANSITION_BUSY' : 'ORPHAN_CLEANUP_DISABLED',
-        control: before,
+        code: 'ORPHAN_CLEANUP_CONTROL_READ_ONLY',
+        control: status(),
       });
     }
 
-    const runId = randomUUID();
-    if (!runsRoot) {
-      memoryRuns.add(runId);
-      const after = status();
-      if (!after.enabled) {
-        memoryRuns.delete(runId);
+    const transition = acquireTransition();
+    if (!transition.ok) {
+      return Object.freeze({
+        ok: false,
+        code: transition.code,
+        control: status(),
+      });
+    }
+
+    try {
+      const current = snapshot({ ignoreTransition: true });
+      if (!current.markerValid) {
         return Object.freeze({
           ok: false,
-          code: after.transitionLocked ? 'ORPHAN_CLEANUP_TRANSITION_BUSY' : 'ORPHAN_CLEANUP_DISABLED',
-          control: after,
+          code: 'ORPHAN_CLEANUP_CONTROL_INVALID',
+          control: current,
         });
       }
-      ownedRuns.set(runId, null);
+      if (!current.enabled) {
+        return Object.freeze({
+          ok: false,
+          code: 'ORPHAN_CLEANUP_DISABLED',
+          control: current,
+        });
+      }
+
+      const runId = randomUUID();
+      if (!runsRoot) {
+        memoryRuns.add(runId);
+        ownedRuns.set(runId, null);
+        return Object.freeze({ ok: true, runId });
+      }
+
+      mkdirSync(runsRoot, { recursive: true });
+      const markerPath = join(runsRoot, runId + '.json');
+      writeFileSync(
+        markerPath,
+        JSON.stringify({ runId, startedAt: clock().toISOString() }) + '\n',
+        { flag: 'wx' },
+      );
+      ownedRuns.set(runId, markerPath);
       return Object.freeze({ ok: true, runId });
+    } finally {
+      releaseTransition(transition);
     }
-
-    mkdirSync(runsRoot, { recursive: true });
-    const markerPath = join(runsRoot, runId + '.json');
-    writeFileSync(markerPath, JSON.stringify({ runId, startedAt: clock().toISOString() }) + '\n', { flag: 'wx' });
-
-    const after = status();
-    if (!after.enabled) {
-      try { unlinkSync(markerPath); } catch {}
-      return Object.freeze({
-        ok: false,
-        code: after.transitionLocked ? 'ORPHAN_CLEANUP_TRANSITION_BUSY' : 'ORPHAN_CLEANUP_DISABLED',
-        control: after,
-      });
-    }
-    ownedRuns.set(runId, markerPath);
-    return Object.freeze({ ok: true, runId });
   }
-
   function endRun(admission) {
     if (!admission?.ok || typeof admission.runId !== 'string' || !ownedRuns.has(admission.runId)) return false;
     const markerPath = ownedRuns.get(admission.runId);
