@@ -4,7 +4,7 @@
 
 This work package implements the attachment-copy/parity **candidate engine** and the production receipt authority boundary.
 
-The candidate engine can copy and evaluate isolated test data, but it returns only non-authoritative `*_CANDIDATE` results. Production `*_VERIFIED` receipts are reserved for provider-authenticated execution and cannot currently be minted because this repository does not yet contain an acceptance-verified live quiescence provider.
+The candidate engine can copy and evaluate isolated test data, but it returns only non-authoritative `*_CANDIDATE` results. Production `*_VERIFIED` receipts are reserved for a private-class-branded `LIVE_PROVIDER` capability and cannot currently be minted because Stage 3 exposes no live capability mint.
 
 It is repository engine evidence for `PRODUCTION_ATTACHMENT_COPY_CAPABILITY`. It is not production deployment evidence and grants no production authorization.
 
@@ -17,9 +17,9 @@ The parity engine requires four explicit storage inputs:
 - target SQLite database;
 - target upload root.
 
-Candidate-engine tests use an exact-scope quiescence probe to exercise the algorithm under a simulated held critical section.
+Candidate-engine mutation tests use a private-class-branded `TEST_SANDBOX` capability minted only by `createAttachmentParityIsolatedTestAuthority()`. That authority creates its own temporary sandbox and refuses to mint for any resolved DB/root identity outside that sandbox.
 
-Production receipt APIs do **not** trust caller-supplied lease fields. They require an opaque capability authenticated by a module-private authority set. Stage 3 intentionally exposes no public capability mint, so a caller that knows the scope digest and supplies `assertHeld: () => true` still receives `ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED`. A future live provider must execute inside this authority boundary and hold real offline-maintenance or coordinated-write exclusion before it can mint production authority.
+Production receipt APIs do **not** trust caller-supplied lease fields or mutable collection prototypes. Capability authenticity is checked by an unforgeable private class brand and private fields. Production APIs require the `LIVE_PROVIDER` authority class, while Stage 3 intentionally exposes no live mint. Knowing the scope digest, monkeypatching `WeakSet.prototype.has`, or supplying `assertHeld: () => true` cannot create production authority. A future live provider must execute inside this private authority boundary while actually holding offline-maintenance or coordinated-write exclusion.
 
 The source and target databases must be different physical files. Database files must have one hard link and every read is bound to the device/inode captured during initial path resolution.
 
@@ -29,9 +29,9 @@ The original source/target database and upload-root identities remain authoritat
 
 The final parity window captures the complete SQLite physical family for both databases: main database identity plus WAL/SHM/journal state, with both the main SQLite file and WAL bytes content-hashed for the closing proof.
 
-Physical-family snapshots remain supplemental drift evidence, not a substitute for writer exclusion. Candidate evaluation continuously checks its test probe, including between the two closing family captures. Production receipt issuance additionally requires an opaque provider-authenticated capability that cannot be constructed from public fields.
+Physical-family snapshots remain supplemental drift evidence, not a substitute for writer exclusion. Candidate evaluation continuously checks its branded capability, including between the two closing family captures. Mutating candidate execution accepts only `TEST_SANDBOX` or future `LIVE_PROVIDER` brands; a sandbox capability is scope-bound to the module-created temporary root and cannot be repointed at production paths. Production receipt issuance accepts only `LIVE_PROVIDER`.
 
-For Stage-3 strong-family verification, the main SQLite file and every present `-wal`, `-shm`, or `-journal` sidecar must have exactly one hard link. Source and target families are compared as a **full cross-product** of present device/inode identities, not merely same-role members. Their expected database/WAL/SHM/journal path namespaces are also compared as a full cross-product, so a source database cannot occupy a target's current or future sidecar pathname. Any physical or namespace overlap is rejected as `SOURCE_TARGET_SQLITE_FAMILY_ALIAS`.
+For Stage-3 strong-family verification, the main SQLite file and every present `-wal`, `-shm`, or `-journal` sidecar must have exactly one hard link. Source and target families are compared as a **full cross-product** of present device/inode identities, not merely same-role members. Their expected database/WAL/SHM/journal namespaces are also compared as a full cross-product using filesystem-aware comparison keys. The key is derived from a read-only case-sensitivity probe against the existing main database path, so future absent sidecars use the same case semantics as their filesystem. Any physical or namespace overlap is rejected as `SOURCE_TARGET_SQLITE_FAMILY_ALIAS`.
 
 The target database is expected to be the isolated migration target produced by the existing migration path. This capability does not create or migrate the target database.
 
@@ -118,7 +118,7 @@ Modes:
 
 The direct CLI intentionally has **no built-in production quiescence provider** in this work package. Direct execution therefore fails closed with `ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED`.
 
-Programmatic callers cannot bypass this by constructing an object with the documented scope digest, kind, or `assertHeld()` callback. Production receipt APIs accept only an opaque capability authenticated inside the module-private provider authority boundary; Stage 3 exposes no mint for it.
+Programmatic callers cannot bypass this by constructing an object with the documented scope digest, kind, or `assertHeld()` callback, nor by monkeypatching `WeakSet.prototype.has`. Production receipt APIs accept only the private `LIVE_PROVIDER` class brand; Stage 3 exposes no mint for it. The only exported mint is the isolated TEST authority, and it can authorize mutation only inside its own freshly created temporary sandbox.
 
 Required path arguments:
 
@@ -145,8 +145,9 @@ The capability fails closed for, among other cases:
 - source drift before final parity;
 - missing or wrong-scope candidate quiescence probe;
 - candidate quiescence loss at any checked point, including between the two closing SQLite-family captures;
-- caller-forged production capability objects;
-- any source/target SQLite family cross-role inode or expected-path namespace collision.
+- caller-forged production capability objects or prototype monkeypatch attempts;
+- attempts to use a TEST capability outside its module-created sandbox;
+- any source/target SQLite family cross-role inode or filesystem-semantic expected-path namespace collision.
 
 A failed or incomplete run never produces a parity receipt.
 
