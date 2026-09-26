@@ -10,7 +10,6 @@ import {
   readdirSync,
   realpathSync,
   statSync,
-  unlinkSync,
   writeSync,
 } from 'node:fs';
 import { basename, join, resolve, sep } from 'node:path';
@@ -250,6 +249,7 @@ export function verifyAttachmentDatabaseParity({
   sourceUploadRoot,
   targetDatabasePath,
   targetUploadRoot,
+  faultInjector,
 } = {}) {
   const sourceDatabase = resolveExistingPath(sourceDatabasePath, 'file');
   const targetDatabase = resolveExistingPath(targetDatabasePath, 'file');
@@ -275,7 +275,24 @@ export function verifyAttachmentDatabaseParity({
   }
   scanTargetRoot(targetRoot, files);
 
-  const uploadFactsDigest = factsDigest(targetRows);
+  // Re-verify after the directory scan so a path replacement during the scan
+  // cannot become a successful parity receipt.
+  for (const file of files) {
+    verifyFileBytes(join(sourceRoot.realPath, file.storedName), file, 'SOURCE_ATTACHMENT_MISMATCH');
+    verifyFileBytes(join(targetRoot.realPath, file.storedName), file, 'TARGET_ATTACHMENT_MISMATCH');
+  }
+
+  if (faultInjector) faultInjector('before_final_database_recheck');
+
+  const finalSourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
+  const finalTargetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
+  if (canonicalJson(finalSourceRows) !== canonicalJson(sourceRows)
+      || canonicalJson(finalTargetRows) !== canonicalJson(targetRows)
+      || canonicalJson(finalSourceRows) !== canonicalJson(finalTargetRows)) {
+    fail('UPLOAD_DATABASE_FACTS_CHANGED_DURING_PARITY');
+  }
+
+  const uploadFactsDigest = factsDigest(finalTargetRows);
   const attachmentBytesDigest = bytesDigest(files);
   const parityDigest = sha256Digest({
     schemaVersion: 1,
@@ -386,12 +403,10 @@ export function copyAndVerifyAttachments({
       closeSync(source.descriptor);
       if (targetDescriptor !== undefined) closeSync(targetDescriptor);
       if (created) {
-        try {
-          verifyFileBytes(targetPath, file, 'TARGET_ATTACHMENT_COPY_FAILED');
-        } catch (error) {
-          try { unlinkSync(targetPath); } catch {}
-          throw error;
-        }
+        // Never delete an ambiguous target path after a failed verification.
+        // This is an isolated target: preserve the conflicting artifact as
+        // evidence and fail closed until it is explicitly reconciled.
+        verifyFileBytes(targetPath, file, 'TARGET_ATTACHMENT_COPY_FAILED');
       }
     }
 
@@ -407,6 +422,7 @@ export function copyAndVerifyAttachments({
     sourceUploadRoot: sourceRoot.realPath,
     targetDatabasePath: targetDatabase.realPath,
     targetUploadRoot: targetRoot.realPath,
+    faultInjector,
   });
 
   return Object.freeze({
