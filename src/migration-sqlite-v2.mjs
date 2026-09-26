@@ -21,6 +21,7 @@ import {
   sha256Digest,
 } from './migration-v2.mjs';
 import { assertKnownSchema } from './sqlite-schema-v2.mjs';
+import { filesystemPathComparisonKey } from './platform-filesystem.mjs';
 import {
   projectV1CompatibilitySnapshot,
   projectV2Snapshot,
@@ -216,10 +217,10 @@ function fileIdentity(path, { includeCtime = true, includeDigest = false, requir
 
 function sqliteFamilyNamespace(path) {
   return Object.freeze({
-    database: sha256Digest(resolve(path)),
-    wal: sha256Digest(resolve(`${path}-wal`)),
-    shm: sha256Digest(resolve(`${path}-shm`)),
-    journal: sha256Digest(resolve(`${path}-journal`)),
+    database: sha256Digest(filesystemPathComparisonKey(path, path)),
+    wal: sha256Digest(filesystemPathComparisonKey(`${path}-wal`, path)),
+    shm: sha256Digest(filesystemPathComparisonKey(`${path}-shm`, path)),
+    journal: sha256Digest(filesystemPathComparisonKey(`${path}-journal`, path)),
   });
 }
 
