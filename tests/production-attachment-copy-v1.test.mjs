@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
   existsSync,
+  linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -226,6 +227,84 @@ function readdirFileCount(root) {
   return readdirSync(root, { withFileTypes: true })
     .filter(entry => entry.isFile()).length;
 }
+
+test('source and target upload roots cannot overlap by ancestry', () => {
+  const body = Buffer.from('nested-root');
+  const row = uploadFact({ id: 'UPLOAD-NESTED-ROOT', body });
+  const fixture = createFixture([row]);
+  const nestedTarget = join(fixture.sourceUploadRoot, 'nested-target');
+  mkdirSync(nestedTarget, { mode: 0o700 });
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    assert.throws(
+      () => copyAndVerifyAttachments(copyOptions(fixture, {
+        targetUploadRoot: nestedTarget,
+      })),
+      error => error.code === 'SOURCE_TARGET_UPLOAD_ROOT_CONFLICT',
+    );
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('source attachment hardlinks are rejected before target mutation', () => {
+  const body = Buffer.from('source-hardlink');
+  const row = uploadFact({ id: 'UPLOAD-SOURCE-HARDLINK', body });
+  const fixture = createFixture([row]);
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    linkSync(
+      join(fixture.sourceUploadRoot, row.stored_name),
+      join(fixture.root, 'source-hardlink-alias.bin'),
+    );
+    assert.throws(
+      () => copyAndVerifyAttachments(copyOptions(fixture)),
+      error => error.code === 'SOURCE_ATTACHMENT_MISMATCH',
+    );
+    assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('target attachment hardlinks are rejected as conflicts', () => {
+  const body = Buffer.from('target-hardlink');
+  const row = uploadFact({ id: 'UPLOAD-TARGET-HARDLINK', body });
+  const fixture = createFixture([row]);
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    const targetPath = join(fixture.targetUploadRoot, row.stored_name);
+    writeFileSync(targetPath, body, { mode: 0o600 });
+    linkSync(targetPath, join(fixture.root, 'target-hardlink-alias.bin'));
+    assert.throws(
+      () => copyAndVerifyAttachments(copyOptions(fixture)),
+      error => error.code === 'TARGET_ATTACHMENT_CONFLICT',
+    );
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('pre-existing target orphans fail before missing referenced files are copied', () => {
+  const body = Buffer.from('pre-copy-orphan');
+  const row = uploadFact({ id: 'UPLOAD-PRE-COPY-ORPHAN', body });
+  const fixture = createFixture([row]);
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    writeFileSync(
+      join(fixture.targetUploadRoot, `${'b'.repeat(64)}.bin`),
+      Buffer.from('orphan-before-copy'),
+      { mode: 0o600 },
+    );
+    assert.throws(
+      () => copyAndVerifyAttachments(copyOptions(fixture)),
+      error => error.code === 'TARGET_ATTACHMENT_ORPHAN',
+    );
+    assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
 
 test('database fact mismatch fails before target bytes are copied', () => {
   const body = Buffer.from('db-mismatch');
