@@ -99,7 +99,7 @@ export function runAttachmentCopyCommand(args, { quiescenceCapability } = {}) {
 function lowDisclosureFailure(error) {
   if (error instanceof MigrationError) {
     return {
-      exitCode: 5,
+      exitCode: error.exitCode,
       output: JSON.stringify({
         status: 'ATTACHMENT_COPY_FAILED',
         code: error.code,
