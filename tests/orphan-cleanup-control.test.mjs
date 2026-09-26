@@ -484,6 +484,8 @@ test('run completion can remove only markers admitted by the same control instan
 
   try {
     const control = createOrphanCleanupControl({ controlRoot });
+    assert.equal(existsSync(runsRoot), false, 'control construction must not create the run directory');
+    mkdirSync(runsRoot, { recursive: true });
     writeFileSync(peerMarker, '{"runId":"peer-cleanup-run"}\n');
 
     const forgedPeerCompletion = control.endRun({ ok: true, runId: peerRunId });
