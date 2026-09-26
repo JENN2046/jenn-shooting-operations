@@ -150,43 +150,25 @@ export function createOperationsServer({
         allowedBriefHosts: schedulingAllowedBriefHosts,
       });
   const server = createServer(createHttpApp({ store, tokens, kiosk, scheduling }));
-  let cleanupTimer = null;
-
-  const stopCleanupTimer = () => {
-    if (!cleanupTimer) return;
-    clearInterval(cleanupTimer);
-    cleanupTimer = null;
-  };
-
-  const startCleanupTimer = () => {
-    if (cleanupTimer || cleanupIntervalMs <= 0 || !store.getOrphanCleanupControlStatus().enabled) return;
-    cleanupTimer = setInterval(() => {
-      try {
-        const result = store.cleanupOrphanUploads();
-        if (result?.skipped && result.code === 'ORPHAN_CLEANUP_DISABLED') stopCleanupTimer();
-      } catch {
-        console.error('Orphan upload cleanup failed; it will retry on the next interval.');
-      }
-    }, cleanupIntervalMs);
-    cleanupTimer.unref();
-  };
+  const cleanupTimer = cleanupIntervalMs > 0
+    ? setInterval(() => {
+        try {
+          store.cleanupOrphanUploads();
+        } catch {
+          console.error('Orphan upload cleanup failed; it will retry on the next interval.');
+        }
+      }, cleanupIntervalMs)
+    : null;
+  cleanupTimer?.unref();
 
   const orphanCleanupControl = Object.freeze({
     status: () => store.getOrphanCleanupControlStatus(),
-    disable(options) {
-      stopCleanupTimer();
-      return store.disableOrphanCleanup(options);
-    },
-    enable(options) {
-      const result = store.enableOrphanCleanup(options);
-      if (result.ok) startCleanupTimer();
-      return result;
-    },
+    disable: options => store.disableOrphanCleanup(options),
+    enable: options => store.enableOrphanCleanup(options),
   });
 
-  startCleanupTimer();
   server.on('close', () => {
-    stopCleanupTimer();
+    if (cleanupTimer) clearInterval(cleanupTimer);
     store.close();
   });
   return { server, store, orphanCleanupControl };
