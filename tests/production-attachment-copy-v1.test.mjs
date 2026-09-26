@@ -663,6 +663,31 @@ test('database reads stay bound to the originally resolved target database inode
   }
 });
 
+test('filesystem namespace folding ignores later String case-method monkeypatching', () => {
+  const originalLower = String.prototype.toLowerCase;
+  const originalUpper = String.prototype.toUpperCase;
+  try {
+    String.prototype.toLowerCase = () => 'forged-lower';
+    String.prototype.toUpperCase = () => 'FORGED-UPPER';
+
+    const sourceKey = filesystemPathComparisonKey(
+      '/tmp/TARGET.sqlite-wal',
+      '/tmp/TARGET.sqlite-wal',
+      { caseInsensitive: true },
+    );
+    const targetKey = filesystemPathComparisonKey(
+      '/tmp/target.sqlite-wal',
+      '/tmp/target.sqlite',
+      { caseInsensitive: true },
+    );
+    assert.equal(sourceKey, targetKey);
+    assert.notEqual(sourceKey, 'forged-lower');
+  } finally {
+    String.prototype.toLowerCase = originalLower;
+    String.prototype.toUpperCase = originalUpper;
+  }
+});
+
 test('filesystem-aware namespace keys fold case when the filesystem is case-insensitive', () => {
   const sourceKey = sha256Digest(filesystemPathComparisonKey(
     '/tmp/TARGET.sqlite-wal',
