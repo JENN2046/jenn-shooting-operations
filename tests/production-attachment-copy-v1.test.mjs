@@ -22,7 +22,9 @@ import { DatabaseSync } from 'node:sqlite';
 
 import {
   copyAndVerifyAttachments,
+  copyAttachmentsAndEvaluateParityCandidate,
   describeAttachmentParityScope,
+  evaluateAttachmentDatabaseParityCandidate,
   verifyAttachmentDatabaseParity,
 } from '../src/production-attachment-copy-v1.mjs';
 import {
@@ -169,6 +171,41 @@ function copyOptions(fixture, extra = {}) {
   };
 }
 
+test('production receipt APIs reject caller-forged quiescence capabilities even with the exact scope digest', () => {
+  const body = Buffer.from('forged-provider-capability');
+  const row = uploadFact({ id: 'UPLOAD-FORGED-PROVIDER', body });
+  const fixture = createFixture([row]);
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    const paths = parityPaths(fixture);
+    const scope = describeAttachmentParityScope(paths);
+    const forged = {
+      kind: 'ATTACHMENT_PARITY_QUIESCENCE_V1',
+      scopeDigest: scope.scopeDigest,
+      assertHeld: () => true,
+    };
+
+    assert.throws(
+      () => copyAndVerifyAttachments({
+        ...paths,
+        quiescenceCapability: forged,
+      }),
+      error => error.code === 'ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED',
+    );
+    assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
+
+    assert.throws(
+      () => verifyAttachmentDatabaseParity({
+        ...paths,
+        quiescenceCapability: forged,
+      }),
+      error => error.code === 'ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED',
+    );
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test('copy and verify refuse to issue receipts without an exact-scope quiescence lease', () => {
   const body = Buffer.from('quiescence-required');
   const row = uploadFact({ id: 'UPLOAD-QUIESCENCE-REQUIRED', body });
@@ -178,13 +215,13 @@ test('copy and verify refuse to issue receipts without an exact-scope quiescence
     const paths = parityPaths(fixture);
 
     assert.throws(
-      () => copyAndVerifyAttachments(paths),
+      () => copyAttachmentsAndEvaluateParityCandidate(paths),
       error => error.code === 'ATTACHMENT_PARITY_QUIESCENCE_REQUIRED',
     );
     assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
 
     assert.throws(
-      () => verifyAttachmentDatabaseParity(paths),
+      () => evaluateAttachmentDatabaseParityCandidate(paths),
       error => error.code === 'ATTACHMENT_PARITY_QUIESCENCE_REQUIRED',
     );
   } finally {
@@ -203,7 +240,7 @@ test('quiescence lease is bound to exact database and upload-root identities', (
 
     const leaseA = createTestQuiescenceLease(parityPaths(fixtureA));
     assert.throws(
-      () => copyAndVerifyAttachments({
+      () => copyAttachmentsAndEvaluateParityCandidate({
         ...parityPaths(fixtureB),
         quiescenceLease: leaseA,
       }),
@@ -239,8 +276,8 @@ test('verified attachment copy binds target bytes to matching source/target data
       },
     ]));
 
-    const first = copyAndVerifyAttachments(copyOptions(fixture));
-    assert.equal(first.status, 'ATTACHMENT_COPY_PARITY_VERIFIED');
+    const first = copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture));
+    assert.equal(first.status, 'ATTACHMENT_COPY_PARITY_CANDIDATE');
     assert.equal(first.copiedFiles, 2);
     assert.equal(first.reusedFiles, 0);
     assert.equal(first.uniqueFiles, 2);
@@ -259,8 +296,8 @@ test('verified attachment copy binds target bytes to matching source/target data
       row.stored_name,
       statSync(join(fixture.targetUploadRoot, row.stored_name), { bigint: true }),
     ]));
-    const replay = copyAndVerifyAttachments(copyOptions(fixture));
-    assert.equal(replay.status, 'ATTACHMENT_COPY_PARITY_VERIFIED');
+    const replay = copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture));
+    assert.equal(replay.status, 'ATTACHMENT_COPY_PARITY_CANDIDATE');
     assert.equal(replay.copiedFiles, 0);
     assert.equal(replay.reusedFiles, 2);
     assert.equal(replay.parityDigest, first.parityDigest);
@@ -293,7 +330,7 @@ test('duplicate database references to identical stored bytes copy once and rema
   const fixture = createFixture(rows);
   try {
     writeSourceFiles(fixture, rows, new Map([[first.stored_name, body]]));
-    const receipt = copyAndVerifyAttachments(copyOptions(fixture));
+    const receipt = copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture));
     assert.equal(receipt.uploadRows, 2);
     assert.equal(receipt.uniqueFiles, 1);
     assert.equal(receipt.copiedFiles, 1);
@@ -317,7 +354,7 @@ test('source and target upload roots cannot overlap by ancestry', () => {
   try {
     writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
     assert.throws(
-      () => copyAndVerifyAttachments(copyOptions(fixture, {
+      () => copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture, {
         targetUploadRoot: nestedTarget,
       })),
       error => error.code === 'SOURCE_TARGET_UPLOAD_ROOT_CONFLICT',
@@ -338,7 +375,7 @@ test('source attachment hardlinks are rejected before target mutation', () => {
       join(fixture.root, 'source-hardlink-alias.bin'),
     );
     assert.throws(
-      () => copyAndVerifyAttachments(copyOptions(fixture)),
+      () => copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture)),
       error => error.code === 'SOURCE_ATTACHMENT_MISMATCH',
     );
     assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
@@ -357,7 +394,7 @@ test('target attachment hardlinks are rejected as conflicts', () => {
     writeFileSync(targetPath, body, { mode: 0o600 });
     linkSync(targetPath, join(fixture.root, 'target-hardlink-alias.bin'));
     assert.throws(
-      () => copyAndVerifyAttachments(copyOptions(fixture)),
+      () => copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture)),
       error => error.code === 'TARGET_ATTACHMENT_CONFLICT',
     );
   } finally {
@@ -377,7 +414,7 @@ test('pre-existing target orphans fail before missing referenced files are copie
       { mode: 0o600 },
     );
     assert.throws(
-      () => copyAndVerifyAttachments(copyOptions(fixture)),
+      () => copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture)),
       error => error.code === 'TARGET_ATTACHMENT_ORPHAN',
     );
     assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
@@ -394,7 +431,7 @@ test('final parity stays bound to the originally acknowledged target upload-root
   try {
     writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
     assert.throws(
-      () => copyAndVerifyAttachments(copyOptions(fixture, {
+      () => copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture, {
         faultInjector(stage) {
           if (stage !== 'before_final_parity') return;
           renameSync(fixture.targetUploadRoot, displacedRoot);
@@ -419,10 +456,10 @@ test('database reads stay bound to the originally resolved target database inode
   const fixture = createFixture([row]);
   try {
     writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
-    copyAndVerifyAttachments(copyOptions(fixture));
+    copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture));
 
     assert.throws(
-      () => verifyAttachmentDatabaseParity(copyOptions(fixture, {
+      () => evaluateAttachmentDatabaseParityCandidate(copyOptions(fixture, {
         faultInjector(stage) {
           if (stage !== 'before_initial_database_read') return;
           const replacement = readFileSync(fixture.sourceDatabasePath);
@@ -513,11 +550,11 @@ test('quiescence loss between the two closing family captures blocks the receipt
   const state = { held: true };
   try {
     writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
-    copyAndVerifyAttachments(copyOptions(fixture, { leaseState: state }));
+    copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture, { leaseState: state }));
 
     state.held = true;
     assert.throws(
-      () => verifyAttachmentDatabaseParity(copyOptions(fixture, {
+      () => evaluateAttachmentDatabaseParityCandidate(copyOptions(fixture, {
         leaseState: state,
         faultInjector(stage) {
           if (stage === 'between_final_family_captures') state.held = false;
@@ -536,10 +573,10 @@ test('WAL write immediately before final family capture invalidates parity', () 
   const fixture = createFixture([row]);
   try {
     writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
-    copyAndVerifyAttachments(copyOptions(fixture));
+    copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture));
 
     assert.throws(
-      () => verifyAttachmentDatabaseParity(copyOptions(fixture, {
+      () => evaluateAttachmentDatabaseParityCandidate(copyOptions(fixture, {
         faultInjector(stage) {
           if (stage !== 'before_final_family_compare') return;
           const target = new DatabaseSync(fixture.targetDatabasePath);
@@ -565,10 +602,10 @@ test('database writes during the final filesystem pass invalidate the physical-f
   const fixture = createFixture([row]);
   try {
     writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
-    copyAndVerifyAttachments(copyOptions(fixture));
+    copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture));
 
     assert.throws(
-      () => verifyAttachmentDatabaseParity(copyOptions(fixture, {
+      () => evaluateAttachmentDatabaseParityCandidate(copyOptions(fixture, {
         faultInjector(stage) {
           if (stage !== 'after_final_database_recheck') return;
           const target = new DatabaseSync(fixture.targetDatabasePath);
@@ -593,12 +630,12 @@ test('filesystem drift after the final database recheck still blocks parity rece
   const fixture = createFixture([row]);
   try {
     writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
-    copyAndVerifyAttachments(copyOptions(fixture));
+    copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture));
 
     const wrong = Buffer.from('X'.repeat(body.length));
     assert.equal(wrong.length, body.length);
     assert.throws(
-      () => verifyAttachmentDatabaseParity(copyOptions(fixture, {
+      () => evaluateAttachmentDatabaseParityCandidate(copyOptions(fixture, {
         faultInjector(stage) {
           if (stage === 'after_final_database_recheck') {
             writeFileSync(
@@ -627,7 +664,7 @@ test('source and target attachment paths cannot be hard-link aliases of one inod
       join(fixture.targetUploadRoot, row.stored_name),
     );
     assert.throws(
-      () => verifyAttachmentDatabaseParity(copyOptions(fixture)),
+      () => evaluateAttachmentDatabaseParityCandidate(copyOptions(fixture)),
       error => ['SOURCE_ATTACHMENT_MISMATCH', 'TARGET_ATTACHMENT_MISMATCH', 'SOURCE_TARGET_ATTACHMENT_ALIAS']
         .includes(error.code),
     );
@@ -651,7 +688,7 @@ test('database fact mismatch fails before target bytes are copied', () => {
     }
 
     assert.throws(
-      () => copyAndVerifyAttachments(copyOptions(fixture)),
+      () => copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture)),
       error => error.code === 'UPLOAD_DATABASE_FACTS_MISMATCH',
     );
     assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
@@ -671,7 +708,7 @@ test('exact target bytes with permissive mode are rejected instead of reused', (
     chmodSync(targetPath, 0o644);
 
     assert.throws(
-      () => copyAndVerifyAttachments(copyOptions(fixture)),
+      () => copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture)),
       error => error.code === 'TARGET_ATTACHMENT_CONFLICT',
     );
     assert.equal((statSync(targetPath).mode & 0o777), 0o644);
@@ -691,7 +728,7 @@ test('existing conflicting target bytes are never overwritten', () => {
     const before = readFileSync(targetPath);
 
     assert.throws(
-      () => copyAndVerifyAttachments(copyOptions(fixture)),
+      () => copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture)),
       error => error.code === 'TARGET_ATTACHMENT_CONFLICT',
     );
     assert.deepEqual(readFileSync(targetPath), before);
@@ -706,7 +743,7 @@ test('target parity rejects unreferenced regular files', () => {
   const fixture = createFixture([row]);
   try {
     writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
-    copyAndVerifyAttachments(copyOptions(fixture));
+    copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture));
     writeFileSync(
       join(fixture.targetUploadRoot, `${'a'.repeat(64)}.bin`),
       Buffer.from('orphan'),
@@ -714,7 +751,7 @@ test('target parity rejects unreferenced regular files', () => {
     );
 
     assert.throws(
-      () => verifyAttachmentDatabaseParity(copyOptions(fixture)),
+      () => evaluateAttachmentDatabaseParityCandidate(copyOptions(fixture)),
       error => error.code === 'TARGET_ATTACHMENT_ORPHAN',
     );
   } finally {
@@ -729,7 +766,7 @@ test('source drift after copy prevents a parity receipt', () => {
   try {
     writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
     assert.throws(
-      () => copyAndVerifyAttachments(copyOptions(fixture, {
+      () => copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture, {
         faultInjector(stage) {
           if (stage === 'after_file_copy') {
             unlinkSync(join(fixture.sourceUploadRoot, row.stored_name));
@@ -755,7 +792,7 @@ test('target tamper before final parity prevents a receipt', () => {
   try {
     writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
     assert.throws(
-      () => copyAndVerifyAttachments(copyOptions(fixture, {
+      () => copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture, {
         faultInjector(stage) {
           if (stage === 'before_final_parity') {
             writeFileSync(
@@ -780,7 +817,7 @@ test('database upload facts changing during final parity prevent a receipt', () 
   try {
     writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
     assert.throws(
-      () => copyAndVerifyAttachments(copyOptions(fixture, {
+      () => copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture, {
         faultInjector(stage) {
           if (stage !== 'before_final_database_recheck') return;
           const target = new DatabaseSync(fixture.targetDatabasePath);
@@ -806,7 +843,7 @@ test('rows without stored bytes require no target file but remain bound into dat
   };
   const fixture = createFixture([row]);
   try {
-    const receipt = copyAndVerifyAttachments(copyOptions(fixture));
+    const receipt = copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture));
     assert.equal(receipt.uploadRows, 1);
     assert.equal(receipt.uniqueFiles, 0);
     assert.equal(receipt.copiedFiles, 0);
@@ -841,7 +878,7 @@ test('attachment copy command requires explicit isolated-target acknowledgement 
   );
 });
 
-test('attachment copy command apply and verify-only converge on the same parity digest', () => {
+test('attachment copy command cannot mint production authority from a caller-forged capability', () => {
   const body = Buffer.from('command-copy-fixture');
   const row = uploadFact({ id: 'UPLOAD-COMMAND', body });
   const fixture = createFixture([row]);
@@ -854,8 +891,12 @@ test('attachment copy command apply and verify-only converge on the same parity 
       '--target-upload-root', fixture.targetUploadRoot,
       '--format', 'json',
     ];
-    const commandPaths = parityPaths(fixture);
-    const lease = createTestQuiescenceLease(commandPaths);
+    const scope = describeAttachmentParityScope(parityPaths(fixture));
+    const forged = {
+      kind: 'ATTACHMENT_PARITY_QUIESCENCE_V1',
+      scopeDigest: scope.scopeDigest,
+      assertHeld: () => true,
+    };
 
     assert.throws(
       () => runAttachmentCopyCommand([
@@ -863,25 +904,26 @@ test('attachment copy command apply and verify-only converge on the same parity 
         ...common,
         '--acknowledge-isolated-target',
       ]),
-      error => error.code === 'ATTACHMENT_PARITY_QUIESCENCE_REQUIRED',
+      error => error.code === 'ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED',
     );
 
-    const apply = runAttachmentCopyCommand([
-      '--apply',
-      ...common,
-      '--acknowledge-isolated-target',
-    ], { quiescenceLease: lease });
-    assert.equal(apply.exitCode, 0);
-    assert.equal(apply.receipt.status, 'ATTACHMENT_COPY_PARITY_VERIFIED');
-
-    const verify = runAttachmentCopyCommand(
-      ['--verify-only', ...common],
-      { quiescenceLease: lease },
+    assert.throws(
+      () => runAttachmentCopyCommand([
+        '--apply',
+        ...common,
+        '--acknowledge-isolated-target',
+      ], { quiescenceCapability: forged }),
+      error => error.code === 'ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED',
     );
-    assert.equal(verify.exitCode, 0);
-    assert.equal(verify.receipt.status, 'ATTACHMENT_DATABASE_PARITY_VERIFIED');
-    assert.equal(verify.receipt.parityDigest, apply.receipt.parityDigest);
-    assert.equal(JSON.parse(apply.output).parityDigest, apply.receipt.parityDigest);
+
+    assert.throws(
+      () => runAttachmentCopyCommand(
+        ['--verify-only', ...common],
+        { quiescenceCapability: forged },
+      ),
+      error => error.code === 'ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED',
+    );
+    assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }
