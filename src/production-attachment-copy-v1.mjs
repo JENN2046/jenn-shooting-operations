@@ -34,6 +34,9 @@ import {
 
 const COPY_BUFFER_BYTES = 64 * 1024;
 const STORED_NAME = /^[a-f0-9]{64}\.[a-z0-9]+$/u;
+// Stage 3 intentionally exposes no mint for this set. Production receipt
+// issuance remains unavailable until a live quiescence provider is added
+// inside this authority boundary.
 const AUTHENTICATED_QUIESCENCE_CAPABILITIES = new WeakSet();
 
 function fail(code, result = 'INVALID_TARGET') {
@@ -754,7 +757,7 @@ export function copyAttachmentsAndEvaluateParityCandidate({
     copiedFiles,
     reusedFiles,
     copiedBytes,
-    copyProofDigest: sha256Digest({
+    candidateCopyDigest: sha256Digest({
       schemaVersion: 1,
       parityDigest: parity.parityDigest,
     }),
@@ -845,5 +848,9 @@ export function copyAndVerifyAttachments({
     ...candidate,
     status: 'ATTACHMENT_COPY_PARITY_VERIFIED',
     authoritative: true,
+    copyProofDigest: sha256Digest({
+      schemaVersion: 1,
+      parityDigest: candidate.parityDigest,
+    }),
   });
 }
