@@ -631,6 +631,7 @@ function readUploadFacts(databaseInfo, invalidCode, {
       snapshot.snapshotDatabaseDescriptor,
       snapshot.family.database,
       invalidCode,
+      snapshot.snapshotMainIdentity,
     );
 
     db = new DatabaseSync(snapshot.snapshotDatabaseUri, { readOnly: true });
@@ -652,6 +653,7 @@ function readUploadFacts(databaseInfo, invalidCode, {
       snapshot.snapshotDatabaseDescriptor,
       snapshot.family.database,
       invalidCode,
+      snapshot.snapshotMainIdentity,
     );
 
     assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
