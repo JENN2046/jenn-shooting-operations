@@ -15,7 +15,7 @@ import {
   writeSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join, resolve, sep } from 'node:path';
+import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import {
@@ -86,7 +86,11 @@ function sameStat(left, right) {
 }
 
 function pathWithin(path, directory) {
-  return path === directory || path.startsWith(`${directory}${sep}`);
+  const relation = relative(directory, path);
+  return relation === ''
+    || (relation !== '..'
+      && !relation.startsWith(`..${sep}`)
+      && !isAbsolute(relation));
 }
 
 function assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot) {
