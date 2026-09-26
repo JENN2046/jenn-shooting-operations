@@ -37,18 +37,25 @@ The target database is expected to be the isolated migration target produced by 
 
 ## Database fact binding
 
-SQLite upload-fact queries never open the acknowledged database pathname directly. For every fact read, the engine:
+SQLite upload-fact queries never open the acknowledged database pathname directly.
 
-1. captures the strong single-link SQLite physical family for the acknowledged main DB inode;
-2. copies the main DB and every present WAL/SHM/journal member through no-follow file descriptors whose device/inode/size/timestamps must match that captured family;
-3. fsyncs the copied private snapshot members;
-4. re-captures the original physical family and requires exact equality;
-5. opens only the private snapshot database with SQLite `query_only`;
-6. rechecks the original family after the query before accepting rows.
+Fact reads require the quiescence/coordination provider to present a **checkpointed sidecar-free SQLite family**. If a captured `-wal`, `-shm`, or `-journal` member is present, the fact read fails closed as a blocked prerequisite before target-byte mutation. The final parity drift proof may still observe SQLite family members later, but upload facts are never queried from a live sidecar-bearing family.
 
-A pathname swap that exists only while SQLite opens therefore cannot redirect the query to an unacknowledged inode.
+For every fact read, the engine:
 
-Both private snapshot databases are opened read-only with SQLite `query_only` enabled.
+1. captures the strong single-link SQLite physical family for the acknowledged main DB inode and requires it to be sidecar-free;
+2. creates a private snapshot directory, opens that directory with `O_DIRECTORY | O_NOFOLLOW`, and verifies the opened directory inode;
+3. copies the acknowledged main DB through a no-follow source descriptor into `/proc/self/fd/<snapshotDirFd>/snapshot.sqlite`;
+4. fsyncs the private main DB, opens it read-only, and pins its private snapshot device/inode plus source size/SHA-256;
+5. re-captures the original physical family and requires exact equality;
+6. keeps the private main-file FD open through the whole query;
+7. opens SQLite only as `file:/proc/self/fd/<snapshotMainFd>?immutable=1`, with `query_only` enabled;
+8. verifies the held private main FD still has the same snapshot inode, size, and source SHA-256 before and after the query;
+9. rechecks the original acknowledged family after the query before accepting rows.
+
+Because SQLite opens the held main-file descriptor rather than either the acknowledged DB pathname or the temporary snapshot pathname, replacing the production path, the `jenn-sqlite-facts-*` directory, or `snapshot.sqlite` cannot redirect the connection to another inode. `immutable=1` also prevents the private fact read from consulting mutable snapshot journal/WAL paths.
+
+Platforms without the required descriptor-bound `/proc/self/fd` primitive fail closed before fact admission; portable activation remains part of later provider/deployment acceptance.
 
 The capability compares the complete ordered upload compatibility facts used for byte ownership:
 
@@ -158,6 +165,7 @@ The capability fails closed for, among other cases:
 - source drift before final parity;
 - missing or wrong-scope candidate quiescence probe;
 - candidate quiescence loss at any checked point, including between the two closing SQLite-family captures;
+- a WAL/SHM/journal-bearing SQLite family at upload-fact read time before provider checkpoint/quiescence;
 - caller-forged production capability objects, prototype monkeypatch attempts, or constructor-reuse attempts without the private mint token;
 - attempts to use a TEST capability outside its module-created sandbox;
 - any source/target SQLite family cross-role inode or filesystem-semantic expected-path namespace collision.
