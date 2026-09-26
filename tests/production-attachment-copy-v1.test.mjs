@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
   unlinkSync,
@@ -301,6 +302,106 @@ test('pre-existing target orphans fail before missing referenced files are copie
       error => error.code === 'TARGET_ATTACHMENT_ORPHAN',
     );
     assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('final parity stays bound to the originally acknowledged target upload-root inode', () => {
+  const body = Buffer.from('root-identity');
+  const row = uploadFact({ id: 'UPLOAD-ROOT-IDENTITY', body });
+  const fixture = createFixture([row]);
+  const displacedRoot = join(fixture.root, 'target-uploads-original');
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    assert.throws(
+      () => copyAndVerifyAttachments(copyOptions(fixture, {
+        faultInjector(stage) {
+          if (stage !== 'before_final_parity') return;
+          renameSync(fixture.targetUploadRoot, displacedRoot);
+          mkdirSync(fixture.targetUploadRoot, { mode: 0o700 });
+          writeFileSync(
+            join(fixture.targetUploadRoot, row.stored_name),
+            body,
+            { mode: 0o600 },
+          );
+        },
+      })),
+      error => error.code === 'TARGET_UPLOAD_ROOT_CHANGED',
+    );
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('database reads stay bound to the originally resolved target database inode', () => {
+  const body = Buffer.from('db-path-replacement');
+  const row = uploadFact({ id: 'UPLOAD-DB-PATH-REPLACE', body });
+  const fixture = createFixture([row]);
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    copyAndVerifyAttachments(copyOptions(fixture));
+
+    assert.throws(
+      () => verifyAttachmentDatabaseParity(copyOptions(fixture, {
+        faultInjector(stage) {
+          if (stage !== 'before_initial_database_read') return;
+          const replacement = readFileSync(fixture.sourceDatabasePath);
+          unlinkSync(fixture.targetDatabasePath);
+          writeFileSync(fixture.targetDatabasePath, replacement, { mode: 0o600 });
+        },
+      })),
+      error => error.code === 'TARGET_UPLOAD_DATABASE_INVALID',
+    );
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('filesystem drift after the final database recheck still blocks parity receipt', () => {
+  const body = Buffer.from('post-db-byte-drift');
+  const row = uploadFact({ id: 'UPLOAD-POST-DB-DRIFT', body });
+  const fixture = createFixture([row]);
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    copyAndVerifyAttachments(copyOptions(fixture));
+
+    const wrong = Buffer.from('X'.repeat(body.length));
+    assert.equal(wrong.length, body.length);
+    assert.throws(
+      () => verifyAttachmentDatabaseParity(copyOptions(fixture, {
+        faultInjector(stage) {
+          if (stage === 'after_final_database_recheck') {
+            writeFileSync(
+              join(fixture.targetUploadRoot, row.stored_name),
+              wrong,
+              { mode: 0o600 },
+            );
+          }
+        },
+      })),
+      error => error.code === 'TARGET_ATTACHMENT_MISMATCH',
+    );
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('source and target attachment paths cannot be hard-link aliases of one inode', () => {
+  const body = Buffer.from('cross-root-hardlink');
+  const row = uploadFact({ id: 'UPLOAD-CROSS-HARDLINK', body });
+  const fixture = createFixture([row]);
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    linkSync(
+      join(fixture.sourceUploadRoot, row.stored_name),
+      join(fixture.targetUploadRoot, row.stored_name),
+    );
+    assert.throws(
+      () => verifyAttachmentDatabaseParity(copyOptions(fixture)),
+      error => ['SOURCE_ATTACHMENT_MISMATCH', 'TARGET_ATTACHMENT_MISMATCH', 'SOURCE_TARGET_ATTACHMENT_ALIAS']
+        .includes(error.code),
+    );
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }
