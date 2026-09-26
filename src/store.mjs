@@ -420,9 +420,14 @@ export class ScheduleStore {
   }
 
   cleanupOrphanUploads(options = {}) {
-    const dryRun = options?.dryRun === true;
-    if (dryRun) return this.#cleanupOrphanUploadsUnchecked(options);
-    if (this.readOnly) return this.#cleanupOrphanUploadsUnchecked(options);
+    const normalizedOptions = Object.freeze({
+      olderThanMs: options?.olderThanMs,
+      operationId: options?.operationId,
+      dryRun: options?.dryRun === true,
+      recoverStaged: options?.recoverStaged,
+    });
+    if (normalizedOptions.dryRun) return this.#cleanupOrphanUploadsUnchecked(normalizedOptions);
+    if (this.readOnly) return this.#cleanupOrphanUploadsUnchecked(normalizedOptions);
 
     const admission = this.#orphanCleanupControl.beginRun();
     if (!admission.ok) {
@@ -443,7 +448,7 @@ export class ScheduleStore {
     }
 
     try {
-      return this.#cleanupOrphanUploadsUnchecked(options);
+      return this.#cleanupOrphanUploadsUnchecked(normalizedOptions);
     } finally {
       this.#orphanCleanupControl.endRun(admission);
     }
