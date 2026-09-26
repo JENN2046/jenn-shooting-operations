@@ -20,11 +20,18 @@ Dry-run inspection remains non-destructive and may execute while cleanup is disa
 
 ## Persistence and restart behavior
 
-For file-backed databases, the control lives beside the SQLite database under a namespace derived from the normalized configured database path:
+For file-backed databases, the control lives beside the canonical SQLite parent directory under a database identity namespace:
 
-`.orphan-cleanup-control/<sha256(resolve(databasePath))>/disabled.json`
+`.orphan-cleanup-control/<database-identity-hash>/disabled.json`
 
-Processes configured for the same SQLite path therefore share one cleanup authority domain. Different SQLite files, including two databases in the same parent directory with separate upload roots, receive different namespaces and cannot disable, enable, drain, or complete one another's cleanup state.
+Identity resolution is fail-closed and follows this order:
+
+1. an explicit stable `ORPHAN_CLEANUP_DOMAIN` / `orphanCleanupDomain` when supplied;
+2. otherwise the filesystem identity of the canonical database parent directory plus the canonical database basename.
+
+The production compose surface pins `ORPHAN_CLEANUP_DOMAIN=jenn-shooting-operations-primary` by default so processes or containers that mount the same data volume at different internal paths still compute the same namespace. Without an explicit domain, symlink aliases are canonicalized through the filesystem rather than hashed as lexical paths.
+
+Processes addressing the same cleanup domain therefore share one cleanup authority domain. Different SQLite files in the same parent directory receive different default namespaces and cannot disable, enable, drain, or complete one another's cleanup state.
 
 A disable operation creates an exact epoch. The disabled marker is retained across process and container restart. `inherit` mode respects the persisted state. Explicit re-enable requires the matching epoch and zero active destructive cleanup runs.
 
@@ -43,7 +50,7 @@ The public cleanup entry snapshots every cleanup option exactly once into an int
 
 Each destructive cleanup run creates a marker in its database namespace:
 
-`.orphan-cleanup-control/<sha256(resolve(databasePath))>/runs/`
+`.orphan-cleanup-control/<database-identity-hash>/runs/`
 
 The control instance records every run it successfully admits. Completion accepts only a run ID owned by that same in-memory control instance and derives the marker path from the stored admission; caller-supplied marker paths are never trusted. A forged or peer run ID cannot remove another process's marker.
 
