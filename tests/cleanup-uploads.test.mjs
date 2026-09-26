@@ -43,9 +43,11 @@ test('upload maintenance defaults to dry-run and requires explicit apply', () =>
   const uploadRoot = join(root, 'uploads');
   const createdAt = new Date('2026-09-20T08:00:00.000Z');
   const cleanupAt = new Date('2026-09-22T08:00:00.000Z');
+  const orphanCleanupDomain = 'cleanup-command-domain';
   const store = new ScheduleStore({
     filename: databasePath,
     uploadRoot,
+    orphanCleanupDomain,
     clock: () => createdAt,
     idFactory: () => 'cleanup-command-orphan',
   });
@@ -62,7 +64,12 @@ test('upload maintenance defaults to dry-run and requires explicit apply', () =>
     assert.equal(existsSync(storedPath), true);
     store.close();
 
-    const preview = runCleanup({ databasePath, uploadRoot, clock: () => cleanupAt });
+    const preview = runCleanup({
+      databasePath,
+      uploadRoot,
+      orphanCleanupDomain,
+      clock: () => cleanupAt,
+    });
     assert.deepEqual(preview, {
       mode: 'dry-run',
       maxAgeHours: 24,
@@ -79,6 +86,7 @@ test('upload maintenance defaults to dry-run and requires explicit apply', () =>
       args: ['--apply', '--max-age-hours', '24'],
       databasePath,
       uploadRoot,
+      orphanCleanupDomain,
       clock: () => cleanupAt,
     });
     assert.equal(applied.mode, 'apply');
@@ -95,6 +103,13 @@ test('upload maintenance defaults to dry-run and requires explicit apply', () =>
 test('upload maintenance rejects unsafe age and unknown arguments', () => {
   assert.throws(() => runCleanup({ args: ['--max-age-hours', '0'] }), /positive number/);
   assert.throws(() => runCleanup({ args: ['--everything'] }), /unknown argument/);
+});
+
+test('destructive maintenance apply requires an explicit cleanup domain', () => {
+  assert.throws(
+    () => runCleanup({ args: ['--apply'] }),
+    /ORPHAN_CLEANUP_DOMAIN is required/,
+  );
 });
 
 test('cleanup serializes with a live identical upload across processes', { timeout: 10_000 }, async () => {
