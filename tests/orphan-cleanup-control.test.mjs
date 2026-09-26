@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -294,6 +294,63 @@ test('disabled startup restores referenced cleanup tombstones without deleting u
   }
 });
 
+
+test('disabled startup drain failure occurs before SQLite is created', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-pre-sqlite-gate-'));
+  const databasePath = join(root, 'operations.sqlite');
+  const uploadRoot = join(root, 'uploads');
+  const runsRoot = join(root, '.orphan-cleanup-control', 'runs');
+  mkdirSync(runsRoot, { recursive: true });
+  const activeRun = join(runsRoot, 'peer-cleanup-before-db.json');
+  writeFileSync(activeRun, '{"runId":"peer-cleanup-before-db"}\n');
+
+  try {
+    assert.equal(existsSync(databasePath), false);
+    assert.throws(
+      () => createOperationsServer({
+        databasePath,
+        uploadRoot,
+        cleanupIntervalMs: 0,
+        orphanCleanupMode: 'disabled',
+      }),
+      error => error?.code === 'ORPHAN_CLEANUP_DRAIN_TIMEOUT',
+    );
+
+    assert.equal(existsSync(databasePath), false, 'failed disabled startup must not create or mutate SQLite');
+    assert.equal(
+      existsSync(join(root, '.orphan-cleanup-control', 'disabled.json')),
+      true,
+      'fail-closed disabled marker must persist even though SQLite was never opened',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('unchecked cleanup implementation is not a public ScheduleStore method', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-private-implementation-'));
+  const databasePath = join(root, 'operations.sqlite');
+  const uploadRoot = join(root, 'uploads');
+  let store;
+
+  try {
+    store = new ScheduleStore({ filename: databasePath, uploadRoot });
+    assert.equal(store.cleanupOrphanUploadsUnchecked, undefined);
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(ScheduleStore.prototype, 'cleanupOrphanUploadsUnchecked'),
+      false,
+    );
+
+    const disabled = store.disableOrphanCleanup({ waitForDrainMs: 0 });
+    assert.equal(disabled.ok, true);
+    const result = store.cleanupOrphanUploads();
+    assert.equal(result.skipped, true);
+    assert.equal(result.code, 'ORPHAN_CLEANUP_DISABLED');
+  } finally {
+    try { store?.close(); } catch {}
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('disabled server startup fails until active cleanup markers are drained', () => {
   const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-startup-drain-'));
