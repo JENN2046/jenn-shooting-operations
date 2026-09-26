@@ -27,6 +27,8 @@ The final parity window captures the complete SQLite physical family for both da
 
 Physical-family snapshots remain supplemental drift evidence, not a substitute for writer exclusion. The active quiescence lease must remain held across source and target family captures and through receipt return; the engine calls `assertHeld()` before copy, throughout parity, between the two closing family captures, and immediately before return. If the lease is absent, wrong-scope, or lost, no parity receipt is issued.
 
+For Stage-3 strong-family verification, the main SQLite file and every present `-wal`, `-shm`, or `-journal` sidecar must have exactly one hard link. Source and target family members are also compared by device/inode; any shared physical member is rejected as `SOURCE_TARGET_SQLITE_FAMILY_ALIAS`. An isolated-target receipt therefore cannot be issued for databases that secretly share mutable SQLite sidecar state.
+
 The target database is expected to be the isolated migration target produced by the existing migration path. This capability does not create or migrate the target database.
 
 ## Database fact binding
