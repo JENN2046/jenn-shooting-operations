@@ -254,13 +254,10 @@ function openBoundTargetChild(targetRootInfo, storedName) {
     }
     if (error instanceof MigrationError) throw error;
     if (error?.code === 'EEXIST') fail('TARGET_ATTACHMENT_CONFLICT');
+    if (['ELOOP', 'ENOTDIR', 'ENOENT'].includes(error?.code)) {
+      fail('TARGET_UPLOAD_ROOT_CHANGED');
+    }
     fail('TARGET_ATTACHMENT_COPY_FAILED');
-  }
-}
-
-function closeBoundTargetChild(opened) {
-  try { closeSync(opened.descriptor); } finally {
-    closeSync(opened.rootDescriptor);
   }
 }
 
@@ -825,6 +822,8 @@ function copyAttachmentsAndEvaluateParityInternal({
     const hash = createHash('sha256');
     let bytesWritten = 0;
     try {
+      if (faultInjector) faultInjector('before_target_create', file.storedName);
+      assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
       const boundTarget = openBoundTargetChild(targetRoot, file.storedName);
       targetDescriptor = boundTarget.descriptor;
       targetRootDescriptor = boundTarget.rootDescriptor;
