@@ -74,7 +74,7 @@ if (invokedDirectly) {
     const result = runCleanup();
     if (result.help) console.log(result.help);
     else console.log(JSON.stringify(result));
-    if (result.fileErrors) process.exitCode = 1;
+    if (result.fileErrors || (result.mode === 'apply' && result.skipped)) process.exitCode = 1;
   } catch (error) {
     console.error(error.message);
     console.error(usage());
