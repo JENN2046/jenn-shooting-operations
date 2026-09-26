@@ -637,24 +637,23 @@ test('final parity stays bound to the originally acknowledged target upload-root
   }
 });
 
-test('SQLite upload-fact queries open only the private inode-bound snapshot', () => {
+test('SQLite upload-fact queries deserialize verified bytes into memory without a writable snapshot file', () => {
   const moduleSource = readFileSync(
     new URL('../src/production-attachment-copy-v1.mjs', import.meta.url),
     'utf8',
   );
-  const readFactsStart = moduleSource.indexOf('function readUploadFacts(');
-  const normalizedStart = moduleSource.indexOf('function normalizedUniqueFiles(', readFactsStart);
-  assert.notEqual(readFactsStart, -1);
+  const captureStart = moduleSource.indexOf('function readCapturedDatabaseBytes(');
+  const normalizedStart = moduleSource.indexOf('function normalizedUniqueFiles(', captureStart);
+  assert.notEqual(captureStart, -1);
   assert.notEqual(normalizedStart, -1);
 
-  const readFactsSource = moduleSource.slice(readFactsStart, normalizedStart);
-  assert.match(readFactsSource, /new DatabaseSync\(snapshot\.snapshotDatabaseUri/u);
-  assert.match(
-    moduleSource,
-    /file:\/proc\/self\/fd\/\$\{snapshotDatabaseDescriptor\}\?immutable=1/u,
-  );
-  assert.doesNotMatch(readFactsSource, /new DatabaseSync\(databaseInfo\.realPath/u);
-  assert.doesNotMatch(readFactsSource, /new DatabaseSync\(snapshot\.snapshotRoot/u);
+  const factReadSource = moduleSource.slice(captureStart, normalizedStart);
+  assert.match(factReadSource, /new DatabaseSync\(':memory:'\)/u);
+  assert.match(factReadSource, /db\.deserialize\(snapshot\.bytes\)/u);
+  assert.doesNotMatch(factReadSource, /new DatabaseSync\(databaseInfo\.realPath/u);
+  assert.doesNotMatch(factReadSource, /jenn-sqlite-facts-/u);
+  assert.doesNotMatch(factReadSource, /snapshotRoot/u);
+  assert.doesNotMatch(factReadSource, /rmSync\(/u);
 });
 
 test('upload-fact reads reject an active SQLite sidecar family before target mutation', () => {
@@ -694,47 +693,30 @@ test('upload-fact reads reject an active SQLite sidecar family before target mut
   }
 });
 
-test('snapshot pathname replacement before SQLite open cannot replace the held snapshot inode', () => {
-  const body = Buffer.from('held-snapshot-open');
-  const row = uploadFact({ id: 'UPLOAD-HELD-SNAPSHOT-OPEN', body });
+test('there is no filesystem snapshot for a same-UID process to rewrite during SQLite query', () => {
+  const body = Buffer.from('memory-deserialize-snapshot');
+  const row = uploadFact({ id: 'UPLOAD-MEMORY-SNAPSHOT', body });
   const fixture = createFixture([row]);
-  let displacedSnapshotRoot = null;
-  let replacementSnapshotRoot = null;
-  let attacked = false;
+  let hookObserved = false;
 
   try {
     writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
 
     const receipt = copyAttachmentsAndEvaluateParityTestCandidate(copyOptions(fixture, {
       faultInjector(stage, details) {
-        if (stage !== 'before_source_snapshot_sqlite_open' || attacked) return;
-        attacked = true;
-        replacementSnapshotRoot = details.snapshotRoot;
-        displacedSnapshotRoot = details.snapshotRoot + '-displaced';
-
-        renameSync(details.snapshotRoot, displacedSnapshotRoot);
-        mkdirSync(details.snapshotRoot, { mode: 0o700 });
-        createDatabase(join(details.snapshotRoot, 'snapshot.sqlite'), [{
-          ...row,
-          original_name: 'unacknowledged-snapshot-row.bin',
-        }]);
+        if (stage !== 'before_source_snapshot_sqlite_open') return;
+        hookObserved = true;
+        assert.deepEqual(details, { storage: 'memory' });
       },
     }));
 
-    assert.equal(attacked, true);
+    assert.equal(hookObserved, true);
     assert.equal(receipt.status, 'ATTACHMENT_COPY_PARITY_CANDIDATE');
     assert.deepEqual(
       readFileSync(join(fixture.targetUploadRoot, row.stored_name)),
       body,
-      'copy must be driven by the held original snapshot inode',
     );
   } finally {
-    if (replacementSnapshotRoot) {
-      rmSync(replacementSnapshotRoot, { recursive: true, force: true });
-    }
-    if (displacedSnapshotRoot) {
-      rmSync(displacedSnapshotRoot, { recursive: true, force: true });
-    }
     fixture.cleanup();
   }
 });
