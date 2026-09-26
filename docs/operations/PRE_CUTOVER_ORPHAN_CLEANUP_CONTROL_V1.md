@@ -35,6 +35,8 @@ The compose definition exposes both variables without changing their default beh
 
 ## Admission and drain
 
+The unchecked destructive implementation is private to `ScheduleStore`; callers can invoke only the gated public cleanup entry point. This prevents a caller holding the returned store object from bypassing admission or drain accounting.
+
 Each destructive cleanup run creates a marker in:
 
 `.orphan-cleanup-control/runs/`
@@ -50,7 +52,7 @@ Disable follows this order:
 
 If the drain deadline expires, the control remains disabled and returns `ORPHAN_CLEANUP_DRAIN_TIMEOUT`. A stale marker after crash or uncertain ownership therefore fails closed rather than reopening cleanup. A stale transition lock likewise blocks cleanup and further state transitions until ownership is reconciled; it is never auto-deleted.
 
-When the real server starts with `ORPHAN_CLEANUP_MODE=disabled`, a non-empty active-run set is a startup hard stop. The constructor retains the disabled marker and throws before `createOperationsServer()` can return, so the process cannot listen while destructive cleanup ownership is still active or uncertain.
+When the real server starts with `ORPHAN_CLEANUP_MODE=disabled`, a non-empty active-run set is a startup hard stop. The constructor retains the disabled marker and throws before `createOperationsServer()` can return, so the process cannot listen while destructive cleanup ownership is still active or uncertain. The disabled gate is acquired before SQLite is opened or schema initialization runs; a failed drain may create only the cleanup-control directories/disabled marker and must leave the target SQLite path absent and untouched.
 
 Disable and enable transitions are serialized by a persisted filesystem transition lock in the same control directory. A process that cannot acquire that lock fails closed with `ORPHAN_CLEANUP_TRANSITION_BUSY`; destructive cleanup admission is also denied while the lock exists. The lock owner is recorded with a unique token, and release removes the lock only when the stored token still matches the owner.
 
