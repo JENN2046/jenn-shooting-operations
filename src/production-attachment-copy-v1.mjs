@@ -921,7 +921,8 @@ export function copyAttachmentsAndEvaluateParityTestCandidate({
     targetDatabasePath,
     targetUploadRoot,
   });
-  if (!inspectCapability(quiescenceCapability, domain.scopeDigest, [TEST_AUTHORITY])) {
+  const inspected = inspectCapability(quiescenceCapability, domain.scopeDigest);
+  if (!inspected || inspected.authorityClass !== TEST_AUTHORITY) {
     fail('ATTACHMENT_PARITY_TEST_AUTH_REQUIRED', 'BLOCKED_PREREQUISITE');
   }
 
@@ -931,6 +932,7 @@ export function copyAttachmentsAndEvaluateParityTestCandidate({
     targetDatabasePath,
     targetUploadRoot,
     quiescenceCapability,
+    faultInjector,
   });
 }
 
