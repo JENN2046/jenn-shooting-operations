@@ -1328,7 +1328,7 @@ test('production import requires verified attachment-byte copy into the isolated
   assert.equal(gate.status, 'BLOCKED');
   assert.equal(
     gate.evidence,
-    'REPOSITORY_ATTACHMENT_COPY_AND_DB_FILE_PARITY_IMPLEMENTED_TARGET_VOLUME_DEPLOYMENT_ACCEPTANCE_PENDING',
+    'REPOSITORY_ATTACHMENT_COPY_PARITY_ENGINE_IMPLEMENTED_LIVE_QUIESCENCE_PROVIDER_AND_TARGET_VOLUME_ACCEPTANCE_PENDING',
   );
 
   const dataImport = action(base, 'PROD-09-PRODUCTION-DATA-IMPORT');
