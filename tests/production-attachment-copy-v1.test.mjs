@@ -362,6 +362,34 @@ test('database reads stay bound to the originally resolved target database inode
   }
 });
 
+test('database writes during the final filesystem pass invalidate the physical-family proof', () => {
+  const body = Buffer.from('final-window-db-write');
+  const row = uploadFact({ id: 'UPLOAD-FINAL-WINDOW-DB', body });
+  const fixture = createFixture([row]);
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    copyAndVerifyAttachments(copyOptions(fixture));
+
+    assert.throws(
+      () => verifyAttachmentDatabaseParity(copyOptions(fixture, {
+        faultInjector(stage) {
+          if (stage !== 'after_final_database_recheck') return;
+          const target = new DatabaseSync(fixture.targetDatabasePath);
+          try {
+            target.prepare('UPDATE uploads SET original_name = ? WHERE id = ?')
+              .run('changed-inside-final-window.bin', row.id);
+          } finally {
+            target.close();
+          }
+        },
+      })),
+      error => error.code === 'TARGET_UPLOAD_DATABASE_CHANGED_DURING_PARITY',
+    );
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test('filesystem drift after the final database recheck still blocks parity receipt', () => {
   const body = Buffer.from('post-db-byte-drift');
   const row = uploadFact({ id: 'UPLOAD-POST-DB-DRIFT', body });
