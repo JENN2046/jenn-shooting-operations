@@ -40,7 +40,7 @@ The production entrypoint accepts:
 - `ORPHAN_CLEANUP_MODE=inherit|disabled|enabled`
 - `ORPHAN_CLEANUP_ENABLE_EPOCH=<exact-disabled-epoch>` when explicitly reopening a persisted disabled state.
 
-The compose definition exposes the cleanup mode/epoch and pins the cleanup domain. The `uploads:cleanup` maintenance command inherits `ORPHAN_CLEANUP_DOMAIN` from the same environment and passes it into `ScheduleStore`; an apply run must therefore observe the exact same disabled marker as the server.
+The compose definition exposes the cleanup mode/epoch and pins the cleanup domain. The `uploads:cleanup` maintenance command inherits `ORPHAN_CLEANUP_DOMAIN` from the same environment and passes it into `ScheduleStore`. Destructive `--apply` fails closed unless an explicit cleanup domain is present; it may never silently fall back to a filesystem-derived namespace. Dry-run inspection remains allowed without an explicit domain because it cannot delete.
 
 ## Admission and drain
 
