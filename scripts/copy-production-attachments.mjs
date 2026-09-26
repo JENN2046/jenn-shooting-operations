@@ -81,11 +81,12 @@ function renderText(receipt, mode) {
   ].join('\n');
 }
 
-export function runAttachmentCopyCommand(args) {
+export function runAttachmentCopyCommand(args, { quiescenceLease } = {}) {
   const options = parseAttachmentCopyArgs(args);
+  if (!quiescenceLease) invalid('ATTACHMENT_PARITY_QUIESCENCE_REQUIRED');
   const receipt = options.mode === 'apply'
-    ? copyAndVerifyAttachments(options)
-    : verifyAttachmentDatabaseParity(options);
+    ? copyAndVerifyAttachments({ ...options, quiescenceLease })
+    : verifyAttachmentDatabaseParity({ ...options, quiescenceLease });
   return Object.freeze({
     exitCode: 0,
     receipt,
