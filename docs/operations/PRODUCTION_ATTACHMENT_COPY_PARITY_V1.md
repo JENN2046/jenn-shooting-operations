@@ -8,12 +8,14 @@ It is repository implementation evidence for `PRODUCTION_ATTACHMENT_COPY_CAPABIL
 
 ## Inputs
 
-The controlled command requires four explicit inputs:
+The parity engine requires four explicit storage inputs:
 
 - source SQLite database;
 - source upload root;
 - target SQLite database;
 - target upload root.
+
+It also requires an active `ATTACHMENT_PARITY_QUIESCENCE_V1` lease bound to the exact resolved database/upload-root identities. The lease is an admission contract supplied by a separately verified offline-maintenance or coordinated-write provider; this repository work does not yet provide or acceptance-verify that production provider.
 
 The source and target databases must be different physical files. Database files must have one hard link and every read is bound to the device/inode captured during initial path resolution.
 
@@ -21,7 +23,9 @@ The source and target upload roots must be different physical directories and ma
 
 The original source/target database and upload-root identities remain authoritative for the whole operation. Final parity does not re-resolve a pathname into a new baseline; path replacement at any later stage fails closed.
 
-The final parity window also captures the complete SQLite physical family for both databases: main database identity plus WAL/SHM/journal state, with WAL bytes content-hashed. The family is captured before the final database reread and compared again after the final filesystem pass. A live SQLite writer during that window therefore invalidates the receipt even when the main database inode does not change.
+The final parity window captures the complete SQLite physical family for both databases: main database identity plus WAL/SHM/journal state, with both the main SQLite file and WAL bytes content-hashed for the closing proof.
+
+Physical-family snapshots remain supplemental drift evidence, not a substitute for writer exclusion. The active quiescence lease must remain held across source and target family captures and through receipt return; the engine calls `assertHeld()` before copy, throughout parity, between the two closing family captures, and immediately before return. If the lease is absent, wrong-scope, or lost, no parity receipt is issued.
 
 The target database is expected to be the isolated migration target produced by the existing migration path. This capability does not create or migrate the target database.
 
@@ -76,7 +80,7 @@ The target upload root must contain exactly the unique files referenced by the d
 
 The verifier re-checks each file pathname after reading and requires it still to reference the same single-link inode that was hashed. Target attachment replay additionally requires mode `0600`. Target-directory scans compare directory metadata before and after enumeration, so concurrent entry-set changes cannot silently pass the scan.
 
-The verifier also revalidates the originally resolved database and upload-root device/inode identities throughout the proof, and the final SQLite physical-family comparison spans the last DB read through the last filesystem pass. Replacing a database file or upload-root directory with matching contents, or committing a WAL-backed DB write during that final pass, therefore cannot become a successful receipt.
+The verifier also revalidates the originally resolved database and upload-root device/inode identities throughout the proof. The candidate receipt is computed from already captured facts, all final path/root checks run before the closing family observations, and quiescence is asserted between the source/target captures and before return. Replacing a database file or upload-root directory with matching contents, losing quiescence, or committing a WAL-backed DB write inside the protected window therefore cannot become a successful receipt.
 
 Successful verification produces:
 
@@ -96,7 +100,7 @@ Exact target files are re-used without rewriting them. Operational counters such
 
 ## Command surface
 
-Repository command:
+Repository command surface:
 
 `npm run attachments:copy -- ...`
 
@@ -104,6 +108,8 @@ Modes:
 
 - `--apply`: may create missing target attachment files and requires `--acknowledge-isolated-target`;
 - `--verify-only`: read-only parity verification and rejects the apply acknowledgement.
+
+The direct CLI intentionally has **no built-in production quiescence provider** in this work package. Direct execution therefore fails closed with `ATTACHMENT_PARITY_QUIESCENCE_REQUIRED`. Programmatic orchestration may inject a live exact-scope lease, but that provider is not production-ready evidence until separately deployed and acceptance-verified.
 
 Required path arguments:
 
@@ -127,7 +133,9 @@ The capability fails closed for, among other cases:
 - target byte tampering;
 - unexpected target files or directories;
 - non-empty target cleanup staging;
-- source drift before final parity.
+- source drift before final parity;
+- missing or wrong-scope quiescence lease;
+- quiescence loss at any checked point, including between the two closing SQLite-family captures.
 
 A failed or incomplete run never produces a parity receipt.
 
@@ -135,6 +143,6 @@ A failed or incomplete run never produces a parity receipt.
 
 This repository implementation does not close `PRODUCTION_ATTACHMENT_COPY_CAPABILITY`.
 
-The gate remains `BLOCKED` until a later authority revision binds and acceptance-verifies the real target upload volume, real production source state, deployed command/runtime identity, and PROD-09 execution evidence.
+The gate remains `BLOCKED` until a later authority revision binds and acceptance-verifies the live quiescence/coordination provider, the real target upload volume, real production source state, deployed command/runtime identity, and PROD-09 execution evidence. This Stage-3 contract does not implement the later Stage-5 long-lived source/target writer fence.
 
 No production database, attachment tree, deployment host, container, provider, device, route, credential, or cutover is touched by this work package.
