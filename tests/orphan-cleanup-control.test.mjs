@@ -730,7 +730,7 @@ test('malformed persisted control marker keeps destructive cleanup fail-closed',
 
     const cleanup = store.cleanupOrphanUploads();
     assert.equal(cleanup.skipped, true);
-    assert.equal(cleanup.code, 'ORPHAN_CLEANUP_DISABLED');
+    assert.equal(cleanup.code, 'ORPHAN_CLEANUP_CONTROL_INVALID');
 
     const enable = store.enableOrphanCleanup({ expectedEpoch: 'anything' });
     assert.equal(enable.ok, false);
