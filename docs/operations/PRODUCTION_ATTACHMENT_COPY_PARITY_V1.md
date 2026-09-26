@@ -17,7 +17,7 @@ The parity engine requires four explicit storage inputs:
 - target SQLite database;
 - target upload root.
 
-Candidate-engine mutation tests use a private-class-branded `TEST_SANDBOX` capability minted only by `createAttachmentParityIsolatedTestAuthority()`. That authority creates its own temporary sandbox and refuses to mint for any resolved DB/root identity outside that sandbox.
+Candidate-engine mutation tests use a private-class-branded `TEST_SANDBOX` capability minted only by `createAttachmentParityIsolatedTestAuthority()`. That authority creates its own temporary sandbox and refuses to mint for any resolved DB/root identity outside that sandbox. The exported mutating test wrapper accepts only this TEST brand; production copy bypasses the test wrapper and calls the private mutator only after LIVE_PROVIDER authentication.
 
 Production receipt APIs do **not** trust caller-supplied lease fields or mutable collection prototypes. Capability authenticity is checked by private class fields, and construction additionally requires a module-private mint token. Production APIs require the `LIVE_PROVIDER` authority class, while Stage 3 intentionally exposes no live mint. Knowing the scope digest, monkeypatching `WeakSet.prototype.has`, supplying `assertHeld: () => true`, or obtaining a legitimate TEST instance's `.constructor` cannot create production authority without the private mint token. A future live provider must execute inside this private authority boundary while actually holding offline-maintenance or coordinated-write exclusion.
 
@@ -77,6 +77,8 @@ For every unique referenced stored file:
 Source and target attachment files must each have exactly one hard link. A source/target hard-link alias can therefore never qualify as an isolated copy.
 
 An existing target file is never overwritten. Exact existing bytes are accepted as a replay only after the same no-follow, single-link, inode, size and hash verification; a conflicting existing file fails closed.
+
+Missing target-file creation is bound to the already validated target upload-root inode. On Linux, the engine opens the target root with `O_DIRECTORY | O_NOFOLLOW`, verifies its device/inode, and creates the child through `/proc/self/fd/<dirfd>/<storedName>`. Renaming/replacing the root pathname therefore cannot redirect creation outside the acknowledged directory. Platforms without an equivalent descriptor-bound primitive fail closed with `TARGET_ROOT_DESCRIPTOR_BINDING_UNAVAILABLE` before target mutation; portable activation remains part of later provider/deployment acceptance.
 
 ## Target DB/file parity
 
