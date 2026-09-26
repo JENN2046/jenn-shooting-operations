@@ -113,6 +113,9 @@ export function createOperationsServer({
   idFactory,
   orphanMaxAgeMs,
   cleanupIntervalMs = 60 * 60 * 1000,
+  orphanCleanupMode = 'inherit',
+  orphanCleanupEnableEpoch,
+  orphanCleanupDomain,
   kioskAuthenticate,
   kioskBusinessTimeZone,
   kioskAllowedBriefHosts = [],
@@ -126,6 +129,9 @@ export function createOperationsServer({
     clock: effectiveClock,
     idFactory,
     orphanMaxAgeMs,
+    orphanCleanupMode,
+    orphanCleanupEnableEpoch,
+    orphanCleanupDomain,
   });
   store.cleanupOrphanUploads();
   const kiosk = kioskAuthenticate === undefined
@@ -156,11 +162,18 @@ export function createOperationsServer({
       }, cleanupIntervalMs)
     : null;
   cleanupTimer?.unref();
+
+  const orphanCleanupControl = Object.freeze({
+    status: () => store.getOrphanCleanupControlStatus(),
+    disable: options => store.disableOrphanCleanup(options),
+    enable: options => store.enableOrphanCleanup(options),
+  });
+
   server.on('close', () => {
     if (cleanupTimer) clearInterval(cleanupTimer);
     store.close();
   });
-  return { server, store };
+  return { server, store, orphanCleanupControl };
 }
 
 const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
@@ -175,7 +188,17 @@ if (invokedDirectly) {
     scheduler: process.env.SCHEDULER_TOKEN,
     administrator: process.env.ADMIN_TOKEN,
   };
-  const { server } = createOperationsServer({ databasePath, uploadRoot, tokens });
+  const orphanCleanupMode = process.env.ORPHAN_CLEANUP_MODE || 'inherit';
+  const orphanCleanupEnableEpoch = process.env.ORPHAN_CLEANUP_ENABLE_EPOCH || undefined;
+  const orphanCleanupDomain = process.env.ORPHAN_CLEANUP_DOMAIN || undefined;
+  const { server } = createOperationsServer({
+    databasePath,
+    uploadRoot,
+    tokens,
+    orphanCleanupMode,
+    orphanCleanupEnableEpoch,
+    orphanCleanupDomain,
+  });
   server.listen(port, host, () => {
     console.log(`Jenn Shooting Operations listening on ${host}:${port}`);
   });

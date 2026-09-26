@@ -7,9 +7,11 @@ This document binds the three remaining review classes as one repository-only co
 The manifest is a non-authorizing definition, not an executor or a production-readiness attestation. All requested, approved, requestable, and derived rollback sets remain empty. The existing deployment gate remains blocked. The two new capability gates are also BLOCKED:
 
 - `CUTOVER_TARGET_WRITE_FENCE_CAPABILITY`: a deployed target-wide fence, drain, and durable fail-closed retention implementation has not been verified.
-- `RESTORED_CLEANUP_DISABLE_CAPABILITY`: exact restoration rollback and in-flight cleanup drain have not been implemented and verified.
+- `RESTORED_CLEANUP_DISABLE_CAPABILITY`: repository-level disable/drain control exists, but the exact PROD-14 rollback still lacks race-safe cleanup-schedule cancellation and therefore remains not implemented.
 
-A future authority revision must supply independently reviewed implementation and deployment evidence before these gates can close. Passing the contract tests does not close either capability gate. Existing post-Switch authority recovery remains separately blocked by `CUTOVER_SWITCH_RECOVERY`; it is not invented by this revision.
+A future authority revision must supply independently reviewed implementation and deployment evidence before these gates can close.
+
+The repository now contains a persistent orphan-cleanup control used by startup, periodic, request-triggered, and maintenance cleanup paths. Disabled state survives restart through a marker stored beside the database; destructive cleanup runs register active markers for their full database-and-file lifetime; disable closes admission before waiting for active markers to drain; stale or uncertain run markers keep cleanup closed. Re-enabling requires the exact disable epoch and zero active runs. These repository semantics support later PROD-05 acceptance and part of future PROD-14 recovery work, but they do not implement the exact PROD-14 rollback because pending cleanup schedules are not yet cancelled by the disable path; neither cleanup-related production gate closes here. Passing the contract tests does not close either capability gate. Existing post-Switch authority recovery remains separately blocked by `CUTOVER_SWITCH_RECOVERY`; it is not invented by this revision.
 
 ## Schema trust boundary
 

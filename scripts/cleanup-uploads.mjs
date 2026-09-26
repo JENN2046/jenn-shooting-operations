@@ -10,6 +10,7 @@ function usage() {
     'Usage: npm run uploads:cleanup -- [--apply] [--max-age-hours <hours>]',
     '',
     'Defaults to a read-only dry-run. Pass --apply to delete eligible orphan uploads.',
+    'Destructive --apply also requires ORPHAN_CLEANUP_DOMAIN (or orphanCleanupDomain programmatically).',
   ].join('\n');
 }
 
@@ -39,10 +40,14 @@ export function runCleanup({
   args = process.argv.slice(2),
   databasePath = resolve(process.env.DATABASE_PATH || './data/shooting-operations.sqlite'),
   uploadRoot = resolve(process.env.UPLOAD_ROOT || './data/uploads'),
+  orphanCleanupDomain = process.env.ORPHAN_CLEANUP_DOMAIN || undefined,
   clock,
 } = {}) {
   const options = parseCleanupArgs(args);
   if (options.help) return { help: usage() };
+  if (options.apply && (typeof orphanCleanupDomain !== 'string' || orphanCleanupDomain.length === 0)) {
+    throw new Error('ORPHAN_CLEANUP_DOMAIN is required for destructive cleanup apply');
+  }
   if (!existsSync(databasePath)) {
     throw new Error(`database does not exist: ${databasePath}`);
   }
@@ -52,6 +57,7 @@ export function runCleanup({
     uploadRoot,
     clock,
     readOnly: !options.apply,
+    orphanCleanupDomain,
   });
   try {
     const result = store.cleanupOrphanUploads({
@@ -74,7 +80,7 @@ if (invokedDirectly) {
     const result = runCleanup();
     if (result.help) console.log(result.help);
     else console.log(JSON.stringify(result));
-    if (result.fileErrors) process.exitCode = 1;
+    if (result.fileErrors || (result.mode === 'apply' && result.skipped)) process.exitCode = 1;
   } catch (error) {
     console.error(error.message);
     console.error(usage());

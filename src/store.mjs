@@ -1,10 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { extname, join } from 'node:path';
+import { existsSync, mkdirSync, realpathSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { validateSnapshot, validateSubmission } from './contract-validator.mjs';
 import { initializeWritableSchema } from './sqlite-schema-v2.mjs';
+import { createOrphanCleanupControl, normalizeOrphanCleanupMode } from './orphan-cleanup-control.mjs';
 
 function isoNow(clock) {
   return clock().toISOString();
@@ -39,6 +39,52 @@ const STAGED_CLEANUP_FILE = /^(?<storedName>[a-f0-9]{64}\.[a-z0-9]+)\.cleanup-[0
 const SQLITE_BUSY = 5;
 const WAL_SETUP_TIMEOUT_MS = 5000;
 const WAL_RETRY_WAIT = new Int32Array(new SharedArrayBuffer(4));
+const ORPHAN_CLEANUP_DOMAIN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
+
+export function resolveOrphanCleanupControlRoot({
+  filename,
+  orphanCleanupDomain,
+} = {}) {
+  if (filename === ':memory:') return null;
+  if (typeof filename !== 'string' || filename.length === 0) {
+    throw new TypeError('filename is required for orphan cleanup control');
+  }
+
+  const absoluteFilename = resolve(filename);
+  let canonicalParent;
+  let canonicalName;
+  try {
+    const canonicalFile = realpathSync(absoluteFilename);
+    canonicalParent = dirname(canonicalFile);
+    canonicalName = basename(canonicalFile);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+    canonicalParent = realpathSync(dirname(absoluteFilename));
+    canonicalName = basename(absoluteFilename);
+  }
+
+  let identity;
+  if (orphanCleanupDomain !== undefined) {
+    if (typeof orphanCleanupDomain !== 'string' || !ORPHAN_CLEANUP_DOMAIN.test(orphanCleanupDomain)) {
+      throw new TypeError('orphan cleanup domain must be a stable 1-160 character identifier');
+    }
+    identity = 'explicit:' + orphanCleanupDomain;
+  } else {
+    const parentStat = statSync(canonicalParent);
+    identity = [
+      'filesystem-parent',
+      String(parentStat.dev),
+      String(parentStat.ino),
+      'database-name',
+      canonicalName,
+    ].join(':');
+  }
+
+  const namespace = createHash('sha256')
+    .update('orphan-cleanup-domain-v1\0' + identity)
+    .digest('hex');
+  return join(canonicalParent, '.orphan-cleanup-control', namespace);
+}
 
 function enableWalWithBusyRetry(db) {
   // SQLite can return SQLITE_BUSY immediately for a concurrent journal-mode
@@ -74,6 +120,8 @@ function matchesSignature(contentType, buffer) {
 }
 
 export class ScheduleStore {
+  #orphanCleanupControl;
+
   constructor({
     filename,
     uploadRoot,
@@ -82,17 +130,41 @@ export class ScheduleStore {
     orphanMaxAgeMs = DEFAULT_ORPHAN_MAX_AGE_MS,
     readOnly = false,
     fileOperations = {},
+    orphanCleanupMode = 'inherit',
+    orphanCleanupEnableEpoch,
+    orphanCleanupDomain,
   }) {
+    const cleanupMode = readOnly ? 'inherit' : normalizeOrphanCleanupMode(orphanCleanupMode);
     if (!readOnly && filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
     this.uploadRoot = uploadRoot || (filename === ':memory:' ? null : join(dirname(filename), 'uploads'));
     this.cleanupRoot = this.uploadRoot ? join(this.uploadRoot, '.cleanup') : null;
-    if (!readOnly && this.uploadRoot) mkdirSync(this.uploadRoot, { recursive: true });
-    if (!readOnly && this.cleanupRoot) mkdirSync(this.cleanupRoot, { recursive: true });
+    this.cleanupControlRoot = resolveOrphanCleanupControlRoot({
+      filename,
+      orphanCleanupDomain,
+    });
+    this.#orphanCleanupControl = createOrphanCleanupControl({
+      controlRoot: this.cleanupControlRoot,
+      clock,
+      writable: !readOnly,
+    });
     this.clock = clock;
     this.idFactory = idFactory;
     this.orphanMaxAgeMs = orphanMaxAgeMs;
     this.readOnly = readOnly;
     this.renameFile = fileOperations.rename || renameSync;
+
+    if (!readOnly && cleanupMode === 'disabled') {
+      const disabled = this.#orphanCleanupControl.disable({ reason: 'store-startup', waitForDrainMs: 0 });
+      if (!disabled.ok) {
+        const error = new Error(disabled.code || 'ORPHAN_CLEANUP_DISABLE_FAILED');
+        error.code = disabled.code || 'ORPHAN_CLEANUP_DISABLE_FAILED';
+        throw error;
+      }
+    }
+
+    if (!readOnly && this.uploadRoot) mkdirSync(this.uploadRoot, { recursive: true });
+    if (!readOnly && this.cleanupRoot) mkdirSync(this.cleanupRoot, { recursive: true });
+
     this.db = new DatabaseSync(filename, { readOnly });
     this.db.exec('PRAGMA busy_timeout = 5000;');
     if (readOnly) {
@@ -114,21 +186,54 @@ export class ScheduleStore {
         ON CONFLICT(id) DO NOTHING
       `).run(now, JSON.stringify(snapshot));
     });
-    this.recoverStagedUploadCleanup();
+    if (cleanupMode === 'enabled') {
+      const enabled = this.#orphanCleanupControl.enable({ expectedEpoch: orphanCleanupEnableEpoch });
+      if (!enabled.ok) {
+        const error = new Error(enabled.code || 'ORPHAN_CLEANUP_ENABLE_FAILED');
+        error.code = enabled.code || 'ORPHAN_CLEANUP_ENABLE_FAILED';
+        try { this.db.close(); } catch {}
+        throw error;
+      }
+    }
+    this.recoverStagedUploadCleanup({ allowDelete: cleanupMode !== 'disabled' });
+  }
+
+  getOrphanCleanupControlStatus() {
+    return this.#orphanCleanupControl.status();
+  }
+
+  disableOrphanCleanup(options) {
+    return this.#orphanCleanupControl.disable(options);
+  }
+
+  enableOrphanCleanup(options) {
+    return this.#orphanCleanupControl.enable(options);
   }
 
   close() {
     this.db.close();
   }
 
-  recoverStagedUploadCleanup() {
+  recoverStagedUploadCleanup({ allowDelete = true } = {}) {
     if (this.readOnly || !this.uploadRoot || !this.cleanupRoot) {
       return { ok: true, restored: 0, removed: 0, restoreErrors: 0, cleanupErrors: 0, errors: 0 };
     }
-    return transaction(this.db, () => this.recoverStagedUploadCleanupLocked());
+    if (!allowDelete) {
+      return transaction(this.db, () => this.#recoverStagedUploadCleanupLocked({ allowDelete: false }));
+    }
+
+    const admission = this.#orphanCleanupControl.beginRun();
+    if (!admission.ok) {
+      return transaction(this.db, () => this.#recoverStagedUploadCleanupLocked({ allowDelete: false }));
+    }
+    try {
+      return transaction(this.db, () => this.#recoverStagedUploadCleanupLocked({ allowDelete: true }));
+    } finally {
+      this.#orphanCleanupControl.endRun(admission);
+    }
   }
 
-  recoverStagedUploadCleanupLocked() {
+  #recoverStagedUploadCleanupLocked({ allowDelete = false } = {}) {
     if (!this.uploadRoot || !this.cleanupRoot || !existsSync(this.cleanupRoot)) {
       return { ok: true, restored: 0, removed: 0, restoreErrors: 0, cleanupErrors: 0, errors: 0 };
     }
@@ -147,11 +252,15 @@ export class ScheduleStore {
       const hasReference = Boolean(referenced.get(match.groups.storedName));
       try {
         if (!hasReference) {
-          unlinkSync(stagedPath);
-          removed += 1;
+          if (allowDelete) {
+            unlinkSync(stagedPath);
+            removed += 1;
+          }
         } else if (existsSync(originalPath)) {
-          unlinkSync(stagedPath);
-          removed += 1;
+          if (allowDelete) {
+            unlinkSync(stagedPath);
+            removed += 1;
+          }
         } else {
           this.renameFile(stagedPath, originalPath);
           restored += 1;
@@ -228,7 +337,7 @@ export class ScheduleStore {
 
     try {
       const result = transaction(this.db, () => {
-        const recovery = this.recoverStagedUploadCleanupLocked();
+        const recovery = this.#recoverStagedUploadCleanupLocked({ allowDelete: false });
         if (!recovery.ok) {
           return { ok: false, status: 503, code: 'UPLOAD_RECOVERY_FAILED' };
         }
@@ -360,7 +469,42 @@ export class ScheduleStore {
     });
   }
 
-  cleanupOrphanUploads({ olderThanMs = this.orphanMaxAgeMs, operationId, dryRun = false, recoverStaged = true } = {}) {
+  cleanupOrphanUploads(options = {}) {
+    const normalizedOptions = Object.freeze({
+      olderThanMs: options?.olderThanMs,
+      operationId: options?.operationId,
+      dryRun: Boolean(options?.dryRun),
+      recoverStaged: options?.recoverStaged,
+    });
+    if (normalizedOptions.dryRun) return this.#cleanupOrphanUploadsUnchecked(normalizedOptions);
+    if (this.readOnly) return this.#cleanupOrphanUploadsUnchecked(normalizedOptions);
+
+    const admission = this.#orphanCleanupControl.beginRun();
+    if (!admission.ok) {
+      return {
+        ok: true,
+        dryRun: false,
+        skipped: true,
+        code: admission.code,
+        controlEpoch: admission.control?.epoch ?? null,
+        candidates: 0,
+        deleted: 0,
+        filesDeleted: 0,
+        fileErrors: 0,
+        recoveryRestored: 0,
+        recoveryRemoved: 0,
+        recoveryErrors: 0,
+      };
+    }
+
+    try {
+      return this.#cleanupOrphanUploadsUnchecked(normalizedOptions);
+    } finally {
+      this.#orphanCleanupControl.endRun(admission);
+    }
+  }
+
+  #cleanupOrphanUploadsUnchecked({ olderThanMs = this.orphanMaxAgeMs, operationId, dryRun = false, recoverStaged = true } = {}) {
     const now = isoNow(this.clock);
     const selectCandidates = () => operationId
       ? this.db.prepare(`
@@ -387,7 +531,7 @@ export class ScheduleStore {
     this.db.exec('BEGIN IMMEDIATE');
     try {
       if (recoverStaged) {
-        const recovery = this.recoverStagedUploadCleanupLocked();
+        const recovery = this.#recoverStagedUploadCleanupLocked({ allowDelete: true });
         recoveryRestored = recovery.restored;
         recoveryRemoved = recovery.removed;
         recoveryErrors = recovery.errors;

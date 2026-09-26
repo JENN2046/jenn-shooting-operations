@@ -13,6 +13,9 @@ services:
       SUBMITTER_TOKEN: ${SUBMITTER_TOKEN:?SUBMITTER_TOKEN is required}
       SCHEDULER_TOKEN: ${SCHEDULER_TOKEN:?SCHEDULER_TOKEN is required}
       ADMIN_TOKEN: ${ADMIN_TOKEN:?ADMIN_TOKEN is required}
+      ORPHAN_CLEANUP_MODE: ${ORPHAN_CLEANUP_MODE:-inherit}
+      ORPHAN_CLEANUP_ENABLE_EPOCH: ${ORPHAN_CLEANUP_ENABLE_EPOCH:-}
+      ORPHAN_CLEANUP_DOMAIN: ${ORPHAN_CLEANUP_DOMAIN:-jenn-shooting-operations-primary}
     volumes:
       - shooting_data:/app/data
     read_only: true
