@@ -80,16 +80,43 @@ function fsyncDirectory(path) {
 function assertDirectoryStable(info, code) {
   let current;
   try {
-    current = statSync(info.realPath, { bigint: true });
+    current = lstatSync(info.realPath, { bigint: true });
   } catch {
     fail(code);
   }
   if (!current.isDirectory()
+      || current.isSymbolicLink()
       || current.dev.toString() !== info.device
-      || current.ino.toString() !== info.inode
-      || realpathSync(info.realPath) !== info.realPath) {
+      || current.ino.toString() !== info.inode) {
     fail(code);
   }
+  try {
+    if (realpathSync(info.realPath) !== info.realPath) fail(code);
+  } catch {
+    fail(code);
+  }
+}
+
+function assertDatabaseStable(info, code) {
+  let current;
+  try {
+    current = lstatSync(info.realPath, { bigint: true });
+  } catch {
+    fail(code);
+  }
+  if (!current.isFile()
+      || current.isSymbolicLink()
+      || current.nlink !== 1n
+      || current.dev.toString() !== info.device
+      || current.ino.toString() !== info.inode) {
+    fail(code);
+  }
+  try {
+    if (realpathSync(info.realPath) !== info.realPath) fail(code);
+  } catch {
+    fail(code);
+  }
+  return current;
 }
 
 function safeStoredName(value) {
@@ -103,34 +130,37 @@ function safeStoredName(value) {
 }
 
 function readUploadFacts(databaseInfo, invalidCode) {
-  const before = statSync(databaseInfo.realPath, { bigint: true });
+  const before = assertDatabaseStable(databaseInfo, invalidCode);
   let db;
+  let inTransaction = false;
   try {
     db = new DatabaseSync(databaseInfo.realPath, { readOnly: true });
+    assertDatabaseStable(databaseInfo, invalidCode);
     db.exec('PRAGMA query_only = ON; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
     const queryOnly = db.prepare('PRAGMA query_only').get();
     if (Number(queryOnly?.query_only) !== 1) fail(invalidCode, 'INVALID_TARGET');
     db.exec('BEGIN');
+    inTransaction = true;
+    assertDatabaseStable(databaseInfo, invalidCode);
     const rows = db.prepare(`
       SELECT id, operation_id, original_name, content_type, kind, size, sha256,
              stored_name, claimed_task_id, created_at
       FROM uploads
       ORDER BY id
     `).all().map(row => Object.freeze({ ...row }));
+    assertDatabaseStable(databaseInfo, invalidCode);
     db.exec('COMMIT');
+    inTransaction = false;
     return Object.freeze(rows);
   } catch (error) {
-    try { db?.exec('ROLLBACK'); } catch {}
+    if (inTransaction) {
+      try { db?.exec('ROLLBACK'); } catch {}
+    }
     if (error instanceof MigrationError) throw error;
     fail(invalidCode);
   } finally {
     try { db?.close(); } catch {}
-    let after;
-    try {
-      after = statSync(databaseInfo.realPath, { bigint: true });
-    } catch {
-      fail(invalidCode);
-    }
+    const after = assertDatabaseStable(databaseInfo, invalidCode);
     if (!sameStat(before, after)) fail(invalidCode);
   }
 }
@@ -215,6 +245,10 @@ function verifyFileBytes(path, expected, code) {
       fail(code);
     }
     if (hash.digest('hex') !== expected.sha256) fail(code);
+    return Object.freeze({
+      device: after.dev.toString(),
+      inode: after.ino.toString(),
+    });
   } finally {
     closeSync(descriptor);
   }
@@ -292,6 +326,113 @@ function bytesDigest(files) {
   })));
 }
 
+function verifyAttachmentDatabaseParityResolved({
+  sourceDatabase,
+  sourceRoot,
+  targetDatabase,
+  targetRoot,
+  faultInjector,
+} = {}) {
+  assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
+  assertDatabaseStable(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
+  assertDatabaseStable(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
+  assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
+  assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
+
+  if (faultInjector) faultInjector('before_initial_database_read');
+
+  const sourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
+  const targetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
+  if (canonicalJson(sourceRows) !== canonicalJson(targetRows)) {
+    fail('UPLOAD_DATABASE_FACTS_MISMATCH');
+  }
+
+  const files = normalizedUniqueFiles(targetRows, 'TARGET_UPLOAD_DATABASE_INVALID');
+
+  const verifyFilesystem = () => {
+    assertDatabaseStable(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
+    assertDatabaseStable(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
+    assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
+    assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
+
+    for (const file of files) {
+      const sourceIdentity = verifyFileBytes(
+        join(sourceRoot.realPath, file.storedName),
+        file,
+        'SOURCE_ATTACHMENT_MISMATCH',
+      );
+      const targetIdentity = verifyFileBytes(
+        join(targetRoot.realPath, file.storedName),
+        file,
+        'TARGET_ATTACHMENT_MISMATCH',
+      );
+      if (sourceIdentity.device === targetIdentity.device
+          && sourceIdentity.inode === targetIdentity.inode) {
+        fail('SOURCE_TARGET_ATTACHMENT_ALIAS');
+      }
+    }
+    scanTargetRoot(targetRoot, files);
+
+    assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
+    assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
+  };
+
+  verifyFilesystem();
+
+  if (faultInjector) faultInjector('before_final_database_recheck');
+
+  const finalSourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
+  const finalTargetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
+  if (canonicalJson(finalSourceRows) !== canonicalJson(sourceRows)
+      || canonicalJson(finalTargetRows) !== canonicalJson(targetRows)
+      || canonicalJson(finalSourceRows) !== canonicalJson(finalTargetRows)) {
+    fail('UPLOAD_DATABASE_FACTS_CHANGED_DURING_PARITY');
+  }
+
+  // The filesystem is checked again after the final DB reads. This closes the
+  // mutation window where bytes/set could drift while database facts were
+  // being revalidated.
+  verifyFilesystem();
+
+  const finalSourceRowsAfterFilesystem = readUploadFacts(
+    sourceDatabase,
+    'SOURCE_UPLOAD_DATABASE_INVALID',
+  );
+  const finalTargetRowsAfterFilesystem = readUploadFacts(
+    targetDatabase,
+    'TARGET_UPLOAD_DATABASE_INVALID',
+  );
+  if (canonicalJson(finalSourceRowsAfterFilesystem) !== canonicalJson(finalSourceRows)
+      || canonicalJson(finalTargetRowsAfterFilesystem) !== canonicalJson(finalTargetRows)
+      || canonicalJson(finalSourceRowsAfterFilesystem) !== canonicalJson(finalTargetRowsAfterFilesystem)) {
+    fail('UPLOAD_DATABASE_FACTS_CHANGED_DURING_PARITY');
+  }
+
+  assertDatabaseStable(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
+  assertDatabaseStable(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
+  assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
+  assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
+
+  const uploadFactsDigest = factsDigest(finalTargetRowsAfterFilesystem);
+  const attachmentBytesDigest = bytesDigest(files);
+  const parityDigest = sha256Digest({
+    schemaVersion: 1,
+    uploadFactsDigest,
+    attachmentBytesDigest,
+  });
+
+  return Object.freeze({
+    status: 'ATTACHMENT_DATABASE_PARITY_VERIFIED',
+    schemaVersion: 1,
+    uploadRows: finalTargetRowsAfterFilesystem.length,
+    uniqueFiles: files.length,
+    totalBytes: files.reduce((sum, file) => sum + file.size, 0),
+    uploadFactsDigest,
+    attachmentBytesDigest,
+    parityDigest,
+  });
+}
+
 export function verifyAttachmentDatabaseParity({
   sourceDatabasePath,
   sourceUploadRoot,
@@ -304,61 +445,12 @@ export function verifyAttachmentDatabaseParity({
   const sourceRoot = resolveExistingPath(sourceUploadRoot, 'directory');
   const targetRoot = resolveExistingPath(targetUploadRoot, 'directory');
 
-  assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
-
-  assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
-  assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
-
-  const sourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
-  const targetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
-  if (canonicalJson(sourceRows) !== canonicalJson(targetRows)) {
-    fail('UPLOAD_DATABASE_FACTS_MISMATCH');
-  }
-
-  const files = normalizedUniqueFiles(targetRows, 'TARGET_UPLOAD_DATABASE_INVALID');
-  for (const file of files) {
-    verifyFileBytes(join(sourceRoot.realPath, file.storedName), file, 'SOURCE_ATTACHMENT_MISMATCH');
-    verifyFileBytes(join(targetRoot.realPath, file.storedName), file, 'TARGET_ATTACHMENT_MISMATCH');
-  }
-  scanTargetRoot(targetRoot, files);
-
-  // Re-verify after the directory scan so a path replacement during the scan
-  // cannot become a successful parity receipt.
-  for (const file of files) {
-    verifyFileBytes(join(sourceRoot.realPath, file.storedName), file, 'SOURCE_ATTACHMENT_MISMATCH');
-    verifyFileBytes(join(targetRoot.realPath, file.storedName), file, 'TARGET_ATTACHMENT_MISMATCH');
-  }
-
-  if (faultInjector) faultInjector('before_final_database_recheck');
-
-  const finalSourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
-  const finalTargetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
-  if (canonicalJson(finalSourceRows) !== canonicalJson(sourceRows)
-      || canonicalJson(finalTargetRows) !== canonicalJson(targetRows)
-      || canonicalJson(finalSourceRows) !== canonicalJson(finalTargetRows)) {
-    fail('UPLOAD_DATABASE_FACTS_CHANGED_DURING_PARITY');
-  }
-
-  const uploadFactsDigest = factsDigest(finalTargetRows);
-  const attachmentBytesDigest = bytesDigest(files);
-  const parityDigest = sha256Digest({
-    schemaVersion: 1,
-    uploadFactsDigest,
-    attachmentBytesDigest,
-  });
-
-  assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
-  assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
-
-  return Object.freeze({
-    status: 'ATTACHMENT_DATABASE_PARITY_VERIFIED',
-    schemaVersion: 1,
-    uploadRows: targetRows.length,
-    uniqueFiles: files.length,
-    totalBytes: files.reduce((sum, file) => sum + file.size, 0),
-    uploadFactsDigest,
-    attachmentBytesDigest,
-    parityDigest,
+  return verifyAttachmentDatabaseParityResolved({
+    sourceDatabase,
+    sourceRoot,
+    targetDatabase,
+    targetRoot,
+    faultInjector,
   });
 }
 
@@ -464,11 +556,11 @@ export function copyAndVerifyAttachments({
   }
 
   if (faultInjector) faultInjector('before_final_parity');
-  const parity = verifyAttachmentDatabaseParity({
-    sourceDatabasePath: sourceDatabase.realPath,
-    sourceUploadRoot: sourceRoot.realPath,
-    targetDatabasePath: targetDatabase.realPath,
-    targetUploadRoot: targetRoot.realPath,
+  const parity = verifyAttachmentDatabaseParityResolved({
+    sourceDatabase,
+    sourceRoot,
+    targetDatabase,
+    targetRoot,
     faultInjector,
   });
 
