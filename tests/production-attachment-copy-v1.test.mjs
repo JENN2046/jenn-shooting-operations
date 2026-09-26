@@ -179,6 +179,7 @@ test('verified attachment copy binds target bytes to matching source/target data
     assert.equal(replay.copiedFiles, 0);
     assert.equal(replay.reusedFiles, 2);
     assert.equal(replay.parityDigest, first.parityDigest);
+    assert.equal(replay.copyProofDigest, first.copyProofDigest);
 
     for (const row of rows) {
       const sourceAfter = statSync(join(fixture.sourceUploadRoot, row.stored_name), { bigint: true });
