@@ -213,9 +213,9 @@ function fileIdentity(path, { includeCtime = true, includeDigest = false } = {})
   return identity;
 }
 
-function sourceFamily(path) {
+function sourceFamily(path, { includeDatabaseDigest = false } = {}) {
   return {
-    database: fileIdentity(path),
+    database: fileIdentity(path, { includeDigest: includeDatabaseDigest }),
     wal: fileIdentity(`${path}-wal`, { includeCtime: false, includeDigest: true }),
     shm: fileIdentity(`${path}-shm`),
     journal: fileIdentity(`${path}-journal`),
@@ -226,11 +226,14 @@ function sameSourceFamily(left, right) {
   return canonicalJson(left) === canonicalJson(right);
 }
 
-export function captureSqlitePhysicalFamily(pathInfo) {
+export function captureSqlitePhysicalFamily(
+  pathInfo,
+  { includeDatabaseDigest = false } = {},
+) {
   if (!pathInfo || typeof pathInfo.realPath !== 'string') {
     fail('INVALID_PATH', 'INVALID_USAGE');
   }
-  return sourceFamily(pathInfo.realPath);
+  return sourceFamily(pathInfo.realPath, { includeDatabaseDigest });
 }
 
 export function sameSqlitePhysicalFamily(left, right) {
