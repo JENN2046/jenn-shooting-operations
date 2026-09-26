@@ -1,7 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { extname, join, resolve } from 'node:path';
+import { existsSync, mkdirSync, realpathSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { validateSnapshot, validateSubmission } from './contract-validator.mjs';
 import { initializeWritableSchema } from './sqlite-schema-v2.mjs';
@@ -40,6 +39,52 @@ const STAGED_CLEANUP_FILE = /^(?<storedName>[a-f0-9]{64}\.[a-z0-9]+)\.cleanup-[0
 const SQLITE_BUSY = 5;
 const WAL_SETUP_TIMEOUT_MS = 5000;
 const WAL_RETRY_WAIT = new Int32Array(new SharedArrayBuffer(4));
+const ORPHAN_CLEANUP_DOMAIN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
+
+export function resolveOrphanCleanupControlRoot({
+  filename,
+  orphanCleanupDomain,
+} = {}) {
+  if (filename === ':memory:') return null;
+  if (typeof filename !== 'string' || filename.length === 0) {
+    throw new TypeError('filename is required for orphan cleanup control');
+  }
+
+  const absoluteFilename = resolve(filename);
+  let canonicalParent;
+  let canonicalName;
+  try {
+    const canonicalFile = realpathSync(absoluteFilename);
+    canonicalParent = dirname(canonicalFile);
+    canonicalName = basename(canonicalFile);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+    canonicalParent = realpathSync(dirname(absoluteFilename));
+    canonicalName = basename(absoluteFilename);
+  }
+
+  let identity;
+  if (orphanCleanupDomain !== undefined) {
+    if (typeof orphanCleanupDomain !== 'string' || !ORPHAN_CLEANUP_DOMAIN.test(orphanCleanupDomain)) {
+      throw new TypeError('orphan cleanup domain must be a stable 1-160 character identifier');
+    }
+    identity = 'explicit:' + orphanCleanupDomain;
+  } else {
+    const parentStat = statSync(canonicalParent);
+    identity = [
+      'filesystem-parent',
+      String(parentStat.dev),
+      String(parentStat.ino),
+      'database-name',
+      canonicalName,
+    ].join(':');
+  }
+
+  const namespace = createHash('sha256')
+    .update('orphan-cleanup-domain-v1\0' + identity)
+    .digest('hex');
+  return join(canonicalParent, '.orphan-cleanup-control', namespace);
+}
 
 function enableWalWithBusyRetry(db) {
   // SQLite can return SQLITE_BUSY immediately for a concurrent journal-mode
@@ -87,17 +132,16 @@ export class ScheduleStore {
     fileOperations = {},
     orphanCleanupMode = 'inherit',
     orphanCleanupEnableEpoch,
+    orphanCleanupDomain,
   }) {
     const cleanupMode = readOnly ? 'inherit' : normalizeOrphanCleanupMode(orphanCleanupMode);
     if (!readOnly && filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
     this.uploadRoot = uploadRoot || (filename === ':memory:' ? null : join(dirname(filename), 'uploads'));
     this.cleanupRoot = this.uploadRoot ? join(this.uploadRoot, '.cleanup') : null;
-    const cleanupControlNamespace = filename === ':memory:'
-      ? null
-      : createHash('sha256').update(resolve(filename)).digest('hex');
-    this.cleanupControlRoot = cleanupControlNamespace === null
-      ? null
-      : join(dirname(filename), '.orphan-cleanup-control', cleanupControlNamespace);
+    this.cleanupControlRoot = resolveOrphanCleanupControlRoot({
+      filename,
+      orphanCleanupDomain,
+    });
     this.#orphanCleanupControl = createOrphanCleanupControl({
       controlRoot: this.cleanupControlRoot,
       clock,
