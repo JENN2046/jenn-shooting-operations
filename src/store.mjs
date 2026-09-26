@@ -75,6 +75,8 @@ function matchesSignature(contentType, buffer) {
 }
 
 export class ScheduleStore {
+  #orphanCleanupControl;
+
   constructor({
     filename,
     uploadRoot,
@@ -91,7 +93,7 @@ export class ScheduleStore {
     this.uploadRoot = uploadRoot || (filename === ':memory:' ? null : join(dirname(filename), 'uploads'));
     this.cleanupRoot = this.uploadRoot ? join(this.uploadRoot, '.cleanup') : null;
     this.cleanupControlRoot = filename === ':memory:' ? null : join(dirname(filename), '.orphan-cleanup-control');
-    this.orphanCleanupControl = createOrphanCleanupControl({
+    this.#orphanCleanupControl = createOrphanCleanupControl({
       controlRoot: this.cleanupControlRoot,
       clock,
       writable: !readOnly,
@@ -105,7 +107,7 @@ export class ScheduleStore {
     this.renameFile = fileOperations.rename || renameSync;
 
     if (!readOnly && cleanupMode === 'disabled') {
-      const disabled = this.orphanCleanupControl.disable({ reason: 'store-startup', waitForDrainMs: 0 });
+      const disabled = this.#orphanCleanupControl.disable({ reason: 'store-startup', waitForDrainMs: 0 });
       if (!disabled.ok) {
         const error = new Error(disabled.code || 'ORPHAN_CLEANUP_DISABLE_FAILED');
         error.code = disabled.code || 'ORPHAN_CLEANUP_DISABLE_FAILED';
@@ -135,7 +137,7 @@ export class ScheduleStore {
       `).run(now, JSON.stringify(snapshot));
     });
     if (cleanupMode === 'enabled') {
-      const enabled = this.orphanCleanupControl.enable({ expectedEpoch: orphanCleanupEnableEpoch });
+      const enabled = this.#orphanCleanupControl.enable({ expectedEpoch: orphanCleanupEnableEpoch });
       if (!enabled.ok) {
         const error = new Error(enabled.code || 'ORPHAN_CLEANUP_ENABLE_FAILED');
         error.code = enabled.code || 'ORPHAN_CLEANUP_ENABLE_FAILED';
@@ -147,15 +149,15 @@ export class ScheduleStore {
   }
 
   getOrphanCleanupControlStatus() {
-    return this.orphanCleanupControl.status();
+    return this.#orphanCleanupControl.status();
   }
 
   disableOrphanCleanup(options) {
-    return this.orphanCleanupControl.disable(options);
+    return this.#orphanCleanupControl.disable(options);
   }
 
   enableOrphanCleanup(options) {
-    return this.orphanCleanupControl.enable(options);
+    return this.#orphanCleanupControl.enable(options);
   }
 
   close() {
@@ -167,21 +169,21 @@ export class ScheduleStore {
       return { ok: true, restored: 0, removed: 0, restoreErrors: 0, cleanupErrors: 0, errors: 0 };
     }
     if (!allowDelete) {
-      return transaction(this.db, () => this.recoverStagedUploadCleanupLocked({ allowDelete: false }));
+      return transaction(this.db, () => this.#recoverStagedUploadCleanupLocked({ allowDelete: false }));
     }
 
-    const admission = this.orphanCleanupControl.beginRun();
+    const admission = this.#orphanCleanupControl.beginRun();
     if (!admission.ok) {
-      return transaction(this.db, () => this.recoverStagedUploadCleanupLocked({ allowDelete: false }));
+      return transaction(this.db, () => this.#recoverStagedUploadCleanupLocked({ allowDelete: false }));
     }
     try {
-      return transaction(this.db, () => this.recoverStagedUploadCleanupLocked({ allowDelete: true }));
+      return transaction(this.db, () => this.#recoverStagedUploadCleanupLocked({ allowDelete: true }));
     } finally {
-      this.orphanCleanupControl.endRun(admission);
+      this.#orphanCleanupControl.endRun(admission);
     }
   }
 
-  recoverStagedUploadCleanupLocked({ allowDelete = false } = {}) {
+  #recoverStagedUploadCleanupLocked({ allowDelete = false } = {}) {
     if (!this.uploadRoot || !this.cleanupRoot || !existsSync(this.cleanupRoot)) {
       return { ok: true, restored: 0, removed: 0, restoreErrors: 0, cleanupErrors: 0, errors: 0 };
     }
@@ -285,7 +287,7 @@ export class ScheduleStore {
 
     try {
       const result = transaction(this.db, () => {
-        const recovery = this.recoverStagedUploadCleanupLocked({ allowDelete: false });
+        const recovery = this.#recoverStagedUploadCleanupLocked({ allowDelete: false });
         if (!recovery.ok) {
           return { ok: false, status: 503, code: 'UPLOAD_RECOVERY_FAILED' };
         }
@@ -422,7 +424,7 @@ export class ScheduleStore {
     if (dryRun) return this.#cleanupOrphanUploadsUnchecked(options);
     if (this.readOnly) return this.#cleanupOrphanUploadsUnchecked(options);
 
-    const admission = this.orphanCleanupControl.beginRun();
+    const admission = this.#orphanCleanupControl.beginRun();
     if (!admission.ok) {
       return {
         ok: true,
@@ -443,7 +445,7 @@ export class ScheduleStore {
     try {
       return this.#cleanupOrphanUploadsUnchecked(options);
     } finally {
-      this.orphanCleanupControl.endRun(admission);
+      this.#orphanCleanupControl.endRun(admission);
     }
   }
 
@@ -474,7 +476,7 @@ export class ScheduleStore {
     this.db.exec('BEGIN IMMEDIATE');
     try {
       if (recoverStaged) {
-        const recovery = this.recoverStagedUploadCleanupLocked({ allowDelete: true });
+        const recovery = this.#recoverStagedUploadCleanupLocked({ allowDelete: true });
         recoveryRestored = recovery.restored;
         recoveryRemoved = recovery.removed;
         recoveryErrors = recovery.errors;
