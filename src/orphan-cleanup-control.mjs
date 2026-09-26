@@ -25,6 +25,7 @@ export function createOrphanCleanupControl({
   let memoryEnabled = true;
   let memoryTransitionToken = null;
   const memoryRuns = new Set();
+  const ownedRuns = new Map();
   const disabledMarker = controlRoot ? join(controlRoot, DISABLED_FILE) : null;
   const runsRoot = controlRoot ? join(controlRoot, RUNS_DIR) : null;
   const transitionLock = controlRoot ? join(controlRoot, TRANSITION_LOCK_FILE) : null;
@@ -291,7 +292,8 @@ export function createOrphanCleanupControl({
           control: after,
         });
       }
-      return Object.freeze({ ok: true, runId, markerPath: null });
+      ownedRuns.set(runId, null);
+      return Object.freeze({ ok: true, runId });
     }
 
     const markerPath = join(runsRoot, runId + '.json');
@@ -306,16 +308,27 @@ export function createOrphanCleanupControl({
         control: after,
       });
     }
-    return Object.freeze({ ok: true, runId, markerPath });
+    ownedRuns.set(runId, markerPath);
+    return Object.freeze({ ok: true, runId });
   }
 
   function endRun(admission) {
-    if (!admission?.ok) return;
-    if (admission.markerPath) {
-      try { unlinkSync(admission.markerPath); } catch {}
-    } else if (admission.runId) {
+    if (!admission?.ok || typeof admission.runId !== 'string' || !ownedRuns.has(admission.runId)) return false;
+    const markerPath = ownedRuns.get(admission.runId);
+    ownedRuns.delete(admission.runId);
+    if (markerPath) {
+      try {
+        unlinkSync(markerPath);
+      } catch (error) {
+        if (error.code !== 'ENOENT') {
+          ownedRuns.set(admission.runId, markerPath);
+          throw error;
+        }
+      }
+    } else {
       memoryRuns.delete(admission.runId);
     }
+    return true;
   }
 
   return Object.freeze({ status, disable, enable, beginRun, endRun });
