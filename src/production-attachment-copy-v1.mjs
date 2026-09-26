@@ -39,13 +39,17 @@ const COPY_BUFFER_BYTES = 64 * 1024;
 const STORED_NAME = /^[a-f0-9]{64}\.[a-z0-9]+$/u;
 const TEST_AUTHORITY = 'TEST_SANDBOX';
 const LIVE_AUTHORITY = 'LIVE_PROVIDER';
+const CAPABILITY_MINT_TOKEN = Object.freeze({});
 
 class AttachmentParityCapability {
   #scopeDigest;
   #authorityClass;
   #assertHeld;
 
-  constructor({ scopeDigest, authorityClass, assertHeld }) {
+  constructor(mintToken, { scopeDigest, authorityClass, assertHeld } = {}) {
+    if (mintToken !== CAPABILITY_MINT_TOKEN) {
+      fail('ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED', 'BLOCKED_PREREQUISITE');
+    }
     this.#scopeDigest = scopeDigest;
     this.#authorityClass = authorityClass;
     this.#assertHeld = assertHeld;
@@ -201,7 +205,7 @@ export function createAttachmentParityIsolatedTestAuthority() {
         ensureInsideSandbox(info);
       }
       assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
-      return new AttachmentParityCapability({
+      return new AttachmentParityCapability(CAPABILITY_MINT_TOKEN, {
         scopeDigest: parityScopeDigest(sourceDatabase, targetDatabase, sourceRoot, targetRoot),
         authorityClass: TEST_AUTHORITY,
         assertHeld: () => active && heldState?.held === true,
