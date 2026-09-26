@@ -6,6 +6,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   unlinkSync,
@@ -217,7 +218,7 @@ test('duplicate database references to identical stored bytes copy once and rema
 });
 
 function readdirFileCount(root) {
-  return (await import('node:fs')).readdirSync(root, { withFileTypes: true })
+  return readdirSync(root, { withFileTypes: true })
     .filter(entry => entry.isFile()).length;
 }
 
