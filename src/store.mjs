@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { extname, join } from 'node:path';
+import { extname, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { validateSnapshot, validateSubmission } from './contract-validator.mjs';
 import { initializeWritableSchema } from './sqlite-schema-v2.mjs';
@@ -92,7 +92,12 @@ export class ScheduleStore {
     if (!readOnly && filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
     this.uploadRoot = uploadRoot || (filename === ':memory:' ? null : join(dirname(filename), 'uploads'));
     this.cleanupRoot = this.uploadRoot ? join(this.uploadRoot, '.cleanup') : null;
-    this.cleanupControlRoot = filename === ':memory:' ? null : join(dirname(filename), '.orphan-cleanup-control');
+    const cleanupControlNamespace = filename === ':memory:'
+      ? null
+      : createHash('sha256').update(resolve(filename)).digest('hex');
+    this.cleanupControlRoot = cleanupControlNamespace === null
+      ? null
+      : join(dirname(filename), '.orphan-cleanup-control', cleanupControlNamespace);
     this.#orphanCleanupControl = createOrphanCleanupControl({
       controlRoot: this.cleanupControlRoot,
       clock,
