@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -12,7 +11,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { runCleanup } from '../scripts/cleanup-uploads.mjs';
 import { createOrphanCleanupControl } from '../src/orphan-cleanup-control.mjs';
 import { createOperationsServer } from '../src/server.mjs';
-import { ScheduleStore } from '../src/store.mjs';
+import { ScheduleStore, resolveOrphanCleanupControlRoot } from '../src/store.mjs';
 
 async function listen(service) {
   service.server.listen(0, '127.0.0.1');
@@ -25,9 +24,11 @@ async function closeService(service) {
   await once(service.server, 'close');
 }
 
-function cleanupControlRootFor(databasePath) {
-  const namespace = createHash('sha256').update(resolve(databasePath)).digest('hex');
-  return join(dirname(databasePath), '.orphan-cleanup-control', namespace);
+function cleanupControlRootFor(databasePath, orphanCleanupDomain) {
+  return resolveOrphanCleanupControlRoot({
+    filename: databasePath,
+    orphanCleanupDomain,
+  });
 }
 
 test('disabled cleanup protects startup periodic saveUpload and submitRequest across restart', { timeout: 10_000 }, async () => {
