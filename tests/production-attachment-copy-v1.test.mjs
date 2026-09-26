@@ -657,6 +657,43 @@ test('SQLite upload-fact queries open only the private inode-bound snapshot', ()
   assert.doesNotMatch(readFactsSource, /new DatabaseSync\(snapshot\.snapshotRoot/u);
 });
 
+test('upload-fact reads reject an active SQLite sidecar family before target mutation', () => {
+  const body = Buffer.from('sidecar-free-fact-read');
+  const row = uploadFact({ id: 'UPLOAD-SIDECAR-BLOCK', body });
+  const fixture = createFixture([row]);
+  let writer;
+
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    writer = new DatabaseSync(fixture.sourceDatabasePath);
+    writer.exec('PRAGMA journal_mode = WAL; PRAGMA wal_autocheckpoint = 0;');
+    writer.prepare('UPDATE uploads SET original_name = ? WHERE id = ?')
+      .run('sidecar-active.bin', row.id);
+
+    assert.equal(
+      existsSync(fixture.sourceDatabasePath + '-wal')
+        || existsSync(fixture.sourceDatabasePath + '-shm'),
+      true,
+      'test must hold an active SQLite sidecar family',
+    );
+
+    assert.throws(
+      () => copyAttachmentsAndEvaluateParityTestCandidate(copyOptions(fixture)),
+      error => error.code === 'SOURCE_UPLOAD_DATABASE_INVALID'
+        && error.result === 'BLOCKED_PREREQUISITE',
+    );
+
+    assert.equal(
+      existsSync(join(fixture.targetUploadRoot, row.stored_name)),
+      false,
+      'sidecar-bearing fact read must fail before target attachment mutation',
+    );
+  } finally {
+    try { writer?.close(); } catch {}
+    fixture.cleanup();
+  }
+});
+
 test('snapshot pathname replacement before SQLite open cannot replace the held snapshot inode', () => {
   const body = Buffer.from('held-snapshot-open');
   const row = uploadFact({ id: 'UPLOAD-HELD-SNAPSHOT-OPEN', body });
