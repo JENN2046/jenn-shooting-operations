@@ -176,6 +176,12 @@ function copyOptions(fixture, extra = {}) {
   };
 }
 
+test('production copy wrapper delegates to the defined private mutator', () => {
+  const source = copyAndVerifyAttachments.toString();
+  assert.match(source, /copyAttachmentsAndEvaluateParityInternal/u);
+  assert.doesNotMatch(source, /copyAttachmentsAndEvaluateParityCandidate/u);
+});
+
 test('production receipt APIs reject caller-forged quiescence capabilities even with the exact scope digest', () => {
   const body = Buffer.from('forged-provider-capability');
   const row = uploadFact({ id: 'UPLOAD-FORGED-PROVIDER', body });
