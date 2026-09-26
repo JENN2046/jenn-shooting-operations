@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -22,6 +23,11 @@ async function closeService(service) {
   if (!service) return;
   service.server.close();
   await once(service.server, 'close');
+}
+
+function cleanupControlRootFor(databasePath) {
+  const namespace = createHash('sha256').update(resolve(databasePath)).digest('hex');
+  return join(dirname(databasePath), '.orphan-cleanup-control', namespace);
 }
 
 test('disabled cleanup protects startup periodic saveUpload and submitRequest across restart', { timeout: 10_000 }, async () => {
@@ -214,7 +220,7 @@ test('disable stays fail-closed until every active cleanup marker is drained', (
 
   try {
     store = new ScheduleStore({ filename: databasePath, uploadRoot });
-    const runsRoot = join(root, '.orphan-cleanup-control', 'runs');
+    const runsRoot = join(cleanupControlRootFor(databasePath), 'runs');
     const fakeRun = join(runsRoot, 'synthetic-active-cleanup.json');
     writeFileSync(fakeRun, '{"runId":"synthetic-active-cleanup"}\n');
 
@@ -313,7 +319,7 @@ test('disabled startup persists protection before upload path initialization can
       }),
     );
 
-    const markerPath = join(root, '.orphan-cleanup-control', 'disabled.json');
+    const markerPath = join(cleanupControlRootFor(databasePath), 'disabled.json');
     assert.equal(
       existsSync(markerPath),
       true,
@@ -337,7 +343,7 @@ test('disabled startup drain failure occurs before SQLite is created', () => {
   const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-pre-sqlite-gate-'));
   const databasePath = join(root, 'operations.sqlite');
   const uploadRoot = join(root, 'uploads');
-  const runsRoot = join(root, '.orphan-cleanup-control', 'runs');
+  const runsRoot = join(cleanupControlRootFor(databasePath), 'runs');
   mkdirSync(runsRoot, { recursive: true });
   const activeRun = join(runsRoot, 'peer-cleanup-before-db.json');
   writeFileSync(activeRun, '{"runId":"peer-cleanup-before-db"}\n');
@@ -356,7 +362,7 @@ test('disabled startup drain failure occurs before SQLite is created', () => {
 
     assert.equal(existsSync(databasePath), false, 'failed disabled startup must not create or mutate SQLite');
     assert.equal(
-      existsSync(join(root, '.orphan-cleanup-control', 'disabled.json')),
+      existsSync(join(cleanupControlRootFor(databasePath), 'disabled.json')),
       true,
       'fail-closed disabled marker must persist even though SQLite was never opened',
     );
@@ -520,7 +526,7 @@ test('disabled server startup fails until active cleanup markers are drained', (
     seed.close();
     seed = null;
 
-    const runsRoot = join(root, '.orphan-cleanup-control', 'runs');
+    const runsRoot = join(cleanupControlRootFor(databasePath), 'runs');
     const activeRun = join(runsRoot, 'rolling-peer-cleanup.json');
     writeFileSync(activeRun, '{"runId":"rolling-peer-cleanup"}\n');
 
@@ -534,7 +540,7 @@ test('disabled server startup fails until active cleanup markers are drained', (
       error => error?.code === 'ORPHAN_CLEANUP_DRAIN_TIMEOUT',
     );
 
-    const disabledMarker = join(root, '.orphan-cleanup-control', 'disabled.json');
+    const disabledMarker = join(cleanupControlRootFor(databasePath), 'disabled.json');
     assert.equal(existsSync(disabledMarker), true, 'startup failure must retain fail-closed disable marker');
 
     unlinkSync(activeRun);
@@ -569,7 +575,7 @@ test('malformed persisted control marker keeps destructive cleanup fail-closed',
     store.close();
     store = null;
 
-    const marker = join(root, '.orphan-cleanup-control', 'disabled.json');
+    const marker = join(cleanupControlRootFor(databasePath), 'disabled.json');
     writeFileSync(marker, '{not-valid-json');
 
     store = new ScheduleStore({
@@ -651,7 +657,7 @@ test('transition lock serializes disable enable and destructive admission across
 
   try {
     store = new ScheduleStore({ filename: databasePath, uploadRoot });
-    const lockPath = join(root, '.orphan-cleanup-control', 'transition.lock');
+    const lockPath = join(cleanupControlRootFor(databasePath), 'transition.lock');
     writeFileSync(lockPath, 'foreign-transition-owner\n', { flag: 'wx' });
 
     const disable = store.disableOrphanCleanup({ reason: 'pre-cutover', waitForDrainMs: 0 });
@@ -738,7 +744,7 @@ test('periodic cleanup retries after a startup-time transition lock clears', { t
     seed.close();
     seed = null;
 
-    const lockPath = join(root, '.orphan-cleanup-control', 'transition.lock');
+    const lockPath = join(cleanupControlRootFor(databasePath), 'transition.lock');
     writeFileSync(lockPath, 'foreign-enable-transition\n', { flag: 'wx' });
 
     service = createOperationsServer({
@@ -793,7 +799,7 @@ test('failed local disable does not strand the periodic cleanup timer', { timeou
     });
     const storedPath = join(uploadRoot, orphan.upload.sha256 + '.txt');
 
-    const lockPath = join(root, '.orphan-cleanup-control', 'transition.lock');
+    const lockPath = join(cleanupControlRootFor(databasePath), 'transition.lock');
     writeFileSync(lockPath, 'foreign-enable-transition\n', { flag: 'wx' });
     now = new Date(now.getTime() + 1001);
 
