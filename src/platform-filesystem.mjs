@@ -3,15 +3,31 @@ import { resolve } from 'node:path';
 
 export const IS_WINDOWS = process.platform === 'win32';
 
+const REFLECT_APPLY = Reflect.apply;
+const STRING_TO_LOWER = String.prototype.toLowerCase;
+const STRING_TO_UPPER = String.prototype.toUpperCase;
+const STRING_SLICE = String.prototype.slice;
+
+function lower(value) {
+  return REFLECT_APPLY(STRING_TO_LOWER, value, []);
+}
+
+function upper(value) {
+  return REFLECT_APPLY(STRING_TO_UPPER, value, []);
+}
+
+function slice(value, start, end) {
+  return REFLECT_APPLY(STRING_SLICE, value, [start, end]);
+}
+
 function toggledCasePath(path) {
-  const characters = [...path];
-  for (let index = characters.length - 1; index >= 0; index -= 1) {
-    const character = characters[index];
-    const lower = character.toLowerCase();
-    const upper = character.toUpperCase();
-    if (lower === upper) continue;
-    characters[index] = character === lower ? upper : lower;
-    return characters.join('');
+  for (let index = path.length - 1; index >= 0; index -= 1) {
+    const character = path[index];
+    const lowerCharacter = lower(character);
+    const upperCharacter = upper(character);
+    if (lowerCharacter === upperCharacter) continue;
+    const toggled = character === lowerCharacter ? upperCharacter : lowerCharacter;
+    return `${slice(path, 0, index)}${toggled}${slice(path, index + 1)}`;
   }
   return null;
 }
@@ -42,7 +58,7 @@ export function filesystemPathComparisonKey(
   { caseInsensitive = filesystemPathIsCaseInsensitive(existingAnchorPath) } = {},
 ) {
   const normalized = resolve(path);
-  return caseInsensitive ? normalized.toLowerCase() : normalized;
+  return caseInsensitive ? lower(normalized) : normalized;
 }
 
 export function pathsEqual(left, right, existingAnchorPath = left) {
