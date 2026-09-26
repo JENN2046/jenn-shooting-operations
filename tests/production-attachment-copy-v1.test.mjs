@@ -16,7 +16,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, parse } from 'node:path';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -395,6 +395,25 @@ function readdirFileCount(root) {
   return readdirSync(root, { withFileTypes: true })
     .filter(entry => entry.isFile()).length;
 }
+
+test('filesystem root upload domains still detect descendants', () => {
+  const body = Buffer.from('filesystem-root-domain');
+  const row = uploadFact({ id: 'UPLOAD-FILESYSTEM-ROOT', body });
+  const fixture = createFixture([row]);
+  try {
+    const filesystemRoot = parse(fixture.root).root;
+    assert.throws(
+      () => describeAttachmentParityScope({
+        ...parityPaths(fixture),
+        sourceUploadRoot: filesystemRoot,
+      }),
+      error => ['SOURCE_TARGET_UPLOAD_ROOT_CONFLICT', 'DATABASE_UPLOAD_ROOT_CONFLICT']
+        .includes(error.code),
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
 
 test('source and target upload roots cannot overlap by ancestry', () => {
   const body = Buffer.from('nested-root');
