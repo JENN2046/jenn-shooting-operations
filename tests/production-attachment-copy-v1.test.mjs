@@ -177,10 +177,11 @@ function copyOptions(fixture, extra = {}) {
   };
 }
 
-test('production copy wrapper delegates to the defined private mutator', () => {
+test('production copy wrapper delegates to the private mutator without test-only fault injection', () => {
   const source = copyAndVerifyAttachments.toString();
   assert.match(source, /copyAttachmentsAndEvaluateParityInternal/u);
   assert.doesNotMatch(source, /copyAttachmentsAndEvaluateParityCandidate/u);
+  assert.doesNotMatch(source, /faultInjector/u);
 });
 
 test('production receipt APIs reject caller-forged quiescence capabilities even with the exact scope digest', () => {
