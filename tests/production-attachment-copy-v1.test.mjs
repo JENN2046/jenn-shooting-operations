@@ -35,6 +35,8 @@ import {
   sqlitePhysicalFamiliesAreDisjoint,
 } from '../src/migration-sqlite-v2.mjs';
 import { V1_SCHEMA_SQL } from '../src/sqlite-schema-v2.mjs';
+import { sha256Digest } from '../src/migration-v2.mjs';
+import { filesystemPathComparisonKey } from '../src/platform-filesystem.mjs';
 import {
   parseAttachmentCopyArgs,
   runAttachmentCopyCommand,
@@ -206,6 +208,52 @@ test('production receipt APIs reject caller-forged quiescence capabilities even 
     );
   } finally {
     fixture.cleanup();
+  }
+});
+
+test('production capability authentication ignores WeakSet prototype monkeypatching', () => {
+  const body = Buffer.from('weakset-monkeypatch');
+  const row = uploadFact({ id: 'UPLOAD-WEAKSET-MONKEYPATCH', body });
+  const fixture = createFixture([row]);
+  const originalHas = WeakSet.prototype.has;
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    const paths = parityPaths(fixture);
+    const forged = {
+      kind: 'ATTACHMENT_PARITY_QUIESCENCE_V1',
+      scopeDigest: describeAttachmentParityScope(paths).scopeDigest,
+      assertHeld: () => true,
+    };
+
+    WeakSet.prototype.has = () => true;
+
+    assert.throws(
+      () => copyAndVerifyAttachments({
+        ...paths,
+        quiescenceCapability: forged,
+      }),
+      error => error.code === 'ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED',
+    );
+    assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
+  } finally {
+    WeakSet.prototype.has = originalHas;
+    fixture.cleanup();
+  }
+});
+
+test('isolated test authority cannot mint a mutating capability for another sandbox', () => {
+  const body = Buffer.from('test-authority-scope');
+  const row = uploadFact({ id: 'UPLOAD-TEST-AUTHORITY-SCOPE', body });
+  const fixtureA = createFixture([row]);
+  const fixtureB = createFixture([row]);
+  try {
+    assert.throws(
+      () => fixtureA.testAuthority.mint(parityPaths(fixtureB)),
+      error => error.code === 'ATTACHMENT_PARITY_TEST_SCOPE_INVALID',
+    );
+  } finally {
+    fixtureA.cleanup();
+    fixtureB.cleanup();
   }
 });
 
@@ -478,6 +526,28 @@ test('database reads stay bound to the originally resolved target database inode
   } finally {
     fixture.cleanup();
   }
+});
+
+test('filesystem-aware namespace keys fold case when the filesystem is case-insensitive', () => {
+  const sourceKey = sha256Digest(filesystemPathComparisonKey(
+    '/tmp/TARGET.sqlite-wal',
+    '/tmp/TARGET.sqlite-wal',
+    { caseInsensitive: true },
+  ));
+  const targetWalKey = sha256Digest(filesystemPathComparisonKey(
+    '/tmp/target.sqlite-wal',
+    '/tmp/target.sqlite',
+    { caseInsensitive: true },
+  ));
+
+  assert.equal(sourceKey, targetWalKey);
+  assert.equal(
+    sqlitePhysicalFamiliesAreDisjoint(
+      { namespace: { database: sourceKey } },
+      { namespace: { wal: targetWalKey } },
+    ),
+    false,
+  );
 });
 
 test('SQLite family disjointness rejects cross-role future sidecar path collisions', () => {
