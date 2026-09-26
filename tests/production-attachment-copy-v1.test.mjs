@@ -168,6 +168,53 @@ function copyOptions(fixture, extra = {}) {
   };
 }
 
+test('copy and verify refuse to issue receipts without an exact-scope quiescence lease', () => {
+  const body = Buffer.from('quiescence-required');
+  const row = uploadFact({ id: 'UPLOAD-QUIESCENCE-REQUIRED', body });
+  const fixture = createFixture([row]);
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    const paths = parityPaths(fixture);
+
+    assert.throws(
+      () => copyAndVerifyAttachments(paths),
+      error => error.code === 'ATTACHMENT_PARITY_QUIESCENCE_REQUIRED',
+    );
+    assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
+
+    assert.throws(
+      () => verifyAttachmentDatabaseParity(paths),
+      error => error.code === 'ATTACHMENT_PARITY_QUIESCENCE_REQUIRED',
+    );
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('quiescence lease is bound to exact database and upload-root identities', () => {
+  const body = Buffer.from('quiescence-scope');
+  const row = uploadFact({ id: 'UPLOAD-QUIESCENCE-SCOPE', body });
+  const fixtureA = createFixture([row]);
+  const fixtureB = createFixture([row]);
+  try {
+    writeSourceFiles(fixtureA, [row], new Map([[row.stored_name, body]]));
+    writeSourceFiles(fixtureB, [row], new Map([[row.stored_name, body]]));
+
+    const leaseA = createTestQuiescenceLease(parityPaths(fixtureA));
+    assert.throws(
+      () => copyAndVerifyAttachments({
+        ...parityPaths(fixtureB),
+        quiescenceLease: leaseA,
+      }),
+      error => error.code === 'ATTACHMENT_PARITY_QUIESCENCE_REQUIRED',
+    );
+    assert.equal(existsSync(join(fixtureB.targetUploadRoot, row.stored_name)), false);
+  } finally {
+    rmSync(fixtureA.root, { recursive: true, force: true });
+    rmSync(fixtureB.root, { recursive: true, force: true });
+  }
+});
+
 test('verified attachment copy binds target bytes to matching source/target database facts and replays read-only', () => {
   const bodyA = Buffer.from('attachment-copy-a');
   const bodyB = Buffer.from('attachment-copy-b');
@@ -417,6 +464,30 @@ test('strong SQLite physical-family proof includes database content digest and d
       { includeDatabaseDigest: true },
     );
     assert.equal(sameSqlitePhysicalFamily(before, after), false);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('quiescence loss between the two closing family captures blocks the receipt', () => {
+  const body = Buffer.from('between-family-quiescence-loss');
+  const row = uploadFact({ id: 'UPLOAD-BETWEEN-FAMILY-LEASE', body });
+  const fixture = createFixture([row]);
+  const state = { held: true };
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    copyAndVerifyAttachments(copyOptions(fixture, { leaseState: state }));
+
+    state.held = true;
+    assert.throws(
+      () => verifyAttachmentDatabaseParity(copyOptions(fixture, {
+        leaseState: state,
+        faultInjector(stage) {
+          if (stage === 'between_final_family_captures') state.held = false;
+        },
+      })),
+      error => error.code === 'ATTACHMENT_PARITY_QUIESCENCE_LOST',
+    );
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }
@@ -746,15 +817,30 @@ test('attachment copy command apply and verify-only converge on the same parity 
       '--target-upload-root', fixture.targetUploadRoot,
       '--format', 'json',
     ];
+    const commandPaths = parityPaths(fixture);
+    const lease = createTestQuiescenceLease(commandPaths);
+
+    assert.throws(
+      () => runAttachmentCopyCommand([
+        '--apply',
+        ...common,
+        '--acknowledge-isolated-target',
+      ]),
+      error => error.code === 'ATTACHMENT_PARITY_QUIESCENCE_REQUIRED',
+    );
+
     const apply = runAttachmentCopyCommand([
       '--apply',
       ...common,
       '--acknowledge-isolated-target',
-    ]);
+    ], { quiescenceLease: lease });
     assert.equal(apply.exitCode, 0);
     assert.equal(apply.receipt.status, 'ATTACHMENT_COPY_PARITY_VERIFIED');
 
-    const verify = runAttachmentCopyCommand(['--verify-only', ...common]);
+    const verify = runAttachmentCopyCommand(
+      ['--verify-only', ...common],
+      { quiescenceLease: lease },
+    );
     assert.equal(verify.exitCode, 0);
     assert.equal(verify.receipt.status, 'ATTACHMENT_DATABASE_PARITY_VERIFIED');
     assert.equal(verify.receipt.parityDigest, apply.receipt.parityDigest);
