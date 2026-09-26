@@ -137,18 +137,17 @@ function parityScopeDigest(sourceDatabase, targetDatabase, sourceRoot, targetRoo
   });
 }
 
-function inspectCapability(capability, scopeDigest, allowedAuthorities) {
+function inspectCapability(capability, scopeDigest) {
   const inspected = AttachmentParityCapability.inspect(capability);
-  if (!inspected
-      || inspected.scopeDigest !== scopeDigest
-      || !allowedAuthorities.includes(inspected.authorityClass)) {
-    return null;
-  }
+  if (!inspected || inspected.scopeDigest !== scopeDigest) return null;
   return inspected;
 }
 
 function assertCandidateQuiescenceCapability(capability, scopeDigest) {
-  if (!inspectCapability(capability, scopeDigest, [TEST_AUTHORITY, LIVE_AUTHORITY])) {
+  const inspected = inspectCapability(capability, scopeDigest);
+  if (!inspected
+      || (inspected.authorityClass !== TEST_AUTHORITY
+        && inspected.authorityClass !== LIVE_AUTHORITY)) {
     fail('ATTACHMENT_PARITY_QUIESCENCE_REQUIRED', 'BLOCKED_PREREQUISITE');
   }
   if (!AttachmentParityCapability.assertHeld(capability)) {
@@ -157,7 +156,8 @@ function assertCandidateQuiescenceCapability(capability, scopeDigest) {
 }
 
 function assertAuthenticatedQuiescenceCapability(capability, scopeDigest) {
-  if (!inspectCapability(capability, scopeDigest, [LIVE_AUTHORITY])) {
+  const inspected = inspectCapability(capability, scopeDigest);
+  if (!inspected || inspected.authorityClass !== LIVE_AUTHORITY) {
     fail('ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED', 'BLOCKED_PREREQUISITE');
   }
   if (!AttachmentParityCapability.assertHeld(capability)) {
@@ -254,7 +254,9 @@ function openBoundTargetChild(targetRootInfo, storedName) {
     }
     if (error instanceof MigrationError) throw error;
     if (error?.code === 'EEXIST') fail('TARGET_ATTACHMENT_CONFLICT');
-    if (['ELOOP', 'ENOTDIR', 'ENOENT'].includes(error?.code)) {
+    if (error?.code === 'ELOOP'
+        || error?.code === 'ENOTDIR'
+        || error?.code === 'ENOENT') {
       fail('TARGET_UPLOAD_ROOT_CHANGED');
     }
     fail('TARGET_ATTACHMENT_COPY_FAILED');
