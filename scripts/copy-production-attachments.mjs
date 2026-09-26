@@ -108,11 +108,11 @@ function lowDisclosureFailure(error) {
     };
   }
   return {
-    exitCode: 5,
+    exitCode: 10,
     output: JSON.stringify({
       status: 'ATTACHMENT_COPY_FAILED',
       code: 'ATTACHMENT_COPY_INTERNAL_ERROR',
-      result: 'INVALID_TARGET',
+      result: 'INTERNAL_ERROR',
     }),
   };
 }
