@@ -6,7 +6,7 @@ This repository control prevents orphan-upload cleanup from mutating imported or
 
 ## Control surface
 
-All destructive orphan cleanup enters through the same persisted gate:
+All destructive orphan cleanup for one database enters through the same database-scoped persisted gate:
 
 The periodic interval is a retry scheduler, not authority. When configured, it stays scheduled across disabled and transition states; each tick must reacquire destructive cleanup admission through the persisted gate. A temporary transition therefore suppresses mutation without permanently stranding periodic cleanup after another process finishes enabling.
 
@@ -20,9 +20,11 @@ Dry-run inspection remains non-destructive and may execute while cleanup is disa
 
 ## Persistence and restart behavior
 
-For file-backed databases, the control lives beside the SQLite database in:
+For file-backed databases, the control lives beside the SQLite database under a namespace derived from the normalized configured database path:
 
-`.orphan-cleanup-control/disabled.json`
+`.orphan-cleanup-control/<sha256(resolve(databasePath))>/disabled.json`
+
+Processes configured for the same SQLite path therefore share one cleanup authority domain. Different SQLite files, including two databases in the same parent directory with separate upload roots, receive different namespaces and cannot disable, enable, drain, or complete one another's cleanup state.
 
 A disable operation creates an exact epoch. The disabled marker is retained across process and container restart. `inherit` mode respects the persisted state. Explicit re-enable requires the matching epoch and zero active destructive cleanup runs.
 
@@ -39,9 +41,9 @@ The unchecked destructive cleanup implementation and locked staged-recovery impl
 
 The public cleanup entry snapshots every cleanup option exactly once into an internal frozen plain object before evaluating `dryRun` or acquiring destructive admission. Caller-controlled getters or proxies are never re-read after the gate decision, so a stateful `dryRun` value cannot switch a dry-run call into destructive execution.
 
-Each destructive cleanup run creates a marker in:
+Each destructive cleanup run creates a marker in its database namespace:
 
-`.orphan-cleanup-control/runs/`
+`.orphan-cleanup-control/<sha256(resolve(databasePath))>/runs/`
 
 The control instance records every run it successfully admits. Completion accepts only a run ID owned by that same in-memory control instance and derives the marker path from the stored admission; caller-supplied marker paths are never trusted. A forged or peer run ID cannot remove another process's marker.
 
@@ -58,7 +60,7 @@ If the drain deadline expires, the control remains disabled and returns `ORPHAN_
 
 When the real server starts with `ORPHAN_CLEANUP_MODE=disabled`, a non-empty active-run set is a startup hard stop. The constructor retains the disabled marker and throws before `createOperationsServer()` can return, so the process cannot listen while destructive cleanup ownership is still active or uncertain. The disabled transition is acquired immediately after the cleanup-control directory exists and before upload-root / `.cleanup` directory initialization or SQLite open/schema work. The `runs/` subdirectory is also lazy and is not created by control construction; it is created only when an enabled destructive cleanup admission is actually being recorded. If later upload-path initialization fails, the persisted disabled marker remains in force for peer processes. The disabled gate is acquired before SQLite is opened or schema initialization runs; a failed drain may create only the cleanup-control directories/disabled marker and must leave the target SQLite path absent and untouched.
 
-Disable and enable transitions are serialized by a persisted filesystem transition lock in the same control directory. A process that cannot acquire that lock fails closed with `ORPHAN_CLEANUP_TRANSITION_BUSY`; destructive cleanup admission is also denied while the lock exists. The lock owner is recorded with a unique token, and release removes the lock only when the stored token still matches the owner.
+Disable and enable transitions are serialized by a persisted filesystem transition lock in the same database-scoped control directory. A process that cannot acquire that lock fails closed with `ORPHAN_CLEANUP_TRANSITION_BUSY`; destructive cleanup admission is also denied while the lock exists. The lock owner is recorded with a unique token, and release removes the lock only when the stored token still matches the owner.
 
 Disable holds the transition lock from marker creation/ownership validation through drain completion. It reports success only if the same disabled epoch still exists and every active cleanup marker has drained. A missing or replaced marker returns `ORPHAN_CLEANUP_MARKER_OWNERSHIP_LOST`.
 
