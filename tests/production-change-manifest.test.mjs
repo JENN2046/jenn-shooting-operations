@@ -929,6 +929,15 @@ test('orphan cleanup restoration is a separate post-cutover action with parity p
     gate.evidence,
     'REQUIRES_VERIFIED_PROD_13_AND_POST_CUTOVER_ATTACHMENT_PARITY',
   );
+  const rollbackGate = base.gates.find(
+    candidate => candidate.id === 'RESTORED_CLEANUP_DISABLE_CAPABILITY',
+  );
+  assert.ok(rollbackGate);
+  assert.equal(rollbackGate.status, 'BLOCKED');
+  assert.equal(
+    rollbackGate.evidence,
+    'REPOSITORY_DISABLE_DRAIN_IMPLEMENTED_BUT_EXACT_PROD_14_SCHEDULE_CANCELLATION_ROLLBACK_NOT_IMPLEMENTED',
+  );
 
   const cutover = action(base, 'PROD-13-CUTOVER-SWITCH');
   assert.equal(
