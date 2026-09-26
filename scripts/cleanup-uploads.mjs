@@ -39,6 +39,7 @@ export function runCleanup({
   args = process.argv.slice(2),
   databasePath = resolve(process.env.DATABASE_PATH || './data/shooting-operations.sqlite'),
   uploadRoot = resolve(process.env.UPLOAD_ROOT || './data/uploads'),
+  orphanCleanupDomain = process.env.ORPHAN_CLEANUP_DOMAIN || undefined,
   clock,
 } = {}) {
   const options = parseCleanupArgs(args);
@@ -52,6 +53,7 @@ export function runCleanup({
     uploadRoot,
     clock,
     readOnly: !options.apply,
+    orphanCleanupDomain,
   });
   try {
     const result = store.cleanupOrphanUploads({
