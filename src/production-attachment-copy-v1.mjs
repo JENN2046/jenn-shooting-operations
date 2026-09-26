@@ -27,6 +27,7 @@ import {
   sameSqlitePhysicalFamily,
 } from './migration-sqlite-v2.mjs';
 import {
+  hasExactPermissions,
   supportsDirectoryFsync,
 } from './platform-filesystem.mjs';
 
@@ -212,7 +213,7 @@ function openStableFile(path, expected, code, { requireMode0600 = false } = {}) 
     fail(code);
   }
   if (!link.isFile() || link.isSymbolicLink() || link.nlink !== 1n) fail(code);
-  if (requireMode0600 && (link.mode & 0o777n) !== 0o600n) fail(code);
+  if (requireMode0600 && !hasExactPermissions(link, 0o600n)) fail(code);
 
   let descriptor;
   try {
@@ -220,7 +221,7 @@ function openStableFile(path, expected, code, { requireMode0600 = false } = {}) 
     const opened = fstatSync(descriptor, { bigint: true });
     if (!opened.isFile()
         || opened.nlink !== 1n
-        || (requireMode0600 && (opened.mode & 0o777n) !== 0o600n)
+        || (requireMode0600 && !hasExactPermissions(opened, 0o600n))
         || opened.dev !== link.dev
         || opened.ino !== link.ino
         || opened.size !== BigInt(expected.size)) {
@@ -254,7 +255,7 @@ function verifyFileBytes(path, expected, code, options) {
       fail(code);
     }
     if (!finalLink.isFile() || finalLink.isSymbolicLink() || finalLink.nlink !== 1n
-        || (options?.requireMode0600 && (finalLink.mode & 0o777n) !== 0o600n)
+        || (options?.requireMode0600 && !hasExactPermissions(finalLink, 0o600n))
         || !sameStat(after, finalLink)) {
       fail(code);
     }
