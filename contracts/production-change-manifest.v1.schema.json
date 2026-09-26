@@ -1,0 +1,444 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jenn.local/contracts/production-change-manifest-v1.schema.json",
+  "title": "WO-06D Production Change Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "manifestId",
+    "authorityBase",
+    "purpose",
+    "currentState",
+    "target",
+    "secrets",
+    "gates",
+    "actions",
+    "rollbackPlan",
+    "authorizationPacket",
+    "invariants"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "manifestId": {
+      "const": "WO-06D-PRODUCTION-CHANGE-MANIFEST-V1"
+    },
+    "authorityBase": {
+      "const": "56f18930b8a89b19cdbfdde24d090649329d50c9"
+    },
+    "purpose": {
+      "const": "PREDEPLOY_AUTHORIZATION_DEFINITION"
+    },
+    "currentState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifestDefinitionStatus",
+        "deploymentAuthorizationRequest",
+        "deploymentGate"
+      ],
+      "properties": {
+        "manifestDefinitionStatus": {
+          "const": "FROZEN_DEFINITION"
+        },
+        "deploymentAuthorizationRequest": {
+          "const": "BLOCKED_PREREQUISITES"
+        },
+        "deploymentGate": {
+          "const": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE"
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "osFamily",
+        "hostIdentityStatus",
+        "hostIdentifier",
+        "publicHostname",
+        "applicationBind",
+        "reverseProxyRoute",
+        "containerName",
+        "dataVolumeLogicalName",
+        "publicExposurePolicy",
+        "unresolvedFacts"
+      ],
+      "properties": {
+        "provider": {
+          "const": "TENCENT_CLOUD_CVM"
+        },
+        "osFamily": {
+          "const": "UBUNTU"
+        },
+        "hostIdentityStatus": {
+          "const": "UNRESOLVED_OUTSIDE_REPOSITORY"
+        },
+        "hostIdentifier": {
+          "type": "null"
+        },
+        "publicHostname": {
+          "type": "null"
+        },
+        "applicationBind": {
+          "const": "127.0.0.1:3800"
+        },
+        "reverseProxyRoute": {
+          "type": "null"
+        },
+        "containerName": {
+          "type": "null"
+        },
+        "dataVolumeLogicalName": {
+          "const": "shooting_data"
+        },
+        "publicExposurePolicy": {
+          "const": "HTTPS_REVERSE_PROXY_ONLY"
+        },
+        "unresolvedFacts": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z0-9_]+$"
+          }
+        }
+      }
+    },
+    "secrets": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/secret"
+      }
+    },
+    "gates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/gate"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/action"
+      }
+    },
+    "rollbackPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "strategy",
+        "orderedActionIds",
+        "destructiveDataDeletionAllowed"
+      ],
+      "properties": {
+        "strategy": {
+          "const": "STOP_CLEANUP_THEN_ROUTE_RUNTIME_PRESERVE_DATA"
+        },
+        "orderedActionIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "destructiveDataDeletionAllowed": {
+          "const": false
+        }
+      }
+    },
+    "authorizationPacket": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "packetId",
+        "status",
+        "approvalModel",
+        "humanApprovalRequired",
+        "blanketApprovalAllowed",
+        "requestedActionIds",
+        "approvedActionIds",
+        "requestableActionIds",
+        "blockingGateIds",
+        "deploymentBlockingGateIds",
+        "mustRevalidateBeforeRequest",
+        "actionSpecificRevalidation",
+        "rollbackAuthorizationModel",
+        "separateRollbackApprovalRequired",
+        "derivedRollbackActionIds"
+      ],
+      "properties": {
+        "packetId": {
+          "const": "WO-06D-AUTHORIZATION-PACKET-V1"
+        },
+        "status": {
+          "const": "FROZEN_NOT_REQUESTED"
+        },
+        "approvalModel": {
+          "const": "EXACT_ACTION_IDS_AND_TARGETS_ONLY"
+        },
+        "humanApprovalRequired": {
+          "const": true
+        },
+        "blanketApprovalAllowed": {
+          "const": false
+        },
+        "requestedActionIds": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "approvedActionIds": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "requestableActionIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "blockingGateIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "mustRevalidateBeforeRequest": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z0-9_]+$"
+          }
+        },
+        "rollbackAuthorizationModel": {
+          "const": "BOUND_ROLLBACK_IDS_COAUTHORIZED_WITH_FORWARD_ACTION"
+        },
+        "separateRollbackApprovalRequired": {
+          "const": false
+        },
+        "derivedRollbackActionIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "deploymentBlockingGateIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "actionSpecificRevalidation": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z0-9_]+$"
+            }
+          }
+        }
+      }
+    },
+    "invariants": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z0-9_]+$"
+      }
+    }
+  },
+  "$defs": {
+    "secret": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "valuePresent",
+        "generation",
+        "destination",
+        "repositoryAllowed",
+        "logsAllowed"
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "VIEWER_TOKEN",
+            "SUBMITTER_TOKEN",
+            "SCHEDULER_TOKEN",
+            "ADMIN_TOKEN"
+          ]
+        },
+        "valuePresent": {
+          "const": false
+        },
+        "generation": {
+          "const": "DEPLOYMENT_TIME_RANDOM"
+        },
+        "destination": {
+          "const": "SERVER_RESTRICTED_CONFIG"
+        },
+        "repositoryAllowed": {
+          "const": false
+        },
+        "logsAllowed": {
+          "const": false
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "evidence"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z0-9_]+$"
+        },
+        "status": {
+          "enum": [
+            "SATISFIED",
+            "BLOCKED",
+            "READY_FOR_AUTHORIZATION"
+          ]
+        },
+        "evidence": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "category",
+        "risk",
+        "sideEffect",
+        "status",
+        "requiresExplicitAuthorization",
+        "authorityTarget",
+        "preconditions",
+        "effects",
+        "rollbackActionIds",
+        "evidenceRequired"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z0-9][A-Z0-9_-]{2,80}$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "category": {
+          "enum": [
+            "TARGET",
+            "FILESYSTEM",
+            "SECRET",
+            "BUILD",
+            "RUNTIME",
+            "NETWORK",
+            "DATA",
+            "INTEGRATION",
+            "CUTOVER",
+            "ROLLBACK"
+          ]
+        },
+        "risk": {
+          "enum": [
+            "LOW",
+            "MEDIUM",
+            "HIGH",
+            "CRITICAL"
+          ]
+        },
+        "sideEffect": {
+          "enum": [
+            "READ_ONLY",
+            "REVERSIBLE",
+            "IRREVERSIBLE_OR_EXTERNAL"
+          ]
+        },
+        "status": {
+          "enum": [
+            "REQUESTABLE_EXPLICIT_AUTHORIZATION",
+            "BLOCKED_PREREQUISITE",
+            "CONDITIONAL_NOT_REQUESTED",
+            "ROLLBACK_ONLY"
+          ]
+        },
+        "requiresExplicitAuthorization": {
+          "type": "boolean"
+        },
+        "authorityTarget": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "preconditions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "effects": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          }
+        },
+        "rollbackActionIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidenceRequired": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z0-9_]+$"
+          }
+        }
+      }
+    }
+  }
+}

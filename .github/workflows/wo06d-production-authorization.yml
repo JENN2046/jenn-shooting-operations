@@ -1,0 +1,47 @@
+name: WO-06D Production Authorization Packet
+
+on:
+  push:
+    branches:
+      - codex/wo-06d-production-change-manifest
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  manifest:
+    name: Validate production change manifest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact head
+        uses: actions/checkout@v4
+
+      - name: Set up fixed Node 24 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: npm
+
+      - name: Record runtime facts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          uname -a
+          node --version
+          npm --version
+          node -p "JSON.stringify({node: process.versions.node, tz: process.versions.tz ?? null, icu: process.versions.icu ?? null})"
+
+      - name: Install declared dependencies
+        run: npm ci
+
+      - name: Run repository check
+        run: npm run check
+
+      - name: Run manifest targeted tests
+        run: node --test tests/production-change-manifest*.test.mjs
+
+      - name: Emit authorization packet verdict
+        run: npm run validate:production-manifest

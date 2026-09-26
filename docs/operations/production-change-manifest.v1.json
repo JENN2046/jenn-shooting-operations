@@ -1,0 +1,1150 @@
+{
+  "schemaVersion": 1,
+  "manifestId": "WO-06D-PRODUCTION-CHANGE-MANIFEST-V1",
+  "authorityBase": "56f18930b8a89b19cdbfdde24d090649329d50c9",
+  "purpose": "PREDEPLOY_AUTHORIZATION_DEFINITION",
+  "currentState": {
+    "manifestDefinitionStatus": "FROZEN_DEFINITION",
+    "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
+    "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE"
+  },
+  "target": {
+    "provider": "TENCENT_CLOUD_CVM",
+    "osFamily": "UBUNTU",
+    "hostIdentityStatus": "UNRESOLVED_OUTSIDE_REPOSITORY",
+    "hostIdentifier": null,
+    "publicHostname": null,
+    "applicationBind": "127.0.0.1:3800",
+    "reverseProxyRoute": null,
+    "containerName": null,
+    "dataVolumeLogicalName": "shooting_data",
+    "publicExposurePolicy": "HTTPS_REVERSE_PROXY_ONLY",
+    "unresolvedFacts": [
+      "TARGET_HOST_IDENTITY",
+      "DISK_CAPACITY",
+      "PORT_CONFLICT_CHECK",
+      "CONTAINER_NAME",
+      "REVERSE_PROXY_ROUTE",
+      "TLS_CERTIFICATE_BINDING"
+    ]
+  },
+  "secrets": [
+    {
+      "id": "VIEWER_TOKEN",
+      "valuePresent": false,
+      "generation": "DEPLOYMENT_TIME_RANDOM",
+      "destination": "SERVER_RESTRICTED_CONFIG",
+      "repositoryAllowed": false,
+      "logsAllowed": false
+    },
+    {
+      "id": "SUBMITTER_TOKEN",
+      "valuePresent": false,
+      "generation": "DEPLOYMENT_TIME_RANDOM",
+      "destination": "SERVER_RESTRICTED_CONFIG",
+      "repositoryAllowed": false,
+      "logsAllowed": false
+    },
+    {
+      "id": "SCHEDULER_TOKEN",
+      "valuePresent": false,
+      "generation": "DEPLOYMENT_TIME_RANDOM",
+      "destination": "SERVER_RESTRICTED_CONFIG",
+      "repositoryAllowed": false,
+      "logsAllowed": false
+    },
+    {
+      "id": "ADMIN_TOKEN",
+      "valuePresent": false,
+      "generation": "DEPLOYMENT_TIME_RANDOM",
+      "destination": "SERVER_RESTRICTED_CONFIG",
+      "repositoryAllowed": false,
+      "logsAllowed": false
+    }
+  ],
+  "gates": [
+    {
+      "id": "WO06A_LOCAL_BASELINE",
+      "status": "SATISFIED",
+      "evidence": "WO-06A_PREDEPLOY_EVIDENCE_BASELINE_PASS"
+    },
+    {
+      "id": "WO06B_MIGRATION_RECOVERY",
+      "status": "SATISFIED",
+      "evidence": "WO-06B_MIGRATION_RECOVERY_ACCEPTANCE_PASS"
+    },
+    {
+      "id": "WO06C_LOCAL_BOUNDARY",
+      "status": "SATISFIED",
+      "evidence": "WO-06C_LOCAL_EXTERNAL_BOUNDARY_PASS"
+    },
+    {
+      "id": "WO06C_VCP_EXTERNAL",
+      "status": "BLOCKED",
+      "evidence": "BLOCKED_EXTERNAL_RUNTIME"
+    },
+    {
+      "id": "VCP_DEPLOYABLE_ADAPTER_WIRING",
+      "status": "BLOCKED",
+      "evidence": "REAL_VCP_ADAPTER_RUNTIME_WIRING_NOT_IMPLEMENTED"
+    },
+    {
+      "id": "WO06C_KIOSK_DEVICE",
+      "status": "BLOCKED",
+      "evidence": "BLOCKED_DEVICE"
+    },
+    {
+      "id": "KIOSK_DEPLOYABLE_AUTH_WIRING",
+      "status": "BLOCKED",
+      "evidence": "PRODUCTION_ENTRYPOINT_AUTH_INJECTION_NOT_IMPLEMENTED"
+    },
+    {
+      "id": "WO06C_DINGTALK_PROVIDER",
+      "status": "READY_FOR_AUTHORIZATION",
+      "evidence": "READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION"
+    },
+    {
+      "id": "DINGTALK_TARGET_BINDING",
+      "status": "BLOCKED",
+      "evidence": "EXACT_APP_PROVIDER_AND_TEST_DESTINATION_UNRESOLVED"
+    },
+    {
+      "id": "DINGTALK_DEPLOYABLE_ADAPTER_WIRING",
+      "status": "BLOCKED",
+      "evidence": "REAL_DINGTALK_ADAPTER_CREDENTIALS_AND_RUNTIME_WIRING_NOT_IMPLEMENTED"
+    },
+    {
+      "id": "CUTOVER_FORWARD_CHAIN",
+      "status": "BLOCKED",
+      "evidence": "REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_10_11_AND_PROD_08_IF_USED"
+    },
+    {
+      "id": "CUTOVER_SWITCH_RECOVERY",
+      "status": "BLOCKED",
+      "evidence": "POST_SWITCH_DUAL_READ_COMPATIBLE_WRITE_AND_SWITCH_RECORD_NOT_DESIGNED"
+    },
+    {
+      "id": "CUTOVER_SOURCE_CONSISTENCY",
+      "status": "BLOCKED",
+      "evidence": "REQUIRES_DEPLOYABLE_SOURCE_WRITE_BARRIER_AND_EXACT_OFFLINE_OR_OPERATION_BOUND_FINAL_SYNC_PLAN_THROUGH_OLD_SOURCE_DEMOTION"
+    },
+    {
+      "id": "CUTOVER_LIVE_SERVICE_READINESS",
+      "status": "BLOCKED",
+      "evidence": "REQUIRES_IMMEDIATE_LOOPBACK_HEALTH_AND_ROUTED_TLS_PROBE"
+    },
+    {
+      "id": "TARGET_HOST_BINDING",
+      "status": "BLOCKED",
+      "evidence": "EXACT_CANDIDATE_PRODUCTION_HOST_UNRESOLVED"
+    },
+    {
+      "id": "CONTAINER_START_READINESS",
+      "status": "BLOCKED",
+      "evidence": "REQUIRES_VERIFIED_PROD_02_03_04_09"
+    },
+    {
+      "id": "PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL",
+      "status": "BLOCKED",
+      "evidence": "ALL_STARTUP_PERIODIC_AND_REQUEST_TRIGGERED_ORPHAN_CLEANUP_DISABLE_NOT_IMPLEMENTED"
+    },
+    {
+      "id": "HEALTH_SMOKE_READINESS",
+      "status": "BLOCKED",
+      "evidence": "REQUIRES_VERIFIED_PROD_05"
+    },
+    {
+      "id": "PROXY_BACKEND_READINESS",
+      "status": "BLOCKED",
+      "evidence": "REQUIRES_VERIFIED_PROD_04_05_06"
+    },
+    {
+      "id": "PRE_CUTOVER_ROUTE_WRITE_RESTRICTION",
+      "status": "BLOCKED",
+      "evidence": "REQUIRES_PUBLIC_WRITE_BLOCK_OR_BOUNDED_STAGING_ACCESS"
+    },
+    {
+      "id": "PRODUCTION_IMPORT_STORAGE_READINESS",
+      "status": "BLOCKED",
+      "evidence": "REQUIRES_VERIFIED_PROD_02"
+    },
+    {
+      "id": "PRODUCTION_IMPORT_TARGET_ABSENCE",
+      "status": "BLOCKED",
+      "evidence": "REQUIRES_TARGET_SQLITE_PATH_ABSENT_BEFORE_PROD_05"
+    },
+    {
+      "id": "PRODUCTION_IMPORT_SOURCE_CONSISTENCY",
+      "status": "BLOCKED",
+      "evidence": "REQUIRES_OFFLINE_SOURCE_QUIESCENCE_OR_VERIFIED_UPLOAD_MIGRATION_COORDINATION"
+    },
+    {
+      "id": "PRODUCTION_ATTACHMENT_COPY_CAPABILITY",
+      "status": "BLOCKED",
+      "evidence": "TARGET_UPLOAD_BYTE_COPY_AND_VERIFICATION_NOT_IMPLEMENTED"
+    },
+    {
+      "id": "INTEGRATION_DEPLOYMENT_READINESS",
+      "status": "BLOCKED",
+      "evidence": "REQUIRES_VERIFIED_PROD_02_03_04_05_06_07_09_AND_PROD_08_IF_USED"
+    },
+    {
+      "id": "PRODUCTION_TARGET_FACTS",
+      "status": "BLOCKED",
+      "evidence": "UNRESOLVED_OUTSIDE_REPOSITORY"
+    },
+    {
+      "id": "PRODUCTION_DATA_MIGRATION",
+      "status": "BLOCKED",
+      "evidence": "REAL_PRODUCTION_INPUT_NOT_VALIDATED"
+    },
+    {
+      "id": "POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION",
+      "status": "BLOCKED",
+      "evidence": "REQUIRES_VERIFIED_PROD_13_AND_POST_CUTOVER_ATTACHMENT_PARITY"
+    },
+    {
+      "id": "CUTOVER_TARGET_WRITE_FENCE_CAPABILITY",
+      "status": "BLOCKED",
+      "evidence": "ALL_TARGET_DATABASE_ATTACHMENT_WRITERS_FENCE_DRAIN_AND_FAIL_CLOSED_RETENTION_NOT_IMPLEMENTED"
+    },
+    {
+      "id": "RESTORED_CLEANUP_DISABLE_CAPABILITY",
+      "status": "BLOCKED",
+      "evidence": "EXACT_PROD_14_CLEANUP_DISABLE_AND_IN_FLIGHT_DRAIN_ROLLBACK_NOT_IMPLEMENTED"
+    },
+    {
+      "id": "PRODUCTION_DEPLOYMENT_GATE",
+      "status": "BLOCKED",
+      "evidence": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE"
+    }
+  ],
+  "actions": [
+    {
+      "id": "PROD-01-TARGET-READONLY-PREFLIGHT",
+      "title": "Read-only target host preflight",
+      "category": "TARGET",
+      "risk": "LOW",
+      "sideEffect": "READ_ONLY",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "UNRESOLVED_PRODUCTION_HOST_IDENTITY",
+      "preconditions": [
+        "TARGET_HOST_BINDING"
+      ],
+      "effects": [
+        "Verify the bound candidate host identity and resolve disk/port/container/proxy/TLS deployment facts without mutation"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "BOUND_HOST_IDENTITY_MATCH",
+        "DISK_CAPACITY",
+        "PORT_CONFLICTS",
+        "CONTAINER_CONFLICTS",
+        "REVERSE_PROXY_ROUTE_CONFLICTS",
+        "TLS_BINDING_FACTS"
+      ]
+    },
+    {
+      "id": "PROD-02-CREATE-ISOLATED-APP-STORAGE",
+      "title": "Create isolated application directory and persistent volume",
+      "category": "FILESYSTEM",
+      "risk": "MEDIUM",
+      "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Resolved production host; new isolated application directory and data volume only",
+      "preconditions": [
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Create new isolated application storage without modifying existing application data; retain the created directory and volume on rollback"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-04-PRESERVE-DATA-VOLUME"
+      ],
+      "evidenceRequired": [
+        "TARGET_PATH",
+        "VOLUME_NAME",
+        "OWNER_MODE",
+        "FREE_SPACE",
+        "RETAINED_STORAGE_ARTIFACT_ACKNOWLEDGED"
+      ]
+    },
+    {
+      "id": "PROD-03-GENERATE-INSTALL-TOKENS",
+      "title": "Generate and install four role tokens",
+      "category": "SECRET",
+      "risk": "HIGH",
+      "sideEffect": "REVERSIBLE",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Resolved production host restricted runtime configuration for four role tokens",
+      "preconditions": [
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Generate independent secret values and install them outside Git/logs/chat"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-06-REVOKE-ROLE-TOKENS"
+      ],
+      "evidenceRequired": [
+        "SECRET_STORAGE_PATH",
+        "FILE_OWNER_MODE",
+        "NO_SECRET_OUTPUT_PROOF"
+      ]
+    },
+    {
+      "id": "PROD-04-BUILD-IMAGE",
+      "title": "Build production image from approved authority source",
+      "category": "BUILD",
+      "risk": "MEDIUM",
+      "sideEffect": "REVERSIBLE",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Resolved production host image store; exact approved authority commit only",
+      "preconditions": [
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Create a new application image without replacing running services"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-08-REMOVE-BUILT-IMAGE"
+      ],
+      "evidenceRequired": [
+        "AUTHORITY_COMMIT",
+        "IMAGE_ID_OR_DIGEST",
+        "NODE_BASE_DIGEST",
+        "BUILD_LOG_LOW_DISCLOSURE"
+      ]
+    },
+    {
+      "id": "PROD-05-START-ISOLATED-CONTAINER",
+      "title": "Start isolated application container",
+      "category": "RUNTIME",
+      "risk": "HIGH",
+      "sideEffect": "REVERSIBLE",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Resolved production host; one new loopback-only container and dedicated data volume",
+      "preconditions": [
+        "PRODUCTION_TARGET_FACTS",
+        "CONTAINER_START_READINESS",
+        "PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Start new service bound to host loopback only with every orphan-upload cleanup entry point disabled through cutover, including startup, periodic timer, saveUpload, and submitRequest-triggered cleanup"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-02-STOP-NEW-CONTAINER"
+      ],
+      "evidenceRequired": [
+        "CONTAINER_NAME",
+        "IMAGE_DIGEST",
+        "LOOPBACK_BIND",
+        "HEALTH_STATUS",
+        "RUNTIME_UID",
+        "STORAGE_TOKEN_IMAGE_PREDECESSOR_PROOF",
+        "PRODUCTION_IMPORT_COMPLETION_PROOF",
+        "STARTUP_ORPHAN_CLEANUP_DISABLED",
+        "PERIODIC_ORPHAN_CLEANUP_DISABLED",
+        "REQUEST_TRIGGERED_ORPHAN_CLEANUP_DISABLED",
+        "ALL_ORPHAN_CLEANUP_ENTRY_POINTS_DISABLED_PROOF"
+      ]
+    },
+    {
+      "id": "PROD-06-LOOPBACK-HEALTH-SMOKE",
+      "title": "Run production-host loopback health smoke",
+      "category": "RUNTIME",
+      "risk": "LOW",
+      "sideEffect": "READ_ONLY",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "New isolated container on resolved production host",
+      "preconditions": [
+        "PRODUCTION_TARGET_FACTS",
+        "HEALTH_SMOKE_READINESS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Read health endpoint and verify local runtime facts only"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "HEALTHZ_STATUS",
+        "CONTAINER_UID",
+        "DATABASE_PATH",
+        "VOLUME_MOUNT",
+        "CONTAINER_START_COMPLETION_PROOF"
+      ]
+    },
+    {
+      "id": "PROD-07-CONFIGURE-REVERSE-PROXY-TLS",
+      "title": "Add isolated reverse-proxy route and HTTPS binding",
+      "category": "NETWORK",
+      "risk": "HIGH",
+      "sideEffect": "REVERSIBLE",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Exact resolved reverse-proxy route and TLS binding only",
+      "preconditions": [
+        "PRODUCTION_TARGET_FACTS",
+        "PROXY_BACKEND_READINESS",
+        "PRE_CUTOVER_ROUTE_WRITE_RESTRICTION",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Expose the new loopback service only through a staging HTTPS route that blocks public unauthenticated writes; any pre-cutover write access is restricted to exact bounded staging principals"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-01-REMOVE-NEW-ROUTE"
+      ],
+      "evidenceRequired": [
+        "ROUTE",
+        "HOSTNAME",
+        "TLS_BINDING",
+        "CONFIG_TEST",
+        "NO_EXISTING_ROUTE_OVERWRITE",
+        "BACKEND_BUILD_START_HEALTH_PROOF",
+        "STAGING_ROUTE_ACCESS_POLICY",
+        "PUBLIC_WRITE_ENDPOINTS_BLOCKED",
+        "BOUNDED_STAGING_PRINCIPAL_SCOPE",
+        "PRE_CUTOVER_WRITE_DENIAL_PROBE",
+        "STAGING_REQUEST_PATH_CLEANUP_DISABLED_PROOF"
+      ]
+    },
+    {
+      "id": "PROD-08-FIREWALL-SECURITY-GROUP",
+      "title": "Change firewall or security group only if required",
+      "category": "NETWORK",
+      "risk": "CRITICAL",
+      "sideEffect": "REVERSIBLE",
+      "status": "CONDITIONAL_NOT_REQUESTED",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Exact named firewall/security-group rule only",
+      "preconditions": [
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Potentially change network reachability; no action unless necessity is separately proven"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-05-REVERT-FIREWALL-RULE"
+      ],
+      "evidenceRequired": [
+        "NECESSITY_PROOF",
+        "CURRENT_RULE",
+        "PROPOSED_RULE",
+        "IMPACT_RADIUS"
+      ]
+    },
+    {
+      "id": "PROD-09-PRODUCTION-DATA-IMPORT",
+      "title": "Import or migrate real production workbench data",
+      "category": "DATA",
+      "risk": "CRITICAL",
+      "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Exact approved production source database/upload set to a new isolated target",
+      "preconditions": [
+        "PRODUCTION_DATA_MIGRATION",
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_IMPORT_STORAGE_READINESS",
+        "PRODUCTION_IMPORT_TARGET_ABSENCE",
+        "PRODUCTION_IMPORT_SOURCE_CONSISTENCY",
+        "PRODUCTION_ATTACHMENT_COPY_CAPABILITY",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Create migrated production facts in an isolated target only after separate real-input validation",
+        "Copy every source upload byte referenced by a non-null stored_name into the isolated target upload volume and verify source/target attachment parity"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-04-PRESERVE-DATA-VOLUME"
+      ],
+      "evidenceRequired": [
+        "SOURCE_IDENTITY",
+        "BACKUP_PROOF",
+        "ROLLBACK_PROOF",
+        "TARGET_DIGEST",
+        "PROOF_SEAL",
+        "MAINTENANCE_WINDOW",
+        "IMPORT_TARGET_SQLITE_ABSENCE_PROOF",
+        "SOURCE_QUIESCENCE_OR_COORDINATION_PROOF",
+        "STORAGE_PREPARATION_COMPLETION_PROOF",
+        "SOURCE_UPLOAD_MANIFEST_DIGEST",
+        "TARGET_UPLOAD_MANIFEST_DIGEST",
+        "SOURCE_TARGET_UPLOAD_MANIFEST_MATCH",
+        "ATTACHMENT_BYTE_COPY_COMPLETION_PROOF",
+        "ATTACHMENT_RECORD_FILE_PARITY_PROOF"
+      ]
+    },
+    {
+      "id": "PROD-10-ENABLE-VCP-REMOTE-SYNC",
+      "title": "Enable VCP remote synchronization",
+      "category": "INTEGRATION",
+      "risk": "HIGH",
+      "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Exact VCP runtime adapter configuration and one approved service endpoint",
+      "preconditions": [
+        "VCP_DEPLOYABLE_ADAPTER_WIRING",
+        "PRODUCTION_TARGET_FACTS",
+        "INTEGRATION_DEPLOYMENT_READINESS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Allow VCP to pull and guarded-push against the deployed service; guarded push may persist new revisioned task facts that configuration rollback does not remove"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-09-DISABLE-VCP-CONFIG"
+      ],
+      "evidenceRequired": [
+        "VCP_RUNTIME_WIRING_PROOF",
+        "VCP_ADAPTER_REVISION",
+        "SERVICE_ENDPOINT",
+        "PRINCIPAL_SCOPE",
+        "PULL_PUSH_VERIFY_RESULT",
+        "DEPLOYMENT_CHAIN_COMPLETION_PROOF"
+      ]
+    },
+    {
+      "id": "PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE",
+      "title": "Enable real Kiosk device and identity mapping",
+      "category": "INTEGRATION",
+      "risk": "HIGH",
+      "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Exact approved Kiosk device/browser and trusted identity mapping",
+      "preconditions": [
+        "KIOSK_DEPLOYABLE_AUTH_WIRING",
+        "PRODUCTION_TARGET_FACTS",
+        "INTEGRATION_DEPLOYMENT_READINESS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "Allow real device to read and submit authorized run events; accepted or review-required submissions may persist production runs, reviews, receipts, and audit facts that configuration rollback does not remove"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-10-DISABLE-KIOSK-CONFIG"
+      ],
+      "evidenceRequired": [
+        "KIOSK_AUTH_RUNTIME_WIRING_PROOF",
+        "DEVICE_IDENTITY",
+        "RESOURCE_SCOPE",
+        "REAL_DEVICE_ACCEPTANCE",
+        "OFFLINE_REPLAY_RESULT",
+        "DEPLOYMENT_CHAIN_COMPLETION_PROOF"
+      ]
+    },
+    {
+      "id": "PROD-12-DINGTALK-PROVIDER-INTEGRATION",
+      "title": "Configure and validate DingTalk provider integration",
+      "category": "INTEGRATION",
+      "risk": "HIGH",
+      "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "UNRESOLVED_DINGTALK_TARGET_BINDING",
+      "preconditions": [
+        "WO06C_DINGTALK_PROVIDER",
+        "DINGTALK_TARGET_BINDING",
+        "DINGTALK_DEPLOYABLE_ADAPTER_WIRING",
+        "PRODUCTION_TARGET_FACTS",
+        "INTEGRATION_DEPLOYMENT_READINESS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "May perform real provider authentication and bounded integration traffic only after explicit authorization"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-11-DISABLE-DINGTALK-CONFIG"
+      ],
+      "evidenceRequired": [
+        "DINGTALK_RUNTIME_WIRING_PROOF",
+        "PROVIDER_CONFIG_SCOPE",
+        "TEST_DESTINATION",
+        "SEND_RESULT",
+        "CALLBACK_POLICY",
+        "SECRET_STORAGE_PROOF",
+        "DEPLOYMENT_CHAIN_COMPLETION_PROOF"
+      ]
+    },
+    {
+      "id": "PROD-13-CUTOVER-SWITCH",
+      "title": "Perform production cutover or Switch",
+      "category": "CUTOVER",
+      "risk": "CRITICAL",
+      "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Exact approved source and target service database/upload write barriers and production route/data/client switch only",
+      "preconditions": [
+        "WO06C_VCP_EXTERNAL",
+        "WO06C_KIOSK_DEVICE",
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_DATA_MIGRATION",
+        "CUTOVER_SOURCE_CONSISTENCY",
+        "CUTOVER_LIVE_SERVICE_READINESS",
+        "CUTOVER_FORWARD_CHAIN",
+        "CUTOVER_SWITCH_RECOVERY",
+        "CUTOVER_TARGET_WRITE_FENCE_CAPABILITY",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "effects": [
+        "After exact PROD-13 authorization, acquire one persistent target fence bound to parent cutover, target storage identities, writer inventory, operation and target-fence epoch; deny every staging, admin, API, integration, callback, background and direct-storage writer with no sync exception active",
+        "With the same fence and no sync exception active, acquire and retain the source-wide database/upload barrier; deny and drain all source writers across processes; drain all initial in-flight target database and attachment mutations across every process; keep every orphan-cleanup entry point disabled",
+        "Only after the exact source database/upload barrier is held and drained, admit the separately approved operation-bound final-sync identity through that fence with both epochs, source/target identities, scope and finite bounds; then revoke, drain DB and attachments, and seal; offline grants none",
+        "With sync sealed, zero active exceptions and zero in-flight mutations, recompute database and attachment parity bound to source snapshot/barrier epoch, target identities/revision/digests, parent cutover, sync operation and target-fence epoch; reject delayed, replayed or stale-epoch grants",
+        "Immediately before Switch, prove the same target fence and source barrier remain held, sync stays sealed, no exception or mutation is active, and proof bindings match with no intervening writes; keep cleanup disabled and verify read-only loopback health and routed TLS",
+        "While retaining the same fence and source barrier with sync sealed and ordinary writers denied, switch only approved endpoint, data and client mappings and promote the staging route; verify old-source demotion and persist its denied-write policy without releasing target writes",
+        "Keep both barriers, zero active exceptions and zero in-flight mutations through read-only post-Switch checks; uncertain acquisition, sync/revocation, drain, restart, ownership, timeout or fence loss invalidates parity, keeps both closed, and never retries sync or reopens admission automatically",
+        "Only after every read-only check succeeds and old-source demotion is proven, release that target fence into approved production writes; keep old-source writes denied; otherwise retain closed admission independently of process or container lifetime; cleanup stays disabled until authorized PROD-14"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH",
+        "ROLLBACK-01-REMOVE-NEW-ROUTE",
+        "ROLLBACK-05-REVERT-FIREWALL-RULE",
+        "ROLLBACK-02-STOP-NEW-CONTAINER",
+        "ROLLBACK-08-REMOVE-BUILT-IMAGE",
+        "ROLLBACK-06-REVOKE-ROLE-TOKENS",
+        "ROLLBACK-09-DISABLE-VCP-CONFIG",
+        "ROLLBACK-10-DISABLE-KIOSK-CONFIG",
+        "ROLLBACK-04-PRESERVE-DATA-VOLUME"
+      ],
+      "evidenceRequired": [
+        "CUTOVER_PLAN",
+        "FORWARD_CHAIN_COMPLETION_PROOF",
+        "VCP_KIOSK_ENABLEMENT_COMPLETION_PROOF",
+        "SWITCH_RECORD",
+        "DUAL_READ_COMPATIBLE_WRITE_RECOVERY_PROOF",
+        "POST_SWITCH_RECOVERY_DESIGN",
+        "PRE_CUTOVER_BACKUP",
+        "CLIENT_SWITCH_LIST",
+        "ROLLBACK_TRIGGER",
+        "POST_CUTOVER_VERIFICATION",
+        "PRE_CUTOVER_ROUTE_RESTRICTION_PROOF",
+        "PRE_SWITCH_SOURCE_TARGET_PARITY_PROOF",
+        "PRE_SWITCH_ATTACHMENT_PARITY_PROOF",
+        "PRE_SWITCH_HEALTH_STATUS",
+        "PRE_SWITCH_ROUTED_TLS_STATUS",
+        "PRE_SWITCH_ORPHAN_CLEANUP_GUARD_PROOF",
+        "POST_CUTOVER_CLEANUP_RESTORATION_PLAN",
+        "TARGET_WRITE_FENCE_CAPABILITY_PROOF",
+        "TARGET_WRITER_INVENTORY_PROOF",
+        "TARGET_WRITE_FENCE_ACQUISITION_PROOF",
+        "TARGET_DATABASE_ATTACHMENT_DRAIN_PROOF",
+        "FINAL_SYNC_EXCEPTION_ADMISSION_RECEIPT",
+        "FINAL_SYNC_EXCEPTION_REVOCATION_RECEIPT",
+        "FINAL_SYNC_DATABASE_DRAIN_RECEIPT",
+        "FINAL_SYNC_ATTACHMENT_DRAIN_RECEIPT",
+        "FINAL_SYNC_PHASE_SEALED_RECEIPT",
+        "ZERO_ACTIVE_SYNC_EXCEPTION_AND_MUTATION_PROOF",
+        "FINAL_PARITY_FENCE_BINDING_PROOF",
+        "PRE_SWITCH_SAME_FENCE_PROOF",
+        "POST_SWITCH_SAME_FENCE_PROOF",
+        "READ_ONLY_POST_SWITCH_VERIFICATION",
+        "TARGET_FENCE_RELEASE_PROOF",
+        "SOURCE_WRITE_BARRIER_CAPABILITY_PROOF",
+        "SOURCE_WRITE_BARRIER_ACQUISITION_AND_DRAIN_PROOF",
+        "SOURCE_BARRIER_PARITY_BINDING_PROOF",
+        "SOURCE_BARRIER_HELD_THROUGH_DEMOTION",
+        "OLD_SOURCE_WRITE_ADMISSION_REMAINS_CLOSED"
+      ]
+    },
+    {
+      "id": "PROD-14-RESTORE-ORPHAN-CLEANUP",
+      "title": "Restore normal orphan-upload cleanup after cutover",
+      "category": "RUNTIME",
+      "risk": "HIGH",
+      "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": true,
+      "authorityTarget": "Exact orphan-upload cleanup controls of the newly authoritative production service only",
+      "preconditions": [
+        "POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION",
+        "RESTORED_CLEANUP_DISABLE_CAPABILITY"
+      ],
+      "effects": [
+        "After verified cutover completion and post-cutover attachment parity, capture the exact disabled cleanup configuration and verify its coauthorized disable-and-drain recovery capability before enabling any cleanup entry point",
+        "Restore only the approved startup, periodic, saveUpload-triggered and submitRequest-triggered cleanup controls; if restoration or post-restore verification fails, invoke the exact PROD-14-bound disable-and-drain rollback; already deleted files are not recoverable by configuration rollback"
+      ],
+      "rollbackActionIds": [
+        "ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP"
+      ],
+      "evidenceRequired": [
+        "CUTOVER_COMPLETION_PROOF",
+        "POST_CUTOVER_ATTACHMENT_PARITY_PROOF",
+        "STARTUP_ORPHAN_CLEANUP_RESTORED",
+        "PERIODIC_ORPHAN_CLEANUP_RESTORED",
+        "REQUEST_TRIGGERED_ORPHAN_CLEANUP_RESTORED",
+        "POST_RESTORE_HEALTH_STATUS",
+        "CLEANUP_DISABLE_CAPABILITY_PROOF",
+        "CLEANUP_PRE_RESTORE_DISABLED_STATE",
+        "CLEANUP_ROLLBACK_TARGET_BINDING",
+        "DELETION_IRREVERSIBILITY_ACKNOWLEDGED"
+      ]
+    },
+    {
+      "id": "ROLLBACK-01-REMOVE-NEW-ROUTE",
+      "title": "Remove newly added reverse-proxy route",
+      "category": "ROLLBACK",
+      "risk": "HIGH",
+      "sideEffect": "REVERSIBLE",
+      "status": "ROLLBACK_ONLY",
+      "requiresExplicitAuthorization": false,
+      "authorityTarget": "Only the newly added route from this deployment",
+      "preconditions": [],
+      "effects": [
+        "Remove exposure of the new service without modifying old routes"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "ROUTE_REMOVED",
+        "OLD_ROUTES_UNCHANGED"
+      ]
+    },
+    {
+      "id": "ROLLBACK-02-STOP-NEW-CONTAINER",
+      "title": "Stop and remove newly started application container",
+      "category": "ROLLBACK",
+      "risk": "MEDIUM",
+      "sideEffect": "REVERSIBLE",
+      "status": "ROLLBACK_ONLY",
+      "requiresExplicitAuthorization": false,
+      "authorityTarget": "Only the newly started container object from this deployment; named data volume is excluded from deletion",
+      "preconditions": [],
+      "effects": [
+        "Stop and remove only the new container object so it releases its image reference; preserve the named data volume"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "CONTAINER_STOPPED",
+        "CONTAINER_REMOVED",
+        "IMAGE_REFERENCE_RELEASED",
+        "DATA_VOLUME_PRESERVED"
+      ]
+    },
+    {
+      "id": "ROLLBACK-09-DISABLE-VCP-CONFIG",
+      "title": "Disable VCP configuration introduced by PROD-10",
+      "category": "ROLLBACK",
+      "risk": "HIGH",
+      "sideEffect": "REVERSIBLE",
+      "status": "ROLLBACK_ONLY",
+      "requiresExplicitAuthorization": false,
+      "authorityTarget": "Only the VCP runtime adapter configuration and service endpoint binding introduced by PROD-10",
+      "preconditions": [],
+      "effects": [
+        "Disable only the VCP integration configuration introduced by PROD-10 without affecting Kiosk or DingTalk"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "VCP_INTEGRATION_DISABLED",
+        "KIOSK_DINGTALK_UNCHANGED",
+        "SECRET_VALUES_NOT_LOGGED"
+      ]
+    },
+    {
+      "id": "ROLLBACK-10-DISABLE-KIOSK-CONFIG",
+      "title": "Disable Kiosk configuration introduced by PROD-11",
+      "category": "ROLLBACK",
+      "risk": "HIGH",
+      "sideEffect": "REVERSIBLE",
+      "status": "ROLLBACK_ONLY",
+      "requiresExplicitAuthorization": false,
+      "authorityTarget": "Only the Kiosk device and trusted identity mapping introduced by PROD-11",
+      "preconditions": [],
+      "effects": [
+        "Disable only the Kiosk integration configuration introduced by PROD-11 without affecting VCP or DingTalk"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "KIOSK_INTEGRATION_DISABLED",
+        "VCP_DINGTALK_UNCHANGED"
+      ]
+    },
+    {
+      "id": "ROLLBACK-11-DISABLE-DINGTALK-CONFIG",
+      "title": "Disable DingTalk configuration introduced by PROD-12",
+      "category": "ROLLBACK",
+      "risk": "HIGH",
+      "sideEffect": "REVERSIBLE",
+      "status": "ROLLBACK_ONLY",
+      "requiresExplicitAuthorization": false,
+      "authorityTarget": "Only the DingTalk provider configuration introduced by PROD-12",
+      "preconditions": [],
+      "effects": [
+        "Disable only the DingTalk integration configuration introduced by PROD-12 without affecting VCP or Kiosk"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "DINGTALK_INTEGRATION_DISABLED",
+        "VCP_KIOSK_UNCHANGED",
+        "SECRET_VALUES_NOT_LOGGED"
+      ]
+    },
+    {
+      "id": "ROLLBACK-04-PRESERVE-DATA-VOLUME",
+      "title": "Preserve new data volume and stop mutation",
+      "category": "ROLLBACK",
+      "risk": "LOW",
+      "sideEffect": "READ_ONLY",
+      "status": "ROLLBACK_ONLY",
+      "requiresExplicitAuthorization": false,
+      "authorityTarget": "New deployment data volume only",
+      "preconditions": [],
+      "effects": [
+        "Preserve evidence/data; do not delete or overwrite the volume"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "VOLUME_PRESERVED",
+        "MUTATION_STOPPED"
+      ]
+    },
+    {
+      "id": "ROLLBACK-05-REVERT-FIREWALL-RULE",
+      "title": "Revert only the newly changed firewall/security-group rule",
+      "category": "ROLLBACK",
+      "risk": "CRITICAL",
+      "sideEffect": "REVERSIBLE",
+      "status": "ROLLBACK_ONLY",
+      "requiresExplicitAuthorization": false,
+      "authorityTarget": "Exact firewall/security-group rule changed by PROD-08 only",
+      "preconditions": [],
+      "effects": [
+        "Restore the previous rule exactly"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "PREVIOUS_RULE_RESTORED"
+      ]
+    },
+    {
+      "id": "ROLLBACK-06-REVOKE-ROLE-TOKENS",
+      "title": "Revoke and remove generated role-token configuration",
+      "category": "ROLLBACK",
+      "risk": "HIGH",
+      "sideEffect": "REVERSIBLE",
+      "status": "ROLLBACK_ONLY",
+      "requiresExplicitAuthorization": false,
+      "authorityTarget": "Only the four role tokens and server-restricted runtime bindings created by PROD-03",
+      "preconditions": [],
+      "effects": [
+        "Remove the generated role-token bindings from server-restricted runtime configuration without exposing token values"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "ROLE_TOKEN_BINDINGS_REMOVED",
+        "SECRET_VALUES_NOT_LOGGED"
+      ]
+    },
+    {
+      "id": "ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH",
+      "title": "Restore previous authoritative endpoint, data path, and client mappings",
+      "category": "ROLLBACK",
+      "risk": "CRITICAL",
+      "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+      "status": "BLOCKED_PREREQUISITE",
+      "requiresExplicitAuthorization": false,
+      "authorityTarget": "UNRESOLVED_POST_SWITCH_AUTHORITY_RECOVERY_CAPABILITY",
+      "preconditions": [
+        "CUTOVER_SWITCH_RECOVERY"
+      ],
+      "effects": [
+        "Restore the previously authoritative endpoint, data path, and client mappings using a separately designed compatible recovery path and recorded switch state"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "DUAL_READ_COMPATIBLE_WRITE_RECOVERY_PROOF",
+        "SWITCH_RECORD",
+        "PREVIOUS_AUTHORITY_RESTORED"
+      ]
+    },
+    {
+      "id": "ROLLBACK-08-REMOVE-BUILT-IMAGE",
+      "title": "Remove image built by PROD-04",
+      "category": "ROLLBACK",
+      "risk": "MEDIUM",
+      "sideEffect": "REVERSIBLE",
+      "status": "ROLLBACK_ONLY",
+      "requiresExplicitAuthorization": false,
+      "authorityTarget": "Only the exact image digest created by PROD-04 on the resolved production host",
+      "preconditions": [],
+      "effects": [
+        "Remove only the PROD-04 image after proving no running container references that digest"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "IMAGE_DIGEST_MATCH",
+        "CONTAINER_REFERENCE_ABSENT",
+        "IMAGE_NOT_IN_USE",
+        "IMAGE_REMOVED"
+      ]
+    },
+    {
+      "id": "ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP",
+      "title": "Disable and drain cleanup restored by PROD-14",
+      "category": "ROLLBACK",
+      "risk": "HIGH",
+      "sideEffect": "REVERSIBLE",
+      "status": "ROLLBACK_ONLY",
+      "requiresExplicitAuthorization": false,
+      "authorityTarget": "Only the startup, periodic, saveUpload and submitRequest orphan-cleanup controls restored by the approved PROD-14 on its exact service and upload volume",
+      "preconditions": [],
+      "effects": [
+        "Immediately block new orphan-cleanup admissions at all four entry points restored by the bound PROD-14, cancel pending cleanup schedules, and drain in-flight cleanup work using the preverified recovery capability",
+        "Restore the captured pre-PROD-14 disabled cleanup configuration and verify no cleanup mutation continues; preserve database, upload volume and unrelated configuration; do not claim to recover already deleted records or files"
+      ],
+      "rollbackActionIds": [],
+      "evidenceRequired": [
+        "CLEANUP_ROLLBACK_TARGET_MATCH",
+        "ALL_RESTORED_CLEANUP_ENTRY_POINTS_DISABLED",
+        "CLEANUP_SCHEDULES_CANCELLED",
+        "CLEANUP_IN_FLIGHT_WORK_DRAINED",
+        "PRE_RESTORE_DISABLED_STATE_RESTORED",
+        "DATA_VOLUME_PRESERVED",
+        "UNRELATED_CONFIGURATION_UNCHANGED",
+        "DELETIONS_NOT_REVERSED_ACKNOWLEDGED"
+      ]
+    }
+  ],
+  "rollbackPlan": {
+    "strategy": "STOP_CLEANUP_THEN_ROUTE_RUNTIME_PRESERVE_DATA",
+    "orderedActionIds": [
+      "ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP",
+      "ROLLBACK-01-REMOVE-NEW-ROUTE",
+      "ROLLBACK-05-REVERT-FIREWALL-RULE",
+      "ROLLBACK-02-STOP-NEW-CONTAINER",
+      "ROLLBACK-08-REMOVE-BUILT-IMAGE",
+      "ROLLBACK-06-REVOKE-ROLE-TOKENS",
+      "ROLLBACK-09-DISABLE-VCP-CONFIG",
+      "ROLLBACK-10-DISABLE-KIOSK-CONFIG",
+      "ROLLBACK-11-DISABLE-DINGTALK-CONFIG",
+      "ROLLBACK-04-PRESERVE-DATA-VOLUME"
+    ],
+    "destructiveDataDeletionAllowed": false
+  },
+  "authorizationPacket": {
+    "packetId": "WO-06D-AUTHORIZATION-PACKET-V1",
+    "status": "FROZEN_NOT_REQUESTED",
+    "approvalModel": "EXACT_ACTION_IDS_AND_TARGETS_ONLY",
+    "humanApprovalRequired": true,
+    "blanketApprovalAllowed": false,
+    "requestedActionIds": [],
+    "approvedActionIds": [],
+    "requestableActionIds": [],
+    "blockingGateIds": [
+      "WO06C_VCP_EXTERNAL",
+      "VCP_DEPLOYABLE_ADAPTER_WIRING",
+      "WO06C_KIOSK_DEVICE",
+      "KIOSK_DEPLOYABLE_AUTH_WIRING",
+      "DINGTALK_TARGET_BINDING",
+      "DINGTALK_DEPLOYABLE_ADAPTER_WIRING",
+      "CUTOVER_FORWARD_CHAIN",
+      "CUTOVER_SWITCH_RECOVERY",
+      "CUTOVER_SOURCE_CONSISTENCY",
+      "CUTOVER_LIVE_SERVICE_READINESS",
+      "TARGET_HOST_BINDING",
+      "CONTAINER_START_READINESS",
+      "PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL",
+      "HEALTH_SMOKE_READINESS",
+      "PROXY_BACKEND_READINESS",
+      "PRE_CUTOVER_ROUTE_WRITE_RESTRICTION",
+      "PRODUCTION_IMPORT_STORAGE_READINESS",
+      "PRODUCTION_IMPORT_TARGET_ABSENCE",
+      "PRODUCTION_IMPORT_SOURCE_CONSISTENCY",
+      "PRODUCTION_ATTACHMENT_COPY_CAPABILITY",
+      "INTEGRATION_DEPLOYMENT_READINESS",
+      "PRODUCTION_TARGET_FACTS",
+      "PRODUCTION_DATA_MIGRATION",
+      "POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION",
+      "CUTOVER_TARGET_WRITE_FENCE_CAPABILITY",
+      "RESTORED_CLEANUP_DISABLE_CAPABILITY",
+      "PRODUCTION_DEPLOYMENT_GATE"
+    ],
+    "mustRevalidateBeforeRequest": [
+      "AUTHORITY_HEAD"
+    ],
+    "rollbackAuthorizationModel": "BOUND_ROLLBACK_IDS_COAUTHORIZED_WITH_FORWARD_ACTION",
+    "separateRollbackApprovalRequired": false,
+    "derivedRollbackActionIds": [],
+    "deploymentBlockingGateIds": [
+      "VCP_DEPLOYABLE_ADAPTER_WIRING",
+      "KIOSK_DEPLOYABLE_AUTH_WIRING",
+      "PRODUCTION_TARGET_FACTS",
+      "PRODUCTION_DATA_MIGRATION",
+      "PRODUCTION_DEPLOYMENT_GATE"
+    ],
+    "actionSpecificRevalidation": {
+      "PROD-02-CREATE-ISOLATED-APP-STORAGE": [
+        "TARGET_HOST_IDENTITY",
+        "DISK_PORT_ROUTE_CONFLICTS",
+        "ROLLBACK_TARGETS"
+      ],
+      "PROD-03-GENERATE-INSTALL-TOKENS": [
+        "TARGET_HOST_IDENTITY",
+        "DISK_PORT_ROUTE_CONFLICTS",
+        "SECRET_STORAGE",
+        "ROLLBACK_TARGETS"
+      ],
+      "PROD-04-BUILD-IMAGE": [
+        "TARGET_HOST_IDENTITY",
+        "DISK_PORT_ROUTE_CONFLICTS",
+        "BUILD_SOURCE_AUTHORITY_COMMIT",
+        "BUILD_BASE_IMAGE_DIGEST"
+      ],
+      "PROD-05-START-ISOLATED-CONTAINER": [
+        "TARGET_HOST_IDENTITY",
+        "DISK_PORT_ROUTE_CONFLICTS",
+        "BUILT_IMAGE_DIGEST",
+        "ALL_ORPHAN_CLEANUP_ENTRY_POINTS_DISABLED",
+        "ROLLBACK_TARGETS"
+      ],
+      "PROD-06-LOOPBACK-HEALTH-SMOKE": [
+        "TARGET_HOST_IDENTITY",
+        "DISK_PORT_ROUTE_CONFLICTS",
+        "BUILT_IMAGE_DIGEST"
+      ],
+      "PROD-07-CONFIGURE-REVERSE-PROXY-TLS": [
+        "TARGET_HOST_IDENTITY",
+        "DISK_PORT_ROUTE_CONFLICTS",
+        "BUILT_IMAGE_DIGEST",
+        "ALL_ORPHAN_CLEANUP_ENTRY_POINTS_STILL_DISABLED",
+        "ROLLBACK_TARGETS",
+        "PRE_CUTOVER_ROUTE_ACCESS_POLICY"
+      ],
+      "PROD-08-FIREWALL-SECURITY-GROUP": [
+        "TARGET_HOST_IDENTITY",
+        "DISK_PORT_ROUTE_CONFLICTS",
+        "ROLLBACK_TARGETS"
+      ],
+      "PROD-09-PRODUCTION-DATA-IMPORT": [
+        "TARGET_HOST_IDENTITY",
+        "DISK_PORT_ROUTE_CONFLICTS",
+        "BACKUP_ROLLBACK_PROOF",
+        "IMPORT_TARGET_SQLITE_ABSENCE_PROOF",
+        "SOURCE_QUIESCENCE_OR_COORDINATION_PROOF",
+        "TARGET_UPLOAD_VOLUME_IDENTITY",
+        "ATTACHMENT_COPY_PLAN",
+        "ROLLBACK_TARGETS"
+      ],
+      "PROD-10-ENABLE-VCP-REMOTE-SYNC": [
+        "TARGET_HOST_IDENTITY",
+        "DISK_PORT_ROUTE_CONFLICTS",
+        "BUILT_IMAGE_DIGEST",
+        "SECRET_STORAGE",
+        "VCP_RUNTIME_ADAPTER_CONFIGURATION",
+        "ROLLBACK_TARGETS"
+      ],
+      "PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE": [
+        "TARGET_HOST_IDENTITY",
+        "DISK_PORT_ROUTE_CONFLICTS",
+        "BUILT_IMAGE_DIGEST",
+        "SECRET_STORAGE",
+        "KIOSK_AUTH_RUNTIME_CONFIGURATION",
+        "EXTERNAL_READINESS_GATES",
+        "ROLLBACK_TARGETS"
+      ],
+      "PROD-12-DINGTALK-PROVIDER-INTEGRATION": [
+        "SECRET_STORAGE",
+        "DINGTALK_RUNTIME_ADAPTER_CONFIGURATION",
+        "EXTERNAL_READINESS_GATES",
+        "ROLLBACK_TARGETS",
+        "DEPLOYMENT_CHAIN_COMPLETION_PROOF"
+      ],
+      "PROD-13-CUTOVER-SWITCH": [
+        "TARGET_HOST_IDENTITY",
+        "DISK_PORT_ROUTE_CONFLICTS",
+        "BUILT_IMAGE_DIGEST",
+        "BACKUP_ROLLBACK_PROOF",
+        "EXTERNAL_READINESS_GATES",
+        "PRE_CUTOVER_ROUTE_RESTRICTION_STILL_ACTIVE",
+        "FINAL_SOURCE_QUIESCENCE_OR_SYNC_PROOF",
+        "SOURCE_WRITE_BARRIER_CAPABILITY_PROOF",
+        "SOURCE_WRITE_BARRIER_PLAN",
+        "FINAL_SYNC_OPERATION_AND_AUTHORITY_TARGETS",
+        "FINAL_SYNC_EXCEPTION_ADMISSION_REVOCATION_DRAIN_AND_SEAL_PLAN",
+        "FINAL_PARITY_UNDER_FENCE_PLAN",
+        "PRE_SWITCH_LOOPBACK_HEALTH",
+        "PRE_SWITCH_ROUTED_TLS_PROBE",
+        "ALL_ORPHAN_CLEANUP_ENTRY_POINTS_STILL_DISABLED",
+        "ROLLBACK_TARGETS",
+        "TARGET_STORAGE_IDENTITIES",
+        "TARGET_WRITER_INVENTORY",
+        "TARGET_WRITE_FENCE_CAPABILITY_PROOF",
+        "TARGET_WRITE_FENCE_PLAN",
+        "TARGET_FENCE_FAILURE_RETENTION_PLAN",
+        "TARGET_FENCE_RELEASE_PLAN"
+      ],
+      "PROD-14-RESTORE-ORPHAN-CLEANUP": [
+        "CUTOVER_COMPLETION_PROOF",
+        "POST_CUTOVER_ATTACHMENT_PARITY",
+        "CLEANUP_RESTORATION_CONFIG",
+        "CLEANUP_DISABLE_CAPABILITY_PROOF",
+        "CLEANUP_PRE_RESTORE_DISABLED_STATE",
+        "ROLLBACK_TARGETS"
+      ]
+    }
+  },
+  "invariants": [
+    "NO_EXISTING_ROUTE_OR_CONTAINER_OVERWRITE",
+    "APP_PORT_LOOPBACK_ONLY",
+    "NO_SECRET_IN_GIT_LOGS_CHAT",
+    "NO_PRODUCTION_DATA_MUTATION_WITHOUT_SEPARATE_AUTHORIZATION",
+    "NO_SWITCH_OR_CUTOVER_FROM_PREDEPLOY_APPROVAL",
+    "NO_AGENT_AUTO_ADOPTION_PERMISSION_EXPANSION",
+    "ROLLBACK_PRESERVES_DATA_VOLUME",
+    "ROLLBACK_AUTHORITY_ONLY_DERIVED_FROM_APPROVED_FORWARD_ACTION",
+    "NO_CUTOVER_WITHOUT_POST_SWITCH_AUTHORITY_RECOVERY",
+    "TARGET_PREFLIGHT_REQUIRES_BOUND_CANDIDATE_NOT_PREFLIGHT_RESULTS",
+    "RUNTIME_START_AND_HEALTH_REQUIRE_VERIFIED_PREDECESSORS",
+    "BUILT_IMAGE_ROLLBACK_REQUIRES_EXACT_DIGEST_AND_ZERO_RUNTIME_REFERENCES",
+    "PRODUCTION_IMPORT_REQUIRES_VERIFIED_STORAGE_PREPARATION",
+    "EXTERNAL_WRITE_INTEGRATIONS_REQUIRE_VERIFIED_DEPLOYMENT_CHAIN",
+    "INTEGRATION_ROLLBACK_AUTHORITY_IS_SOURCE_ACTION_SCOPED",
+    "CREATED_STORAGE_IS_INTENTIONALLY_RETAINED_ON_ROLLBACK",
+    "BUILD_OUTPUT_DIGEST_IS_NOT_A_GLOBAL_PRE_REQUEST_PREREQUISITE",
+    "BUILD_REQUEST_REVALIDATES_SOURCE_AND_BASE_DIGEST_SEPARATELY",
+    "HOST_CONFLICT_REVALIDATION_REQUIRES_COMPLETED_PREFLIGHT",
+    "GLOBAL_PRE_REQUEST_REVALIDATION_IS_AUTHORITY_ONLY",
+    "INITIAL_TARGET_PREFLIGHT_HAS_NO_LATER_STAGE_REVALIDATION",
+    "PRODUCTION_IMPORT_REQUIRES_OFFLINE_OR_VERIFIED_COORDINATED_SOURCE_STATE",
+    "PRODUCTION_IMPORT_REQUIRES_ABSENT_TARGET_SQLITE_PATH",
+    "PRODUCTION_IMPORT_PRECEDES_CONTAINER_INITIALIZATION",
+    "IMAGE_ROLLBACK_REQUIRES_CONTAINER_OBJECT_REMOVAL",
+    "PRODUCTION_IMPORT_REQUIRES_ATTACHMENT_BYTES_IN_TARGET_VOLUME",
+    "PRE_CUTOVER_ROUTE_BLOCKS_PUBLIC_WRITES_UNTIL_SWITCH",
+    "VCP_GUARDED_PUSH_WRITES_ARE_NOT_REVERSED_BY_CONFIG_ROLLBACK",
+    "KIOSK_EVENT_WRITES_ARE_NOT_REVERSED_BY_CONFIG_ROLLBACK",
+    "KIOSK_REAL_DEVICE_ACCEPTANCE_FOLLOWS_DEPLOYABLE_AUTH_WIRING",
+    "CUTOVER_REQUIRES_FINAL_SOURCE_TARGET_PARITY",
+    "CUTOVER_REQUIRES_IMMEDIATE_SERVICE_HEALTH_AND_ROUTE_PROBE",
+    "PRE_CUTOVER_RUNTIME_DISALLOWS_ORPHAN_CLEANUP",
+    "PRE_CUTOVER_ORPHAN_CLEANUP_GUARD_COVERS_ALL_ENTRY_POINTS",
+    "DINGTALK_PROVIDER_ACTION_REQUIRES_DEPLOYABLE_RUNTIME_ADAPTER",
+    "VCP_EXTERNAL_COMPATIBILITY_FOLLOWS_DEPLOYABLE_ADAPTER_ENABLEMENT",
+    "ORPHAN_CLEANUP_RESTORATION_REQUIRES_POST_CUTOVER_ATTACHMENT_PARITY",
+    "CUTOVER_PARITY_AND_SWITCH_SHARE_ONE_TARGET_WIDE_FENCE",
+    "CUTOVER_TARGET_FENCE_DRAINS_DATABASE_AND_ATTACHMENT_WRITERS",
+    "CUTOVER_FAILURE_RETAINS_FENCE_AND_INVALIDATES_PARITY",
+    "CUTOVER_FENCE_RELEASE_REQUIRES_SUCCESSFUL_READ_ONLY_VERIFICATION",
+    "CUTOVER_FENCE_OUTPUTS_FOLLOW_EXACT_AUTHORIZATION",
+    "CLEANUP_RESTORATION_REQUIRES_COAUTHORIZED_DISABLE_AND_DRAIN",
+    "CLEANUP_DISABLE_ROLLBACK_DOES_NOT_RESTORE_DELETED_FACTS",
+    "VALIDATION_SCHEMA_IS_BOUND_TO_FROZEN_VALIDATOR_AUTHORITY",
+    "SOURCE_AND_TARGET_WRITE_BARRIERS_SPAN_PARITY_SWITCH_AND_DEMOTION",
+    "FINAL_SYNC_EXCEPTION_IS_OPERATION_BOUND_PHASE_LIMITED_REVOKED_DRAINED_AND_SEALED_BEFORE_PARITY"
+  ]
+}
