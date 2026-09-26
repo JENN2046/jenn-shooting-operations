@@ -38,8 +38,6 @@ function toggledCasePath(path) {
 }
 
 export function filesystemPathIsCaseInsensitive(existingPath) {
-  if (IS_WINDOWS) return true;
-
   const normalized = resolve(existingPath);
   const alternate = toggledCasePath(normalized);
   if (!alternate || alternate === normalized) {
@@ -58,8 +56,6 @@ export function filesystemPathIsCaseInsensitive(existingPath) {
 }
 
 export function filesystemPathUsesCanonicalEquivalence(existingPath) {
-  if (process.platform === 'darwin') return true;
-
   const resolved = resolve(existingPath);
   const nfc = normalizeUnicode(resolved, 'NFC');
   const nfd = normalizeUnicode(resolved, 'NFD');
@@ -86,7 +82,7 @@ export function filesystemPathComparisonKey(
 ) {
   let key = resolve(path);
   if (canonicalEquivalent) key = normalizeUnicode(key, 'NFD');
-  if (caseInsensitive) key = lower(key);
+  if (caseInsensitive) key = upper(key);
   if (canonicalEquivalent) key = normalizeUnicode(key, 'NFD');
   return key;
 }
