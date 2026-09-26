@@ -296,6 +296,43 @@ test('disabled startup restores referenced cleanup tombstones without deleting u
 });
 
 
+test('disabled startup persists protection before upload path initialization can fail', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-pre-upload-path-gate-'));
+  const databasePath = join(root, 'operations.sqlite');
+  const uploadRoot = join(root, 'uploads-as-file');
+  writeFileSync(uploadRoot, 'not a directory');
+
+  try {
+    assert.equal(existsSync(databasePath), false);
+    assert.throws(
+      () => createOperationsServer({
+        databasePath,
+        uploadRoot,
+        cleanupIntervalMs: 0,
+        orphanCleanupMode: 'disabled',
+      }),
+    );
+
+    const markerPath = join(root, '.orphan-cleanup-control', 'disabled.json');
+    assert.equal(
+      existsSync(markerPath),
+      true,
+      'disabled marker must persist before upload-path initialization is attempted',
+    );
+    assert.equal(
+      JSON.parse(readFileSync(markerPath, 'utf8')).state,
+      'disabled',
+    );
+    assert.equal(
+      existsSync(databasePath),
+      false,
+      'upload-path failure after disable must still occur before SQLite is opened',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('disabled startup drain failure occurs before SQLite is created', () => {
   const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-pre-sqlite-gate-'));
   const databasePath = join(root, 'operations.sqlite');
