@@ -183,6 +183,15 @@ function verifyFileBytes(path, expected, code) {
     }
     const after = fstatSync(descriptor, { bigint: true });
     if (!sameStat(before, after)) fail(code);
+    let finalLink;
+    try {
+      finalLink = lstatSync(path, { bigint: true });
+    } catch {
+      fail(code);
+    }
+    if (!finalLink.isFile() || finalLink.isSymbolicLink() || !sameStat(after, finalLink)) {
+      fail(code);
+    }
     if (hash.digest('hex') !== expected.sha256) fail(code);
   } finally {
     closeSync(descriptor);
@@ -409,9 +418,6 @@ export function copyAndVerifyAttachments({
     copyProofDigest: sha256Digest({
       schemaVersion: 1,
       parityDigest: parity.parityDigest,
-      copiedFiles,
-      reusedFiles,
-      copiedBytes,
     }),
   });
 }
