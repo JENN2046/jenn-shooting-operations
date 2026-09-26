@@ -113,6 +113,8 @@ export function createOperationsServer({
   idFactory,
   orphanMaxAgeMs,
   cleanupIntervalMs = 60 * 60 * 1000,
+  orphanCleanupMode = 'inherit',
+  orphanCleanupEnableEpoch,
   kioskAuthenticate,
   kioskBusinessTimeZone,
   kioskAllowedBriefHosts = [],
@@ -126,6 +128,8 @@ export function createOperationsServer({
     clock: effectiveClock,
     idFactory,
     orphanMaxAgeMs,
+    orphanCleanupMode,
+    orphanCleanupEnableEpoch,
   });
   store.cleanupOrphanUploads();
   const kiosk = kioskAuthenticate === undefined
@@ -146,21 +150,46 @@ export function createOperationsServer({
         allowedBriefHosts: schedulingAllowedBriefHosts,
       });
   const server = createServer(createHttpApp({ store, tokens, kiosk, scheduling }));
-  const cleanupTimer = cleanupIntervalMs > 0
-    ? setInterval(() => {
-        try {
-          store.cleanupOrphanUploads();
-        } catch {
-          console.error('Orphan upload cleanup failed; it will retry on the next interval.');
-        }
-      }, cleanupIntervalMs)
-    : null;
-  cleanupTimer?.unref();
+  let cleanupTimer = null;
+
+  const stopCleanupTimer = () => {
+    if (!cleanupTimer) return;
+    clearInterval(cleanupTimer);
+    cleanupTimer = null;
+  };
+
+  const startCleanupTimer = () => {
+    if (cleanupTimer || cleanupIntervalMs <= 0 || !store.getOrphanCleanupControlStatus().enabled) return;
+    cleanupTimer = setInterval(() => {
+      try {
+        const result = store.cleanupOrphanUploads();
+        if (result?.skipped && result.code === 'ORPHAN_CLEANUP_DISABLED') stopCleanupTimer();
+      } catch {
+        console.error('Orphan upload cleanup failed; it will retry on the next interval.');
+      }
+    }, cleanupIntervalMs);
+    cleanupTimer.unref();
+  };
+
+  const orphanCleanupControl = Object.freeze({
+    status: () => store.getOrphanCleanupControlStatus(),
+    disable(options) {
+      stopCleanupTimer();
+      return store.disableOrphanCleanup(options);
+    },
+    enable(options) {
+      const result = store.enableOrphanCleanup(options);
+      if (result.ok) startCleanupTimer();
+      return result;
+    },
+  });
+
+  startCleanupTimer();
   server.on('close', () => {
-    if (cleanupTimer) clearInterval(cleanupTimer);
+    stopCleanupTimer();
     store.close();
   });
-  return { server, store };
+  return { server, store, orphanCleanupControl };
 }
 
 const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
@@ -175,7 +204,15 @@ if (invokedDirectly) {
     scheduler: process.env.SCHEDULER_TOKEN,
     administrator: process.env.ADMIN_TOKEN,
   };
-  const { server } = createOperationsServer({ databasePath, uploadRoot, tokens });
+  const orphanCleanupMode = process.env.ORPHAN_CLEANUP_MODE || 'inherit';
+  const orphanCleanupEnableEpoch = process.env.ORPHAN_CLEANUP_ENABLE_EPOCH || undefined;
+  const { server } = createOperationsServer({
+    databasePath,
+    uploadRoot,
+    tokens,
+    orphanCleanupMode,
+    orphanCleanupEnableEpoch,
+  });
   server.listen(port, host, () => {
     console.log(`Jenn Shooting Operations listening on ${host}:${port}`);
   });
