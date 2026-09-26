@@ -283,7 +283,7 @@ test('verified attachment copy binds target bytes to matching source/target data
     assert.equal(first.uniqueFiles, 2);
     assert.equal(first.uploadRows, 2);
     assert.match(first.parityDigest, /^sha256:[a-f0-9]{64}$/u);
-    assert.match(first.copyProofDigest, /^sha256:[a-f0-9]{64}$/u);
+    assert.match(first.candidateCopyDigest, /^sha256:[a-f0-9]{64}$/u);
 
     for (const row of rows) {
       assert.deepEqual(
@@ -301,7 +301,7 @@ test('verified attachment copy binds target bytes to matching source/target data
     assert.equal(replay.copiedFiles, 0);
     assert.equal(replay.reusedFiles, 2);
     assert.equal(replay.parityDigest, first.parityDigest);
-    assert.equal(replay.copyProofDigest, first.copyProofDigest);
+    assert.equal(replay.candidateCopyDigest, first.candidateCopyDigest);
 
     for (const row of rows) {
       const sourceAfter = statSync(join(fixture.sourceUploadRoot, row.stored_name), { bigint: true });
