@@ -23,6 +23,7 @@ import { DatabaseSync } from 'node:sqlite';
 import {
   copyAndVerifyAttachments,
   copyAttachmentsAndEvaluateParityCandidate,
+  createAttachmentParityIsolatedTestAuthority,
   describeAttachmentParityScope,
   evaluateAttachmentDatabaseParityCandidate,
   verifyAttachmentDatabaseParity,
@@ -110,22 +111,32 @@ function createDatabase(path, uploads = []) {
 }
 
 function createFixture(uploads) {
-  const root = mkdtempSync(join(tmpdir(), 'jenn-attachment-copy-'));
+  const testAuthority = createAttachmentParityIsolatedTestAuthority();
+  const root = testAuthority.root;
   const sourceDatabasePath = join(root, 'source.sqlite');
   const targetDatabasePath = join(root, 'target.sqlite');
   const sourceUploadRoot = join(root, 'source-uploads');
   const targetUploadRoot = join(root, 'target-uploads');
-  mkdirSync(sourceUploadRoot, { mode: 0o700 });
-  mkdirSync(targetUploadRoot, { mode: 0o700 });
-  createDatabase(sourceDatabasePath, uploads);
-  createDatabase(targetDatabasePath, uploads);
-  return {
-    root,
-    sourceDatabasePath,
-    targetDatabasePath,
-    sourceUploadRoot,
-    targetUploadRoot,
-  };
+  try {
+    mkdirSync(sourceUploadRoot, { mode: 0o700 });
+    mkdirSync(targetUploadRoot, { mode: 0o700 });
+    createDatabase(sourceDatabasePath, uploads);
+    createDatabase(targetDatabasePath, uploads);
+    return {
+      root,
+      sourceDatabasePath,
+      targetDatabasePath,
+      sourceUploadRoot,
+      targetUploadRoot,
+      testAuthority,
+      cleanup() {
+        testAuthority.close();
+      },
+    };
+  } catch (error) {
+    testAuthority.close();
+    throw error;
+  }
 }
 
 function writeSourceFiles(fixture, rows, bodiesByName) {
@@ -147,27 +158,19 @@ function parityPaths(fixture, extra = {}) {
   };
 }
 
-function createTestQuiescenceLease(options, state = { held: true }) {
-  const scope = describeAttachmentParityScope(options);
-  return {
-    kind: 'ATTACHMENT_PARITY_QUIESCENCE_V1',
-    scopeDigest: scope.scopeDigest,
-    assertHeld() {
-      return state.held === true;
-    },
-  };
-}
-
 function copyOptions(fixture, extra = {}) {
   const {
-    quiescenceLease,
-    leaseState,
+    quiescenceCapability,
+    heldState,
     ...optionOverrides
   } = extra;
   const options = parityPaths(fixture, optionOverrides);
   return {
     ...options,
-    quiescenceLease: quiescenceLease ?? createTestQuiescenceLease(options, leaseState),
+    quiescenceCapability: quiescenceCapability ?? fixture.testAuthority.mint({
+      ...options,
+      heldState,
+    }),
   };
 }
 
@@ -202,7 +205,7 @@ test('production receipt APIs reject caller-forged quiescence capabilities even 
       error => error.code === 'ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED',
     );
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -225,7 +228,7 @@ test('copy and verify refuse to issue receipts without an exact-scope quiescence
       error => error.code === 'ATTACHMENT_PARITY_QUIESCENCE_REQUIRED',
     );
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -238,18 +241,18 @@ test('quiescence lease is bound to exact database and upload-root identities', (
     writeSourceFiles(fixtureA, [row], new Map([[row.stored_name, body]]));
     writeSourceFiles(fixtureB, [row], new Map([[row.stored_name, body]]));
 
-    const leaseA = createTestQuiescenceLease(parityPaths(fixtureA));
+    const leaseA = fixtureA.testAuthority.mint(parityPaths(fixtureA));
     assert.throws(
       () => copyAttachmentsAndEvaluateParityCandidate({
         ...parityPaths(fixtureB),
-        quiescenceLease: leaseA,
+        quiescenceCapability: leaseA,
       }),
       error => error.code === 'ATTACHMENT_PARITY_QUIESCENCE_REQUIRED',
     );
     assert.equal(existsSync(join(fixtureB.targetUploadRoot, row.stored_name)), false);
   } finally {
-    rmSync(fixtureA.root, { recursive: true, force: true });
-    rmSync(fixtureB.root, { recursive: true, force: true });
+    fixtureA.cleanup();
+    fixtureB.cleanup();
   }
 });
 
@@ -313,7 +316,7 @@ test('verified attachment copy binds target bytes to matching source/target data
       assert.equal(targetAfter.mtimeNs, targetBeforeReplay.get(row.stored_name).mtimeNs);
     }
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -336,7 +339,7 @@ test('duplicate database references to identical stored bytes copy once and rema
     assert.equal(receipt.copiedFiles, 1);
     assert.equal(readdirFileCount(fixture.targetUploadRoot), 1);
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -360,7 +363,7 @@ test('source and target upload roots cannot overlap by ancestry', () => {
       error => error.code === 'SOURCE_TARGET_UPLOAD_ROOT_CONFLICT',
     );
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -380,7 +383,7 @@ test('source attachment hardlinks are rejected before target mutation', () => {
     );
     assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -398,7 +401,7 @@ test('target attachment hardlinks are rejected as conflicts', () => {
       error => error.code === 'TARGET_ATTACHMENT_CONFLICT',
     );
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -419,7 +422,7 @@ test('pre-existing target orphans fail before missing referenced files are copie
     );
     assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -446,7 +449,7 @@ test('final parity stays bound to the originally acknowledged target upload-root
       error => error.code === 'TARGET_UPLOAD_ROOT_CHANGED',
     );
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -473,7 +476,7 @@ test('database reads stay bound to the originally resolved target database inode
       error => error.code === 'TARGET_UPLOAD_DATABASE_INVALID',
     );
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -569,7 +572,7 @@ test('strong SQLite physical-family proof includes database content digest and d
     );
     assert.equal(sameSqlitePhysicalFamily(before, after), false);
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -580,12 +583,12 @@ test('quiescence loss between the two closing family captures blocks the receipt
   const state = { held: true };
   try {
     writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
-    copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture, { leaseState: state }));
+    copyAttachmentsAndEvaluateParityCandidate(copyOptions(fixture, { heldState: state }));
 
     state.held = true;
     assert.throws(
       () => evaluateAttachmentDatabaseParityCandidate(copyOptions(fixture, {
-        leaseState: state,
+        heldState: state,
         faultInjector(stage) {
           if (stage === 'between_final_family_captures') state.held = false;
         },
@@ -593,7 +596,7 @@ test('quiescence loss between the two closing family captures blocks the receipt
       error => error.code === 'ATTACHMENT_PARITY_QUIESCENCE_LOST',
     );
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -622,7 +625,7 @@ test('WAL write immediately before final family capture invalidates parity', () 
       error => error.code === 'TARGET_UPLOAD_DATABASE_CHANGED_DURING_PARITY',
     );
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -650,7 +653,7 @@ test('database writes during the final filesystem pass invalidate the physical-f
       error => error.code === 'TARGET_UPLOAD_DATABASE_CHANGED_DURING_PARITY',
     );
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -679,7 +682,7 @@ test('filesystem drift after the final database recheck still blocks parity rece
       error => error.code === 'TARGET_ATTACHMENT_MISMATCH',
     );
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -699,7 +702,7 @@ test('source and target attachment paths cannot be hard-link aliases of one inod
         .includes(error.code),
     );
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -723,7 +726,7 @@ test('database fact mismatch fails before target bytes are copied', () => {
     );
     assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -743,7 +746,7 @@ test('exact target bytes with permissive mode are rejected instead of reused', (
     );
     assert.equal((statSync(targetPath).mode & 0o777), 0o644);
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -763,7 +766,7 @@ test('existing conflicting target bytes are never overwritten', () => {
     );
     assert.deepEqual(readFileSync(targetPath), before);
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -785,7 +788,7 @@ test('target parity rejects unreferenced regular files', () => {
       error => error.code === 'TARGET_ATTACHMENT_ORPHAN',
     );
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -811,7 +814,7 @@ test('source drift after copy prevents a parity receipt', () => {
       error => error.code === 'SOURCE_ATTACHMENT_MISMATCH',
     );
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -836,7 +839,7 @@ test('target tamper before final parity prevents a receipt', () => {
       error => error.code === 'TARGET_ATTACHMENT_MISMATCH',
     );
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -862,7 +865,7 @@ test('database upload facts changing during final parity prevent a receipt', () 
       error => error.code === 'UPLOAD_DATABASE_FACTS_CHANGED_DURING_PARITY',
     );
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -879,7 +882,7 @@ test('rows without stored bytes require no target file but remain bound into dat
     assert.equal(receipt.copiedFiles, 0);
     assert.equal(receipt.totalBytes, 0);
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
 
@@ -955,6 +958,6 @@ test('attachment copy command cannot mint production authority from a caller-for
     );
     assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
   } finally {
-    rmSync(fixture.root, { recursive: true, force: true });
+    fixture.cleanup();
   }
 });
