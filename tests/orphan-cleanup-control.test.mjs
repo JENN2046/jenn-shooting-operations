@@ -403,6 +403,41 @@ test('cleanup snapshots caller options once before dry-run gate evaluation', () 
   }
 });
 
+test('truthy non-boolean dry-run values remain non-destructive after snapshotting', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-truthy-dry-run-'));
+  const databasePath = join(root, 'operations.sqlite');
+  const uploadRoot = join(root, 'uploads');
+  let store;
+
+  try {
+    store = new ScheduleStore({
+      filename: databasePath,
+      uploadRoot,
+      idFactory: () => 'truthy-dry-run-upload',
+    });
+    const operationId = 'truthy-dry-run-0001';
+    const upload = store.saveUpload({
+      operationId,
+      originalName: 'truthy.txt',
+      contentType: 'text/plain',
+      kind: 'attachment',
+      buffer: Buffer.from('truthy dry-run values must never become apply mode'),
+    });
+    const storedPath = join(uploadRoot, upload.upload.sha256 + '.txt');
+
+    for (const dryRun of ['true', 'false', new Boolean(false)]) {
+      const result = store.cleanupOrphanUploads({ operationId, dryRun });
+      assert.equal(result.dryRun, true);
+      assert.equal(result.deleted, 0);
+      assert.equal(existsSync(storedPath), true);
+      assert.ok(store.db.prepare('SELECT 1 FROM uploads WHERE id = ?').get(upload.upload.id));
+    }
+  } finally {
+    try { store?.close(); } catch {}
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('run completion can remove only markers admitted by the same control instance', () => {
   const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-run-ownership-'));
   const controlRoot = join(root, '.orphan-cleanup-control');
