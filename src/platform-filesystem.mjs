@@ -36,11 +36,13 @@ export function filesystemPathIsCaseInsensitive(existingPath) {
   return original.dev === toggled.dev && original.ino === toggled.ino;
 }
 
-export function filesystemPathComparisonKey(path, existingAnchorPath = path) {
+export function filesystemPathComparisonKey(
+  path,
+  existingAnchorPath = path,
+  { caseInsensitive = filesystemPathIsCaseInsensitive(existingAnchorPath) } = {},
+) {
   const normalized = resolve(path);
-  return filesystemPathIsCaseInsensitive(existingAnchorPath)
-    ? normalized.toLowerCase()
-    : normalized;
+  return caseInsensitive ? normalized.toLowerCase() : normalized;
 }
 
 export function pathsEqual(left, right, existingAnchorPath = left) {
