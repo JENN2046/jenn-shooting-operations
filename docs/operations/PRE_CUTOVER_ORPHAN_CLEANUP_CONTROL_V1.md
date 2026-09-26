@@ -37,6 +37,8 @@ The compose definition exposes both variables without changing their default beh
 
 The unchecked destructive cleanup implementation and locked staged-recovery implementation are private to `ScheduleStore`; the internal cleanup-control object is also a private store field. Callers holding the returned store can invoke only the gated public cleanup/recovery surfaces, so they cannot bypass admission or drain accounting.
 
+The public cleanup entry snapshots every cleanup option exactly once into an internal frozen plain object before evaluating `dryRun` or acquiring destructive admission. Caller-controlled getters or proxies are never re-read after the gate decision, so a stateful `dryRun` value cannot switch a dry-run call into destructive execution.
+
 Each destructive cleanup run creates a marker in:
 
 `.orphan-cleanup-control/runs/`
