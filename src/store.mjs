@@ -125,12 +125,19 @@ export class ScheduleStore {
     });
     const cleanupMode = normalizeOrphanCleanupMode(orphanCleanupMode);
     if (cleanupMode === 'disabled') {
-      this.orphanCleanupControl.disable({ reason: 'store-startup', waitForDrainMs: 0 });
+      const disabled = this.orphanCleanupControl.disable({ reason: 'store-startup', waitForDrainMs: 0 });
+      if (!disabled.ok) {
+        const error = new Error(disabled.code || 'ORPHAN_CLEANUP_DISABLE_FAILED');
+        error.code = disabled.code || 'ORPHAN_CLEANUP_DISABLE_FAILED';
+        try { this.db.close(); } catch {}
+        throw error;
+      }
     } else if (cleanupMode === 'enabled') {
       const enabled = this.orphanCleanupControl.enable({ expectedEpoch: orphanCleanupEnableEpoch });
       if (!enabled.ok) {
         const error = new Error(enabled.code || 'ORPHAN_CLEANUP_ENABLE_FAILED');
         error.code = enabled.code || 'ORPHAN_CLEANUP_ENABLE_FAILED';
+        try { this.db.close(); } catch {}
         throw error;
       }
     }
