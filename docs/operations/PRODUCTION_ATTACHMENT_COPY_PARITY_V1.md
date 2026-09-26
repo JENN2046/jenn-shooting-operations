@@ -37,7 +37,18 @@ The target database is expected to be the isolated migration target produced by 
 
 ## Database fact binding
 
-Both databases are opened read-only with SQLite `query_only` enabled.
+SQLite upload-fact queries never open the acknowledged database pathname directly. For every fact read, the engine:
+
+1. captures the strong single-link SQLite physical family for the acknowledged main DB inode;
+2. copies the main DB and every present WAL/SHM/journal member through no-follow file descriptors whose device/inode/size/timestamps must match that captured family;
+3. fsyncs the copied private snapshot members;
+4. re-captures the original physical family and requires exact equality;
+5. opens only the private snapshot database with SQLite `query_only`;
+6. rechecks the original family after the query before accepting rows.
+
+A pathname swap that exists only while SQLite opens therefore cannot redirect the query to an unacknowledged inode.
+
+Both private snapshot databases are opened read-only with SQLite `query_only` enabled.
 
 The capability compares the complete ordered upload compatibility facts used for byte ownership:
 
