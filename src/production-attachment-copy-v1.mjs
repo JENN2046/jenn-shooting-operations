@@ -21,8 +21,10 @@ import {
   sha256Digest,
 } from './migration-v2.mjs';
 import {
+  captureSqlitePhysicalFamily,
   resolveExistingPath,
   sameFile,
+  sameSqlitePhysicalFamily,
 } from './migration-sqlite-v2.mjs';
 import {
   supportsDirectoryFsync,
@@ -117,6 +119,15 @@ function assertDatabaseStable(info, code) {
     fail(code);
   }
   return current;
+}
+
+function captureDatabaseFamily(databaseInfo, code) {
+  assertDatabaseStable(databaseInfo, code);
+  try {
+    return captureSqlitePhysicalFamily(databaseInfo);
+  } catch {
+    fail(code);
+  }
 }
 
 function safeStoredName(value) {
@@ -416,6 +427,18 @@ function verifyAttachmentDatabaseParityResolved({
   // being revalidated.
   verifyFilesystem();
 
+  // Capture the complete SQLite physical families before the last DB read.
+  // This binds the final DB read and the last filesystem pass into one
+  // read-only stability window without acquiring a production write lock.
+  const sourceFamilyBeforeFinalWindow = captureDatabaseFamily(
+    sourceDatabase,
+    'SOURCE_UPLOAD_DATABASE_INVALID',
+  );
+  const targetFamilyBeforeFinalWindow = captureDatabaseFamily(
+    targetDatabase,
+    'TARGET_UPLOAD_DATABASE_INVALID',
+  );
+
   const finalSourceRowsAfterFilesystem = readUploadFacts(
     sourceDatabase,
     'SOURCE_UPLOAD_DATABASE_INVALID',
@@ -435,6 +458,21 @@ function verifyAttachmentDatabaseParityResolved({
   // One final filesystem pass comes after the last database read so byte/set
   // drift that occurs during that DB read cannot escape into a receipt.
   verifyFilesystem();
+
+  const sourceFamilyAfterFinalWindow = captureDatabaseFamily(
+    sourceDatabase,
+    'SOURCE_UPLOAD_DATABASE_INVALID',
+  );
+  const targetFamilyAfterFinalWindow = captureDatabaseFamily(
+    targetDatabase,
+    'TARGET_UPLOAD_DATABASE_INVALID',
+  );
+  if (!sameSqlitePhysicalFamily(sourceFamilyBeforeFinalWindow, sourceFamilyAfterFinalWindow)) {
+    fail('SOURCE_UPLOAD_DATABASE_CHANGED_DURING_PARITY');
+  }
+  if (!sameSqlitePhysicalFamily(targetFamilyBeforeFinalWindow, targetFamilyAfterFinalWindow)) {
+    fail('TARGET_UPLOAD_DATABASE_CHANGED_DURING_PARITY');
+  }
 
   assertDatabaseStable(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
   assertDatabaseStable(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
