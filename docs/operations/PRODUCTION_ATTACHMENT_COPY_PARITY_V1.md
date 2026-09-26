@@ -15,7 +15,11 @@ The controlled command requires four explicit inputs:
 - target SQLite database;
 - target upload root.
 
-The source and target databases must be different physical files. The source and target upload roots must be different physical directories.
+The source and target databases must be different physical files. Database files must have one hard link and every read is bound to the device/inode captured during initial path resolution.
+
+The source and target upload roots must be different physical directories and may not contain one another. Database files may not be located inside either upload root.
+
+The original source/target database and upload-root identities remain authoritative for the whole operation. Final parity does not re-resolve a pathname into a new baseline; path replacement at any later stage fails closed.
 
 The target database is expected to be the isolated migration target produced by the existing migration path. This capability does not create or migrate the target database.
 
@@ -58,15 +62,17 @@ For every unique referenced stored file:
 10. verify copied byte count and SHA-256;
 11. `fsync` the target upload directory where supported.
 
-An existing target file is never overwritten. Exact existing bytes are accepted as a replay; a conflicting existing file fails closed.
+Source and target attachment files must each have exactly one hard link. A source/target hard-link alias can therefore never qualify as an isolated copy.
+
+An existing target file is never overwritten. Exact existing bytes are accepted as a replay only after the same no-follow, single-link, inode, size and hash verification; a conflicting existing file fails closed.
 
 ## Target DB/file parity
 
-After copy, the verifier re-reads both SQLite upload fact sets and verifies every referenced source and target file again.
+After copy, parity stays bound to the original resolved database/root identities. It verifies source and target bytes and the exact target directory set, re-reads both SQLite upload fact sets, verifies the filesystem again, re-reads database facts again, and performs a final filesystem pass after the last database read.
 
-The target upload root must contain exactly the unique files referenced by the database, with one exception: an empty `.cleanup` directory is tolerated. A non-empty cleanup directory, symlink, unexpected directory, or unreferenced regular file fails parity.
+The target upload root must contain exactly the unique files referenced by the database, with one exception: an empty `.cleanup` directory is tolerated. A non-empty cleanup directory, symlink, unexpected directory, or unreferenced regular file fails parity. Unexpected target entries are also rejected before any missing attachment is copied.
 
-The verifier re-checks the path after reading each file and requires it still to reference the same inode that was hashed. This prevents a path replacement after descriptor verification from becoming a successful parity result.
+The verifier re-checks each file pathname after reading and requires it still to reference the same single-link inode that was hashed. It also revalidates the originally resolved database and upload-root device/inode identities throughout the proof. Replacing a database file or upload-root directory with matching contents therefore cannot become a successful receipt.
 
 Successful verification produces:
 
