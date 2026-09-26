@@ -21,6 +21,8 @@ The source and target upload roots must be different physical directories and ma
 
 The original source/target database and upload-root identities remain authoritative for the whole operation. Final parity does not re-resolve a pathname into a new baseline; path replacement at any later stage fails closed.
 
+The final parity window also captures the complete SQLite physical family for both databases: main database identity plus WAL/SHM/journal state, with WAL bytes content-hashed. The family is captured before the final database reread and compared again after the final filesystem pass. A live SQLite writer during that window therefore invalidates the receipt even when the main database inode does not change.
+
 The target database is expected to be the isolated migration target produced by the existing migration path. This capability does not create or migrate the target database.
 
 ## Database fact binding
@@ -72,7 +74,9 @@ After copy, parity stays bound to the original resolved database/root identities
 
 The target upload root must contain exactly the unique files referenced by the database, with one exception: an empty `.cleanup` directory is tolerated. A non-empty cleanup directory, symlink, unexpected directory, or unreferenced regular file fails parity. Unexpected target entries are also rejected before any missing attachment is copied.
 
-The verifier re-checks each file pathname after reading and requires it still to reference the same single-link inode that was hashed. It also revalidates the originally resolved database and upload-root device/inode identities throughout the proof. Replacing a database file or upload-root directory with matching contents therefore cannot become a successful receipt.
+The verifier re-checks each file pathname after reading and requires it still to reference the same single-link inode that was hashed. Target attachment replay additionally requires mode `0600`. Target-directory scans compare directory metadata before and after enumeration, so concurrent entry-set changes cannot silently pass the scan.
+
+The verifier also revalidates the originally resolved database and upload-root device/inode identities throughout the proof, and the final SQLite physical-family comparison spans the last DB read through the last filesystem pass. Replacing a database file or upload-root directory with matching contents, or committing a WAL-backed DB write during that final pass, therefore cannot become a successful receipt.
 
 Successful verification produces:
 
