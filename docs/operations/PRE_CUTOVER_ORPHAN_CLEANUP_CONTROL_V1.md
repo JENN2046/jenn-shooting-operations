@@ -48,6 +48,8 @@ Disable follows this order:
 
 If the drain deadline expires, the control remains disabled and returns `ORPHAN_CLEANUP_DRAIN_TIMEOUT`. A stale marker after crash or uncertain ownership therefore fails closed rather than reopening cleanup.
 
+When the real server starts with `ORPHAN_CLEANUP_MODE=disabled`, a non-empty active-run set is a startup hard stop. The constructor retains the disabled marker and throws before `createOperationsServer()` can return, so the process cannot listen while destructive cleanup ownership is still active or uncertain.
+
 Re-enable fails when:
 
 - the persisted control marker is malformed;
