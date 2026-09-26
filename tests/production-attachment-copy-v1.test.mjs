@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   chmodSync,
@@ -19,6 +20,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join, parse } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
 import {
@@ -789,28 +791,32 @@ test('database reads stay bound to the originally resolved target database inode
   }
 });
 
-test('filesystem namespace folding ignores later String case-method monkeypatching', () => {
+test('filesystem namespace folding ignores later String case and normalization monkeypatching', () => {
   const originalLower = String.prototype.toLowerCase;
   const originalUpper = String.prototype.toUpperCase;
+  const originalNormalize = String.prototype.normalize;
   try {
     String.prototype.toLowerCase = () => 'forged-lower';
     String.prototype.toUpperCase = () => 'FORGED-UPPER';
+    String.prototype.normalize = () => 'forged-normalized';
 
     const sourceKey = filesystemPathComparisonKey(
-      '/tmp/TARGET.sqlite-wal',
-      '/tmp/TARGET.sqlite-wal',
-      { caseInsensitive: true },
+      '/tmp/TARGÉT.sqlite-wal',
+      '/tmp/TARGÉT.sqlite-wal',
+      { caseInsensitive: true, canonicalEquivalent: true },
     );
     const targetKey = filesystemPathComparisonKey(
-      '/tmp/target.sqlite-wal',
+      '/tmp/targe\u0301t.sqlite-wal',
       '/tmp/target.sqlite',
-      { caseInsensitive: true },
+      { caseInsensitive: true, canonicalEquivalent: true },
     );
     assert.equal(sourceKey, targetKey);
     assert.notEqual(sourceKey, 'forged-lower');
+    assert.notEqual(sourceKey, 'forged-normalized');
   } finally {
     String.prototype.toLowerCase = originalLower;
     String.prototype.toUpperCase = originalUpper;
+    String.prototype.normalize = originalNormalize;
   }
 });
 
@@ -824,6 +830,28 @@ test('filesystem-aware namespace keys fold case when the filesystem is case-inse
     '/tmp/target.sqlite-wal',
     '/tmp/target.sqlite',
     { caseInsensitive: true },
+  ));
+
+  assert.equal(sourceKey, targetWalKey);
+  assert.equal(
+    sqlitePhysicalFamiliesAreDisjoint(
+      { namespace: { database: sourceKey } },
+      { namespace: { wal: targetWalKey } },
+    ),
+    false,
+  );
+});
+
+test('filesystem-aware namespace keys fold NFC and NFD on canonical-equivalent filesystems', () => {
+  const sourceKey = sha256Digest(filesystemPathComparisonKey(
+    '/tmp/café.sqlite-wal',
+    '/tmp/café.sqlite-wal',
+    { caseInsensitive: true, canonicalEquivalent: true },
+  ));
+  const targetWalKey = sha256Digest(filesystemPathComparisonKey(
+    '/tmp/cafe\u0301.sqlite-wal',
+    '/tmp/cafe\u0301.sqlite',
+    { caseInsensitive: true, canonicalEquivalent: true },
   ));
 
   assert.equal(sourceKey, targetWalKey);
@@ -1265,6 +1293,21 @@ test('attachment copy command requires explicit isolated-target acknowledgement 
     ]),
     error => error.code === 'APPLY_ARGUMENT_NOT_ALLOWED',
   );
+});
+
+test('attachment copy CLI preserves INVALID_USAGE exit code 3', () => {
+  const scriptPath = fileURLToPath(
+    new URL('../scripts/copy-production-attachments.mjs', import.meta.url),
+  );
+  const result = spawnSync(process.execPath, [scriptPath, '--apply'], {
+    encoding: 'utf8',
+  });
+
+  assert.equal(result.status, 3);
+  const payload = JSON.parse(result.stdout.trim());
+  assert.equal(payload.status, 'ATTACHMENT_COPY_FAILED');
+  assert.equal(payload.result, 'INVALID_USAGE');
+  assert.equal(payload.code, 'MISSING_REQUIRED_ARGUMENT');
 });
 
 test('attachment copy command cannot mint production authority from a caller-forged capability', () => {
