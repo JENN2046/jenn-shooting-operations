@@ -115,6 +115,7 @@ export function createOperationsServer({
   cleanupIntervalMs = 60 * 60 * 1000,
   orphanCleanupMode = 'inherit',
   orphanCleanupEnableEpoch,
+  orphanCleanupDomain,
   kioskAuthenticate,
   kioskBusinessTimeZone,
   kioskAllowedBriefHosts = [],
@@ -130,6 +131,7 @@ export function createOperationsServer({
     orphanMaxAgeMs,
     orphanCleanupMode,
     orphanCleanupEnableEpoch,
+    orphanCleanupDomain,
   });
   store.cleanupOrphanUploads();
   const kiosk = kioskAuthenticate === undefined
@@ -188,12 +190,14 @@ if (invokedDirectly) {
   };
   const orphanCleanupMode = process.env.ORPHAN_CLEANUP_MODE || 'inherit';
   const orphanCleanupEnableEpoch = process.env.ORPHAN_CLEANUP_ENABLE_EPOCH || undefined;
+  const orphanCleanupDomain = process.env.ORPHAN_CLEANUP_DOMAIN || undefined;
   const { server } = createOperationsServer({
     databasePath,
     uploadRoot,
     tokens,
     orphanCleanupMode,
     orphanCleanupEnableEpoch,
+    orphanCleanupDomain,
   });
   server.listen(port, host, () => {
     console.log(`Jenn Shooting Operations listening on ${host}:${port}`);
