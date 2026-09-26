@@ -423,7 +423,7 @@ export class ScheduleStore {
     const normalizedOptions = Object.freeze({
       olderThanMs: options?.olderThanMs,
       operationId: options?.operationId,
-      dryRun: options?.dryRun === true,
+      dryRun: Boolean(options?.dryRun),
       recoverStaged: options?.recoverStaged,
     });
     if (normalizedOptions.dryRun) return this.#cleanupOrphanUploadsUnchecked(normalizedOptions);
