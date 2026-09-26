@@ -931,7 +931,6 @@ export function copyAttachmentsAndEvaluateParityTestCandidate({
     targetDatabasePath,
     targetUploadRoot,
     quiescenceCapability,
-    faultInjector,
   });
 }
 
@@ -962,7 +961,6 @@ export function verifyAttachmentDatabaseParity({
   targetDatabasePath,
   targetUploadRoot,
   quiescenceCapability,
-  faultInjector,
 } = {}) {
   const domain = resolveParityDomain({
     sourceDatabasePath,
@@ -978,7 +976,6 @@ export function verifyAttachmentDatabaseParity({
     targetDatabase: domain.targetDatabase,
     targetRoot: domain.targetRoot,
     quiescenceCapability: quiescenceCapability,
-    faultInjector,
   });
   assertAuthenticatedQuiescenceCapability(quiescenceCapability, domain.scopeDigest);
 
@@ -995,7 +992,6 @@ export function copyAndVerifyAttachments({
   targetDatabasePath,
   targetUploadRoot,
   quiescenceCapability,
-  faultInjector,
 } = {}) {
   const domain = resolveParityDomain({
     sourceDatabasePath,
