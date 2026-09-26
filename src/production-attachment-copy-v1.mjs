@@ -34,6 +34,7 @@ import {
 
 const COPY_BUFFER_BYTES = 64 * 1024;
 const STORED_NAME = /^[a-f0-9]{64}\.[a-z0-9]+$/u;
+const AUTHENTICATED_QUIESCENCE_CAPABILITIES = new WeakSet();
 
 function fail(code, result = 'INVALID_TARGET') {
   throw new MigrationError(code, result);
@@ -86,7 +87,7 @@ function parityScopeDigest(sourceDatabase, targetDatabase, sourceRoot, targetRoo
   });
 }
 
-function assertQuiescenceLease(lease, scopeDigest) {
+function assertQuiescenceProbe(lease, scopeDigest) {
   if (!lease
       || lease.kind !== 'ATTACHMENT_PARITY_QUIESCENCE_V1'
       || lease.scopeDigest !== scopeDigest
@@ -102,6 +103,16 @@ function assertQuiescenceLease(lease, scopeDigest) {
   if (held !== true) {
     fail('ATTACHMENT_PARITY_QUIESCENCE_LOST', 'BLOCKED_PREREQUISITE');
   }
+}
+
+function assertAuthenticatedQuiescenceCapability(capability, scopeDigest) {
+  if (!capability
+      || typeof capability !== 'object'
+      || !AUTHENTICATED_QUIESCENCE_CAPABILITIES.has(capability)
+      || capability.scopeDigest !== scopeDigest) {
+    fail('ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED', 'BLOCKED_PREREQUISITE');
+  }
+  assertQuiescenceProbe(capability, scopeDigest);
 }
 
 export function describeAttachmentParityScope({
@@ -426,15 +437,15 @@ function verifyAttachmentDatabaseParityResolved({
 } = {}) {
   assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
   const scopeDigest = parityScopeDigest(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
-  assertQuiescenceLease(quiescenceLease, scopeDigest);
+  assertQuiescenceProbe(quiescenceLease, scopeDigest);
   assertDatabaseStable(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
   assertDatabaseStable(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
   assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
   assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
 
-  assertQuiescenceLease(quiescenceLease, scopeDigest);
+  assertQuiescenceProbe(quiescenceLease, scopeDigest);
   if (faultInjector) faultInjector('before_initial_database_read');
-  assertQuiescenceLease(quiescenceLease, scopeDigest);
+  assertQuiescenceProbe(quiescenceLease, scopeDigest);
 
   const sourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
   const targetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
@@ -474,10 +485,10 @@ function verifyAttachmentDatabaseParityResolved({
   };
 
   verifyFilesystem();
-  assertQuiescenceLease(quiescenceLease, scopeDigest);
+  assertQuiescenceProbe(quiescenceLease, scopeDigest);
 
   if (faultInjector) faultInjector('before_final_database_recheck');
-  assertQuiescenceLease(quiescenceLease, scopeDigest);
+  assertQuiescenceProbe(quiescenceLease, scopeDigest);
 
   const finalSourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
   const finalTargetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
@@ -491,7 +502,7 @@ function verifyAttachmentDatabaseParityResolved({
   // mutation window where bytes/set could drift while database facts were
   // being revalidated.
   verifyFilesystem();
-  assertQuiescenceLease(quiescenceLease, scopeDigest);
+  assertQuiescenceProbe(quiescenceLease, scopeDigest);
 
   // Capture the complete SQLite physical families before the last DB read.
   // This binds the final DB read and the last filesystem pass into one
@@ -526,7 +537,7 @@ function verifyAttachmentDatabaseParityResolved({
   }
 
   if (faultInjector) faultInjector('after_final_database_recheck');
-  assertQuiescenceLease(quiescenceLease, scopeDigest);
+  assertQuiescenceProbe(quiescenceLease, scopeDigest);
 
   // One final filesystem pass comes after the last database read so byte/set
   // drift that occurs during that DB read cannot escape into a receipt.
@@ -544,7 +555,8 @@ function verifyAttachmentDatabaseParityResolved({
     attachmentBytesDigest,
   });
   const candidateReceipt = Object.freeze({
-    status: 'ATTACHMENT_DATABASE_PARITY_VERIFIED',
+    status: 'ATTACHMENT_DATABASE_PARITY_CANDIDATE',
+    authoritative: false,
     schemaVersion: 1,
     uploadRows: finalTargetRowsAfterFilesystem.length,
     uniqueFiles: files.length,
@@ -564,15 +576,15 @@ function verifyAttachmentDatabaseParityResolved({
   assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
 
   if (faultInjector) faultInjector('before_final_family_compare');
-  assertQuiescenceLease(quiescenceLease, scopeDigest);
+  assertQuiescenceProbe(quiescenceLease, scopeDigest);
 
   const sourceFamilyAfterFinalWindow = captureDatabaseFamily(
     sourceDatabase,
     'SOURCE_UPLOAD_DATABASE_INVALID',
   );
-  assertQuiescenceLease(quiescenceLease, scopeDigest);
+  assertQuiescenceProbe(quiescenceLease, scopeDigest);
   if (faultInjector) faultInjector('between_final_family_captures');
-  assertQuiescenceLease(quiescenceLease, scopeDigest);
+  assertQuiescenceProbe(quiescenceLease, scopeDigest);
   const targetFamilyAfterFinalWindow = captureDatabaseFamily(
     targetDatabase,
     'TARGET_UPLOAD_DATABASE_INVALID',
@@ -589,12 +601,12 @@ function verifyAttachmentDatabaseParityResolved({
   if (!sameSqlitePhysicalFamily(targetFamilyBeforeFinalWindow, targetFamilyAfterFinalWindow)) {
     fail('TARGET_UPLOAD_DATABASE_CHANGED_DURING_PARITY');
   }
-  assertQuiescenceLease(quiescenceLease, scopeDigest);
+  assertQuiescenceProbe(quiescenceLease, scopeDigest);
 
   return candidateReceipt;
 }
 
-export function verifyAttachmentDatabaseParity({
+export function evaluateAttachmentDatabaseParityCandidate({
   sourceDatabasePath,
   sourceUploadRoot,
   targetDatabasePath,
@@ -617,7 +629,7 @@ export function verifyAttachmentDatabaseParity({
   });
 }
 
-export function copyAndVerifyAttachments({
+export function copyAttachmentsAndEvaluateParityCandidate({
   sourceDatabasePath,
   sourceUploadRoot,
   targetDatabasePath,
@@ -632,7 +644,7 @@ export function copyAndVerifyAttachments({
 
   assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
   const scopeDigest = parityScopeDigest(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
-  assertQuiescenceLease(quiescenceLease, scopeDigest);
+  assertQuiescenceProbe(quiescenceLease, scopeDigest);
 
   const sourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
   const targetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
@@ -647,7 +659,7 @@ export function copyAndVerifyAttachments({
   let copiedBytes = 0;
 
   for (const file of files) {
-    assertQuiescenceLease(quiescenceLease, scopeDigest);
+    assertQuiescenceProbe(quiescenceLease, scopeDigest);
     assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
     assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
 
@@ -718,13 +730,13 @@ export function copyAndVerifyAttachments({
 
     fsyncDirectory(targetRoot.realPath);
     if (faultInjector) faultInjector('after_file_copy', file.storedName);
-    assertQuiescenceLease(quiescenceLease, scopeDigest);
+    assertQuiescenceProbe(quiescenceLease, scopeDigest);
     copiedFiles += 1;
     copiedBytes += file.size;
   }
 
   if (faultInjector) faultInjector('before_final_parity');
-  assertQuiescenceLease(quiescenceLease, scopeDigest);
+  assertQuiescenceProbe(quiescenceLease, scopeDigest);
   const parity = verifyAttachmentDatabaseParityResolved({
     sourceDatabase,
     sourceRoot,
@@ -733,11 +745,12 @@ export function copyAndVerifyAttachments({
     quiescenceLease,
     faultInjector,
   });
-  assertQuiescenceLease(quiescenceLease, scopeDigest);
+  assertQuiescenceProbe(quiescenceLease, scopeDigest);
 
   return Object.freeze({
     ...parity,
-    status: 'ATTACHMENT_COPY_PARITY_VERIFIED',
+    status: 'ATTACHMENT_COPY_PARITY_CANDIDATE',
+    authoritative: false,
     copiedFiles,
     reusedFiles,
     copiedBytes,
@@ -745,5 +758,92 @@ export function copyAndVerifyAttachments({
       schemaVersion: 1,
       parityDigest: parity.parityDigest,
     }),
+  });
+}
+
+
+function resolveParityDomain({
+  sourceDatabasePath,
+  sourceUploadRoot,
+  targetDatabasePath,
+  targetUploadRoot,
+} = {}) {
+  const sourceDatabase = resolveExistingPath(sourceDatabasePath, 'file');
+  const targetDatabase = resolveExistingPath(targetDatabasePath, 'file');
+  const sourceRoot = resolveExistingPath(sourceUploadRoot, 'directory');
+  const targetRoot = resolveExistingPath(targetUploadRoot, 'directory');
+  assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
+  return Object.freeze({
+    sourceDatabase,
+    targetDatabase,
+    sourceRoot,
+    targetRoot,
+    scopeDigest: parityScopeDigest(sourceDatabase, targetDatabase, sourceRoot, targetRoot),
+  });
+}
+
+export function verifyAttachmentDatabaseParity({
+  sourceDatabasePath,
+  sourceUploadRoot,
+  targetDatabasePath,
+  targetUploadRoot,
+  quiescenceCapability,
+  faultInjector,
+} = {}) {
+  const domain = resolveParityDomain({
+    sourceDatabasePath,
+    sourceUploadRoot,
+    targetDatabasePath,
+    targetUploadRoot,
+  });
+  assertAuthenticatedQuiescenceCapability(quiescenceCapability, domain.scopeDigest);
+
+  const candidate = verifyAttachmentDatabaseParityResolved({
+    sourceDatabase: domain.sourceDatabase,
+    sourceRoot: domain.sourceRoot,
+    targetDatabase: domain.targetDatabase,
+    targetRoot: domain.targetRoot,
+    quiescenceLease: quiescenceCapability,
+    faultInjector,
+  });
+  assertAuthenticatedQuiescenceCapability(quiescenceCapability, domain.scopeDigest);
+
+  return Object.freeze({
+    ...candidate,
+    status: 'ATTACHMENT_DATABASE_PARITY_VERIFIED',
+    authoritative: true,
+  });
+}
+
+export function copyAndVerifyAttachments({
+  sourceDatabasePath,
+  sourceUploadRoot,
+  targetDatabasePath,
+  targetUploadRoot,
+  quiescenceCapability,
+  faultInjector,
+} = {}) {
+  const domain = resolveParityDomain({
+    sourceDatabasePath,
+    sourceUploadRoot,
+    targetDatabasePath,
+    targetUploadRoot,
+  });
+  assertAuthenticatedQuiescenceCapability(quiescenceCapability, domain.scopeDigest);
+
+  const candidate = copyAttachmentsAndEvaluateParityCandidate({
+    sourceDatabasePath,
+    sourceUploadRoot,
+    targetDatabasePath,
+    targetUploadRoot,
+    quiescenceLease: quiescenceCapability,
+    faultInjector,
+  });
+  assertAuthenticatedQuiescenceCapability(quiescenceCapability, domain.scopeDigest);
+
+  return Object.freeze({
+    ...candidate,
+    status: 'ATTACHMENT_COPY_PARITY_VERIFIED',
+    authoritative: true,
   });
 }
