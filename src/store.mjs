@@ -141,7 +141,7 @@ export class ScheduleStore {
         throw error;
       }
     }
-    this.recoverStagedUploadCleanup();
+    this.recoverStagedUploadCleanup({ allowDelete: cleanupMode !== 'disabled' });
   }
 
   getOrphanCleanupControlStatus() {
