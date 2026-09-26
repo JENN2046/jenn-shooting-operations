@@ -344,6 +344,32 @@ test('target tamper before final parity prevents a receipt', () => {
   }
 });
 
+test('database upload facts changing during final parity prevent a receipt', () => {
+  const body = Buffer.from('database-drift');
+  const row = uploadFact({ id: 'UPLOAD-DATABASE-DRIFT', body });
+  const fixture = createFixture([row]);
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    assert.throws(
+      () => copyAndVerifyAttachments(copyOptions(fixture, {
+        faultInjector(stage) {
+          if (stage !== 'before_final_database_recheck') return;
+          const target = new DatabaseSync(fixture.targetDatabasePath);
+          try {
+            target.prepare('UPDATE uploads SET original_name = ? WHERE id = ?')
+              .run('changed-during-parity.bin', row.id);
+          } finally {
+            target.close();
+          }
+        },
+      })),
+      error => error.code === 'UPLOAD_DATABASE_FACTS_CHANGED_DURING_PARITY',
+    );
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test('rows without stored bytes require no target file but remain bound into database facts', () => {
   const row = {
     ...uploadFact({ id: 'UPLOAD-NO-FILE', body: Buffer.alloc(0) }),
