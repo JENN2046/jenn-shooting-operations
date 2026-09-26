@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import {
   closeSync,
   constants as fsConstants,
@@ -170,31 +170,9 @@ function openStableFile(path, expected, code) {
   }
 }
 
-function hashStableFile(path, expected, code) {
-  const opened = openStableFile(path, expected, code);
-  const { descriptor, before } = opened;
-  const hash = new (await import('node:crypto')).createHash('sha256');
-  const buffer = Buffer.allocUnsafe(COPY_BUFFER_BYTES);
-  try {
-    while (true) {
-      const bytes = readSync(descriptor, buffer, 0, buffer.length, null);
-      if (bytes === 0) break;
-      hash.update(buffer.subarray(0, bytes));
-    }
-    const after = fstatSync(descriptor, { bigint: true });
-    if (!sameStat(before, after)) fail(code);
-    const digest = hash.digest('hex');
-    if (digest !== expected.sha256) fail(code);
-    return digest;
-  } finally {
-    closeSync(descriptor);
-  }
-}
-
 function verifyFileBytes(path, expected, code) {
   const opened = openStableFile(path, expected, code);
   const { descriptor, before } = opened;
-  const { createHash } = require('node:crypto');
   const hash = createHash('sha256');
   const buffer = Buffer.allocUnsafe(COPY_BUFFER_BYTES);
   try {
@@ -366,7 +344,6 @@ export function copyAndVerifyAttachments({
     let targetDescriptor;
     let created = false;
     const buffer = Buffer.allocUnsafe(COPY_BUFFER_BYTES);
-    const { createHash } = require('node:crypto');
     const hash = createHash('sha256');
     let bytesWritten = 0;
     try {
