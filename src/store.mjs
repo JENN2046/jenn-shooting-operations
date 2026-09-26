@@ -419,8 +419,8 @@ export class ScheduleStore {
 
   cleanupOrphanUploads(options = {}) {
     const dryRun = options?.dryRun === true;
-    if (dryRun) return this.cleanupOrphanUploadsUnchecked(options);
-    if (this.readOnly) return this.cleanupOrphanUploadsUnchecked(options);
+    if (dryRun) return this.#cleanupOrphanUploadsUnchecked(options);
+    if (this.readOnly) return this.#cleanupOrphanUploadsUnchecked(options);
 
     const admission = this.orphanCleanupControl.beginRun();
     if (!admission.ok) {
@@ -441,13 +441,13 @@ export class ScheduleStore {
     }
 
     try {
-      return this.cleanupOrphanUploadsUnchecked(options);
+      return this.#cleanupOrphanUploadsUnchecked(options);
     } finally {
       this.orphanCleanupControl.endRun(admission);
     }
   }
 
-  cleanupOrphanUploadsUnchecked({ olderThanMs = this.orphanMaxAgeMs, operationId, dryRun = false, recoverStaged = true } = {}) {
+  #cleanupOrphanUploadsUnchecked({ olderThanMs = this.orphanMaxAgeMs, operationId, dryRun = false, recoverStaged = true } = {}) {
     const now = isoNow(this.clock);
     const selectCandidates = () => operationId
       ? this.db.prepare(`
