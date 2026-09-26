@@ -751,8 +751,8 @@ export function copyAttachmentsAndEvaluateParityCandidate({
 
     const sourcePath = resolve(sourceRoot.realPath, file.storedName);
     const targetPath = resolve(targetRoot.realPath, file.storedName);
-    if (!sourcePath.startsWith(`${sourceRoot.realPath}${sep}`)
-        || !targetPath.startsWith(`${targetRoot.realPath}${sep}`)) {
+    if (!pathWithin(sourcePath, sourceRoot.realPath)
+        || !pathWithin(targetPath, targetRoot.realPath)) {
       fail('UPLOAD_PATH_UNSAFE');
     }
 
