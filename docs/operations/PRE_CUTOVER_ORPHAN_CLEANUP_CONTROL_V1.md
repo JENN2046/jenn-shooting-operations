@@ -46,15 +46,23 @@ Disable follows this order:
 3. wait for already admitted run markers to disappear;
 4. return success only when the active set is empty.
 
-If the drain deadline expires, the control remains disabled and returns `ORPHAN_CLEANUP_DRAIN_TIMEOUT`. A stale marker after crash or uncertain ownership therefore fails closed rather than reopening cleanup.
+If the drain deadline expires, the control remains disabled and returns `ORPHAN_CLEANUP_DRAIN_TIMEOUT`. A stale marker after crash or uncertain ownership therefore fails closed rather than reopening cleanup. A stale transition lock likewise blocks cleanup and further state transitions until ownership is reconciled; it is never auto-deleted.
 
 When the real server starts with `ORPHAN_CLEANUP_MODE=disabled`, a non-empty active-run set is a startup hard stop. The constructor retains the disabled marker and throws before `createOperationsServer()` can return, so the process cannot listen while destructive cleanup ownership is still active or uncertain.
+
+Disable and enable transitions are serialized by a persisted filesystem transition lock in the same control directory. A process that cannot acquire that lock fails closed with `ORPHAN_CLEANUP_TRANSITION_BUSY`; destructive cleanup admission is also denied while the lock exists. The lock owner is recorded with a unique token, and release removes the lock only when the stored token still matches the owner.
+
+Disable holds the transition lock from marker creation/ownership validation through drain completion. It reports success only if the same disabled epoch still exists and every active cleanup marker has drained. A missing or replaced marker returns `ORPHAN_CLEANUP_MARKER_OWNERSHIP_LOST`.
+
+Enable holds the same transition lock from epoch validation through marker deletion. It re-reads the persisted marker immediately before unlink and requires the exact validated epoch, so a stale enable for epoch E cannot remove a replacement epoch F.
 
 Re-enable fails when:
 
 - the persisted control marker is malformed;
+- another cleanup-control transition owns the lock;
 - active cleanup markers remain;
-- the supplied epoch does not equal the persisted disabled epoch.
+- the supplied epoch does not equal the persisted disabled epoch;
+- marker ownership changes between validation and commit.
 
 ## Staged cleanup recovery
 
