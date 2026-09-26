@@ -29,6 +29,7 @@ import {
   captureSqlitePhysicalFamily,
   resolveExistingPath,
   sameSqlitePhysicalFamily,
+  sqlitePhysicalFamiliesAreDisjoint,
 } from '../src/migration-sqlite-v2.mjs';
 import { V1_SCHEMA_SQL } from '../src/sqlite-schema-v2.mjs';
 import {
@@ -436,6 +437,42 @@ test('database reads stay bound to the originally resolved target database inode
     );
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('SQLite family sidecars must be single-link and source/target families disjoint', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-sqlite-family-alias-'));
+  const sourcePath = join(root, 'source.sqlite');
+  const targetPath = join(root, 'target.sqlite');
+  const sourceWal = sourcePath + '-wal';
+  const targetWal = targetPath + '-wal';
+
+  try {
+    writeFileSync(sourcePath, Buffer.from('source-db'), { mode: 0o600 });
+    writeFileSync(targetPath, Buffer.from('target-db'), { mode: 0o600 });
+    writeFileSync(sourceWal, Buffer.from('shared-wal-state'), { mode: 0o600 });
+    linkSync(sourceWal, targetWal);
+
+    const sourceInfo = resolveExistingPath(sourcePath, 'file');
+    const targetInfo = resolveExistingPath(targetPath, 'file');
+
+    assert.throws(
+      () => captureSqlitePhysicalFamily(sourceInfo, {
+        includeDatabaseDigest: true,
+        requireSingleLink: true,
+      }),
+      error => error.code === 'SOURCE_CHANGED_DURING_SCAN',
+    );
+
+    const sourceFamily = captureSqlitePhysicalFamily(sourceInfo, {
+      includeDatabaseDigest: true,
+    });
+    const targetFamily = captureSqlitePhysicalFamily(targetInfo, {
+      includeDatabaseDigest: true,
+    });
+    assert.equal(sqlitePhysicalFamiliesAreDisjoint(sourceFamily, targetFamily), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
