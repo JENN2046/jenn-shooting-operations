@@ -236,6 +236,38 @@ test('sandbox holders cannot reuse cap.constructor to mint LIVE_PROVIDER authori
   }
 });
 
+test('sandbox capability cannot monkeypatch the private capability class authentication logic', () => {
+  const body = Buffer.from('frozen-capability-class');
+  const row = uploadFact({ id: 'UPLOAD-FROZEN-CAPABILITY', body });
+  const fixture = createFixture([row]);
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    const paths = parityPaths(fixture);
+    const testCapability = fixture.testAuthority.mint(paths);
+    const Capability = testCapability.constructor;
+
+    assert.equal(Object.isFrozen(Capability), true);
+    assert.equal(Object.isFrozen(Capability.prototype), true);
+    assert.throws(
+      () => {
+        Capability.inspect = () => ({ scopeDigest: 'forged', authorityClass: 'LIVE_PROVIDER' });
+      },
+      TypeError,
+    );
+
+    assert.throws(
+      () => copyAndVerifyAttachments({
+        ...paths,
+        quiescenceCapability: testCapability,
+      }),
+      error => error.code === 'ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED',
+    );
+    assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test('production capability authentication ignores WeakSet prototype monkeypatching', () => {
   const body = Buffer.from('weakset-monkeypatch');
   const row = uploadFact({ id: 'UPLOAD-WEAKSET-MONKEYPATCH', body });
@@ -320,7 +352,7 @@ test('quiescence lease is bound to exact database and upload-root identities', (
         ...parityPaths(fixtureB),
         quiescenceCapability: leaseA,
       }),
-      error => error.code === 'ATTACHMENT_PARITY_QUIESCENCE_REQUIRED',
+      error => error.code === 'ATTACHMENT_PARITY_TEST_AUTH_REQUIRED',
     );
     assert.equal(existsSync(join(fixtureB.targetUploadRoot, row.stored_name)), false);
   } finally {
