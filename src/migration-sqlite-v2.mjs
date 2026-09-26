@@ -226,6 +226,17 @@ function sameSourceFamily(left, right) {
   return canonicalJson(left) === canonicalJson(right);
 }
 
+export function captureSqlitePhysicalFamily(pathInfo) {
+  if (!pathInfo || typeof pathInfo.realPath !== 'string') {
+    fail('INVALID_PATH', 'INVALID_USAGE');
+  }
+  return sourceFamily(pathInfo.realPath);
+}
+
+export function sameSqlitePhysicalFamily(left, right) {
+  return sameSourceFamily(left, right);
+}
+
 export function readV1Source(pathInfo, { duringScan } = {}) {
   const beforeFamily = sourceFamily(pathInfo.realPath);
   const db = openReadOnly(pathInfo.realPath, 'INVALID_SOURCE');
