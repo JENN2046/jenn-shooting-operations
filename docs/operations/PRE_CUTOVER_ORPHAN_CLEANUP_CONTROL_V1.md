@@ -35,11 +35,13 @@ The compose definition exposes both variables without changing their default beh
 
 ## Admission and drain
 
-The unchecked destructive implementation is private to `ScheduleStore`; callers can invoke only the gated public cleanup entry point. This prevents a caller holding the returned store object from bypassing admission or drain accounting.
+The unchecked destructive cleanup implementation and locked staged-recovery implementation are private to `ScheduleStore`; the internal cleanup-control object is also a private store field. Callers holding the returned store can invoke only the gated public cleanup/recovery surfaces, so they cannot bypass admission or drain accounting.
 
 Each destructive cleanup run creates a marker in:
 
 `.orphan-cleanup-control/runs/`
+
+The control instance records every run it successfully admits. Completion accepts only a run ID owned by that same in-memory control instance and derives the marker path from the stored admission; caller-supplied marker paths are never trusted. A forged or peer run ID cannot remove another process's marker.
 
 The marker exists from destructive admission until database cleanup, staged-file handling, and final file deletion have all completed.
 
