@@ -2,9 +2,11 @@
 
 ## Purpose
 
-This capability copies attachment bytes from a verified source upload root into an already isolated target upload volume, then proves that the target SQLite upload facts and target attachment bytes describe the same set.
+This work package implements the attachment-copy/parity **candidate engine** and the production receipt authority boundary.
 
-It is repository implementation evidence for `PRODUCTION_ATTACHMENT_COPY_CAPABILITY`. It is not production deployment evidence and grants no production authorization.
+The candidate engine can copy and evaluate isolated test data, but it returns only non-authoritative `*_CANDIDATE` results. Production `*_VERIFIED` receipts are reserved for provider-authenticated execution and cannot currently be minted because this repository does not yet contain an acceptance-verified live quiescence provider.
+
+It is repository engine evidence for `PRODUCTION_ATTACHMENT_COPY_CAPABILITY`. It is not production deployment evidence and grants no production authorization.
 
 ## Inputs
 
@@ -15,7 +17,9 @@ The parity engine requires four explicit storage inputs:
 - target SQLite database;
 - target upload root.
 
-It also requires an active `ATTACHMENT_PARITY_QUIESCENCE_V1` lease bound to the exact resolved database/upload-root identities. The lease is an admission contract supplied by a separately verified offline-maintenance or coordinated-write provider; this repository work does not yet provide or acceptance-verify that production provider.
+Candidate-engine tests use an exact-scope quiescence probe to exercise the algorithm under a simulated held critical section.
+
+Production receipt APIs do **not** trust caller-supplied lease fields. They require an opaque capability authenticated by a module-private authority set. Stage 3 intentionally exposes no public capability mint, so a caller that knows the scope digest and supplies `assertHeld: () => true` still receives `ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED`. A future live provider must execute inside this authority boundary and hold real offline-maintenance or coordinated-write exclusion before it can mint production authority.
 
 The source and target databases must be different physical files. Database files must have one hard link and every read is bound to the device/inode captured during initial path resolution.
 
@@ -25,9 +29,9 @@ The original source/target database and upload-root identities remain authoritat
 
 The final parity window captures the complete SQLite physical family for both databases: main database identity plus WAL/SHM/journal state, with both the main SQLite file and WAL bytes content-hashed for the closing proof.
 
-Physical-family snapshots remain supplemental drift evidence, not a substitute for writer exclusion. The active quiescence lease must remain held across source and target family captures and through receipt return; the engine calls `assertHeld()` before copy, throughout parity, between the two closing family captures, and immediately before return. If the lease is absent, wrong-scope, or lost, no parity receipt is issued.
+Physical-family snapshots remain supplemental drift evidence, not a substitute for writer exclusion. Candidate evaluation continuously checks its test probe, including between the two closing family captures. Production receipt issuance additionally requires an opaque provider-authenticated capability that cannot be constructed from public fields.
 
-For Stage-3 strong-family verification, the main SQLite file and every present `-wal`, `-shm`, or `-journal` sidecar must have exactly one hard link. Source and target family members are also compared by device/inode; any shared physical member is rejected as `SOURCE_TARGET_SQLITE_FAMILY_ALIAS`. An isolated-target receipt therefore cannot be issued for databases that secretly share mutable SQLite sidecar state.
+For Stage-3 strong-family verification, the main SQLite file and every present `-wal`, `-shm`, or `-journal` sidecar must have exactly one hard link. Source and target families are compared as a **full cross-product** of present device/inode identities, not merely same-role members. Their expected database/WAL/SHM/journal path namespaces are also compared as a full cross-product, so a source database cannot occupy a target's current or future sidecar pathname. Any physical or namespace overlap is rejected as `SOURCE_TARGET_SQLITE_FAMILY_ALIAS`.
 
 The target database is expected to be the isolated migration target produced by the existing migration path. This capability does not create or migrate the target database.
 
@@ -84,13 +88,14 @@ The verifier re-checks each file pathname after reading and requires it still to
 
 The verifier also revalidates the originally resolved database and upload-root device/inode identities throughout the proof. The candidate receipt is computed from already captured facts, all final path/root checks run before the closing family observations, and quiescence is asserted between the source/target captures and before return. Replacing a database file or upload-root directory with matching contents, losing quiescence, or committing a WAL-backed DB write inside the protected window therefore cannot become a successful receipt.
 
-Successful verification produces:
+Candidate evaluation produces:
 
 - `uploadFactsDigest`;
 - `attachmentBytesDigest`;
-- `parityDigest`.
+- `parityDigest`;
+- for copy evaluation, `candidateCopyDigest`.
 
-`parityDigest` binds the target database upload facts to the exact attachment byte set without exposing original filenames or absolute paths.
+These values describe evaluated facts but do not grant production authority. Only a future provider-authenticated wrapper may return `ATTACHMENT_DATABASE_PARITY_VERIFIED` / `ATTACHMENT_COPY_PARITY_VERIFIED` and the production-named `copyProofDigest`.
 
 ## Replay semantics
 
@@ -98,7 +103,7 @@ A completed copy may be replayed.
 
 Exact target files are re-used without rewriting them. Operational counters such as `copiedFiles` and `reusedFiles` are informational and are not part of the stable proof identity.
 
-`copyProofDigest` is derived from the parity identity only, so initial copy and exact replay converge on the same proof.
+`candidateCopyDigest` is derived from the parity identity only, so initial copy and exact replay converge on the same non-authoritative candidate identity. The production-named `copyProofDigest` is reserved for provider-authenticated receipt issuance.
 
 ## Command surface
 
@@ -111,7 +116,9 @@ Modes:
 - `--apply`: may create missing target attachment files and requires `--acknowledge-isolated-target`;
 - `--verify-only`: read-only parity verification and rejects the apply acknowledgement.
 
-The direct CLI intentionally has **no built-in production quiescence provider** in this work package. Direct execution therefore fails closed with `ATTACHMENT_PARITY_QUIESCENCE_REQUIRED`. Programmatic orchestration may inject a live exact-scope lease, but that provider is not production-ready evidence until separately deployed and acceptance-verified.
+The direct CLI intentionally has **no built-in production quiescence provider** in this work package. Direct execution therefore fails closed with `ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED`.
+
+Programmatic callers cannot bypass this by constructing an object with the documented scope digest, kind, or `assertHeld()` callback. Production receipt APIs accept only an opaque capability authenticated inside the module-private provider authority boundary; Stage 3 exposes no mint for it.
 
 Required path arguments:
 
@@ -136,8 +143,10 @@ The capability fails closed for, among other cases:
 - unexpected target files or directories;
 - non-empty target cleanup staging;
 - source drift before final parity;
-- missing or wrong-scope quiescence lease;
-- quiescence loss at any checked point, including between the two closing SQLite-family captures.
+- missing or wrong-scope candidate quiescence probe;
+- candidate quiescence loss at any checked point, including between the two closing SQLite-family captures;
+- caller-forged production capability objects;
+- any source/target SQLite family cross-role inode or expected-path namespace collision.
 
 A failed or incomplete run never produces a parity receipt.
 
@@ -145,6 +154,6 @@ A failed or incomplete run never produces a parity receipt.
 
 This repository implementation does not close `PRODUCTION_ATTACHMENT_COPY_CAPABILITY`.
 
-The gate remains `BLOCKED` until a later authority revision binds and acceptance-verifies the live quiescence/coordination provider, the real target upload volume, real production source state, deployed command/runtime identity, and PROD-09 execution evidence. This Stage-3 contract does not implement the later Stage-5 long-lived source/target writer fence.
+The gate remains `BLOCKED` until a later authority revision implements and acceptance-verifies the live provider that can mint the opaque capability while actually holding source/target quiescence, plus the real target upload volume, real production source state, deployed command/runtime identity, and PROD-09 execution evidence. This Stage-3 contract does not implement the later Stage-5 long-lived source/target writer fence.
 
 No production database, attachment tree, deployment host, container, provider, device, route, credential, or cutover is touched by this work package.
