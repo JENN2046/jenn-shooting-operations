@@ -637,6 +637,62 @@ test('final parity stays bound to the originally acknowledged target upload-root
   }
 });
 
+test('SQLite upload-fact queries open only the private inode-bound snapshot', () => {
+  const moduleSource = readFileSync(
+    new URL('../src/production-attachment-copy-v1.mjs', import.meta.url),
+    'utf8',
+  );
+  const readFactsStart = moduleSource.indexOf('function readUploadFacts(');
+  const normalizedStart = moduleSource.indexOf('function normalizedUniqueFiles(', readFactsStart);
+  assert.notEqual(readFactsStart, -1);
+  assert.notEqual(normalizedStart, -1);
+
+  const readFactsSource = moduleSource.slice(readFactsStart, normalizedStart);
+  assert.match(readFactsSource, /new DatabaseSync\(snapshot\.snapshotDatabasePath/u);
+  assert.doesNotMatch(readFactsSource, /new DatabaseSync\(databaseInfo\.realPath/u);
+});
+
+test('database pathname replacement after bound snapshot copy fails before target mutation', () => {
+  const body = Buffer.from('inode-bound-snapshot');
+  const row = uploadFact({ id: 'UPLOAD-INODE-SNAPSHOT', body });
+  const fixture = createFixture([row]);
+  const replacementPath = join(fixture.root, 'source-replacement.sqlite');
+  const heldOriginalPath = join(fixture.root, 'source-original-held.sqlite');
+  let swapped = false;
+
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    createDatabase(replacementPath, [{
+      ...row,
+      original_name: 'unacknowledged-replacement.bin',
+    }]);
+
+    assert.throws(
+      () => copyAttachmentsAndEvaluateParityTestCandidate(copyOptions(fixture, {
+        faultInjector(stage) {
+          if (stage !== 'after_source_database_snapshot_copy' || swapped) return;
+          renameSync(fixture.sourceDatabasePath, heldOriginalPath);
+          renameSync(replacementPath, fixture.sourceDatabasePath);
+          swapped = true;
+        },
+      })),
+      error => error.code === 'SOURCE_UPLOAD_DATABASE_INVALID',
+    );
+
+    assert.equal(
+      existsSync(join(fixture.targetUploadRoot, row.stored_name)),
+      false,
+      'unacknowledged database facts must fail before attachment mutation',
+    );
+  } finally {
+    if (swapped) {
+      try { renameSync(fixture.sourceDatabasePath, replacementPath); } catch {}
+      try { renameSync(heldOriginalPath, fixture.sourceDatabasePath); } catch {}
+    }
+    fixture.cleanup();
+  }
+});
+
 test('database reads stay bound to the originally resolved target database inode', () => {
   const body = Buffer.from('db-path-replacement');
   const row = uploadFact({ id: 'UPLOAD-DB-PATH-REPLACE', body });
