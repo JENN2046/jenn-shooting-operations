@@ -495,3 +495,108 @@ test('stale enable cannot remove a replacement disable epoch', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+
+test('periodic cleanup retries after a startup-time transition lock clears', { timeout: 10_000 }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-startup-transition-timer-'));
+  const databasePath = join(root, 'operations.sqlite');
+  const uploadRoot = join(root, 'uploads');
+  const oldTime = new Date('2026-09-20T08:00:00.000Z');
+  const laterTime = new Date('2026-09-22T08:00:00.000Z');
+  let seed;
+  let service;
+
+  try {
+    seed = new ScheduleStore({
+      filename: databasePath,
+      uploadRoot,
+      clock: () => oldTime,
+      idFactory: () => 'startup-transition-timer-orphan',
+    });
+    const orphan = seed.saveUpload({
+      operationId: 'startup-transition-timer-0001',
+      originalName: 'startup-transition.txt',
+      contentType: 'text/plain',
+      kind: 'attachment',
+      buffer: Buffer.from('periodic timer must retry after transition'),
+    });
+    const storedPath = join(uploadRoot, orphan.upload.sha256 + '.txt');
+    seed.close();
+    seed = null;
+
+    const lockPath = join(root, '.orphan-cleanup-control', 'transition.lock');
+    writeFileSync(lockPath, 'foreign-enable-transition\n', { flag: 'wx' });
+
+    service = createOperationsServer({
+      databasePath,
+      uploadRoot,
+      clock: () => laterTime,
+      orphanMaxAgeMs: 1000,
+      cleanupIntervalMs: 10,
+      orphanCleanupMode: 'inherit',
+    });
+    await listen(service);
+
+    await delay(40);
+    assert.equal(existsSync(storedPath), true, 'transition must block destructive periodic admission');
+
+    unlinkSync(lockPath);
+    await delay(60);
+    assert.equal(existsSync(storedPath), false, 'existing interval must retry after transition clears');
+  } finally {
+    try { seed?.close(); } catch {}
+    if (service) {
+      try { await closeService(service); } catch {}
+    }
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('failed local disable does not strand the periodic cleanup timer', { timeout: 10_000 }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-disable-busy-timer-'));
+  const databasePath = join(root, 'operations.sqlite');
+  const uploadRoot = join(root, 'uploads');
+  let now = new Date('2026-09-22T08:00:00.000Z');
+  let service;
+
+  try {
+    service = createOperationsServer({
+      databasePath,
+      uploadRoot,
+      clock: () => now,
+      idFactory: () => 'disable-busy-timer-orphan',
+      orphanMaxAgeMs: 1000,
+      cleanupIntervalMs: 10,
+    });
+    await listen(service);
+
+    const orphan = service.store.saveUpload({
+      operationId: 'disable-busy-timer-0001',
+      originalName: 'disable-busy.txt',
+      contentType: 'text/plain',
+      kind: 'attachment',
+      buffer: Buffer.from('timer must remain scheduled after transition busy'),
+    });
+    const storedPath = join(uploadRoot, orphan.upload.sha256 + '.txt');
+
+    const lockPath = join(root, '.orphan-cleanup-control', 'transition.lock');
+    writeFileSync(lockPath, 'foreign-enable-transition\n', { flag: 'wx' });
+    now = new Date(now.getTime() + 1001);
+
+    const blocked = service.orphanCleanupControl.disable({ reason: 'pre-cutover', waitForDrainMs: 0 });
+    assert.equal(blocked.ok, false);
+    assert.equal(blocked.code, 'ORPHAN_CLEANUP_TRANSITION_BUSY');
+
+    await delay(30);
+    assert.equal(existsSync(storedPath), true, 'foreign transition still blocks destructive admission');
+
+    unlinkSync(lockPath);
+    await delay(60);
+    assert.equal(existsSync(storedPath), false, 'timer must still exist after failed local disable');
+  } finally {
+    if (service) {
+      try { await closeService(service); } catch {}
+    }
+    rmSync(root, { recursive: true, force: true });
+  }
+});
