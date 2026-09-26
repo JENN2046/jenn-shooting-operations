@@ -96,7 +96,7 @@ export function runAttachmentCopyCommand(args, { quiescenceCapability } = {}) {
   });
 }
 
-function lowDisclosureFailure(error) {
+export function lowDisclosureFailure(error) {
   if (error instanceof MigrationError) {
     return {
       exitCode: error.exitCode,
