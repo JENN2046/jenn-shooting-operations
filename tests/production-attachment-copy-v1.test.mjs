@@ -397,6 +397,35 @@ test('strong SQLite physical-family proof includes database content digest and d
   }
 });
 
+test('WAL write immediately before final family capture invalidates parity', () => {
+  const body = Buffer.from('final-family-wal-write');
+  const row = uploadFact({ id: 'UPLOAD-FINAL-FAMILY-WAL', body });
+  const fixture = createFixture([row]);
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    copyAndVerifyAttachments(copyOptions(fixture));
+
+    assert.throws(
+      () => verifyAttachmentDatabaseParity(copyOptions(fixture, {
+        faultInjector(stage) {
+          if (stage !== 'before_final_family_compare') return;
+          const target = new DatabaseSync(fixture.targetDatabasePath);
+          try {
+            target.exec('PRAGMA journal_mode = WAL;');
+            target.prepare('UPDATE uploads SET original_name = ? WHERE id = ?')
+              .run('changed-at-final-family.bin', row.id);
+          } finally {
+            target.close();
+          }
+        },
+      })),
+      error => error.code === 'TARGET_UPLOAD_DATABASE_CHANGED_DURING_PARITY',
+    );
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test('database writes during the final filesystem pass invalidate the physical-family proof', () => {
   const body = Buffer.from('final-window-db-write');
   const row = uploadFact({ id: 'UPLOAD-FINAL-WINDOW-DB', body });
