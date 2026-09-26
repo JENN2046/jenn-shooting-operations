@@ -214,11 +214,21 @@ function fileIdentity(path, { includeCtime = true, includeDigest = false, requir
   return identity;
 }
 
+function sqliteFamilyNamespace(path) {
+  return Object.freeze({
+    database: sha256Digest(resolve(path)),
+    wal: sha256Digest(resolve(`${path}-wal`)),
+    shm: sha256Digest(resolve(`${path}-shm`)),
+    journal: sha256Digest(resolve(`${path}-journal`)),
+  });
+}
+
 function sourceFamily(
   path,
   { includeDatabaseDigest = false, requireSingleLink = false } = {},
 ) {
   return {
+    namespace: sqliteFamilyNamespace(path),
     database: fileIdentity(path, {
       includeDigest: includeDatabaseDigest,
       requireSingleLink,
@@ -252,13 +262,24 @@ export function sameSqlitePhysicalFamily(left, right) {
 }
 
 export function sqlitePhysicalFamiliesAreDisjoint(left, right) {
-  for (const key of ['database', 'wal', 'shm', 'journal']) {
-    const leftMember = left?.[key];
-    const rightMember = right?.[key];
-    if (!leftMember || !rightMember) continue;
-    if (leftMember.device === rightMember.device
-        && leftMember.inode === rightMember.inode) {
-      return false;
+  const keys = ['database', 'wal', 'shm', 'journal'];
+
+  for (const leftPath of Object.values(left?.namespace ?? {})) {
+    for (const rightPath of Object.values(right?.namespace ?? {})) {
+      if (leftPath === rightPath) return false;
+    }
+  }
+
+  for (const leftKey of keys) {
+    const leftMember = left?.[leftKey];
+    if (!leftMember) continue;
+    for (const rightKey of keys) {
+      const rightMember = right?.[rightKey];
+      if (!rightMember) continue;
+      if (leftMember.device === rightMember.device
+          && leftMember.inode === rightMember.inode) {
+        return false;
+      }
     }
   }
   return true;
