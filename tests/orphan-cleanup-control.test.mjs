@@ -359,6 +359,50 @@ test('unchecked cleanup implementation is not a public ScheduleStore method', ()
   }
 });
 
+test('cleanup snapshots caller options once before dry-run gate evaluation', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-options-snapshot-'));
+  const databasePath = join(root, 'operations.sqlite');
+  const uploadRoot = join(root, 'uploads');
+  let store;
+
+  try {
+    store = new ScheduleStore({
+      filename: databasePath,
+      uploadRoot,
+      idFactory: () => 'cleanup-options-snapshot',
+    });
+    const operationId = 'cleanup-options-snapshot-0001';
+    const upload = store.saveUpload({
+      operationId,
+      originalName: 'snapshot.txt',
+      contentType: 'text/plain',
+      kind: 'attachment',
+      buffer: Buffer.from('stateful getters cannot change dry-run after admission decision'),
+    });
+    const storedPath = join(uploadRoot, upload.upload.sha256 + '.txt');
+    const disabled = store.disableOrphanCleanup({ waitForDrainMs: 0 });
+    assert.equal(disabled.ok, true);
+
+    let dryRunReads = 0;
+    const result = store.cleanupOrphanUploads({
+      operationId,
+      get dryRun() {
+        dryRunReads += 1;
+        return dryRunReads === 1;
+      },
+    });
+
+    assert.equal(dryRunReads, 1);
+    assert.equal(result.dryRun, true);
+    assert.equal(result.deleted, 0);
+    assert.equal(existsSync(storedPath), true);
+    assert.ok(store.db.prepare('SELECT 1 FROM uploads WHERE id = ?').get(upload.upload.id));
+  } finally {
+    try { store?.close(); } catch {}
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('run completion can remove only markers admitted by the same control instance', () => {
   const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-run-ownership-'));
   const controlRoot = join(root, '.orphan-cleanup-control');
