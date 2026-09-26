@@ -12,6 +12,7 @@ import {
   renameSync,
   rmSync,
   statSync,
+  symlinkSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -304,6 +305,25 @@ test('production capability authentication ignores WeakSet prototype monkeypatch
   }
 });
 
+test('sandbox containment does not depend on mutable String prototype methods', () => {
+  const body = Buffer.from('prototype-containment');
+  const row = uploadFact({ id: 'UPLOAD-PROTOTYPE-CONTAINMENT', body });
+  const fixtureA = createFixture([row]);
+  const fixtureB = createFixture([row]);
+  const originalStartsWith = String.prototype.startsWith;
+  try {
+    String.prototype.startsWith = () => false;
+    assert.throws(
+      () => fixtureA.testAuthority.mint(parityPaths(fixtureB)),
+      error => error.code === 'ATTACHMENT_PARITY_TEST_SCOPE_INVALID',
+    );
+  } finally {
+    String.prototype.startsWith = originalStartsWith;
+    fixtureA.cleanup();
+    fixtureB.cleanup();
+  }
+});
+
 test('isolated test authority cannot mint a mutating capability for another sandbox', () => {
   const body = Buffer.from('test-authority-scope');
   const row = uploadFact({ id: 'UPLOAD-TEST-AUTHORITY-SCOPE', body });
@@ -532,6 +552,39 @@ test('target attachment hardlinks are rejected as conflicts', () => {
     );
   } finally {
     fixture.cleanup();
+  }
+});
+
+test('target creation stays bound to the validated root inode across pathname replacement', () => {
+  const body = Buffer.from('root-descriptor-binding');
+  const row = uploadFact({ id: 'UPLOAD-ROOT-DESCRIPTOR', body });
+  const fixture = createFixture([row]);
+  const displacedRoot = join(fixture.root, 'target-uploads-displaced');
+  const outsideRoot = mkdtempSync(join(tmpdir(), 'jenn-outside-target-'));
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    const outsidePath = join(outsideRoot, row.stored_name);
+
+    assert.throws(
+      () => copyAttachmentsAndEvaluateParityTestCandidate(copyOptions(fixture, {
+        faultInjector(stage) {
+          if (stage !== 'before_target_create') return;
+          renameSync(fixture.targetUploadRoot, displacedRoot);
+          symlinkSync(outsideRoot, fixture.targetUploadRoot, 'dir');
+        },
+      })),
+      error => ['TARGET_UPLOAD_ROOT_CHANGED', 'TARGET_ATTACHMENT_COPY_FAILED']
+        .includes(error.code),
+    );
+
+    assert.equal(
+      existsSync(outsidePath),
+      false,
+      'descriptor-bound create must never escape to replacement parent',
+    );
+  } finally {
+    fixture.cleanup();
+    rmSync(outsideRoot, { recursive: true, force: true });
   }
 });
 
