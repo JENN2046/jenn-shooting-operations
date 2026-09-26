@@ -86,6 +86,7 @@ export class ScheduleStore {
     orphanCleanupMode = 'inherit',
     orphanCleanupEnableEpoch,
   }) {
+    const cleanupMode = readOnly ? 'inherit' : normalizeOrphanCleanupMode(orphanCleanupMode);
     if (!readOnly && filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
     this.uploadRoot = uploadRoot || (filename === ':memory:' ? null : join(dirname(filename), 'uploads'));
     this.cleanupRoot = this.uploadRoot ? join(this.uploadRoot, '.cleanup') : null;
@@ -102,6 +103,16 @@ export class ScheduleStore {
     this.orphanMaxAgeMs = orphanMaxAgeMs;
     this.readOnly = readOnly;
     this.renameFile = fileOperations.rename || renameSync;
+
+    if (!readOnly && cleanupMode === 'disabled') {
+      const disabled = this.orphanCleanupControl.disable({ reason: 'store-startup', waitForDrainMs: 0 });
+      if (!disabled.ok) {
+        const error = new Error(disabled.code || 'ORPHAN_CLEANUP_DISABLE_FAILED');
+        error.code = disabled.code || 'ORPHAN_CLEANUP_DISABLE_FAILED';
+        throw error;
+      }
+    }
+
     this.db = new DatabaseSync(filename, { readOnly });
     this.db.exec('PRAGMA busy_timeout = 5000;');
     if (readOnly) {
@@ -123,16 +134,7 @@ export class ScheduleStore {
         ON CONFLICT(id) DO NOTHING
       `).run(now, JSON.stringify(snapshot));
     });
-    const cleanupMode = normalizeOrphanCleanupMode(orphanCleanupMode);
-    if (cleanupMode === 'disabled') {
-      const disabled = this.orphanCleanupControl.disable({ reason: 'store-startup', waitForDrainMs: 0 });
-      if (!disabled.ok) {
-        const error = new Error(disabled.code || 'ORPHAN_CLEANUP_DISABLE_FAILED');
-        error.code = disabled.code || 'ORPHAN_CLEANUP_DISABLE_FAILED';
-        try { this.db.close(); } catch {}
-        throw error;
-      }
-    } else if (cleanupMode === 'enabled') {
+    if (cleanupMode === 'enabled') {
       const enabled = this.orphanCleanupControl.enable({ expectedEpoch: orphanCleanupEnableEpoch });
       if (!enabled.ok) {
         const error = new Error(enabled.code || 'ORPHAN_CLEANUP_ENABLE_FAILED');
