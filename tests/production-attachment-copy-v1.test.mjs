@@ -648,8 +648,58 @@ test('SQLite upload-fact queries open only the private inode-bound snapshot', ()
   assert.notEqual(normalizedStart, -1);
 
   const readFactsSource = moduleSource.slice(readFactsStart, normalizedStart);
-  assert.match(readFactsSource, /new DatabaseSync\(snapshot\.snapshotDatabasePath/u);
+  assert.match(readFactsSource, /new DatabaseSync\(snapshot\.snapshotDatabaseUri/u);
+  assert.match(
+    moduleSource,
+    /file:\/proc\/self\/fd\/\$\{snapshotDatabaseDescriptor\}\?immutable=1/u,
+  );
   assert.doesNotMatch(readFactsSource, /new DatabaseSync\(databaseInfo\.realPath/u);
+  assert.doesNotMatch(readFactsSource, /new DatabaseSync\(snapshot\.snapshotRoot/u);
+});
+
+test('snapshot pathname replacement before SQLite open cannot replace the held snapshot inode', () => {
+  const body = Buffer.from('held-snapshot-open');
+  const row = uploadFact({ id: 'UPLOAD-HELD-SNAPSHOT-OPEN', body });
+  const fixture = createFixture([row]);
+  let displacedSnapshotRoot = null;
+  let replacementSnapshotRoot = null;
+  let attacked = false;
+
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+
+    const receipt = copyAttachmentsAndEvaluateParityTestCandidate(copyOptions(fixture, {
+      faultInjector(stage, details) {
+        if (stage !== 'before_source_snapshot_sqlite_open' || attacked) return;
+        attacked = true;
+        replacementSnapshotRoot = details.snapshotRoot;
+        displacedSnapshotRoot = details.snapshotRoot + '-displaced';
+
+        renameSync(details.snapshotRoot, displacedSnapshotRoot);
+        mkdirSync(details.snapshotRoot, { mode: 0o700 });
+        createDatabase(join(details.snapshotRoot, 'snapshot.sqlite'), [{
+          ...row,
+          original_name: 'unacknowledged-snapshot-row.bin',
+        }]);
+      },
+    }));
+
+    assert.equal(attacked, true);
+    assert.equal(receipt.status, 'ATTACHMENT_COPY_PARITY_CANDIDATE');
+    assert.deepEqual(
+      readFileSync(join(fixture.targetUploadRoot, row.stored_name)),
+      body,
+      'copy must be driven by the held original snapshot inode',
+    );
+  } finally {
+    if (replacementSnapshotRoot) {
+      rmSync(replacementSnapshotRoot, { recursive: true, force: true });
+    }
+    if (displacedSnapshotRoot) {
+      rmSync(displacedSnapshotRoot, { recursive: true, force: true });
+    }
+    fixture.cleanup();
+  }
 });
 
 test('database pathname replacement after bound snapshot copy fails before target mutation', () => {
