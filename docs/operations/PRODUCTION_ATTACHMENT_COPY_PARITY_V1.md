@@ -37,25 +37,24 @@ The target database is expected to be the isolated migration target produced by 
 
 ## Database fact binding
 
-SQLite upload-fact queries never open the acknowledged database pathname directly.
+SQLite upload-fact queries never open either the acknowledged database pathname or a temporary snapshot pathname.
 
-Fact reads require the quiescence/coordination provider to present a **checkpointed sidecar-free SQLite family**. If a captured `-wal`, `-shm`, or `-journal` member is present, the fact read fails closed as a blocked prerequisite before target-byte mutation. The final parity drift proof may still observe SQLite family members later, but upload facts are never queried from a live sidecar-bearing family.
+Fact reads require the quiescence/coordination provider to present a **checkpointed sidecar-free SQLite family**. If a captured `-wal`, `-shm`, or `-journal` member is present, the fact read fails closed as a blocked prerequisite before target-byte mutation.
 
 For every fact read, the engine:
 
 1. captures the strong single-link SQLite physical family for the acknowledged main DB inode and requires it to be sidecar-free;
-2. creates a private snapshot directory, opens that directory with `O_DIRECTORY | O_NOFOLLOW`, and verifies the opened directory inode;
-3. copies the acknowledged main DB through a no-follow source descriptor into `/proc/self/fd/<snapshotDirFd>/snapshot.sqlite`;
-4. fsyncs the private main DB, opens it read-only, and pins its private snapshot device/inode plus source size/SHA-256;
-5. re-captures the original physical family and requires exact equality;
-6. keeps the private main-file FD open through the whole query;
-7. opens SQLite only as `file:/proc/self/fd/<snapshotMainFd>?immutable=1`, with `query_only` enabled;
-8. verifies the held private main FD still has the same snapshot inode, size, and source SHA-256 before and after the query;
-9. rechecks the original acknowledged family after the query before accepting rows.
+2. opens the acknowledged main DB with `O_NOFOLLOW` and verifies the opened descriptor against the captured device/inode/size/timestamps;
+3. reads the file through that descriptor while computing SHA-256, then rechecks the descriptor and requires the digest to match the captured family;
+4. re-captures the acknowledged physical family and requires exact equality;
+5. creates `DatabaseSync(':memory:')`;
+6. requires Node's SQLite `deserialize()` API and deserializes the verified bytes directly into the in-memory database;
+7. enables SQLite `query_only`, reads upload facts, then rechecks the acknowledged family before accepting rows;
+8. clears the captured byte buffer after the in-memory connection closes.
 
-Because SQLite opens the held main-file descriptor rather than either the acknowledged DB pathname or the temporary snapshot pathname, replacing the production path, the `jenn-sqlite-facts-*` directory, or `snapshot.sqlite` cannot redirect the connection to another inode. `immutable=1` also prevents the private fact read from consulting mutable snapshot journal/WAL paths.
+There is therefore **no writable fact-read snapshot file or temporary SQLite directory** for another same-UID process to overwrite between pre/post-query checks. The query operates on process-memory SQLite state derived from bytes that were descriptor-bound and hash-verified before deserialization.
 
-Platforms without the required descriptor-bound `/proc/self/fd` primitive fail closed before fact admission; portable activation remains part of later provider/deployment acceptance.
+This capability requires Node >= 24.16.0, where `DatabaseSync.deserialize()` is available. The production image and exact-head CI remain pinned to Node 24.21.0. Older runtimes fail closed with `SQLITE_DESERIALIZE_UNAVAILABLE` rather than falling back to a pathname-backed snapshot.
 
 The capability compares the complete ordered upload compatibility facts used for byte ownership:
 
@@ -166,6 +165,7 @@ The capability fails closed for, among other cases:
 - missing or wrong-scope candidate quiescence probe;
 - candidate quiescence loss at any checked point, including between the two closing SQLite-family captures;
 - a WAL/SHM/journal-bearing SQLite family at upload-fact read time before provider checkpoint/quiescence;
+- a runtime older than Node 24.16.0 that lacks in-memory SQLite deserialization;
 - caller-forged production capability objects, prototype monkeypatch attempts, or constructor-reuse attempts without the private mint token;
 - attempts to use a TEST capability outside its module-created sandbox;
 - any source/target SQLite family cross-role inode or filesystem-semantic expected-path namespace collision.
