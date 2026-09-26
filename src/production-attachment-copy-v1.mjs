@@ -732,8 +732,18 @@ function verifyAttachmentDatabaseParityResolved({
   if (faultInjector) faultInjector('before_initial_database_read');
   assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
 
-  const sourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
-  const targetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
+  const sourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID', {
+    quiescenceCapability,
+    scopeDigest,
+    faultInjector,
+    stageLabel: 'source',
+  });
+  const targetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID', {
+    quiescenceCapability,
+    scopeDigest,
+    faultInjector,
+    stageLabel: 'target',
+  });
   if (canonicalJson(sourceRows) !== canonicalJson(targetRows)) {
     fail('UPLOAD_DATABASE_FACTS_MISMATCH');
   }
@@ -775,8 +785,18 @@ function verifyAttachmentDatabaseParityResolved({
   if (faultInjector) faultInjector('before_final_database_recheck');
   assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
 
-  const finalSourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
-  const finalTargetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
+  const finalSourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID', {
+    quiescenceCapability,
+    scopeDigest,
+    faultInjector,
+    stageLabel: 'source',
+  });
+  const finalTargetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID', {
+    quiescenceCapability,
+    scopeDigest,
+    faultInjector,
+    stageLabel: 'target',
+  });
   if (canonicalJson(finalSourceRows) !== canonicalJson(sourceRows)
       || canonicalJson(finalTargetRows) !== canonicalJson(targetRows)
       || canonicalJson(finalSourceRows) !== canonicalJson(finalTargetRows)) {
@@ -810,10 +830,22 @@ function verifyAttachmentDatabaseParityResolved({
   const finalSourceRowsAfterFilesystem = readUploadFacts(
     sourceDatabase,
     'SOURCE_UPLOAD_DATABASE_INVALID',
+    {
+      quiescenceCapability,
+      scopeDigest,
+      faultInjector,
+      stageLabel: 'source',
+    },
   );
   const finalTargetRowsAfterFilesystem = readUploadFacts(
     targetDatabase,
     'TARGET_UPLOAD_DATABASE_INVALID',
+    {
+      quiescenceCapability,
+      scopeDigest,
+      faultInjector,
+      stageLabel: 'target',
+    },
   );
   if (canonicalJson(finalSourceRowsAfterFilesystem) !== canonicalJson(finalSourceRows)
       || canonicalJson(finalTargetRowsAfterFilesystem) !== canonicalJson(finalTargetRows)
@@ -931,8 +963,18 @@ function copyAttachmentsAndEvaluateParityInternal({
   const scopeDigest = parityScopeDigest(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
   assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
 
-  const sourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
-  const targetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
+  const sourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID', {
+    quiescenceCapability,
+    scopeDigest,
+    faultInjector,
+    stageLabel: 'source',
+  });
+  const targetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID', {
+    quiescenceCapability,
+    scopeDigest,
+    faultInjector,
+    stageLabel: 'target',
+  });
   if (canonicalJson(sourceRows) !== canonicalJson(targetRows)) {
     fail('UPLOAD_DATABASE_FACTS_MISMATCH');
   }
