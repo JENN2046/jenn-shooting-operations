@@ -134,7 +134,7 @@ export class ScheduleStore {
         throw error;
       }
     }
-    this.recoverStagedUploadCleanup({ allowDelete: false });
+    this.recoverStagedUploadCleanup();
   }
 
   getOrphanCleanupControlStatus() {
@@ -153,11 +153,23 @@ export class ScheduleStore {
     this.db.close();
   }
 
-  recoverStagedUploadCleanup({ allowDelete = false } = {}) {
+  recoverStagedUploadCleanup({ allowDelete = true } = {}) {
     if (this.readOnly || !this.uploadRoot || !this.cleanupRoot) {
       return { ok: true, restored: 0, removed: 0, restoreErrors: 0, cleanupErrors: 0, errors: 0 };
     }
-    return transaction(this.db, () => this.recoverStagedUploadCleanupLocked({ allowDelete }));
+    if (!allowDelete) {
+      return transaction(this.db, () => this.recoverStagedUploadCleanupLocked({ allowDelete: false }));
+    }
+
+    const admission = this.orphanCleanupControl.beginRun();
+    if (!admission.ok) {
+      return transaction(this.db, () => this.recoverStagedUploadCleanupLocked({ allowDelete: false }));
+    }
+    try {
+      return transaction(this.db, () => this.recoverStagedUploadCleanupLocked({ allowDelete: true }));
+    } finally {
+      this.orphanCleanupControl.endRun(admission);
+    }
   }
 
   recoverStagedUploadCleanupLocked({ allowDelete = false } = {}) {
