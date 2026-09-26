@@ -340,28 +340,183 @@ function safeStoredName(value) {
     && STORED_NAME.test(value);
 }
 
-function readUploadFacts(databaseInfo, invalidCode) {
-  const before = assertDatabaseStable(databaseInfo, invalidCode);
+const SQLITE_SNAPSHOT_MEMBERS = Object.freeze([
+  Object.freeze({ key: 'database', suffix: '' }),
+  Object.freeze({ key: 'wal', suffix: '-wal' }),
+  Object.freeze({ key: 'shm', suffix: '-shm' }),
+  Object.freeze({ key: 'journal', suffix: '-journal' }),
+]);
+
+function familyMemberMatches(metadata, expected) {
+  if (!metadata?.isFile?.()
+      || metadata.isSymbolicLink?.()
+      || metadata.nlink !== 1n
+      || metadata.dev.toString() !== expected.device
+      || metadata.ino.toString() !== expected.inode
+      || metadata.size.toString() !== expected.size
+      || metadata.mtimeNs.toString() !== expected.mtimeNs) {
+    return false;
+  }
+  return expected.ctimeNs === undefined
+    || metadata.ctimeNs.toString() === expected.ctimeNs;
+}
+
+function assertCapturedMainDatabaseIdentity(family, databaseInfo, invalidCode) {
+  const main = family?.database;
+  if (!main
+      || main.device !== databaseInfo.device
+      || main.inode !== databaseInfo.inode) {
+    fail(invalidCode);
+  }
+}
+
+function copyBoundSqliteFamilyMember({
+  sourcePath,
+  targetPath,
+  expected,
+  invalidCode,
+}) {
+  if (!expected) {
+    try {
+      lstatSync(sourcePath, { bigint: true });
+      fail(invalidCode);
+    } catch (error) {
+      if (error instanceof MigrationError) throw error;
+      if (error?.code !== 'ENOENT') fail(invalidCode);
+    }
+    return;
+  }
+
+  let pathMetadata;
+  let sourceDescriptor;
+  let targetDescriptor;
+  try {
+    pathMetadata = lstatSync(sourcePath, { bigint: true });
+    if (!familyMemberMatches(pathMetadata, expected)) fail(invalidCode);
+
+    sourceDescriptor = openSync(sourcePath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    const opened = fstatSync(sourceDescriptor, { bigint: true });
+    if (!familyMemberMatches(opened, expected)
+        || opened.dev !== pathMetadata.dev
+        || opened.ino !== pathMetadata.ino) {
+      fail(invalidCode);
+    }
+
+    targetDescriptor = openSync(
+      targetPath,
+      fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY,
+      0o600,
+    );
+    const digest = expected.digest ? createHash('sha256') : null;
+    const buffer = Buffer.allocUnsafe(COPY_BUFFER_BYTES);
+    while (true) {
+      const bytesRead = readSync(sourceDescriptor, buffer, 0, buffer.length, null);
+      if (bytesRead === 0) break;
+      digest?.update(buffer.subarray(0, bytesRead));
+      let offset = 0;
+      while (offset < bytesRead) {
+        offset += writeSync(targetDescriptor, buffer, offset, bytesRead - offset);
+      }
+    }
+    fsyncSync(targetDescriptor);
+
+    const after = fstatSync(sourceDescriptor, { bigint: true });
+    if (!familyMemberMatches(after, expected)
+        || !sameStat(opened, after)) {
+      fail(invalidCode);
+    }
+    if (digest && `sha256:${digest.digest('hex')}` !== expected.digest) {
+      fail(invalidCode);
+    }
+  } catch (error) {
+    if (error instanceof MigrationError) throw error;
+    fail(invalidCode);
+  } finally {
+    if (sourceDescriptor !== undefined) closeSync(sourceDescriptor);
+    if (targetDescriptor !== undefined) closeSync(targetDescriptor);
+  }
+}
+
+function createBoundSqliteSnapshot(databaseInfo, invalidCode, {
+  quiescenceCapability,
+  scopeDigest,
+  faultInjector,
+  stageLabel,
+} = {}) {
+  assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
+  const beforeFamily = captureDatabaseFamily(databaseInfo, invalidCode);
+  assertCapturedMainDatabaseIdentity(beforeFamily, databaseInfo, invalidCode);
+
+  const snapshotRoot = mkdtempSync(join(tmpdir(), 'jenn-sqlite-facts-'));
+  const snapshotDatabasePath = join(snapshotRoot, 'snapshot.sqlite');
+  try {
+    for (let index = 0; index < SQLITE_SNAPSHOT_MEMBERS.length; index += 1) {
+      assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
+      const member = SQLITE_SNAPSHOT_MEMBERS[index];
+      copyBoundSqliteFamilyMember({
+        sourcePath: `${databaseInfo.realPath}${member.suffix}`,
+        targetPath: `${snapshotDatabasePath}${member.suffix}`,
+        expected: beforeFamily[member.key],
+        invalidCode,
+      });
+    }
+
+    assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
+    if (faultInjector && stageLabel) {
+      faultInjector(`after_${stageLabel}_database_snapshot_copy`);
+    }
+    assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
+
+    const afterFamily = captureDatabaseFamily(databaseInfo, invalidCode);
+    assertCapturedMainDatabaseIdentity(afterFamily, databaseInfo, invalidCode);
+    if (!sameSqlitePhysicalFamily(beforeFamily, afterFamily)) fail(invalidCode);
+
+    return Object.freeze({
+      snapshotRoot,
+      snapshotDatabasePath,
+      family: beforeFamily,
+    });
+  } catch (error) {
+    rmSync(snapshotRoot, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+function readUploadFacts(databaseInfo, invalidCode, {
+  quiescenceCapability,
+  scopeDigest,
+  faultInjector,
+  stageLabel,
+} = {}) {
+  const snapshot = createBoundSqliteSnapshot(databaseInfo, invalidCode, {
+    quiescenceCapability,
+    scopeDigest,
+    faultInjector,
+    stageLabel,
+  });
   let db;
   let inTransaction = false;
   try {
-    db = new DatabaseSync(databaseInfo.realPath, { readOnly: true });
-    assertDatabaseStable(databaseInfo, invalidCode);
+    db = new DatabaseSync(snapshot.snapshotDatabasePath, { readOnly: true });
     db.exec('PRAGMA query_only = ON; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
     const queryOnly = db.prepare('PRAGMA query_only').get();
     if (Number(queryOnly?.query_only) !== 1) fail(invalidCode, 'INVALID_TARGET');
     db.exec('BEGIN');
     inTransaction = true;
-    assertDatabaseStable(databaseInfo, invalidCode);
     const rows = db.prepare(`
       SELECT id, operation_id, original_name, content_type, kind, size, sha256,
              stored_name, claimed_task_id, created_at
       FROM uploads
       ORDER BY id
     `).all().map(row => Object.freeze({ ...row }));
-    assertDatabaseStable(databaseInfo, invalidCode);
     db.exec('COMMIT');
     inTransaction = false;
+
+    assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
+    const afterQueryFamily = captureDatabaseFamily(databaseInfo, invalidCode);
+    assertCapturedMainDatabaseIdentity(afterQueryFamily, databaseInfo, invalidCode);
+    if (!sameSqlitePhysicalFamily(snapshot.family, afterQueryFamily)) fail(invalidCode);
+
     return Object.freeze(rows);
   } catch (error) {
     if (inTransaction) {
@@ -371,8 +526,7 @@ function readUploadFacts(databaseInfo, invalidCode) {
     fail(invalidCode);
   } finally {
     try { db?.close(); } catch {}
-    const after = assertDatabaseStable(databaseInfo, invalidCode);
-    if (!sameStat(before, after)) fail(invalidCode);
+    rmSync(snapshot.snapshotRoot, { recursive: true, force: true });
   }
 }
 
