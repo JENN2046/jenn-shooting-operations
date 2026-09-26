@@ -32,7 +32,6 @@ export function createOrphanCleanupControl({
 
   if (controlRoot && writable) {
     mkdirSync(controlRoot, { recursive: true });
-    mkdirSync(runsRoot, { recursive: true });
   }
 
   function readMarker() {
@@ -296,6 +295,7 @@ export function createOrphanCleanupControl({
       return Object.freeze({ ok: true, runId });
     }
 
+    mkdirSync(runsRoot, { recursive: true });
     const markerPath = join(runsRoot, runId + '.json');
     writeFileSync(markerPath, JSON.stringify({ runId, startedAt: clock().toISOString() }) + '\n', { flag: 'wx' });
 
