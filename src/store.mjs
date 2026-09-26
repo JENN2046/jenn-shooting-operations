@@ -98,8 +98,6 @@ export class ScheduleStore {
       clock,
       writable: !readOnly,
     });
-    if (!readOnly && this.uploadRoot) mkdirSync(this.uploadRoot, { recursive: true });
-    if (!readOnly && this.cleanupRoot) mkdirSync(this.cleanupRoot, { recursive: true });
     this.clock = clock;
     this.idFactory = idFactory;
     this.orphanMaxAgeMs = orphanMaxAgeMs;
@@ -114,6 +112,9 @@ export class ScheduleStore {
         throw error;
       }
     }
+
+    if (!readOnly && this.uploadRoot) mkdirSync(this.uploadRoot, { recursive: true });
+    if (!readOnly && this.cleanupRoot) mkdirSync(this.cleanupRoot, { recursive: true });
 
     this.db = new DatabaseSync(filename, { readOnly });
     this.db.exec('PRAGMA busy_timeout = 5000;');
