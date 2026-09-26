@@ -949,7 +949,7 @@ export function copyAndVerifyAttachments({
   });
   assertAuthenticatedQuiescenceCapability(quiescenceCapability, domain.scopeDigest);
 
-  const candidate = copyAttachmentsAndEvaluateParityCandidate({
+  const candidate = copyAttachmentsAndEvaluateParityInternal({
     sourceDatabasePath,
     sourceUploadRoot,
     targetDatabasePath,
