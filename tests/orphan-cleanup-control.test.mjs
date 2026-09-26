@@ -427,3 +427,71 @@ test('CLI apply exits nonzero when persisted cleanup protection blocks deletion'
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+
+test('transition lock serializes disable enable and destructive admission across processes', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-transition-lock-'));
+  const databasePath = join(root, 'operations.sqlite');
+  const uploadRoot = join(root, 'uploads');
+  let store;
+
+  try {
+    store = new ScheduleStore({ filename: databasePath, uploadRoot });
+    const lockPath = join(root, '.orphan-cleanup-control', 'transition.lock');
+    writeFileSync(lockPath, 'foreign-transition-owner\n', { flag: 'wx' });
+
+    const disable = store.disableOrphanCleanup({ reason: 'pre-cutover', waitForDrainMs: 0 });
+    assert.equal(disable.ok, false);
+    assert.equal(disable.code, 'ORPHAN_CLEANUP_TRANSITION_BUSY');
+
+    const enable = store.enableOrphanCleanup({ expectedEpoch: 'stale' });
+    assert.equal(enable.ok, false);
+    assert.equal(enable.code, 'ORPHAN_CLEANUP_TRANSITION_BUSY');
+
+    const cleanup = store.cleanupOrphanUploads();
+    assert.equal(cleanup.skipped, true);
+    assert.equal(cleanup.code, 'ORPHAN_CLEANUP_TRANSITION_BUSY');
+
+    unlinkSync(lockPath);
+
+    const disabled = store.disableOrphanCleanup({ reason: 'pre-cutover', waitForDrainMs: 0 });
+    assert.equal(disabled.ok, true);
+    assert.equal(disabled.enabled, false);
+    assert.equal(typeof disabled.epoch, 'string');
+  } finally {
+    try { store?.close(); } catch {}
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('stale enable cannot remove a replacement disable epoch', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-stale-enable-'));
+  const databasePath = join(root, 'operations.sqlite');
+  const uploadRoot = join(root, 'uploads');
+  let store;
+
+  try {
+    store = new ScheduleStore({ filename: databasePath, uploadRoot });
+
+    const first = store.disableOrphanCleanup({ reason: 'first-disable', waitForDrainMs: 0 });
+    assert.equal(first.ok, true);
+
+    const firstEnable = store.enableOrphanCleanup({ expectedEpoch: first.epoch });
+    assert.equal(firstEnable.ok, true);
+
+    const replacement = store.disableOrphanCleanup({ reason: 'replacement-disable', waitForDrainMs: 0 });
+    assert.equal(replacement.ok, true);
+    assert.notEqual(replacement.epoch, first.epoch);
+
+    const staleEnable = store.enableOrphanCleanup({ expectedEpoch: first.epoch });
+    assert.equal(staleEnable.ok, false);
+    assert.equal(staleEnable.code, 'ORPHAN_CLEANUP_EPOCH_MISMATCH');
+
+    const stillDisabled = store.getOrphanCleanupControlStatus();
+    assert.equal(stillDisabled.enabled, false);
+    assert.equal(stillDisabled.epoch, replacement.epoch);
+  } finally {
+    try { store?.close(); } catch {}
+    rmSync(root, { recursive: true, force: true });
+  }
+});
