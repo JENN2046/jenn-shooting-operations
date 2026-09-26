@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import {
+  chmodSync,
   existsSync,
   linkSync,
   lstatSync,
@@ -429,6 +430,26 @@ test('database fact mismatch fails before target bytes are copied', () => {
       error => error.code === 'UPLOAD_DATABASE_FACTS_MISMATCH',
     );
     assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('exact target bytes with permissive mode are rejected instead of reused', () => {
+  const body = Buffer.from('target-mode');
+  const row = uploadFact({ id: 'UPLOAD-TARGET-MODE', body });
+  const fixture = createFixture([row]);
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    const targetPath = join(fixture.targetUploadRoot, row.stored_name);
+    writeFileSync(targetPath, body, { mode: 0o600 });
+    chmodSync(targetPath, 0o644);
+
+    assert.throws(
+      () => copyAndVerifyAttachments(copyOptions(fixture)),
+      error => error.code === 'TARGET_ATTACHMENT_CONFLICT',
+    );
+    assert.equal((statSync(targetPath).mode & 0o777), 0o644);
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }
