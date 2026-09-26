@@ -80,11 +80,8 @@ This preserves safety after a cleanup crash without turning recovery into a hidd
 
 ## Production boundary
 
-The repository implementation changes the machine evidence for:
+The repository implementation advances the machine evidence for `PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL` only.
 
-- `PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL`
-- `RESTORED_CLEANUP_DISABLE_CAPABILITY`
-
-Both gates remain `BLOCKED`. Repository tests are not deployed multi-process acceptance. A later authority revision must still prove real runtime configuration, shared-volume visibility, drain behavior, restart behavior, and exact rollback execution before these gates can close.
+`RESTORED_CLEANUP_DISABLE_CAPABILITY` remains `BLOCKED` and explicitly not implemented as an exact PROD-14 rollback because the current disable path does not cancel pending periodic cleanup schedules or produce `CLEANUP_SCHEDULES_CANCELLED` evidence. Repository tests are not deployed multi-process acceptance. A later authority revision must separately implement and verify that rollback surface before the restored-cleanup capability can close.
 
 No production data, deployment, cutover, provider call, credential, network rule, or cleanup against real files is authorized by this document.
