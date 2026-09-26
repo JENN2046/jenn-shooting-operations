@@ -193,7 +193,7 @@ function normalizedUniqueFiles(rows, invalidCode) {
   )));
 }
 
-function openStableFile(path, expected, code) {
+function openStableFile(path, expected, code, { requireMode0600 = false } = {}) {
   let link;
   try {
     link = lstatSync(path, { bigint: true });
@@ -201,6 +201,7 @@ function openStableFile(path, expected, code) {
     fail(code);
   }
   if (!link.isFile() || link.isSymbolicLink() || link.nlink !== 1n) fail(code);
+  if (requireMode0600 && (link.mode & 0o777n) !== 0o600n) fail(code);
 
   let descriptor;
   try {
@@ -208,6 +209,7 @@ function openStableFile(path, expected, code) {
     const opened = fstatSync(descriptor, { bigint: true });
     if (!opened.isFile()
         || opened.nlink !== 1n
+        || (requireMode0600 && (opened.mode & 0o777n) !== 0o600n)
         || opened.dev !== link.dev
         || opened.ino !== link.ino
         || opened.size !== BigInt(expected.size)) {
@@ -221,8 +223,8 @@ function openStableFile(path, expected, code) {
   }
 }
 
-function verifyFileBytes(path, expected, code) {
-  const opened = openStableFile(path, expected, code);
+function verifyFileBytes(path, expected, code, options) {
+  const opened = openStableFile(path, expected, code, options);
   const { descriptor, before } = opened;
   const hash = createHash('sha256');
   const buffer = Buffer.allocUnsafe(COPY_BUFFER_BYTES);
@@ -241,6 +243,7 @@ function verifyFileBytes(path, expected, code) {
       fail(code);
     }
     if (!finalLink.isFile() || finalLink.isSymbolicLink() || finalLink.nlink !== 1n
+        || (options?.requireMode0600 && (finalLink.mode & 0o777n) !== 0o600n)
         || !sameStat(after, finalLink)) {
       fail(code);
     }
@@ -256,8 +259,10 @@ function verifyFileBytes(path, expected, code) {
 
 function assertTargetRootHasNoUnexpectedEntries(targetRootInfo, expectedFiles) {
   const expected = new Set(expectedFiles.map(file => file.storedName));
+  let rootBefore;
   let entries;
   try {
+    rootBefore = lstatSync(targetRootInfo.realPath, { bigint: true });
     entries = readdirSync(targetRootInfo.realPath, { withFileTypes: true });
   } catch {
     fail('TARGET_UPLOAD_ROOT_CHANGED');
@@ -277,12 +282,21 @@ function assertTargetRootHasNoUnexpectedEntries(targetRootInfo, expectedFiles) {
       fail('TARGET_ATTACHMENT_ORPHAN');
     }
   }
+  let rootAfter;
+  try {
+    rootAfter = lstatSync(targetRootInfo.realPath, { bigint: true });
+  } catch {
+    fail('TARGET_UPLOAD_ROOT_CHANGED');
+  }
+  if (!sameStat(rootBefore, rootAfter)) fail('TARGET_UPLOAD_ROOT_CHANGED');
 }
 
 function scanTargetRoot(targetRootInfo, expectedFiles) {
   const expected = new Set(expectedFiles.map(file => file.storedName));
+  let rootBefore;
   let entries;
   try {
+    rootBefore = lstatSync(targetRootInfo.realPath, { bigint: true });
     entries = readdirSync(targetRootInfo.realPath, { withFileTypes: true });
   } catch {
     fail('TARGET_UPLOAD_ROOT_CHANGED');
@@ -301,6 +315,13 @@ function scanTargetRoot(targetRootInfo, expectedFiles) {
   if (entries.filter(entry => entry.name !== '.cleanup').length !== expected.size) {
     fail('TARGET_ATTACHMENT_SET_MISMATCH');
   }
+  let rootAfter;
+  try {
+    rootAfter = lstatSync(targetRootInfo.realPath, { bigint: true });
+  } catch {
+    fail('TARGET_UPLOAD_ROOT_CHANGED');
+  }
+  if (!sameStat(rootBefore, rootAfter)) fail('TARGET_UPLOAD_ROOT_CHANGED');
 }
 
 function factsDigest(rows) {
@@ -365,6 +386,7 @@ function verifyAttachmentDatabaseParityResolved({
         join(targetRoot.realPath, file.storedName),
         file,
         'TARGET_ATTACHMENT_MISMATCH',
+        { requireMode0600: true },
       );
       if (sourceIdentity.device === targetIdentity.device
           && sourceIdentity.inode === targetIdentity.inode) {
@@ -506,7 +528,7 @@ export function copyAndVerifyAttachments({
 
     if (existing) {
       if (!existing.isFile() || existing.isSymbolicLink()) fail('TARGET_ATTACHMENT_CONFLICT');
-      verifyFileBytes(targetPath, file, 'TARGET_ATTACHMENT_CONFLICT');
+      verifyFileBytes(targetPath, file, 'TARGET_ATTACHMENT_CONFLICT', { requireMode0600: true });
       reusedFiles += 1;
       continue;
     }
@@ -551,7 +573,7 @@ export function copyAndVerifyAttachments({
         // Never delete an ambiguous target path after a failed verification.
         // This is an isolated target: preserve the conflicting artifact as
         // evidence and fail closed until it is explicitly reconciled.
-        verifyFileBytes(targetPath, file, 'TARGET_ATTACHMENT_COPY_FAILED');
+        verifyFileBytes(targetPath, file, 'TARGET_ATTACHMENT_COPY_FAILED', { requireMode0600: true });
       }
     }
 
