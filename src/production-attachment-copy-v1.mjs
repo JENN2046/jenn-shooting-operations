@@ -1009,7 +1009,6 @@ export function copyAndVerifyAttachments({
     targetDatabasePath,
     targetUploadRoot,
     quiescenceCapability: quiescenceCapability,
-    faultInjector,
   });
   assertAuthenticatedQuiescenceCapability(quiescenceCapability, domain.scopeDigest);
 
