@@ -19,7 +19,7 @@ The parity engine requires four explicit storage inputs:
 
 Candidate-engine mutation tests use a private-class-branded `TEST_SANDBOX` capability minted only by `createAttachmentParityIsolatedTestAuthority()`. That authority creates its own temporary sandbox and refuses to mint for any resolved DB/root identity outside that sandbox.
 
-Production receipt APIs do **not** trust caller-supplied lease fields or mutable collection prototypes. Capability authenticity is checked by an unforgeable private class brand and private fields. Production APIs require the `LIVE_PROVIDER` authority class, while Stage 3 intentionally exposes no live mint. Knowing the scope digest, monkeypatching `WeakSet.prototype.has`, or supplying `assertHeld: () => true` cannot create production authority. A future live provider must execute inside this private authority boundary while actually holding offline-maintenance or coordinated-write exclusion.
+Production receipt APIs do **not** trust caller-supplied lease fields or mutable collection prototypes. Capability authenticity is checked by private class fields, and construction additionally requires a module-private mint token. Production APIs require the `LIVE_PROVIDER` authority class, while Stage 3 intentionally exposes no live mint. Knowing the scope digest, monkeypatching `WeakSet.prototype.has`, supplying `assertHeld: () => true`, or obtaining a legitimate TEST instance's `.constructor` cannot create production authority without the private mint token. A future live provider must execute inside this private authority boundary while actually holding offline-maintenance or coordinated-write exclusion.
 
 The source and target databases must be different physical files. Database files must have one hard link and every read is bound to the device/inode captured during initial path resolution.
 
@@ -145,7 +145,7 @@ The capability fails closed for, among other cases:
 - source drift before final parity;
 - missing or wrong-scope candidate quiescence probe;
 - candidate quiescence loss at any checked point, including between the two closing SQLite-family captures;
-- caller-forged production capability objects or prototype monkeypatch attempts;
+- caller-forged production capability objects, prototype monkeypatch attempts, or constructor-reuse attempts without the private mint token;
 - attempts to use a TEST capability outside its module-created sandbox;
 - any source/target SQLite family cross-role inode or filesystem-semantic expected-path namespace collision.
 
