@@ -31,7 +31,7 @@ The final parity window captures the complete SQLite physical family for both da
 
 Physical-family snapshots remain supplemental drift evidence, not a substitute for writer exclusion. Candidate evaluation continuously checks its branded capability, including between the two closing family captures. Mutating candidate execution accepts only `TEST_SANDBOX` or future `LIVE_PROVIDER` brands; a sandbox capability is scope-bound to the module-created temporary root and cannot be repointed at production paths. Production receipt issuance accepts only `LIVE_PROVIDER`.
 
-For Stage-3 strong-family verification, the main SQLite file and every present `-wal`, `-shm`, or `-journal` sidecar must have exactly one hard link. Source and target families are compared as a **full cross-product** of present device/inode identities, not merely same-role members. Their expected database/WAL/SHM/journal namespaces are also compared as a full cross-product using filesystem-aware comparison keys. The key is derived from a read-only case-sensitivity probe against the existing main database path, so future absent sidecars use the same case semantics as their filesystem. Any physical or namespace overlap is rejected as `SOURCE_TARGET_SQLITE_FAMILY_ALIAS`.
+For Stage-3 strong-family verification, the main SQLite file and every present `-wal`, `-shm`, or `-journal` sidecar must have exactly one hard link. Source and target families are compared as a **full cross-product** of present device/inode identities, not merely same-role members. Their expected database/WAL/SHM/journal namespaces are also compared as a full cross-product using filesystem-aware comparison keys. The key models both case semantics and Unicode canonical equivalence: on canonical-equivalent filesystems such as APFS, paths are normalized to a canonical decomposed form before case folding; other filesystems may be probed against the existing main database path. Captured string-normalization/case-fold intrinsics prevent later prototype monkeypatching from weakening the comparison. Future absent sidecars therefore use the same namespace equivalence semantics as their filesystem. Any physical or namespace overlap is rejected as `SOURCE_TARGET_SQLITE_FAMILY_ALIAS`.
 
 The target database is expected to be the isolated migration target produced by the existing migration path. This capability does not create or migrate the target database.
 
@@ -146,7 +146,7 @@ Required path arguments:
 - `--target-db`;
 - `--target-upload-root`.
 
-The command emits only bounded receipt facts and stable error codes. It does not print attachment names, original names, or absolute paths.
+The command emits only bounded receipt facts and stable error codes. `INVALID_USAGE` failures preserve migration exit code **3**, target/proof failures use **5**, and unexpected internal failures use the bounded internal-error code. It does not print attachment names, original names, or absolute paths.
 
 ## Failure semantics
 
