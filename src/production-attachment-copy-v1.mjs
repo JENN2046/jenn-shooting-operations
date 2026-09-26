@@ -94,10 +94,12 @@ function sameStat(left, right) {
 
 function pathWithin(path, directory) {
   const relation = relative(directory, path);
-  return relation === ''
-    || (relation !== '..'
-      && !relation.startsWith(`..${sep}`)
-      && !isAbsolute(relation));
+  const escapesParent = relation === '..'
+    || (relation.length > 2
+      && relation[0] === '.'
+      && relation[1] === '.'
+      && relation[2] === sep);
+  return relation === '' || (!escapesParent && !isAbsolute(relation));
 }
 
 function assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot) {
@@ -219,6 +221,47 @@ export function createAttachmentParityIsolatedTestAuthority() {
       rmSync(sandboxRoot, { recursive: true, force: true });
     },
   });
+}
+
+function openBoundTargetChild(targetRootInfo, storedName) {
+  if (process.platform !== 'linux') {
+    fail('TARGET_ROOT_DESCRIPTOR_BINDING_UNAVAILABLE', 'BLOCKED_PREREQUISITE');
+  }
+
+  let rootDescriptor;
+  try {
+    rootDescriptor = openSync(
+      targetRootInfo.realPath,
+      fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW,
+    );
+    const rootMetadata = fstatSync(rootDescriptor, { bigint: true });
+    if (!rootMetadata.isDirectory()
+        || rootMetadata.dev.toString() !== targetRootInfo.device
+        || rootMetadata.ino.toString() !== targetRootInfo.inode) {
+      fail('TARGET_UPLOAD_ROOT_CHANGED');
+    }
+
+    const boundPath = `/proc/self/fd/${rootDescriptor}/${storedName}`;
+    const descriptor = openSync(
+      boundPath,
+      fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW | fsConstants.O_WRONLY,
+      0o600,
+    );
+    return Object.freeze({ descriptor, rootDescriptor, boundPath });
+  } catch (error) {
+    if (rootDescriptor !== undefined) {
+      try { closeSync(rootDescriptor); } catch {}
+    }
+    if (error instanceof MigrationError) throw error;
+    if (error?.code === 'EEXIST') fail('TARGET_ATTACHMENT_CONFLICT');
+    fail('TARGET_ATTACHMENT_COPY_FAILED');
+  }
+}
+
+function closeBoundTargetChild(opened) {
+  try { closeSync(opened.descriptor); } finally {
+    closeSync(opened.rootDescriptor);
+  }
 }
 
 function fsyncDirectory(path) {
@@ -775,16 +818,17 @@ function copyAttachmentsAndEvaluateParityInternal({
 
     const source = openStableFile(sourcePath, file, 'SOURCE_ATTACHMENT_MISMATCH');
     let targetDescriptor;
+    let targetRootDescriptor;
+    let targetBoundPath;
     let created = false;
     const buffer = Buffer.allocUnsafe(COPY_BUFFER_BYTES);
     const hash = createHash('sha256');
     let bytesWritten = 0;
     try {
-      targetDescriptor = openSync(
-        targetPath,
-        fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW | fsConstants.O_WRONLY,
-        0o600,
-      );
+      const boundTarget = openBoundTargetChild(targetRoot, file.storedName);
+      targetDescriptor = boundTarget.descriptor;
+      targetRootDescriptor = boundTarget.rootDescriptor;
+      targetBoundPath = boundTarget.boundPath;
       created = true;
       while (true) {
         const bytes = readSync(source.descriptor, buffer, 0, buffer.length, null);
@@ -808,12 +852,23 @@ function copyAttachmentsAndEvaluateParityInternal({
       fail('TARGET_ATTACHMENT_COPY_FAILED');
     } finally {
       closeSync(source.descriptor);
-      if (targetDescriptor !== undefined) closeSync(targetDescriptor);
+      if (targetDescriptor !== undefined) {
+        closeSync(targetDescriptor);
+        targetDescriptor = undefined;
+      }
       if (created) {
-        // Never delete an ambiguous target path after a failed verification.
-        // This is an isolated target: preserve the conflicting artifact as
-        // evidence and fail closed until it is explicitly reconciled.
-        verifyFileBytes(targetPath, file, 'TARGET_ATTACHMENT_COPY_FAILED', { requireMode0600: true });
+        // Verify through the descriptor-bound root before releasing that root
+        // handle. A renamed/replaced pathname cannot redirect this check.
+        verifyFileBytes(
+          targetBoundPath,
+          file,
+          'TARGET_ATTACHMENT_COPY_FAILED',
+          { requireMode0600: true },
+        );
+      }
+      if (targetRootDescriptor !== undefined) {
+        closeSync(targetRootDescriptor);
+        targetRootDescriptor = undefined;
       }
     }
 
