@@ -39,8 +39,13 @@ import {
 } from '../src/migration-sqlite-v2.mjs';
 import { V1_SCHEMA_SQL } from '../src/sqlite-schema-v2.mjs';
 import { sha256Digest } from '../src/migration-v2.mjs';
-import { filesystemPathComparisonKey } from '../src/platform-filesystem.mjs';
 import {
+  filesystemPathComparisonKey,
+  filesystemPathIsCaseInsensitive,
+  filesystemPathUsesCanonicalEquivalence,
+} from '../src/platform-filesystem.mjs';
+import {
+  lowDisclosureFailure,
   parseAttachmentCopyArgs,
   runAttachmentCopyCommand,
 } from '../scripts/copy-production-attachments.mjs';
@@ -842,6 +847,53 @@ test('filesystem-aware namespace keys fold case when the filesystem is case-inse
   );
 });
 
+test('case-insensitive namespace keys follow uppercase collation for Greek sigma forms', () => {
+  const finalSigma = filesystemPathComparisonKey(
+    '/tmp/ς.sqlite-wal',
+    '/tmp/ς.sqlite-wal',
+    { caseInsensitive: true, canonicalEquivalent: false },
+  );
+  const normalSigma = filesystemPathComparisonKey(
+    '/tmp/σ.sqlite-wal',
+    '/tmp/σ.sqlite',
+    { caseInsensitive: true, canonicalEquivalent: false },
+  );
+
+  assert.equal(finalSigma, normalSigma);
+  assert.match(finalSigma, /Σ\.SQLITE-WAL$/u);
+});
+
+test('filesystem probes use the actual mounted directory rather than process-platform defaults', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-fs-semantics-'));
+  const nfcPath = join(root, 'café');
+  const nfdPath = join(root, 'cafe\u0301');
+  const lowerPath = join(root, 'caseprobe');
+  const upperPath = join(root, 'CASEPROBE');
+
+  try {
+    writeFileSync(nfcPath, 'nfc');
+    writeFileSync(nfdPath, 'nfd');
+    writeFileSync(lowerPath, 'lower');
+    writeFileSync(upperPath, 'upper');
+
+    const nfcStat = lstatSync(nfcPath, { bigint: true });
+    const nfdStat = lstatSync(nfdPath, { bigint: true });
+    const lowerStat = lstatSync(lowerPath, { bigint: true });
+    const upperStat = lstatSync(upperPath, { bigint: true });
+
+    // This branch is meaningful only when the actual verifier filesystem
+    // allows the names to coexist as distinct entries.
+    if (nfcStat.ino !== nfdStat.ino) {
+      assert.equal(filesystemPathUsesCanonicalEquivalence(nfcPath), false);
+    }
+    if (lowerStat.ino !== upperStat.ino) {
+      assert.equal(filesystemPathIsCaseInsensitive(lowerPath), false);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('filesystem-aware namespace keys fold NFC and NFD on canonical-equivalent filesystems', () => {
   const sourceKey = sha256Digest(filesystemPathComparisonKey(
     '/tmp/café.sqlite-wal',
@@ -1308,6 +1360,15 @@ test('attachment copy CLI preserves INVALID_USAGE exit code 3', () => {
   assert.equal(payload.status, 'ATTACHMENT_COPY_FAILED');
   assert.equal(payload.result, 'INVALID_USAGE');
   assert.equal(payload.code, 'MISSING_REQUIRED_ARGUMENT');
+});
+
+test('attachment copy CLI classifies unexpected failures as INTERNAL_ERROR exit 10', () => {
+  const failure = lowDisclosureFailure(new Error('unexpected runtime failure'));
+  assert.equal(failure.exitCode, 10);
+  const payload = JSON.parse(failure.output);
+  assert.equal(payload.status, 'ATTACHMENT_COPY_FAILED');
+  assert.equal(payload.code, 'ATTACHMENT_COPY_INTERNAL_ERROR');
+  assert.equal(payload.result, 'INTERNAL_ERROR');
 });
 
 test('attachment copy command cannot mint production authority from a caller-forged capability', () => {
