@@ -160,6 +160,7 @@ test('maintenance apply cannot bypass a persisted disabled cleanup control', () 
   const uploadRoot = join(root, 'uploads');
   const oldTime = new Date('2026-09-20T08:00:00.000Z');
   const laterTime = new Date('2026-09-22T08:00:00.000Z');
+  const orphanCleanupDomain = 'maintenance-shared-domain';
   let store;
 
   try {
@@ -167,6 +168,7 @@ test('maintenance apply cannot bypass a persisted disabled cleanup control', () 
       filename: databasePath,
       uploadRoot,
       clock: () => oldTime,
+      orphanCleanupDomain,
       idFactory: () => 'cleanup-maintenance-seed',
     });
     const orphan = store.saveUpload({
@@ -186,6 +188,7 @@ test('maintenance apply cannot bypass a persisted disabled cleanup control', () 
       args: ['--apply', '--max-age-hours', '24'],
       databasePath,
       uploadRoot,
+      orphanCleanupDomain,
       clock: () => laterTime,
     });
     assert.equal(blocked.skipped, true);
@@ -193,7 +196,7 @@ test('maintenance apply cannot bypass a persisted disabled cleanup control', () 
     assert.equal(blocked.deleted, 0);
     assert.equal(existsSync(storedPath), true);
 
-    store = new ScheduleStore({ filename: databasePath, uploadRoot, clock: () => laterTime });
+    store = new ScheduleStore({ filename: databasePath, uploadRoot, clock: () => laterTime, orphanCleanupDomain });
     const enabled = store.enableOrphanCleanup({ expectedEpoch: disabled.epoch });
     assert.equal(enabled.ok, true);
     store.close();
@@ -203,6 +206,7 @@ test('maintenance apply cannot bypass a persisted disabled cleanup control', () 
       args: ['--apply', '--max-age-hours', '24'],
       databasePath,
       uploadRoot,
+      orphanCleanupDomain,
       clock: () => laterTime,
     });
     assert.equal(applied.deleted, 1);
@@ -742,6 +746,7 @@ test('CLI apply exits nonzero when persisted cleanup protection blocks deletion'
   const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-cli-control-'));
   const databasePath = join(root, 'operations.sqlite');
   const uploadRoot = join(root, 'uploads');
+  const orphanCleanupDomain = 'cli-shared-domain';
   let store;
 
   try {
@@ -749,6 +754,7 @@ test('CLI apply exits nonzero when persisted cleanup protection blocks deletion'
       filename: databasePath,
       uploadRoot,
       clock: () => new Date('2026-09-20T08:00:00.000Z'),
+      orphanCleanupDomain,
       idFactory: () => 'cleanup-cli-control',
     });
     const upload = store.saveUpload({
@@ -770,6 +776,7 @@ test('CLI apply exits nonzero when persisted cleanup protection blocks deletion'
         ...process.env,
         DATABASE_PATH: databasePath,
         UPLOAD_ROOT: uploadRoot,
+        ORPHAN_CLEANUP_DOMAIN: orphanCleanupDomain,
       },
       encoding: 'utf8',
     });
