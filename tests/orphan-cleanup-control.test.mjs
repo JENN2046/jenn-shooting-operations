@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { runCleanup } from '../scripts/cleanup-uploads.mjs';
+import { createOrphanCleanupControl } from '../src/orphan-cleanup-control.mjs';
 import { createOperationsServer } from '../src/server.mjs';
 import { ScheduleStore } from '../src/store.mjs';
 
@@ -336,8 +337,14 @@ test('unchecked cleanup implementation is not a public ScheduleStore method', ()
   try {
     store = new ScheduleStore({ filename: databasePath, uploadRoot });
     assert.equal(store.cleanupOrphanUploadsUnchecked, undefined);
+    assert.equal(store.recoverStagedUploadCleanupLocked, undefined);
+    assert.equal(store.orphanCleanupControl, undefined);
     assert.equal(
       Object.prototype.hasOwnProperty.call(ScheduleStore.prototype, 'cleanupOrphanUploadsUnchecked'),
+      false,
+    );
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(ScheduleStore.prototype, 'recoverStagedUploadCleanupLocked'),
       false,
     );
 
@@ -348,6 +355,38 @@ test('unchecked cleanup implementation is not a public ScheduleStore method', ()
     assert.equal(result.code, 'ORPHAN_CLEANUP_DISABLED');
   } finally {
     try { store?.close(); } catch {}
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('run completion can remove only markers admitted by the same control instance', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-run-ownership-'));
+  const controlRoot = join(root, '.orphan-cleanup-control');
+  const runsRoot = join(controlRoot, 'runs');
+  const peerRunId = 'peer-cleanup-run';
+  const peerMarker = join(runsRoot, peerRunId + '.json');
+
+  try {
+    const control = createOrphanCleanupControl({ controlRoot });
+    writeFileSync(peerMarker, '{"runId":"peer-cleanup-run"}\n');
+
+    const forgedPeerCompletion = control.endRun({ ok: true, runId: peerRunId });
+    assert.equal(forgedPeerCompletion, false);
+    assert.equal(existsSync(peerMarker), true, 'a foreign control instance cannot remove a peer marker');
+
+    const admission = control.beginRun();
+    assert.equal(admission.ok, true);
+    const ownedMarker = join(runsRoot, admission.runId + '.json');
+    assert.equal(existsSync(ownedMarker), true);
+
+    const forgedOtherCompletion = control.endRun({ ok: true, runId: 'forged-other-run' });
+    assert.equal(forgedOtherCompletion, false);
+    assert.equal(existsSync(ownedMarker), true);
+
+    assert.equal(control.endRun(admission), true);
+    assert.equal(existsSync(ownedMarker), false);
+    assert.equal(existsSync(peerMarker), true);
+  } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
