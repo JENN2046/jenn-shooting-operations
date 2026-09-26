@@ -10,6 +10,7 @@ function usage() {
     'Usage: npm run uploads:cleanup -- [--apply] [--max-age-hours <hours>]',
     '',
     'Defaults to a read-only dry-run. Pass --apply to delete eligible orphan uploads.',
+    'Destructive --apply also requires ORPHAN_CLEANUP_DOMAIN (or orphanCleanupDomain programmatically).',
   ].join('\n');
 }
 
@@ -44,6 +45,9 @@ export function runCleanup({
 } = {}) {
   const options = parseCleanupArgs(args);
   if (options.help) return { help: usage() };
+  if (options.apply && (typeof orphanCleanupDomain !== 'string' || orphanCleanupDomain.length === 0)) {
+    throw new Error('ORPHAN_CLEANUP_DOMAIN is required for destructive cleanup apply');
+  }
   if (!existsSync(databasePath)) {
     throw new Error(`database does not exist: ${databasePath}`);
   }
