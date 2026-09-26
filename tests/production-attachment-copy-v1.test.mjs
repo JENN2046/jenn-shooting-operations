@@ -477,6 +477,36 @@ test('database reads stay bound to the originally resolved target database inode
   }
 });
 
+test('SQLite family disjointness rejects cross-role future sidecar path collisions', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-sqlite-family-namespace-'));
+  const targetPath = join(root, 'target.sqlite');
+  const sourcePath = targetPath + '-wal';
+
+  try {
+    writeFileSync(sourcePath, Buffer.from('source-db-at-target-wal-path'), { mode: 0o600 });
+    writeFileSync(targetPath, Buffer.from('target-db'), { mode: 0o600 });
+
+    const sourceInfo = resolveExistingPath(sourcePath, 'file');
+    const targetInfo = resolveExistingPath(targetPath, 'file');
+    const sourceFamily = captureSqlitePhysicalFamily(sourceInfo, {
+      includeDatabaseDigest: true,
+      requireSingleLink: true,
+    });
+    const targetFamily = captureSqlitePhysicalFamily(targetInfo, {
+      includeDatabaseDigest: true,
+      requireSingleLink: true,
+    });
+
+    assert.equal(
+      sqlitePhysicalFamiliesAreDisjoint(sourceFamily, targetFamily),
+      false,
+      'source database path must collide with target future WAL namespace',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('SQLite family sidecars must be single-link and source/target families disjoint', () => {
   const root = mkdtempSync(join(tmpdir(), 'jenn-sqlite-family-alias-'));
   const sourcePath = join(root, 'source.sqlite');
