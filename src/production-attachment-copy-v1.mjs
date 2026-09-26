@@ -77,6 +77,9 @@ class AttachmentParityCapability {
   }
 }
 
+Object.freeze(AttachmentParityCapability.prototype);
+Object.freeze(AttachmentParityCapability);
+
 function fail(code, result = 'INVALID_TARGET') {
   throw new MigrationError(code, result);
 }
@@ -715,7 +718,7 @@ export function evaluateAttachmentDatabaseParityCandidate({
   });
 }
 
-export function copyAttachmentsAndEvaluateParityCandidate({
+function copyAttachmentsAndEvaluateParityInternal({
   sourceDatabasePath,
   sourceUploadRoot,
   targetDatabasePath,
@@ -844,6 +847,35 @@ export function copyAttachmentsAndEvaluateParityCandidate({
       schemaVersion: 1,
       parityDigest: parity.parityDigest,
     }),
+  });
+}
+
+
+export function copyAttachmentsAndEvaluateParityTestCandidate({
+  sourceDatabasePath,
+  sourceUploadRoot,
+  targetDatabasePath,
+  targetUploadRoot,
+  quiescenceCapability,
+  faultInjector,
+} = {}) {
+  const domain = resolveParityDomain({
+    sourceDatabasePath,
+    sourceUploadRoot,
+    targetDatabasePath,
+    targetUploadRoot,
+  });
+  if (!inspectCapability(quiescenceCapability, domain.scopeDigest, [TEST_AUTHORITY])) {
+    fail('ATTACHMENT_PARITY_TEST_AUTH_REQUIRED', 'BLOCKED_PREREQUISITE');
+  }
+
+  return copyAttachmentsAndEvaluateParityInternal({
+    sourceDatabasePath,
+    sourceUploadRoot,
+    targetDatabasePath,
+    targetUploadRoot,
+    quiescenceCapability,
+    faultInjector,
   });
 }
 
