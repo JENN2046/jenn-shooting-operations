@@ -43,6 +43,27 @@ function sameStat(left, right) {
     && left.ctimeNs === right.ctimeNs;
 }
 
+function pathWithin(path, directory) {
+  return path === directory || path.startsWith(`${directory}${sep}`);
+}
+
+function assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot) {
+  if (sameFile(sourceDatabase, targetDatabase)) {
+    fail('SOURCE_TARGET_DATABASE_CONFLICT', 'INVALID_USAGE');
+  }
+  if (sameFile(sourceRoot, targetRoot)
+      || pathWithin(sourceRoot.realPath, targetRoot.realPath)
+      || pathWithin(targetRoot.realPath, sourceRoot.realPath)) {
+    fail('SOURCE_TARGET_UPLOAD_ROOT_CONFLICT', 'INVALID_USAGE');
+  }
+  for (const database of [sourceDatabase, targetDatabase]) {
+    if (pathWithin(database.realPath, sourceRoot.realPath)
+        || pathWithin(database.realPath, targetRoot.realPath)) {
+      fail('DATABASE_UPLOAD_ROOT_CONFLICT', 'INVALID_USAGE');
+    }
+  }
+}
+
 function fsyncDirectory(path) {
   if (!supportsDirectoryFsync()) return;
   let descriptor;
@@ -149,13 +170,14 @@ function openStableFile(path, expected, code) {
   } catch {
     fail(code);
   }
-  if (!link.isFile() || link.isSymbolicLink()) fail(code);
+  if (!link.isFile() || link.isSymbolicLink() || link.nlink !== 1n) fail(code);
 
   let descriptor;
   try {
     descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
     const opened = fstatSync(descriptor, { bigint: true });
     if (!opened.isFile()
+        || opened.nlink !== 1n
         || opened.dev !== link.dev
         || opened.ino !== link.ino
         || opened.size !== BigInt(expected.size)) {
@@ -188,12 +210,38 @@ function verifyFileBytes(path, expected, code) {
     } catch {
       fail(code);
     }
-    if (!finalLink.isFile() || finalLink.isSymbolicLink() || !sameStat(after, finalLink)) {
+    if (!finalLink.isFile() || finalLink.isSymbolicLink() || finalLink.nlink !== 1n
+        || !sameStat(after, finalLink)) {
       fail(code);
     }
     if (hash.digest('hex') !== expected.sha256) fail(code);
   } finally {
     closeSync(descriptor);
+  }
+}
+
+function assertTargetRootHasNoUnexpectedEntries(targetRootInfo, expectedFiles) {
+  const expected = new Set(expectedFiles.map(file => file.storedName));
+  let entries;
+  try {
+    entries = readdirSync(targetRootInfo.realPath, { withFileTypes: true });
+  } catch {
+    fail('TARGET_UPLOAD_ROOT_CHANGED');
+  }
+  for (const entry of entries) {
+    if (entry.name === '.cleanup') {
+      if (!entry.isDirectory() || entry.isSymbolicLink()) fail('TARGET_ATTACHMENT_ORPHAN');
+      const cleanupPath = join(targetRootInfo.realPath, entry.name);
+      const before = lstatSync(cleanupPath, { bigint: true });
+      if (!before.isDirectory() || before.isSymbolicLink()) fail('TARGET_ATTACHMENT_ORPHAN');
+      if (readdirSync(cleanupPath).length > 0) fail('TARGET_ATTACHMENT_STAGING_PRESENT');
+      const after = lstatSync(cleanupPath, { bigint: true });
+      if (!sameStat(before, after)) fail('TARGET_UPLOAD_ROOT_CHANGED');
+      continue;
+    }
+    if (!expected.has(entry.name) || !entry.isFile() || entry.isSymbolicLink()) {
+      fail('TARGET_ATTACHMENT_ORPHAN');
+    }
   }
 }
 
@@ -256,8 +304,7 @@ export function verifyAttachmentDatabaseParity({
   const sourceRoot = resolveExistingPath(sourceUploadRoot, 'directory');
   const targetRoot = resolveExistingPath(targetUploadRoot, 'directory');
 
-  if (sameFile(sourceDatabase, targetDatabase)) fail('SOURCE_TARGET_DATABASE_CONFLICT', 'INVALID_USAGE');
-  if (sameFile(sourceRoot, targetRoot)) fail('SOURCE_TARGET_UPLOAD_ROOT_CONFLICT', 'INVALID_USAGE');
+  assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
 
   assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
   assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
@@ -327,8 +374,7 @@ export function copyAndVerifyAttachments({
   const sourceRoot = resolveExistingPath(sourceUploadRoot, 'directory');
   const targetRoot = resolveExistingPath(targetUploadRoot, 'directory');
 
-  if (sameFile(sourceDatabase, targetDatabase)) fail('SOURCE_TARGET_DATABASE_CONFLICT', 'INVALID_USAGE');
-  if (sameFile(sourceRoot, targetRoot)) fail('SOURCE_TARGET_UPLOAD_ROOT_CONFLICT', 'INVALID_USAGE');
+  assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
 
   const sourceRows = readUploadFacts(sourceDatabase, 'SOURCE_UPLOAD_DATABASE_INVALID');
   const targetRows = readUploadFacts(targetDatabase, 'TARGET_UPLOAD_DATABASE_INVALID');
@@ -337,6 +383,7 @@ export function copyAndVerifyAttachments({
   }
 
   const files = normalizedUniqueFiles(sourceRows, 'SOURCE_UPLOAD_DATABASE_INVALID');
+  assertTargetRootHasNoUnexpectedEntries(targetRoot, files);
   let copiedFiles = 0;
   let reusedFiles = 0;
   let copiedBytes = 0;
