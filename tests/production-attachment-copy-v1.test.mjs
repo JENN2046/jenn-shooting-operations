@@ -22,6 +22,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import {
   copyAndVerifyAttachments,
+  describeAttachmentParityScope,
   verifyAttachmentDatabaseParity,
 } from '../src/production-attachment-copy-v1.mjs';
 import {
@@ -133,13 +134,37 @@ function writeSourceFiles(fixture, rows, bodiesByName) {
   }
 }
 
-function copyOptions(fixture, extra = {}) {
+function parityPaths(fixture, extra = {}) {
   return {
     sourceDatabasePath: fixture.sourceDatabasePath,
     sourceUploadRoot: fixture.sourceUploadRoot,
     targetDatabasePath: fixture.targetDatabasePath,
     targetUploadRoot: fixture.targetUploadRoot,
     ...extra,
+  };
+}
+
+function createTestQuiescenceLease(options, state = { held: true }) {
+  const scope = describeAttachmentParityScope(options);
+  return {
+    kind: 'ATTACHMENT_PARITY_QUIESCENCE_V1',
+    scopeDigest: scope.scopeDigest,
+    assertHeld() {
+      return state.held === true;
+    },
+  };
+}
+
+function copyOptions(fixture, extra = {}) {
+  const {
+    quiescenceLease,
+    leaseState,
+    ...optionOverrides
+  } = extra;
+  const options = parityPaths(fixture, optionOverrides);
+  return {
+    ...options,
+    quiescenceLease: quiescenceLease ?? createTestQuiescenceLease(options, leaseState),
   };
 }
 
