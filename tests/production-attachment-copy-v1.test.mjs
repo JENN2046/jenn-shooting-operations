@@ -347,7 +347,10 @@ test('database reads stay bound to the originally resolved target database inode
         faultInjector(stage) {
           if (stage !== 'before_initial_database_read') return;
           const replacement = readFileSync(fixture.sourceDatabasePath);
-          unlinkSync(fixture.targetDatabasePath);
+          renameSync(
+            fixture.targetDatabasePath,
+            join(fixture.root, 'target-original.sqlite'),
+          );
           writeFileSync(fixture.targetDatabasePath, replacement, { mode: 0o600 });
         },
       })),
