@@ -276,6 +276,79 @@ test('cleanup control is isolated by database identity within one directory', ()
   }
 });
 
+test('cleanup control identity is canonical across symlink aliases of one database', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-db-alias-'));
+  const realRoot = join(root, 'real');
+  const aliasRoot = join(root, 'alias');
+  mkdirSync(realRoot, { recursive: true });
+  symlinkSync(realRoot, aliasRoot, 'dir');
+
+  const realDatabasePath = join(realRoot, 'operations.sqlite');
+  const aliasDatabasePath = join(aliasRoot, 'operations.sqlite');
+  const realUploadRoot = join(realRoot, 'uploads');
+  const aliasUploadRoot = join(aliasRoot, 'uploads');
+  let realStore;
+  let aliasStore;
+
+  try {
+    realStore = new ScheduleStore({
+      filename: realDatabasePath,
+      uploadRoot: realUploadRoot,
+    });
+    aliasStore = new ScheduleStore({
+      filename: aliasDatabasePath,
+      uploadRoot: aliasUploadRoot,
+    });
+
+    assert.equal(realStore.cleanupControlRoot, aliasStore.cleanupControlRoot);
+    assert.equal(
+      cleanupControlRootFor(realDatabasePath),
+      cleanupControlRootFor(aliasDatabasePath),
+    );
+
+    const disabled = realStore.disableOrphanCleanup({ reason: 'alias-shared-disable', waitForDrainMs: 0 });
+    assert.equal(disabled.ok, true);
+    assert.equal(disabled.enabled, false);
+
+    const aliasStatus = aliasStore.getOrphanCleanupControlStatus();
+    assert.equal(aliasStatus.enabled, false);
+    assert.equal(aliasStatus.epoch, disabled.epoch);
+
+    const enabled = aliasStore.enableOrphanCleanup({ expectedEpoch: disabled.epoch });
+    assert.equal(enabled.ok, true);
+    assert.equal(enabled.enabled, true);
+    assert.equal(realStore.getOrphanCleanupControlStatus().enabled, true);
+  } finally {
+    try { realStore?.close(); } catch {}
+    try { aliasStore?.close(); } catch {}
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('explicit cleanup domain is wired into the server control namespace', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-explicit-domain-'));
+  const databasePath = join(root, 'operations.sqlite');
+  const uploadRoot = join(root, 'uploads');
+  const orphanCleanupDomain = 'production-shared-database';
+  let service;
+
+  try {
+    service = createOperationsServer({
+      databasePath,
+      uploadRoot,
+      cleanupIntervalMs: 0,
+      orphanCleanupDomain,
+    });
+    assert.equal(
+      service.store.cleanupControlRoot,
+      cleanupControlRootFor(databasePath, orphanCleanupDomain),
+    );
+  } finally {
+    try { service?.store.close(); } catch {}
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('disable stays fail-closed until every active cleanup marker is drained', () => {
   const root = mkdtempSync(join(tmpdir(), 'jenn-cleanup-drain-control-'));
   const databasePath = join(root, 'operations.sqlite');
