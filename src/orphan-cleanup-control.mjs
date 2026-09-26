@@ -19,13 +19,14 @@ export function normalizeOrphanCleanupMode(value = 'inherit') {
 export function createOrphanCleanupControl({
   controlRoot,
   clock = () => new Date(),
+  writable = true,
 } = {}) {
   let memoryEnabled = true;
   const memoryRuns = new Set();
   const disabledMarker = controlRoot ? join(controlRoot, DISABLED_FILE) : null;
   const runsRoot = controlRoot ? join(controlRoot, RUNS_DIR) : null;
 
-  if (controlRoot) {
+  if (controlRoot && writable) {
     mkdirSync(controlRoot, { recursive: true });
     mkdirSync(runsRoot, { recursive: true });
   }
@@ -79,6 +80,7 @@ export function createOrphanCleanupControl({
   }
 
   function disable({ reason = 'runtime-control', waitForDrainMs = 5000 } = {}) {
+    if (!writable) return Object.freeze({ ok: false, code: 'ORPHAN_CLEANUP_CONTROL_READ_ONLY', ...status() });
     if (!Number.isFinite(waitForDrainMs) || waitForDrainMs < 0) {
       throw new TypeError('waitForDrainMs must be a non-negative number');
     }
@@ -115,6 +117,7 @@ export function createOrphanCleanupControl({
   }
 
   function enable({ expectedEpoch } = {}) {
+    if (!writable) return Object.freeze({ ok: false, code: 'ORPHAN_CLEANUP_CONTROL_READ_ONLY', ...status() });
     const current = status();
     if (current.enabled) return Object.freeze({ ok: true, ...current });
     if (!current.markerValid || !current.epoch) {
@@ -140,6 +143,7 @@ export function createOrphanCleanupControl({
   }
 
   function beginRun() {
+    if (!writable) return Object.freeze({ ok: false, code: 'ORPHAN_CLEANUP_CONTROL_READ_ONLY', control: status() });
     const before = status();
     if (!before.enabled) {
       return Object.freeze({ ok: false, code: 'ORPHAN_CLEANUP_DISABLED', control: before });
