@@ -125,7 +125,7 @@ function assertDatabaseStable(info, code) {
 function captureDatabaseFamily(databaseInfo, code) {
   assertDatabaseStable(databaseInfo, code);
   try {
-    return captureSqlitePhysicalFamily(databaseInfo);
+    return captureSqlitePhysicalFamily(databaseInfo, { includeDatabaseDigest: true });
   } catch {
     fail(code);
   }
@@ -460,6 +460,28 @@ function verifyAttachmentDatabaseParityResolved({
   // drift that occurs during that DB read cannot escape into a receipt.
   verifyFilesystem();
 
+  // Compute the candidate receipt entirely from facts already captured while
+  // the strong physical-family window is still open. The final external reads
+  // below are therefore only the content-level stability proof; no filesystem
+  // or database fact is consulted after that proof succeeds.
+  const uploadFactsDigest = factsDigest(finalTargetRowsAfterFilesystem);
+  const attachmentBytesDigest = bytesDigest(files);
+  const parityDigest = sha256Digest({
+    schemaVersion: 1,
+    uploadFactsDigest,
+    attachmentBytesDigest,
+  });
+  const candidateReceipt = Object.freeze({
+    status: 'ATTACHMENT_DATABASE_PARITY_VERIFIED',
+    schemaVersion: 1,
+    uploadRows: finalTargetRowsAfterFilesystem.length,
+    uniqueFiles: files.length,
+    totalBytes: files.reduce((sum, file) => sum + file.size, 0),
+    uploadFactsDigest,
+    attachmentBytesDigest,
+    parityDigest,
+  });
+
   const sourceFamilyAfterFinalWindow = captureDatabaseFamily(
     sourceDatabase,
     'SOURCE_UPLOAD_DATABASE_INVALID',
@@ -480,24 +502,7 @@ function verifyAttachmentDatabaseParityResolved({
   assertDirectoryStable(sourceRoot, 'SOURCE_UPLOAD_ROOT_CHANGED');
   assertDirectoryStable(targetRoot, 'TARGET_UPLOAD_ROOT_CHANGED');
 
-  const uploadFactsDigest = factsDigest(finalTargetRowsAfterFilesystem);
-  const attachmentBytesDigest = bytesDigest(files);
-  const parityDigest = sha256Digest({
-    schemaVersion: 1,
-    uploadFactsDigest,
-    attachmentBytesDigest,
-  });
-
-  return Object.freeze({
-    status: 'ATTACHMENT_DATABASE_PARITY_VERIFIED',
-    schemaVersion: 1,
-    uploadRows: finalTargetRowsAfterFilesystem.length,
-    uniqueFiles: files.length,
-    totalBytes: files.reduce((sum, file) => sum + file.size, 0),
-    uploadFactsDigest,
-    attachmentBytesDigest,
-    parityDigest,
-  });
+  return candidateReceipt;
 }
 
 export function verifyAttachmentDatabaseParity({
