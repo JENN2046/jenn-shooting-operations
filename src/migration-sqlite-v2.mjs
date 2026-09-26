@@ -191,7 +191,7 @@ function hashFamilyFileStable(path, expectedMetadata) {
   }
 }
 
-function fileIdentity(path, { includeCtime = true, includeDigest = false } = {}) {
+function fileIdentity(path, { includeCtime = true, includeDigest = false, requireSingleLink = false } = {}) {
   let metadata;
   try {
     metadata = lstatSync(path, { bigint: true });
@@ -199,7 +199,8 @@ function fileIdentity(path, { includeCtime = true, includeDigest = false } = {})
     if (error?.code === 'ENOENT') return null;
     fail('SOURCE_CHANGED_DURING_SCAN', 'INVALID_SOURCE');
   }
-  if (!metadata.isFile() || metadata.isSymbolicLink()) {
+  if (!metadata.isFile() || metadata.isSymbolicLink()
+      || (requireSingleLink && metadata.nlink !== 1n)) {
     fail('SOURCE_CHANGED_DURING_SCAN', 'INVALID_SOURCE');
   }
   const identity = {
@@ -213,12 +214,22 @@ function fileIdentity(path, { includeCtime = true, includeDigest = false } = {})
   return identity;
 }
 
-function sourceFamily(path, { includeDatabaseDigest = false } = {}) {
+function sourceFamily(
+  path,
+  { includeDatabaseDigest = false, requireSingleLink = false } = {},
+) {
   return {
-    database: fileIdentity(path, { includeDigest: includeDatabaseDigest }),
-    wal: fileIdentity(`${path}-wal`, { includeCtime: false, includeDigest: true }),
-    shm: fileIdentity(`${path}-shm`),
-    journal: fileIdentity(`${path}-journal`),
+    database: fileIdentity(path, {
+      includeDigest: includeDatabaseDigest,
+      requireSingleLink,
+    }),
+    wal: fileIdentity(`${path}-wal`, {
+      includeCtime: false,
+      includeDigest: true,
+      requireSingleLink,
+    }),
+    shm: fileIdentity(`${path}-shm`, { requireSingleLink }),
+    journal: fileIdentity(`${path}-journal`, { requireSingleLink }),
   };
 }
 
@@ -228,12 +239,12 @@ function sameSourceFamily(left, right) {
 
 export function captureSqlitePhysicalFamily(
   pathInfo,
-  { includeDatabaseDigest = false } = {},
+  { includeDatabaseDigest = false, requireSingleLink = false } = {},
 ) {
   if (!pathInfo || typeof pathInfo.realPath !== 'string') {
     fail('INVALID_PATH', 'INVALID_USAGE');
   }
-  return sourceFamily(pathInfo.realPath, { includeDatabaseDigest });
+  return sourceFamily(pathInfo.realPath, { includeDatabaseDigest, requireSingleLink });
 }
 
 export function sameSqlitePhysicalFamily(left, right) {
