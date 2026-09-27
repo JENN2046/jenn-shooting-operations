@@ -185,7 +185,6 @@
   ],
   "greenfieldPreActivationWriteFence": {
     "runtimeMode": "disabled",
-    "runtimeEnv": "WRITE_ADMISSION_MODE=disabled",
     "blockedHttpMethods": [
       "POST",
       "PUT",
@@ -219,6 +218,8 @@
       "BACKGROUND_WRITER_INVENTORY_ZERO_PROOF",
       "DIRECT_STORAGE_WRITER_INVENTORY_ZERO_PROOF",
       "TARGET_VOLUME_SINGLE_CONTAINER_MOUNT_PROOF"
-    ]
+    ],
+    "runtimeEnvironmentVariable": "WRITE_ADMISSION_MODE",
+    "runtimeEnvironmentValue": "disabled"
   }
 }
