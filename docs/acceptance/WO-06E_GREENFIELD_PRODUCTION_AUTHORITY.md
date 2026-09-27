@@ -955,3 +955,68 @@ nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
 Intermediate runs #216 and #217 exercised over-broad hostile test timing/assertions and are superseded by exact-head run #218. They are not acceptance evidence.
 
 No production side effect was performed by this correction.
+
+
+## Fourteenth Codex review correction
+
+Independent review found two additional valid P1s in the admission authority itself.
+
+### P1: mutable String normalization primitives
+
+`normalizeWriteAdmissionMode` previously used runtime `String(...).trim().toLowerCase()` dispatch. Same-realm code could replace `globalThis.String` or the referenced string prototype methods after module evaluation but before server construction and force a configured `disabled` mode to normalize as `enabled`.
+
+The admission module now captures at module evaluation:
+
+- `String`;
+- `String.prototype.trim`;
+- `String.prototype.toLowerCase`;
+- `Reflect.apply`.
+
+Normalization uses only those captured primitives. The two-mode admission check no longer depends on `Set.prototype.has`; it compares directly against the frozen semantic values `enabled` and `disabled`.
+
+A hostile regression replaces `globalThis.String`, `String.prototype.trim`, and `String.prototype.toLowerCase` with implementations that all try to return `enabled`, then constructs a control with `initialMode: disabled`. The resulting control remains disabled with transition count zero.
+
+### P1: mutable Object.freeze
+
+The control factory previously called runtime `Object.freeze`. Same-realm code could replace it after module evaluation and receive a mutable admission control, then overwrite `isDisabled` or `enable` without the audited transition.
+
+The module now captures native `Object.freeze` once at module evaluation and uses that captured function for:
+
+- the public control object;
+- status snapshots;
+- enable receipts;
+- already-enabled receipts;
+- `writeAdmissionFailure` responses.
+
+The hostile regression replaces runtime `Object.freeze` with a no-op before constructing a disabled control and proves:
+
+- the returned control remains frozen;
+- status/failure responses remain frozen;
+- attempts to replace `isDisabled` or `enable` throw;
+- the control remains disabled with transition count zero;
+- the only successful state change is the original captured `enable` function, which advances transition count exactly once.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 737e2abe0166578cd5b3bd1004eb1aeadf34e98d
+workflowRun        = 36331091273 (#222)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 761
+pass               = 760
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+Intermediate run #221 failed only because the new freeze regression omitted the existing `writeAdmissionFailure` import; it is superseded by exact-head run #222 and is not acceptance evidence.
+
+No production side effect was performed by this correction.
