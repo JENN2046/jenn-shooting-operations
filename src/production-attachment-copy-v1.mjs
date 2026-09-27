@@ -114,6 +114,28 @@ function directoryMatchesIdentity(path, identity) {
   }
 }
 
+function directoryDescriptorMatchesIdentity(descriptor, identity) {
+  try {
+    const metadata = fstatSync(descriptor, { bigint: true });
+    return metadata.isDirectory()
+      && metadata.dev.toString() === identity.device
+      && metadata.ino.toString() === identity.inode;
+  } catch {
+    return false;
+  }
+}
+
+function clearDirectoryContentsByDescriptor(descriptor) {
+  const metadata = fstatSync(descriptor, { bigint: true });
+  if (!metadata.isDirectory()) {
+    throw new Error('descriptor is not a directory');
+  }
+  const boundRoot = `/proc/self/fd/${descriptor}`;
+  for (const child of readdirSync(boundRoot)) {
+    rmSync(join(boundRoot, child), { recursive: true, force: true });
+  }
+}
+
 function assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot) {
   if (sameFile(sourceDatabase, targetDatabase)) {
     fail('SOURCE_TARGET_DATABASE_CONFLICT', 'INVALID_USAGE');
@@ -228,13 +250,22 @@ export function createAttachmentParityIsolatedTestAuthority() {
         device: sandboxMetadata.dev.toString(),
         inode: sandboxMetadata.ino.toString(),
       });
-      sandboxRoot = realpathSync(createdPath);
+
+      // Resolve through the held directory descriptor, never through the
+      // reusable pathname. Then require that the still-exposed creation name
+      // identifies that same inode before publishing the authority root.
+      sandboxRoot = realpathSync(`/proc/self/fd/${sandboxDescriptor}`);
+      if (!directoryMatchesIdentity(sandboxRoot, sandboxIdentity)
+          || !directoryMatchesIdentity(createdPath, sandboxIdentity)) {
+        fail('ATTACHMENT_PARITY_TEST_SANDBOX_CHANGED', 'INVALID_USAGE');
+      }
     } catch (error) {
       if (sandboxDescriptor !== undefined) {
+        // Constructor failure cleanup must stay bound to the exact directory
+        // already opened. An unverified/replaced public pathname is preserved.
+        try { clearDirectoryContentsByDescriptor(sandboxDescriptor); } catch {}
         try { closeSync(sandboxDescriptor); } catch {}
-      }
-      if (createdPath !== undefined) {
-        try { rmSync(createdPath, { recursive: true, force: true }); } catch {}
+        sandboxDescriptor = undefined;
       }
       if (error instanceof MigrationError) throw error;
       fail('ATTACHMENT_PARITY_TEST_AUTH_UNAVAILABLE', 'BLOCKED_PREREQUISITE');
@@ -254,10 +285,59 @@ export function createAttachmentParityIsolatedTestAuthority() {
 
   let active = true;
 
-  const ensureInsideSandbox = info => {
-    if (!pathWithin(info.realPath, sandboxRoot)) {
+  const assertSandboxBinding = () => {
+    if (process.platform !== 'linux') {
+      if (!directoryMatchesIdentity(sandboxRoot, sandboxIdentity)) {
+        fail('ATTACHMENT_PARITY_TEST_SANDBOX_CHANGED', 'INVALID_USAGE');
+      }
+      return;
+    }
+    if (!directoryDescriptorMatchesIdentity(sandboxDescriptor, sandboxIdentity)
+        || !directoryMatchesIdentity(sandboxRoot, sandboxIdentity)) {
+      fail('ATTACHMENT_PARITY_TEST_SANDBOX_CHANGED', 'INVALID_USAGE');
+    }
+  };
+
+  const resolveSandboxMember = (inputPath, expectedType) => {
+    if (process.platform !== 'linux') {
+      const info = resolveExistingPath(inputPath, expectedType);
+      if (!pathWithin(info.realPath, sandboxRoot)) {
+        fail('ATTACHMENT_PARITY_TEST_SCOPE_INVALID', 'INVALID_USAGE');
+      }
+      return info;
+    }
+
+    assertSandboxBinding();
+    if (typeof inputPath !== 'string' || !isAbsolute(inputPath)) {
       fail('ATTACHMENT_PARITY_TEST_SCOPE_INVALID', 'INVALID_USAGE');
     }
+    const absoluteInput = resolve(inputPath);
+    if (!pathWithin(absoluteInput, sandboxRoot)) {
+      fail('ATTACHMENT_PARITY_TEST_SCOPE_INVALID', 'INVALID_USAGE');
+    }
+
+    const relation = relative(sandboxRoot, absoluteInput);
+    const boundRoot = realpathSync(`/proc/self/fd/${sandboxDescriptor}`);
+    if (!directoryMatchesIdentity(boundRoot, sandboxIdentity)) {
+      fail('ATTACHMENT_PARITY_TEST_SANDBOX_CHANGED', 'INVALID_USAGE');
+    }
+
+    const boundInfo = resolveExistingPath(
+      relation === ''
+        ? `/proc/self/fd/${sandboxDescriptor}`
+        : join(`/proc/self/fd/${sandboxDescriptor}`, relation),
+      expectedType,
+    );
+    if (!pathWithin(boundInfo.realPath, boundRoot)) {
+      fail('ATTACHMENT_PARITY_TEST_SCOPE_INVALID', 'INVALID_USAGE');
+    }
+
+    const exposedInfo = resolveExistingPath(inputPath, expectedType);
+    if (!sameFile(boundInfo, exposedInfo)) {
+      fail('ATTACHMENT_PARITY_TEST_SANDBOX_CHANGED', 'INVALID_USAGE');
+    }
+    assertSandboxBinding();
+    return boundInfo;
   };
 
   return Object.freeze({
@@ -270,18 +350,24 @@ export function createAttachmentParityIsolatedTestAuthority() {
       heldState = { held: true },
     } = {}) {
       if (!active) fail('ATTACHMENT_PARITY_TEST_AUTHORITY_CLOSED', 'INVALID_USAGE');
-      const sourceDatabase = resolveExistingPath(sourceDatabasePath, 'file');
-      const targetDatabase = resolveExistingPath(targetDatabasePath, 'file');
-      const sourceRoot = resolveExistingPath(sourceUploadRoot, 'directory');
-      const targetRoot = resolveExistingPath(targetUploadRoot, 'directory');
-      for (const info of [sourceDatabase, targetDatabase, sourceRoot, targetRoot]) {
-        ensureInsideSandbox(info);
-      }
+      const sourceDatabase = resolveSandboxMember(sourceDatabasePath, 'file');
+      const targetDatabase = resolveSandboxMember(targetDatabasePath, 'file');
+      const sourceRoot = resolveSandboxMember(sourceUploadRoot, 'directory');
+      const targetRoot = resolveSandboxMember(targetUploadRoot, 'directory');
+      assertSandboxBinding();
       assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
       return new AttachmentParityCapability(CAPABILITY_MINT_TOKEN, {
         scopeDigest: parityScopeDigest(sourceDatabase, targetDatabase, sourceRoot, targetRoot),
         authorityClass: TEST_AUTHORITY,
-        assertHeld: () => active && heldState?.held === true,
+        assertHeld: () => {
+          if (!active || heldState?.held !== true) return false;
+          try {
+            assertSandboxBinding();
+            return true;
+          } catch {
+            return false;
+          }
+        },
       });
     },
     close() {
@@ -308,10 +394,7 @@ export function createAttachmentParityIsolatedTestAuthority() {
             'INVALID_USAGE',
           );
         } else {
-          const boundRoot = `/proc/self/fd/${sandboxDescriptor}`;
-          for (const child of readdirSync(boundRoot)) {
-            rmSync(join(boundRoot, child), { recursive: true, force: true });
-          }
+          clearDirectoryContentsByDescriptor(sandboxDescriptor);
         }
       } catch (error) {
         cleanupError ??= error;

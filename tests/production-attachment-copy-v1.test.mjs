@@ -424,6 +424,70 @@ test('sandbox containment does not depend on mutable String prototype methods', 
   }
 });
 
+test('test authority constructor never publishes a pathname replacement after opening the sandbox', () => {
+  if (process.platform !== 'linux') return;
+
+  const originalRealpathSync = fs.realpathSync;
+  let triggered = false;
+  let publicRoot;
+  let displacedRoot;
+
+  try {
+    fs.realpathSync = (path, ...args) => {
+      const input = String(path);
+      if (!triggered && /^\/proc\/self\/fd\/\d+$/u.test(input)) {
+        publicRoot = originalRealpathSync(path, ...args);
+        displacedRoot = `${publicRoot}-constructor-displaced`;
+        renameSync(publicRoot, displacedRoot);
+        mkdirSync(publicRoot, { mode: 0o700 });
+        writeFileSync(join(publicRoot, 'replacement.txt'), 'replacement', { mode: 0o600 });
+        triggered = true;
+      }
+      return originalRealpathSync(path, ...args);
+    };
+    syncBuiltinESMExports();
+
+    assert.throws(
+      () => createAttachmentParityIsolatedTestAuthority(),
+      error => error.code === 'ATTACHMENT_PARITY_TEST_SANDBOX_CHANGED',
+    );
+    assert.equal(triggered, true);
+    assert.equal(readFileSync(join(publicRoot, 'replacement.txt'), 'utf8'), 'replacement');
+  } finally {
+    fs.realpathSync = originalRealpathSync;
+    syncBuiltinESMExports();
+    if (publicRoot) rmSync(publicRoot, { recursive: true, force: true });
+    if (displacedRoot) rmSync(displacedRoot, { recursive: true, force: true });
+  }
+});
+
+test('test authority mint rejects a public sandbox path replaced after construction', () => {
+  if (process.platform !== 'linux') return;
+
+  const authority = createAttachmentParityIsolatedTestAuthority();
+  const publicRoot = authority.root;
+  const displacedRoot = `${publicRoot}-mint-displaced`;
+
+  try {
+    renameSync(publicRoot, displacedRoot);
+    mkdirSync(publicRoot, { mode: 0o700 });
+
+    assert.throws(
+      () => authority.mint({
+        sourceDatabasePath: join(publicRoot, 'source.sqlite'),
+        sourceUploadRoot: join(publicRoot, 'source-uploads'),
+        targetDatabasePath: join(publicRoot, 'target.sqlite'),
+        targetUploadRoot: join(publicRoot, 'target-uploads'),
+      }),
+      error => error.code === 'ATTACHMENT_PARITY_TEST_SANDBOX_CHANGED',
+    );
+  } finally {
+    try { authority.close(); } catch {}
+    rmSync(publicRoot, { recursive: true, force: true });
+    rmSync(displacedRoot, { recursive: true, force: true });
+  }
+});
+
 test('test authority cleanup stays bound to its created sandbox after public-path replacement', () => {
   if (process.platform !== 'linux') return;
 
