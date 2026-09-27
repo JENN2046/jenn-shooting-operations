@@ -181,6 +181,60 @@ test('ScheduleStore directly rejects disabled admission unless cleanup is disabl
   }
 });
 
+test('ScheduleStore public write helpers and recovery stay fenced while admission is disabled', () => {
+  const admission = createWriteAdmissionControl({ initialMode: 'disabled' });
+  const store = new ScheduleStore({
+    filename: ':memory:',
+    writeAdmissionControl: admission,
+    orphanCleanupMode: 'disabled',
+  });
+  try {
+    const before = store.db.prepare('SELECT total_changes() AS changes').get().changes;
+
+    assert.deepEqual(
+      store.recordOperation(
+        'DIRECT-OPERATION-0001',
+        'direct.test',
+        { ok: true },
+        '2026-09-27T13:00:00.000Z',
+      ),
+      { ok: false, status: 503, code: 'WRITE_ADMISSION_DISABLED' },
+    );
+    assert.deepEqual(
+      store.recordAudit(
+        'direct.test',
+        'administrator',
+        null,
+        0,
+        'blocked',
+        '2026-09-27T13:00:00.000Z',
+      ),
+      { ok: false, status: 503, code: 'WRITE_ADMISSION_DISABLED' },
+    );
+
+    const recovery = store.recoverStagedUploadCleanup();
+    assert.equal(recovery.ok, false);
+    assert.equal(recovery.code, 'WRITE_ADMISSION_DISABLED');
+
+    const enabled = createWriteAdmissionControl({ initialMode: 'enabled' });
+    assert.throws(
+      () => { store.writeAdmissionControl = enabled; },
+      TypeError,
+    );
+    assert.equal(store.writeAdmissionControl, admission);
+    assert.throws(
+      () => Object.defineProperty(store, 'writeAdmissionControl', { value: enabled }),
+      TypeError,
+    );
+    assert.equal(store.writeAdmissionControl, admission);
+
+    const after = store.db.prepare('SELECT total_changes() AS changes').get().changes;
+    assert.equal(after, before);
+  } finally {
+    store.close();
+  }
+});
+
 test('pre-activation write admission cannot start with cleanup enabled', () => {
   assert.throws(
     () => createOperationsServer({
