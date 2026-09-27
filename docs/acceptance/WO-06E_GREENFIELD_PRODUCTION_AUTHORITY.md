@@ -216,3 +216,90 @@ nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
 Intermediate failed workflow runs during the multi-file correction are not acceptance evidence. Exact-head run #156 supersedes them.
 
 No production token, container, route, DNS, TLS, firewall/security-group, database import, attachment copy, or production activation was performed by these corrections.
+
+
+## Third Codex review correction
+
+Independent review of exact head `0bde15c9db67061842c3f601e480941bc120de83` found three further valid findings:
+
+1. **P1 / admission transition ordering** — restarting a container with write admission already enabled before health/storage re-verification created a write window.
+2. **P2 / cleanup lifetime interlock** — cleanup could be re-enabled in-process while write admission remained disabled.
+3. **P2 / malformed base-manifest entries** — direct callers could pass arrays containing null or malformed entries and trigger exceptions during map construction.
+
+All three are corrected without changing the frozen existing-source manifest.
+
+### Atomic in-process admission transition
+
+Greenfield activation no longer restarts an enabled container.
+
+The verified service process starts and remains with write admission disabled through:
+
+- loopback health verification;
+- target storage identity verification;
+- routed TLS verification;
+- route promotion;
+- read-only post-activation verification.
+
+Only after every required read-only verification succeeds while the same process, route, image, target volume and disabled fence remain unchanged does activation perform one explicit in-process admission transition.
+
+For the direct production process, the transition is triggered by `SIGUSR2`. The process owns one shared `writeAdmissionControl` used by both HTTP and V1 store mutation boundaries. The transition is one-way and does not restart the container or change the route.
+
+`/healthz` keeps its existing JSON body contract unchanged and exposes current admission state only through the read-only `X-Write-Admission` response header.
+
+### Cleanup lifetime interlock
+
+While write admission is disabled:
+
+- `orphanCleanupControl.enable` returns `WRITE_ADMISSION_DISABLED`;
+- periodic/manual non-dry-run cleanup returns `WRITE_ADMISSION_DISABLED` before mutation;
+- startup requires orphan cleanup to be disabled;
+- enabling write admission does **not** automatically restore cleanup.
+
+Cleanup remains disabled until the separately authorized Greenfield cleanup-restoration action.
+
+### Base-manifest nested shape admission
+
+The exported Greenfield validator now structurally validates every base-manifest gate/action entry and authorization array before mapping or dereferencing them.
+
+Malformed direct inputs such as:
+
+```text
+gates = [null]
+actions = [null]
+authorizationPacket.requestedActionIds = null
+```
+
+return:
+
+```text
+ok = false
+code = BASE_MANIFEST_SCHEMA_INVALID
+digest = absent
+```
+
+and do not throw.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 95b36e97fad50563a63b81a21fbc98d43827f176
+workflowRun        = 36320452632 (#167)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 744
+pass               = 743
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+Intermediate failed workflow runs while the multi-file correction was incomplete are not acceptance evidence. Exact-head run #167 supersedes them.
+
+No production token, container, route, DNS, TLS, firewall/security-group, database import, attachment copy, admission transition, or production activation was performed by these corrections.
