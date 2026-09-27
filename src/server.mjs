@@ -21,8 +21,9 @@ export function createKioskV2Application({
   allowedBriefHosts = [],
 } = {}) {
   if (!store?.db) throw new TypeError('ScheduleStore is required');
-  if (typeof store.writeAdmissionControl?.isDisabled !== 'function'
-      || typeof store.writeAdmissionControl?.status !== 'function') {
+  const writeAdmissionControl = store.writeAdmissionControl;
+  if (typeof writeAdmissionControl?.isDisabled !== 'function'
+      || typeof writeAdmissionControl?.status !== 'function') {
     throw new TypeError('Kiosk ScheduleStore write admission control is required');
   }
   if (typeof authenticate !== 'function') throw new TypeError('Kiosk authenticate port is required');
@@ -43,10 +44,10 @@ export function createKioskV2Application({
   });
   return Object.freeze({
     authenticate,
-    writeAdmissionControl: store.writeAdmissionControl,
+    writeAdmissionControl,
     readCurrent,
     applyRunEvent(input) {
-      if (store.writeAdmissionControl.isDisabled()) {
+      if (writeAdmissionControl.isDisabled()) {
         return Object.freeze({ ok: false, code: 'WRITE_ADMISSION_DISABLED' });
       }
       return applyRunEvent(input);
@@ -61,8 +62,9 @@ export function createSchedulingV2Application({
   allowedBriefHosts = [],
 } = {}) {
   if (!store?.db) throw new TypeError('ScheduleStore is required');
-  if (typeof store.writeAdmissionControl?.isDisabled !== 'function'
-      || typeof store.writeAdmissionControl?.status !== 'function') {
+  const writeAdmissionControl = store.writeAdmissionControl;
+  if (typeof writeAdmissionControl?.isDisabled !== 'function'
+      || typeof writeAdmissionControl?.status !== 'function') {
     throw new TypeError('Scheduling ScheduleStore write admission control is required');
   }
   if (typeof authenticate !== 'function') {
@@ -99,9 +101,9 @@ export function createSchedulingV2Application({
   });
   return Object.freeze({
     authenticate,
-    writeAdmissionControl: store.writeAdmissionControl,
+    writeAdmissionControl,
     decideProposal({ command, principal } = {}) {
-      if (store.writeAdmissionControl.isDisabled()) {
+      if (writeAdmissionControl.isDisabled()) {
         return Object.freeze({ ok: false, code: 'WRITE_ADMISSION_DISABLED' });
       }
       if (command?.decisionType !== 'reject') {
