@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { DatabaseSync, StatementSync } from 'node:sqlite';
 import {
   createWriteAdmissionControl,
   normalizeWriteAdmissionMode,
@@ -324,6 +325,91 @@ test('prepared statement facade cannot expose or extend the raw StatementSync ta
     const after = store.db.prepare('SELECT total_changes() AS changes').get().changes;
     assert.equal(after, before);
   } finally {
+    store.close();
+  }
+});
+
+test('SQLite facades ignore runtime native prototype replacement', () => {
+  const admission = createWriteAdmissionControl({ initialMode: 'disabled' });
+  const store = new ScheduleStore({
+    filename: ':memory:',
+    writeAdmissionControl: admission,
+    orphanCleanupMode: 'disabled',
+  });
+
+  const originalDatabasePrepare = DatabaseSync.prototype.prepare;
+  const originalStatementSetBare = StatementSync.prototype.setAllowBareNamedParameters;
+  const originalStatementRun = StatementSync.prototype.run;
+  let capturedDatabase = null;
+  let capturedStatementFromSetBare = null;
+  let capturedStatementFromRun = null;
+
+  try {
+    Object.defineProperty(DatabaseSync.prototype, 'prepare', {
+      configurable: true,
+      writable: true,
+      value(...args) {
+        capturedDatabase = this;
+        return originalDatabasePrepare.apply(this, args);
+      },
+    });
+    Object.defineProperty(StatementSync.prototype, 'setAllowBareNamedParameters', {
+      configurable: true,
+      writable: true,
+      value(...args) {
+        capturedStatementFromSetBare = this;
+        return originalStatementSetBare.apply(this, args);
+      },
+    });
+    Object.defineProperty(StatementSync.prototype, 'run', {
+      configurable: true,
+      writable: true,
+      value(...args) {
+        capturedStatementFromRun = this;
+        return originalStatementRun.apply(this, args);
+      },
+    });
+
+    const read = store.db.prepare('SELECT revision FROM schedule_state WHERE id = 1');
+    assert.equal(read.get().revision, 0);
+    assert.equal(capturedDatabase, null);
+
+    const write = store.db.prepare(
+      "INSERT INTO audit_log (action, role, entity_id, revision, result, created_at) VALUES ('prototype-bypass', 'admin', NULL, 0, 'blocked', '2026-09-27T13:00:00.000Z')",
+    );
+    write.setAllowBareNamedParameters(true);
+    assert.equal(capturedStatementFromSetBare, null);
+
+    const before = store.db.prepare('SELECT total_changes() AS changes').get().changes;
+    assert.throws(() => write.run());
+    assert.equal(capturedStatementFromRun, null);
+    const after = store.db.prepare('SELECT total_changes() AS changes').get().changes;
+    assert.equal(after, before);
+
+    admission.enable();
+    write.run();
+    assert.equal(capturedStatementFromRun, null);
+    assert.equal(
+      store.db.prepare('SELECT total_changes() AS changes').get().changes,
+      before + 1,
+    );
+    assert.equal(capturedDatabase, null);
+  } finally {
+    Object.defineProperty(DatabaseSync.prototype, 'prepare', {
+      configurable: true,
+      writable: true,
+      value: originalDatabasePrepare,
+    });
+    Object.defineProperty(StatementSync.prototype, 'setAllowBareNamedParameters', {
+      configurable: true,
+      writable: true,
+      value: originalStatementSetBare,
+    });
+    Object.defineProperty(StatementSync.prototype, 'run', {
+      configurable: true,
+      writable: true,
+      value: originalStatementRun,
+    });
     store.close();
   }
 });
