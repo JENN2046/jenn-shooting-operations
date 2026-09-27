@@ -19,6 +19,7 @@ test('Scheduling V2 runtime composition is explicit and connects the canonical p
       authenticate: () => created.principal,
       clock: () => new Date('2026-09-23T08:00:00.000Z'),
     });
+    assert.equal(scheduling.writeAdmissionControl, store.writeAdmissionControl);
     assert.equal(scheduling.authenticate(), created.principal);
     const result = scheduling.decideProposal({
       command: {
