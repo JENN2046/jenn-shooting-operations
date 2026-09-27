@@ -977,9 +977,12 @@ function copyAttachmentsAndEvaluateParityInternal({
     let targetRootDescriptor;
     let targetBoundPath;
     let created = false;
+    let operationError = null;
+    let cleanupError = null;
     const buffer = Buffer.allocUnsafe(COPY_BUFFER_BYTES);
     const hash = createHash('sha256');
     let bytesWritten = 0;
+
     try {
       if (faultInjector) faultInjector('before_target_create', file.storedName);
       assertCandidateQuiescenceCapability(quiescenceCapability, scopeDigest);
@@ -1006,38 +1009,63 @@ function copyAttachmentsAndEvaluateParityInternal({
         fail('SOURCE_ATTACHMENT_MISMATCH');
       }
     } catch (error) {
-      if (error instanceof MigrationError) throw error;
-      fail('TARGET_ATTACHMENT_COPY_FAILED');
-    } finally {
+      operationError = error instanceof MigrationError
+        ? error
+        : new MigrationError('TARGET_ATTACHMENT_COPY_FAILED', 'INVALID_TARGET');
+    }
+
+    try {
+      closeSync(source.descriptor);
+    } catch (error) {
+      cleanupError ??= error;
+    }
+
+    if (targetDescriptor !== undefined) {
       try {
-        closeSync(source.descriptor);
-        if (targetDescriptor !== undefined) {
-          closeSync(targetDescriptor);
-          targetDescriptor = undefined;
-        }
-        if (created) {
-          if (faultInjector) {
-            faultInjector(
-              'before_target_verify',
-              file.storedName,
-              Object.freeze({ targetBoundPath }),
-            );
-          }
-          // Verify through the descriptor-bound root before releasing that root
-          // handle. A renamed/replaced pathname cannot redirect this check.
-          verifyFileBytes(
-            targetBoundPath,
-            file,
-            'TARGET_ATTACHMENT_COPY_FAILED',
-            { requireMode0600: true },
+        closeSync(targetDescriptor);
+      } catch (error) {
+        cleanupError ??= error;
+      } finally {
+        targetDescriptor = undefined;
+      }
+    }
+
+    if (created) {
+      try {
+        if (faultInjector) {
+          faultInjector(
+            'before_target_verify',
+            file.storedName,
+            Object.freeze({ targetBoundPath }),
           );
         }
-      } finally {
-        if (targetRootDescriptor !== undefined) {
-          closeSync(targetRootDescriptor);
-          targetRootDescriptor = undefined;
-        }
+        // Verify through the descriptor-bound root before releasing that root
+        // handle. A renamed/replaced pathname cannot redirect this check.
+        verifyFileBytes(
+          targetBoundPath,
+          file,
+          'TARGET_ATTACHMENT_COPY_FAILED',
+          { requireMode0600: true },
+        );
+      } catch (error) {
+        cleanupError ??= error;
       }
+    }
+
+    if (targetRootDescriptor !== undefined) {
+      try {
+        closeSync(targetRootDescriptor);
+      } catch (error) {
+        cleanupError ??= error;
+      } finally {
+        targetRootDescriptor = undefined;
+      }
+    }
+
+    if (operationError) throw operationError;
+    if (cleanupError) {
+      if (cleanupError instanceof MigrationError) throw cleanupError;
+      throw new MigrationError('TARGET_ATTACHMENT_COPY_FAILED', 'INVALID_TARGET');
     }
 
     fsyncDirectory(targetRoot.realPath);
