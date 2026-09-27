@@ -121,6 +121,7 @@ export function createOperationsServer({
   kioskAllowedBriefHosts = [],
   schedulingAuthenticate,
   schedulingAllowedBriefHosts = [],
+  writeAdmissionMode = 'enabled',
 }) {
   const effectiveClock = clock ?? (() => new Date());
   const store = new ScheduleStore({
@@ -132,6 +133,7 @@ export function createOperationsServer({
     orphanCleanupMode,
     orphanCleanupEnableEpoch,
     orphanCleanupDomain,
+    writeAdmissionMode,
   });
   store.cleanupOrphanUploads();
   const kiosk = kioskAuthenticate === undefined
@@ -151,7 +153,13 @@ export function createOperationsServer({
         clock: effectiveClock,
         allowedBriefHosts: schedulingAllowedBriefHosts,
       });
-  const server = createServer(createHttpApp({ store, tokens, kiosk, scheduling }));
+  const server = createServer(createHttpApp({
+    store,
+    tokens,
+    kiosk,
+    scheduling,
+    writeAdmissionMode,
+  }));
   const cleanupTimer = cleanupIntervalMs > 0
     ? setInterval(() => {
         try {
@@ -191,6 +199,7 @@ if (invokedDirectly) {
   const orphanCleanupMode = process.env.ORPHAN_CLEANUP_MODE || 'inherit';
   const orphanCleanupEnableEpoch = process.env.ORPHAN_CLEANUP_ENABLE_EPOCH || undefined;
   const orphanCleanupDomain = process.env.ORPHAN_CLEANUP_DOMAIN || undefined;
+  const writeAdmissionMode = process.env.WRITE_ADMISSION_MODE || 'enabled';
   const { server } = createOperationsServer({
     databasePath,
     uploadRoot,
