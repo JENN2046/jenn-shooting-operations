@@ -1,0 +1,1086 @@
+# WO-06E：Greenfield Production Authority
+
+- Parent authority: `docs/operations/production-change-manifest.v1.json`
+- Parent manifest digest: `sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b`
+- Supplement: `docs/operations/production-greenfield-authority.v1.json`
+- Deployment mode: `GREENFIELD_NO_EXISTING_SOURCE`
+- Status: `GREENFIELD_WRITE_FENCE_IMPLEMENTATION_PASS / FINAL_DOCS_HEAD_VALIDATION_PENDING / PRODUCTION_AUTHORIZATION_NOT_REQUESTED`
+
+## Why this supplement exists
+
+Real production binding established that this is the first Jenn Shooting Operations production deployment. The bound production host contains no prior Jenn Shooting Operations V1 production database, upload root, running V1 API, production route, or prior production authority that must be migrated or demoted.
+
+The frozen WO-06D base manifest models an existing-source migration/cutover path. It therefore requires PROD-09, source quiescence, attachment-copy LIVE_PROVIDER authority, final source parity, source writer barriers, old-source demotion, and switch recovery. Those requirements remain valid for an existing-source migration, but they are not truthful prerequisites for this greenfield deployment.
+
+This supplement is digest-bound to the unchanged migration manifest. It does not rewrite or weaken Stage 2, Stage 3, PROD-09, the attachment-copy engine, source-barrier controls, or the existing-source cutover contract.
+
+## Bound production target
+
+```text
+provider             = Tencent Cloud CVM
+instanceId           = ins-mi85f3my
+instanceName         = AGENTS-OS
+publicIPv4           = 159.75.139.246
+privateIPv4          = 172.16.0.12
+region               = ap-guangzhou
+zone                 = ap-guangzhou-7
+OS                   = Ubuntu 24.04.4 LTS
+architecture         = amd64
+applicationBind      = 127.0.0.1:3800
+applicationDirectory = /mnt/datadisk0/apps/jenn-shooting-operations
+dataVolume           = jenn-shooting-operations_shooting_data
+volumeMountpoint     = /mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data
+backingDevice        = /dev/vdb
+filesystem           = ext4
+```
+
+Public hostname, reverse-proxy route, container name, and cloud security-group control-plane facts remain unresolved and are not invented by this supplement.
+
+## Completed production acceptance
+
+The following bounded work has completed:
+
+1. PROD-01 target read-only binding:
+   - Tencent metadata matched `159.75.139.246` to `ins-mi85f3my`;
+   - Docker, disk, port, Nginx/TLS and host firewall facts were read without mutation.
+2. PROD-02 isolated storage:
+   - application directory created on `/dev/vdb`;
+   - dedicated empty Docker volume created on `/dev/vdb`;
+   - no container, route or token was created as part of PROD-02.
+3. Phase-B target-volume acceptance:
+   - Node `v24.21.0` in an isolated one-shot container;
+   - case-sensitive filename semantics;
+   - NFC/NFD names remain distinct;
+   - Linux `/proc/self/fd` exclusive target creation works;
+   - SQLite WAL/SHM and rollback-journal families behave on the target ext4 volume;
+   - no active bind-mount alias references the target volume after acceptance;
+   - disposable probe files, container and pulled Node image were removed;
+   - target volume returned to empty state.
+
+## No-existing-source evidence
+
+Jenn confirmed this is the first formal production deployment and there is no old Jenn Shooting Operations production data to preserve or migrate.
+
+Read-only discovery on the bound host found no V1 source containing the required `schedule_state`, `operations`, `audit_log`, and `uploads` tables, no corresponding upload tree, and no running Jenn Shooting Operations V1 API. Other databases belonging to New API, VCP, Photo Studio OS, Docker and unrelated tooling are not treated as source candidates.
+
+Therefore the following base-manifest gates remain blocked in the migration contract but are not applicable to this greenfield deployment:
+
+- `PRODUCTION_DATA_MIGRATION`
+- `PRODUCTION_IMPORT_SOURCE_CONSISTENCY`
+- `PRODUCTION_ATTACHMENT_COPY_CAPABILITY`
+- `CUTOVER_SOURCE_CONSISTENCY`
+- `CUTOVER_SWITCH_RECOVERY`
+- `CUTOVER_TARGET_WRITE_FENCE_CAPABILITY`
+
+No `*_VERIFIED` attachment-copy receipt or LIVE_PROVIDER mint is fabricated.
+
+## Greenfield replacements
+
+The supplement replaces only the current deployment-path assumptions that unconditionally require an existing source:
+
+- container start requires verified PROD-02 / PROD-03 / PROD-04, fresh target-SQLite absence, no-existing-source proof, cleanup disabled, and the production deployment gate;
+- the required greenfield pre-activation forward chain omits PROD-09 and all write-capable integration enablement;
+- conditional firewall/security-group work references the real `PROD-08-FIREWALL-SECURITY-GROUP` action ID and is tracked separately from the required chain;
+- `PROD-10-ENABLE-VCP-REMOTE-SYNC` and `PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE` are post-activation integrations: they remain disabled before activation and require `GREENFIELD_ACTIVATION_COMPLETION` plus their unchanged base wiring/authorization gates before they can be separately authorized;
+- greenfield activation uses a new exact action contract `PROD-GF-13-ACTIVATE` rather than the source-migration `PROD-13-CUTOVER-SWITCH`; its rollback cannot derive VCP/Kiosk disable authority because those actions have not yet run;
+- greenfield cleanup restoration uses `PROD-GF-14-RESTORE-ORPHAN-CLEANUP` rather than pretending post-migration attachment parity exists.
+
+The original PROD-09 / PROD-13 / PROD-14 contracts remain unchanged for an existing-source deployment.
+
+## Authorization boundary
+
+```text
+authorization.status          = FROZEN_NOT_REQUESTED
+requestedActionIds             = []
+approvedActionIds              = []
+requestableActionIds           = []
+blanketApprovalAllowed         = false
+nextActionId                   = PROD-03-GENERATE-INSTALL-TOKENS
+nextActionRequiresAuthorization = true
+```
+
+This authority definition does not grant PROD-03 or any later production mutation. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
+
+## Remaining facts before later gates
+
+- exact container name;
+- exact public hostname / DNS binding;
+- exact reverse-proxy route;
+- TLS binding for that route;
+- Tencent Cloud security-group control-plane fact if a change is actually required;
+- built image digest;
+- greenfield activation evidence;
+- post-activation VCP/Kiosk wiring and their separately authorized real acceptance;
+- greenfield cleanup restoration evidence.
+
+No source migration, production data copy, public route change, token generation, container start, integration enablement, or production activation is authorized by this document.
+
+## Codex review correction
+
+Independent review of exact head `de487b8c5cc65635a2142ffd0b52fac61b8191e4` found four valid authority defects. The implementation correction preserves the unchanged base migration manifest and fixes all four:
+
+1. Parent-manifest binding is now derived inside the greenfield validator from the supplied `baseManifest`; callers can no longer pair a modified manifest with a trusted digest argument.
+2. PROD-10 and PROD-11 are removed from the pre-activation forward chain. Greenfield activation requires proof that those write-capable integrations remain disabled; they become separately authorizable only after `GREENFIELD_ACTIVATION_COMPLETION`.
+3. Conditional firewall work now references the actual base action ID `PROD-08-FIREWALL-SECURITY-GROUP` in a separate conditional-action set.
+4. The authority format rejects every undeclared top-level field, preventing alternate action/authorization surfaces from being embedded in an otherwise valid supplement.
+
+The correction also removes VCP/Kiosk rollback IDs and enablement proof from `PROD-GF-13-ACTIVATE`, because those integrations no longer run before activation.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 8bd73a419b24ae7fc0a3b340806edcac3cab956c
+workflowRun        = 36318045627 (#130)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 736
+pass               = 735
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:faaf177bfe562b9306fb6f1728d957f2c731ebdd88d7c4e5a44583dd6999b1fc
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+The failed runs immediately before #130 belong to intentionally incomplete intermediate commits while validator, authority JSON, CLI and regressions were being aligned. They are superseded by exact-head run #130 and are not acceptance evidence.
+
+No production mutation was performed by this review correction.
+
+## Second Codex review correction
+
+Independent review of exact head `ddc54cb23d4b0c100278bb4df1281d5eb9acbaca` found two additional valid findings:
+
+1. **P1 / staging-principal writes** — the unchanged PROD-07 contract permits bounded staging principals to write before cutover. Moving PROD-10/11 post-activation was therefore insufficient by itself.
+2. **P2 / malformed nested authority values** — JSON-valid malformed fields such as a null forward chain or null activation action could reach unconditional property access and throw instead of returning a fail-closed validation result.
+
+Both are corrected without changing the frozen existing-source migration manifest.
+
+### Greenfield pre-activation write fence
+
+The runtime now has an explicit write-admission mode. Greenfield pre-activation deployment requires the disabled mode from PROD-05 through PROD-GF-13 read-only verification.
+
+When disabled:
+
+- every mutating HTTP method is rejected with a stable low-disclosure `WRITE_ADMISSION_DISABLED` response before business/store dispatch;
+- V1 direct store mutation entrypoints `replaceSnapshot`, `submitRequest`, and `saveUpload` reject before mutation;
+- PROD-07 bounded staging-principal writes are forbidden on the greenfield path even though the unchanged migration-path PROD-07 contract permits them;
+- PROD-10 / PROD-11 remain disabled until after greenfield activation;
+- orphan cleanup must already be disabled and drained; the server refuses to start in pre-activation write-disabled mode if orphan cleanup is enabled or inherited;
+- background writer inventory must be zero;
+- uncontrolled direct-storage bypass writer inventory must be zero;
+- no other container may mount the target volume;
+- only the initial empty-target schema and revision-zero bootstrap before the service begins listening is admitted as a pre-activation storage mutation.
+
+Activation keeps this fence held while routed TLS, storage identity and read-only service checks run. Production write admission is enabled only after those checks, using the exact same image and target volume, followed by another loopback health and storage-identity check. PROD-10 / PROD-11 remain separately authorized post-activation actions.
+
+The existing `CUTOVER_TARGET_WRITE_FENCE_CAPABILITY` remains unchanged and blocked in the base existing-source contract. The greenfield fence is a separate first-deployment admission boundary and does not claim to implement the source/target cross-process cutover fence.
+
+### Validator shape hardening
+
+The greenfield validator now validates all nested array/object shapes before any `.includes`, mapping, or nested property access. Malformed but JSON-valid direct inputs return:
+
+```text
+ok = false
+code = GREENFIELD_SCHEMA_INVALID
+digest = absent
+```
+
+They do not throw to direct consumers.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 25f9ac5f615ee00e8a8c366613cf068c0ee4aa83
+workflowRun        = 36319432367 (#156)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 741
+pass               = 740
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:4dae92d329628c7b4736bfdfafe7c8f432810e6c9f00059bbd201f47787ad24a
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+Intermediate failed workflow runs during the multi-file correction are not acceptance evidence. Exact-head run #156 supersedes them.
+
+No production token, container, route, DNS, TLS, firewall/security-group, database import, attachment copy, or production activation was performed by these corrections.
+
+
+## Third Codex review correction
+
+Independent review of exact head `0bde15c9db67061842c3f601e480941bc120de83` found three further valid findings:
+
+1. **P1 / admission transition ordering** — restarting a container with write admission already enabled before health/storage re-verification created a write window.
+2. **P2 / cleanup lifetime interlock** — cleanup could be re-enabled in-process while write admission remained disabled.
+3. **P2 / malformed base-manifest entries** — direct callers could pass arrays containing null or malformed entries and trigger exceptions during map construction.
+
+All three are corrected without changing the frozen existing-source manifest.
+
+### Atomic in-process admission transition
+
+Greenfield activation no longer restarts an enabled container.
+
+The verified service process starts and remains with write admission disabled through:
+
+- loopback health verification;
+- target storage identity verification;
+- routed TLS verification;
+- route promotion;
+- read-only post-activation verification.
+
+Only after every required read-only verification succeeds while the same process, route, image, target volume and disabled fence remain unchanged does activation perform one explicit in-process admission transition.
+
+For the direct production process, the transition is triggered by `SIGUSR2`. The process owns one shared `writeAdmissionControl` used by both HTTP and V1 store mutation boundaries. The transition is one-way and does not restart the container or change the route.
+
+`/healthz` keeps its existing JSON body contract unchanged and exposes current admission state only through the read-only `X-Write-Admission` response header.
+
+### Cleanup lifetime interlock
+
+While write admission is disabled:
+
+- `orphanCleanupControl.enable` returns `WRITE_ADMISSION_DISABLED`;
+- periodic/manual non-dry-run cleanup returns `WRITE_ADMISSION_DISABLED` before mutation;
+- startup requires orphan cleanup to be disabled;
+- enabling write admission does **not** automatically restore cleanup.
+
+Cleanup remains disabled until the separately authorized Greenfield cleanup-restoration action.
+
+### Base-manifest nested shape admission
+
+The exported Greenfield validator now structurally validates every base-manifest gate/action entry and authorization array before mapping or dereferencing them.
+
+Malformed direct inputs such as:
+
+```text
+gates = [null]
+actions = [null]
+authorizationPacket.requestedActionIds = null
+```
+
+return:
+
+```text
+ok = false
+code = BASE_MANIFEST_SCHEMA_INVALID
+digest = absent
+```
+
+and do not throw.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 95b36e97fad50563a63b81a21fbc98d43827f176
+workflowRun        = 36320452632 (#167)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 744
+pass               = 743
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+Intermediate failed workflow runs while the multi-file correction was incomplete are not acceptance evidence. Exact-head run #167 supersedes them.
+
+No production token, container, route, DNS, TLS, firewall/security-group, database import, attachment copy, admission transition, or production activation was performed by these corrections.
+
+
+## Fourth Codex review correction
+
+Independent review found one additional valid P2 on direct `ScheduleStore` construction: the server-level admission/cleanup interlock could be bypassed by consumers that instantiate the store directly.
+
+The invariant is now owned by `ScheduleStore` itself.
+
+Before any writable filesystem or database side effect, the constructor now:
+
+1. normalizes/accepts the supplied or newly created write-admission control;
+2. rejects invalid admission-control objects;
+3. if admission is disabled and the store is writable, requires `orphanCleanupMode = disabled`;
+4. only after those checks may it create the database parent, cleanup control, upload directories, SQLite connection, schema, or recovery state.
+
+Direct consumers therefore cannot combine disabled write admission with inherited/enabled cleanup and cannot reach staged-cleanup recovery in that invalid state.
+
+A regression constructs `ScheduleStore` directly with a shared disabled admission control and verifies both `inherit` and `enabled` cleanup modes throw before even creating the target database directory. A direct store with disabled admission plus disabled cleanup remains valid and initializes only the allowed revision-zero bootstrap.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 5c46f7b0f0705ee636ee44e4335aa79269cd0f79
+workflowRun        = 36320960503 (#170)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 745
+pass               = 744
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+No production side effect was performed by this correction.
+
+
+## Fifth Codex review correction
+
+Independent review found one additional valid P1: direct HTTP composition could create a second enabled admission control even when a supplied `ScheduleStore` already owned a disabled control, allowing V2 handlers to bypass the pre-dispatch fence.
+
+The HTTP composition boundary now treats the store-owned admission control as authoritative.
+
+`createHttpApp` resolves admission in this order:
+
+1. `store.writeAdmissionControl`;
+2. an explicitly supplied HTTP control only when the store has no control;
+3. a standalone fallback only for store-like test/composition objects that expose no control.
+
+If a store-owned control exists and the caller supplies a different explicit control, composition fails closed with `write admission control must match store control`.
+
+The HTTP boundary also validates that the selected control exposes the required admission interface before returning the app.
+
+A regression directly constructs a real write-disabled `ScheduleStore`, passes it to `createHttpApp({ store, kiosk })` without supplying a separate admission control, and proves:
+
+- `/healthz` reports the disabled admission state through `X-Write-Admission`;
+- a V2 run-event POST is rejected with `WRITE_ADMISSION_DISABLED` before the injected V2 handler is called;
+- attempting to override the store with a different enabled admission control throws before composition.
+
+This closes the HTTP/store admission split-brain for direct consumers.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 23ce6af2663ca90c6e0ddc82e48539242e536b2c
+workflowRun        = 36322711683 (#173)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 746
+pass               = 745
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+No production side effect was performed by this correction.
+
+
+## Sixth Codex review correction
+
+Independent review found one additional valid P1: an injected Kiosk or Scheduling V2 application could retain adapters over a different `ScheduleStore` while `createHttpApp` selected another admission control, creating a V2 admission split-brain.
+
+The composition contract now binds every write-capable surface to one admission authority.
+
+### V2 application authority
+
+`createKioskV2Application` and `createSchedulingV2Application` now require their `ScheduleStore` to expose a valid write-admission control and return that exact control on the application object.
+
+### HTTP composition authority
+
+`createHttpApp` collects the controls exposed by:
+
+- the supplied store;
+- write-capable Kiosk application;
+- write-capable Scheduling application;
+- any explicit HTTP admission control.
+
+Every supplied control must be the **same object**. If any differ, composition fails closed with `all write-capable surfaces must share admission control`.
+
+A write-capable injected Kiosk or Scheduling application that exposes no admission control is rejected before the HTTP app is returned.
+
+Only when no write-capable/store authority exists may the standalone composition fallback create a local control.
+
+### Regression coverage
+
+New regressions prove:
+
+- Kiosk and Scheduling factories expose the exact `ScheduleStore.writeAdmissionControl` object;
+- a disabled V2 application composed with a store-like HTTP object that has no control causes HTTP to select the application's disabled authority and reject POST before V2 dispatch;
+- composing that same disabled V2 application with a different enabled `ScheduleStore` fails during composition;
+- existing HTTP fixture applications explicitly bind their fake write handlers to one shared enabled test control.
+
+This closes admission split-brain across Store / HTTP / Kiosk / Scheduling composition surfaces.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 165056d67d97d06416328f5fceea9b885347ae77
+workflowRun        = 36323202621 (#180)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 748
+pass               = 747
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+No production side effect was performed by this correction.
+
+
+## Seventh Codex review correction
+
+Independent review found one additional valid P1: exposing V2 application admission authority at composition time was not sufficient for direct consumers that call `kiosk.applyRunEvent` or `scheduling.decideProposal` without HTTP.
+
+The V2 application factories now enforce the bound admission control inside their mutation methods before dispatching to any SQLite-backed adapter.
+
+### Direct Kiosk mutation fence
+
+`createKioskV2Application` constructs the underlying run-event use case but wraps the exported `applyRunEvent` method.
+
+When the bound `ScheduleStore.writeAdmissionControl` is disabled:
+
+```text
+applyRunEvent(...)
+=> ok = false
+=> code = WRITE_ADMISSION_DISABLED
+=> underlying SQLite run-event adapter is not invoked
+```
+
+### Direct Scheduling mutation fence
+
+`createSchedulingV2Application` checks the same bound control at the first line of `decideProposal`.
+
+When disabled, neither accept nor reject logic reaches the proposal store or projection refresh path.
+
+### Stable low-disclosure V2 failure surface
+
+`WRITE_ADMISSION_DISABLED` is recognized as a 503 failure by both Kiosk and Scheduling HTTP result mappings. The Kiosk run-event result schema also admits the low-disclosure failure code.
+
+### Regression coverage
+
+Direct factory tests use real disabled `ScheduleStore` instances and call the mutation methods without HTTP. They capture SQLite `total_changes()` before and after the call and prove:
+
+- result is exactly `{ ok:false, code:WRITE_ADMISSION_DISABLED }`;
+- SQLite change count is unchanged;
+- the bound application control remains identical to the store control.
+
+This closes the direct V2 application mutation bypass in addition to the existing HTTP composition fence.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = af9e5682696dea7a78f8b085424bd01d0764cd93
+workflowRun        = 36323703201 (#188)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 750
+pass               = 749
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+No production side effect was performed by this correction.
+
+
+## Eighth Codex review correction
+
+Independent review found two additional valid findings on the in-process write boundary.
+
+### P1: public ScheduleStore write helpers
+
+`recordOperation` and `recordAudit` were still public unconditional SQLite write methods. A caller holding the store returned by `createOperationsServer` could invoke them directly while admission was disabled.
+
+The store boundary now enforces admission on those helpers before any INSERT.
+
+The same correction also hardens two adjacent public surfaces:
+
+- `recoverStagedUploadCleanup` returns `WRITE_ADMISSION_DISABLED` before any restore/delete mutation while admission is disabled;
+- `ScheduleStore.writeAdmissionControl` is installed as a non-writable, non-configurable authority property at construction, so callers cannot swap in an enabled control after startup.
+
+Regression coverage directly calls `recordOperation`, `recordAudit`, and staged recovery on a disabled store, verifies stable admission failure, verifies SQLite `total_changes()` is unchanged, and proves both assignment and property redefinition of the admission control fail.
+
+### P2: V2 wrappers must capture admission authority once
+
+Kiosk and Scheduling wrappers previously exposed one control but consulted `store.writeAdmissionControl` again at mutation time. A mutable store-like object could therefore swap that property after factory construction and create a split between the application’s advertised authority and its mutation guard.
+
+Both factories now:
+
+1. read and validate the store admission control once at construction;
+2. capture that exact object in a closure constant;
+3. expose that same captured object on the returned application;
+4. use only that captured object for every mutation admission check.
+
+Hostile regressions construct each V2 application over a deliberately mutable store-like object, replace the object’s control with an enabled control after construction, and prove the application still uses the originally captured disabled control and performs zero SQLite changes.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 40750cea50dcb8cb598f2ec31367cd2d00a2cff4
+workflowRun        = 36324285941 (#194)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 753
+pass               = 752
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+No production side effect was performed by this correction.
+
+
+## Ninth Codex review correction
+
+Independent review found one additional valid P1: even after store/helper/application fences, the public `store.db` property still exposed the raw writable `DatabaseSync` handle and therefore allowed direct SQLite writes that bypassed the admission authority.
+
+The raw database handle is now private inside `ScheduleStore`.
+
+### Admission-checked database facade
+
+`ScheduleStore` owns the actual `DatabaseSync` connection in a private field. The public `store.db` value is now a frozen minimal facade used by existing adapters/tests.
+
+The facade exposes only:
+
+- `prepare`;
+- `exec`;
+- `serialize`;
+- read-only connection-state getters.
+
+It does **not** expose SQLite policy/escape surfaces such as:
+
+- `setAuthorizer`;
+- `deserialize`;
+- `createSession`;
+- `createTagStore`;
+- `loadExtension`.
+
+### SQLite-native admission enforcement
+
+Node 24's SQLite authorizer is used as the statement classifier/execution guard rather than parsing SQL text in JavaScript.
+
+For `prepare`:
+
+1. a temporary authorizer observes the SQLite action codes while the statement is compiled;
+2. the statement is classified as read-only or mutating;
+3. compilation is allowed so V2 adapters can be constructed while pre-activation admission remains disabled;
+4. the returned Statement wrapper checks the live admission control before every execution method (`run/get/all/iterate`) and rejects mutating statements while disabled.
+
+For `exec`:
+
+- the authorizer is installed for the actual execution;
+- while admission is disabled, only the read-safe SQLite action set is admitted;
+- INSERT/UPDATE/DELETE/DDL/PRAGMA/ATTACH and other non-read actions receive `SQLITE_DENY`;
+- after the one-way admission enable transition, the same facade permits normal production writes.
+
+This preserves pre-activation read transactions and V2 adapter construction without exposing a raw writable database handle.
+
+### Regression coverage
+
+The hostile raw-database regression proves that, while admission is disabled:
+
+- SELECT remains available;
+- `prepare(INSERT).run()` is rejected;
+- direct `exec(UPDATE ...)` is rejected;
+- direct mutating PRAGMA is rejected;
+- SQLite `total_changes()` remains unchanged;
+- the facade exposes no authorizer/deserialization/session/extension/tag-store escape method.
+
+After the same admission control is explicitly enabled, the exact same facade can perform an admitted write, proving the boundary follows the live admission authority rather than permanently converting the database to read-only mode.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 41decc2bd79b43bd4ade858c6dddcb12f203f8cd
+workflowRun        = 36326012272 (#198)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 754
+pass               = 753
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+The failed intermediate runs #196 and #197 used the earlier permanent-authorizer variant, which blocked V2 adapter statement preparation. They are superseded by exact-head run #198 and are not acceptance evidence.
+
+No production side effect was performed by this correction.
+
+
+## Tenth Codex review correction
+
+Independent review found one additional valid P1: the admission-checked prepared statement was still implemented as a Proxy over the raw `StatementSync`. Because caller-defined properties were forwarded to the raw target, a consumer could install an `unwrap()` method and recover the unwrapped statement, then call `run()` without the admission guard.
+
+The Proxy has been removed entirely.
+
+### Frozen statement capability facade
+
+`store.db.prepare()` now returns a dedicated null-prototype, frozen, non-extensible facade rather than a Proxy.
+
+The facade exposes only an explicit allowlist of supported statement capabilities:
+
+- `run`
+- `get`
+- `all`
+- `iterate`
+- `columns`
+- named-parameter configuration methods
+- read-only `sourceSQL` / `expandedSQL` getters
+
+The raw `StatementSync` object remains closure-private.
+
+Mutating execution methods continue to consult the same live admission control before touching SQLite.
+
+Because the facade:
+
+- has no prototype;
+- is frozen;
+- is non-extensible;
+- never binds arbitrary caller-visible function properties to the raw statement;
+
+`Object.defineProperty`, assignment, prototype replacement, or prototype injection cannot create an unwrap path.
+
+### Exploit regression
+
+The exact reported exploit is covered:
+
+```text
+Object.defineProperty(stmt, 'unwrap', {
+  value() { return this; }
+})
+```
+
+is rejected.
+
+The regression also proves:
+
+- `Object.getPrototypeOf(stmt) === null`;
+- the facade is frozen and non-extensible;
+- assignment of an `unwrap` property fails;
+- `Object.setPrototypeOf` fails;
+- the mutating statement still cannot run while admission is disabled;
+- SQLite `total_changes()` remains unchanged.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = a7e695b05c71254edc82725268eed7fda3b8a1ce
+workflowRun        = 36326762035 (#201)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 755
+pass               = 754
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+No production side effect was performed by this correction.
+
+
+## Eleventh Codex review correction
+
+Independent review found two additional valid P1 prototype-capture paths:
+
+1. `DatabaseSync.prototype` methods could be replaced after module import; dynamic database method lookup would then supply the closure-private raw database as `this`.
+2. `StatementSync.prototype` methods could likewise be replaced; dynamic statement method lookup would supply the raw statement as `this`, allowing the caller to retain and reuse it outside the admission facade.
+
+The SQLite boundary now captures its native capabilities exactly once when `store.mjs` is evaluated.
+
+### Captured DatabaseSync capabilities
+
+Module initialization captures the native function objects for:
+
+- `prepare`
+- `exec`
+- `setAuthorizer`
+- `serialize`
+- `close`
+
+All later database calls use these captured function objects through the captured `Reflect.apply`. Runtime reads from `DatabaseSync.prototype` are not used by the admission facade, store bootstrap, schema/revision-zero initialization, or close path.
+
+The ScheduleStore bootstrap itself now runs through an internal bootstrap database facade that uses the same captured native capabilities. This means prototype replacement performed **after module import but before ScheduleStore construction** cannot capture the raw database during PRAGMA/schema/revision-zero initialization.
+
+### Captured StatementSync capabilities
+
+Module initialization also captures the native function objects for:
+
+- `run`
+- `get`
+- `all`
+- `iterate`
+- `columns`
+- named-parameter configuration methods
+
+The frozen statement facade invokes only these captured function objects. It never performs a runtime method lookup on `StatementSync.prototype`.
+
+Optional SQLite state/SQL-inspection properties that are not prototype methods in Node 24.21.0 and are unused by this repository were deliberately omitted from the facade rather than reintroducing dynamic prototype reads.
+
+### Hostile prototype-capture regression
+
+The regression patches `DatabaseSync.prototype.prepare/exec/setAuthorizer/close` and `StatementSync.prototype.setAllowBareNamedParameters/run` **before constructing ScheduleStore**.
+
+Each hostile wrapper records its `this` target if invoked.
+
+The test proves:
+
+- ScheduleStore bootstrap succeeds without invoking any hostile DatabaseSync wrapper;
+- public database reads/writes continue to use captured native functions;
+- named-parameter statement configuration does not invoke the hostile StatementSync wrapper;
+- disabled mutation remains blocked with zero SQLite changes;
+- the admitted post-enable mutation succeeds without invoking the hostile StatementSync wrapper;
+- store close uses the captured native close function;
+- every hostile raw-database/raw-statement capture variable remains null.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = b03e2700293c3ee129438d2d143da324630d4ac1
+workflowRun        = 36327922573 (#208)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 756
+pass               = 755
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+Intermediate runs #203-#205 exercised incomplete native-capability snapshots and are superseded by exact-head run #208. They are not acceptance evidence.
+
+No production side effect was performed by this correction.
+
+
+## Twelfth Codex review correction
+
+Independent review found one additional valid P1: the hardened database facade had removed the native transaction-state signal required by the Outbox repository. As a result, factory-built Kiosk completion could enter a real `BEGIN IMMEDIATE` transaction while `db.isTransaction` appeared absent/falsy, causing `OUTBOX_TRANSACTION_REQUIRED` and rolling the completion back as `INTERNAL_ERROR`.
+
+The facade now preserves the trustworthy native transaction-state signal without reopening prototype dispatch.
+
+### Native instance transaction-state getter
+
+Node 24 exposes `DatabaseSync.isTransaction` as an own, read-only native getter on each database instance.
+
+At ScheduleStore construction, the facade obtains that **instance-owned, non-configurable native getter** using the module-load-captured `Object.getOwnPropertyDescriptor`.
+
+The public facade exposes only:
+
+```text
+get isTransaction() {
+  return capturedNativeGetter.call(privateDatabase)
+}
+```
+
+through the already captured `Reflect.apply`.
+
+No runtime lookup through `DatabaseSync.prototype` is used.
+
+### Outbox transaction regression
+
+A real `createSqliteOutboxRepositoryV1` is constructed over `ScheduleStore.db`.
+
+The regression proves:
+
+- outside a transaction, `db.isTransaction === false` and enqueue returns `OUTBOX_TRANSACTION_REQUIRED`;
+- after `BEGIN IMMEDIATE`, `db.isTransaction === true`;
+- the same repository enqueues successfully with `OUTBOX_ENQUEUED`;
+- after `COMMIT`, `db.isTransaction === false`;
+- a subsequent `BEGIN IMMEDIATE / ROLLBACK` toggles true → false correctly.
+
+### Factory-built Kiosk completion regression
+
+The repository's existing grouped-run fixture is seeded into a file-backed database, reopened through `ScheduleStore`, and then exercised through `createKioskV2Application`.
+
+The test performs:
+
+```text
+start
+→ complete
+→ notification_outbox enqueue
+```
+
+through the admission-checked database facade.
+
+It proves:
+
+- the start succeeds;
+- the complete succeeds with `resultingState = completed`;
+- the transaction is closed again after each application call;
+- the completion notification is persisted in `notification_outbox` with the expected outbox id, aggregate revision, route key and pending status.
+
+This directly covers the failure path reported by review rather than only testing the facade getter in isolation.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = dca148e74450c2829d81e4460ecf8a6aa003d7a9
+workflowRun        = 36328772929 (#213)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 758
+pass               = 757
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+No production side effect was performed by this correction.
+
+
+## Thirteenth Codex review correction
+
+Independent review found one additional valid P1: SQLite authorizer classification still called `SQLITE_ADMISSION_READ_ACTIONS.has(...)` dynamically. An in-process caller could replace `Set.prototype.has` after `store.mjs` loaded and force every SQLite authorizer action to appear read-only, allowing the public database facade to misclassify prepared writes and direct `exec` writes while admission was disabled.
+
+The admission classifier now captures the native `Set.prototype.has` function exactly once when `store.mjs` is evaluated.
+
+All SQLite read-action membership checks now use:
+
+```text
+captured Reflect.apply(
+  captured Set.prototype.has,
+  SQLITE_ADMISSION_READ_ACTIONS,
+  [actionCode]
+)
+```
+
+There is no runtime dispatch through mutable `Set.prototype.has` in either:
+
+- prepared-statement write classification; or
+- direct `exec` authorizer enforcement.
+
+### Hostile regression
+
+A disabled ScheduleStore is constructed normally. The test then replaces `Set.prototype.has` with a hostile implementation that returns `true` for every membership check and proves the replacement is active.
+
+While that hostile replacement is installed:
+
+- a prepared INSERT is still classified as mutating and cannot execute;
+- direct `exec(INSERT ...)` is rejected;
+- direct `exec(UPDATE ...)` is rejected;
+- SQLite `total_changes()` remains unchanged;
+- the canonical schedule snapshot revision remains unchanged.
+
+This directly covers the reported live-facade bypass without widening the PR into unrelated same-process sandboxing.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 0525ff978c737c1023dadd7646e498c9d75d79d9
+workflowRun        = 36330358691 (#218)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 759
+pass               = 758
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+Intermediate runs #216 and #217 exercised over-broad hostile test timing/assertions and are superseded by exact-head run #218. They are not acceptance evidence.
+
+No production side effect was performed by this correction.
+
+
+## Fourteenth Codex review correction
+
+Independent review found two additional valid P1s in the admission authority itself.
+
+### P1: mutable String normalization primitives
+
+`normalizeWriteAdmissionMode` previously used runtime `String(...).trim().toLowerCase()` dispatch. Same-realm code could replace `globalThis.String` or the referenced string prototype methods after module evaluation but before server construction and force a configured `disabled` mode to normalize as `enabled`.
+
+The admission module now captures at module evaluation:
+
+- `String`;
+- `String.prototype.trim`;
+- `String.prototype.toLowerCase`;
+- `Reflect.apply`.
+
+Normalization uses only those captured primitives. The two-mode admission check no longer depends on `Set.prototype.has`; it compares directly against the frozen semantic values `enabled` and `disabled`.
+
+A hostile regression replaces `globalThis.String`, `String.prototype.trim`, and `String.prototype.toLowerCase` with implementations that all try to return `enabled`, then constructs a control with `initialMode: disabled`. The resulting control remains disabled with transition count zero.
+
+### P1: mutable Object.freeze
+
+The control factory previously called runtime `Object.freeze`. Same-realm code could replace it after module evaluation and receive a mutable admission control, then overwrite `isDisabled` or `enable` without the audited transition.
+
+The module now captures native `Object.freeze` once at module evaluation and uses that captured function for:
+
+- the public control object;
+- status snapshots;
+- enable receipts;
+- already-enabled receipts;
+- `writeAdmissionFailure` responses.
+
+The hostile regression replaces runtime `Object.freeze` with a no-op before constructing a disabled control and proves:
+
+- the returned control remains frozen;
+- status/failure responses remain frozen;
+- attempts to replace `isDisabled` or `enable` throw;
+- the control remains disabled with transition count zero;
+- the only successful state change is the original captured `enable` function, which advances transition count exactly once.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 737e2abe0166578cd5b3bd1004eb1aeadf34e98d
+workflowRun        = 36331091273 (#222)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 761
+pass               = 760
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+Intermediate run #221 failed only because the new freeze regression omitted the existing `writeAdmissionFailure` import; it is superseded by exact-head run #222 and is not acceptance evidence.
+
+No production side effect was performed by this correction.
+
+
+## Fifteenth Codex review correction
+
+Independent review found one additional valid P1: `ScheduleStore` still exposed the raw filesystem rename function as public `store.renameFile`. A caller holding the returned store could therefore mutate database/upload/cleanup-control paths directly without consulting write admission.
+
+The raw rename capability is now private to `ScheduleStore`.
+
+### Private filesystem mutation capability
+
+The store now declares a private `#renameFile` field.
+
+Construction still accepts the existing test seam:
+
+```text
+fileOperations.rename
+```
+
+or defaults to native `renameSync`, but the selected function is stored only in `#renameFile`.
+
+All cleanup/recovery internals use `this.#renameFile(...)`.
+
+The returned store no longer exposes:
+
+```text
+store.renameFile
+```
+
+or any equivalent public rename method.
+
+### Regression coverage
+
+A disabled ScheduleStore is constructed with an injected rename function and proves:
+
+- `'renameFile' in store === false`;
+- `store.renameFile === undefined`;
+- the store has no own `renameFile` property.
+
+Existing cleanup/recovery tests continue to exercise the private injected rename seam. The one legacy test that previously used the public store method merely to manufacture a staged test file now uses the test-side `renameSync` directly, preserving its scenario without restoring the production capability.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 2dcc824c0114aa1358002667569995e205742285
+workflowRun        = 36331817252 (#226)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 762
+pass               = 761
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+Intermediate run #225 failed only because one legacy test still called the deliberately removed public rename helper; it was updated to use its own test-side filesystem rename and is superseded by exact-head run #226.
+
+No production side effect was performed by this correction.

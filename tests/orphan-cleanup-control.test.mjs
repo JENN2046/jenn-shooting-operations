@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -420,7 +420,7 @@ test('disabled startup restores referenced cleanup tombstones without deleting u
       'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.txt.cleanup-00000000-0000-4000-8000-000000000002',
     );
 
-    store.renameFile(storedPath, referencedStaged);
+    renameSync(storedPath, referencedStaged);
     writeFileSync(unreferencedStaged, 'do not delete while cleanup is disabled');
     const disabled = store.disableOrphanCleanup({ waitForDrainMs: 0 });
     assert.equal(disabled.ok, true);

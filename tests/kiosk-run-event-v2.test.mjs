@@ -18,6 +18,8 @@ import {
 } from '../src/kiosk-run-event-use-case-v2.mjs';
 import { digestRunEventResponse } from '../src/run-event-use-case-v2.mjs';
 import { createSqliteKioskRunEventStore } from '../src/sqlite-kiosk-run-event-store-v2.mjs';
+import { createKioskV2Application } from '../src/server.mjs';
+import { ScheduleStore } from '../src/store.mjs';
 import { initializeWritableSchema } from '../src/sqlite-schema-v2.mjs';
 import { normalizeSchedulingConfigV1 } from '../src/scheduling-admin-contract-v1.mjs';
 import { canonicalJsonSchedulingV1, digestResourceCapabilitiesV1 } from '../src/scheduling-contract-v1.mjs';
@@ -587,6 +589,79 @@ if (!isMainThread && workerData?.mode === 'apply-kiosk-run-event') {
       assert.equal(state(db).counters.projection_revision, 12);
     } finally {
       db.close();
+    }
+  });
+
+  test('factory-built Kiosk completion enqueues through ScheduleStore transaction facade', () => {
+    const root = mkdtempSync(join(tmpdir(), 'jso-kiosk-facade-complete-'));
+    const filename = join(root, 'kiosk-facade.sqlite');
+    const seedDb = openDatabase(filename);
+    let store;
+    try {
+      seedBase(seedDb);
+      const grouped = seedSchedule(seedDb, {
+        suffix: 'FACADE-GROUPED',
+        sourceOrdinal: 0,
+        requestCount: 2,
+      });
+      seedDb.close();
+
+      store = new ScheduleStore({ filename });
+      const trusted = principal();
+      const kiosk = createKioskV2Application({
+        store,
+        authenticate: () => trusted,
+        businessTimeZone: 'UTC',
+        clock: () => new Date('2026-09-22T12:04:00.000Z'),
+      });
+
+      assert.equal(store.db.isTransaction, false);
+      const started = kiosk.applyRunEvent({
+        command: command({
+          eventId: 'EVENT-FACADE-GROUPED-START',
+          runId: 'RUN-FACADE-GROUPED',
+          scheduleId: grouped.scheduleId,
+          occurredAt: '2026-09-22T12:00:00.000Z',
+        }),
+        principal: trusted,
+      });
+      assert.equal(started.ok, true, JSON.stringify(started));
+      assert.equal(started.resultingState, 'shooting');
+      assert.equal(store.db.isTransaction, false);
+
+      const completed = kiosk.applyRunEvent({
+        command: command({
+          eventId: 'EVENT-FACADE-GROUPED-DONE',
+          runId: 'RUN-FACADE-GROUPED',
+          scheduleId: grouped.scheduleId,
+          eventType: 'complete',
+          expectedRunRevision: 1,
+          occurredAt: '2026-09-22T12:04:00.000Z',
+          localSequence: 2,
+        }),
+        principal: trusted,
+      });
+      assert.equal(completed.ok, true, JSON.stringify(completed));
+      assert.equal(completed.resultingState, 'completed');
+      assert.equal(store.db.isTransaction, false);
+
+      const notification = store.db.prepare(`
+        SELECT outbox_id, aggregate_revision, route_key, status
+        FROM notification_outbox
+        WHERE outbox_id = 'EVENT-FACADE-GROUPED-DONE'
+      `).get();
+      assert.deepEqual({ ...notification }, {
+        outbox_id: 'EVENT-FACADE-GROUPED-DONE',
+        aggregate_revision: 2,
+        route_key: 'operations.default',
+        status: 'pending',
+      });
+    } finally {
+      if (store) store.close();
+      else {
+        try { seedDb.close(); } catch {}
+      }
+      rmSync(root, { recursive: true, force: true });
     }
   });
 

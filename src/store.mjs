@@ -1,10 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, realpathSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, StatementSync, constants as sqliteConstants } from 'node:sqlite';
 import { validateSnapshot, validateSubmission } from './contract-validator.mjs';
 import { initializeWritableSchema } from './sqlite-schema-v2.mjs';
 import { createOrphanCleanupControl, normalizeOrphanCleanupMode } from './orphan-cleanup-control.mjs';
+import {
+  createWriteAdmissionControl,
+  writeAdmissionFailure,
+} from './write-admission-v1.mjs';
 
 function isoNow(clock) {
   return clock().toISOString();
@@ -40,6 +44,165 @@ const SQLITE_BUSY = 5;
 const WAL_SETUP_TIMEOUT_MS = 5000;
 const WAL_RETRY_WAIT = new Int32Array(new SharedArrayBuffer(4));
 const ORPHAN_CLEANUP_DOMAIN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
+
+const APPLY = Reflect.apply;
+const GET_OWN_PROPERTY_DESCRIPTOR = Object.getOwnPropertyDescriptor;
+const SET_HAS = Set.prototype.has;
+
+const DATABASE_PREPARE = DatabaseSync.prototype.prepare;
+const DATABASE_EXEC = DatabaseSync.prototype.exec;
+const DATABASE_SET_AUTHORIZER = DatabaseSync.prototype.setAuthorizer;
+const DATABASE_SERIALIZE = DatabaseSync.prototype.serialize;
+const DATABASE_CLOSE = DatabaseSync.prototype.close;
+const STATEMENT_RUN = StatementSync.prototype.run;
+const STATEMENT_GET = StatementSync.prototype.get;
+const STATEMENT_ALL = StatementSync.prototype.all;
+const STATEMENT_ITERATE = StatementSync.prototype.iterate;
+const STATEMENT_COLUMNS = StatementSync.prototype.columns;
+const STATEMENT_SET_ALLOW_BARE = StatementSync.prototype.setAllowBareNamedParameters;
+const STATEMENT_SET_ALLOW_UNKNOWN = StatementSync.prototype.setAllowUnknownNamedParameters;
+for (const [name, value] of Object.entries({
+  DATABASE_PREPARE,
+  DATABASE_EXEC,
+  DATABASE_SET_AUTHORIZER,
+  DATABASE_SERIALIZE,
+  DATABASE_CLOSE,
+  STATEMENT_RUN,
+  STATEMENT_GET,
+  STATEMENT_ALL,
+  STATEMENT_ITERATE,
+  STATEMENT_COLUMNS,
+  STATEMENT_SET_ALLOW_BARE,
+  STATEMENT_SET_ALLOW_UNKNOWN,
+})) {
+  if (typeof value !== 'function') {
+    throw new TypeError(`missing native SQLite capability: ${name}`);
+  }
+}
+
+const BOOTSTRAP_ADMISSION_CONTROL = Object.freeze({
+  isDisabled: () => false,
+});
+
+const SQLITE_ADMISSION_READ_ACTIONS = new Set([
+  sqliteConstants.SQLITE_SELECT,
+  sqliteConstants.SQLITE_READ,
+  sqliteConstants.SQLITE_FUNCTION,
+  sqliteConstants.SQLITE_TRANSACTION,
+  sqliteConstants.SQLITE_SAVEPOINT,
+  sqliteConstants.SQLITE_RECURSIVE,
+]);
+
+function withSqliteAuthorizer(db, authorizer, action) {
+  APPLY(DATABASE_SET_AUTHORIZER, db, [authorizer]);
+  try {
+    return action();
+  } finally {
+    APPLY(DATABASE_SET_AUTHORIZER, db, [null]);
+  }
+}
+
+function writeAdmissionSqliteError() {
+  const error = new Error('write admission disabled');
+  error.code = 'WRITE_ADMISSION_DISABLED';
+  return error;
+}
+
+function wrapAdmissionCheckedStatement(statement, admissionControl, mutating) {
+  const guardedNativeCall = nativeMethod => (...args) => {
+    if (mutating && admissionControl.isDisabled()) {
+      throw writeAdmissionSqliteError();
+    }
+    return APPLY(nativeMethod, statement, args);
+  };
+  const facade = Object.create(null);
+  Object.defineProperties(facade, {
+    run: {
+      enumerable: true,
+      value: guardedNativeCall(STATEMENT_RUN),
+    },
+    get: {
+      enumerable: true,
+      value: guardedNativeCall(STATEMENT_GET),
+    },
+    all: {
+      enumerable: true,
+      value: guardedNativeCall(STATEMENT_ALL),
+    },
+    iterate: {
+      enumerable: true,
+      value: guardedNativeCall(STATEMENT_ITERATE),
+    },
+    columns: {
+      enumerable: true,
+      value: (...args) => APPLY(STATEMENT_COLUMNS, statement, args),
+    },
+    setAllowBareNamedParameters: {
+      enumerable: true,
+      value: (...args) => {
+        const result = APPLY(STATEMENT_SET_ALLOW_BARE, statement, args);
+        return result === statement ? facade : result;
+      },
+    },
+    setAllowUnknownNamedParameters: {
+      enumerable: true,
+      value: (...args) => {
+        const result = APPLY(STATEMENT_SET_ALLOW_UNKNOWN, statement, args);
+        return result === statement ? facade : result;
+      },
+    },
+  });
+  return Object.freeze(facade);
+}
+
+function prepareAdmissionCheckedStatement(db, admissionControl, ...args) {
+  let mutating = false;
+  const statement = withSqliteAuthorizer(
+    db,
+    actionCode => {
+      if (!APPLY(SET_HAS, SQLITE_ADMISSION_READ_ACTIONS, [actionCode])) mutating = true;
+      return sqliteConstants.SQLITE_OK;
+    },
+    () => APPLY(DATABASE_PREPARE, db, args),
+  );
+  return wrapAdmissionCheckedStatement(statement, admissionControl, mutating);
+}
+
+function execWithAdmission(db, admissionControl, ...args) {
+  return withSqliteAuthorizer(
+    db,
+    actionCode => {
+      if (!admissionControl.isDisabled()) return sqliteConstants.SQLITE_OK;
+      return APPLY(SET_HAS, SQLITE_ADMISSION_READ_ACTIONS, [actionCode])
+        ? sqliteConstants.SQLITE_OK
+        : sqliteConstants.SQLITE_DENY;
+    },
+    () => APPLY(DATABASE_EXEC, db, args),
+  );
+}
+
+function captureDatabaseTransactionGetter(db) {
+  const descriptor = APPLY(GET_OWN_PROPERTY_DESCRIPTOR, Object, [db, 'isTransaction']);
+  if (typeof descriptor?.get !== 'function' || descriptor.configurable !== false) {
+    throw new TypeError('native SQLite transaction-state getter is required');
+  }
+  return descriptor.get;
+}
+
+function createAdmissionCheckedDatabaseFacade(
+  db,
+  admissionControl,
+  transactionGetter = captureDatabaseTransactionGetter(db),
+) {
+  return Object.freeze({
+    prepare: (...args) => prepareAdmissionCheckedStatement(db, admissionControl, ...args),
+    exec: (...args) => execWithAdmission(db, admissionControl, ...args),
+    serialize: (...args) => APPLY(DATABASE_SERIALIZE, db, args),
+    get isTransaction() {
+      return APPLY(transactionGetter, db, []);
+    },
+  });
+}
 
 export function resolveOrphanCleanupControlRoot({
   filename,
@@ -121,6 +284,8 @@ function matchesSignature(contentType, buffer) {
 
 export class ScheduleStore {
   #orphanCleanupControl;
+  #database;
+  #renameFile;
 
   constructor({
     filename,
@@ -133,8 +298,20 @@ export class ScheduleStore {
     orphanCleanupMode = 'inherit',
     orphanCleanupEnableEpoch,
     orphanCleanupDomain,
+    writeAdmissionMode = 'enabled',
+    writeAdmissionControl,
   }) {
     const cleanupMode = readOnly ? 'inherit' : normalizeOrphanCleanupMode(orphanCleanupMode);
+    const admissionControl = writeAdmissionControl
+      ?? createWriteAdmissionControl({ initialMode: writeAdmissionMode });
+    if (typeof admissionControl?.isDisabled !== 'function'
+        || typeof admissionControl?.isEnabled !== 'function') {
+      throw new TypeError('valid write admission control is required');
+    }
+    if (!readOnly && admissionControl.isDisabled() && cleanupMode !== 'disabled') {
+      throw new TypeError('disabled write admission requires disabled orphan cleanup');
+    }
+
     if (!readOnly && filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
     this.uploadRoot = uploadRoot || (filename === ':memory:' ? null : join(dirname(filename), 'uploads'));
     this.cleanupRoot = this.uploadRoot ? join(this.uploadRoot, '.cleanup') : null;
@@ -151,7 +328,13 @@ export class ScheduleStore {
     this.idFactory = idFactory;
     this.orphanMaxAgeMs = orphanMaxAgeMs;
     this.readOnly = readOnly;
-    this.renameFile = fileOperations.rename || renameSync;
+    Object.defineProperty(this, 'writeAdmissionControl', {
+      value: admissionControl,
+      enumerable: true,
+      writable: false,
+      configurable: false,
+    });
+    this.#renameFile = fileOperations.rename || renameSync;
 
     if (!readOnly && cleanupMode === 'disabled') {
       const disabled = this.#orphanCleanupControl.disable({ reason: 'store-startup', waitForDrainMs: 0 });
@@ -165,33 +348,46 @@ export class ScheduleStore {
     if (!readOnly && this.uploadRoot) mkdirSync(this.uploadRoot, { recursive: true });
     if (!readOnly && this.cleanupRoot) mkdirSync(this.cleanupRoot, { recursive: true });
 
-    this.db = new DatabaseSync(filename, { readOnly });
-    this.db.exec('PRAGMA busy_timeout = 5000;');
+    const database = new DatabaseSync(filename, { readOnly });
+    const bootstrapDb = createAdmissionCheckedDatabaseFacade(
+      database,
+      BOOTSTRAP_ADMISSION_CONTROL,
+    );
+    bootstrapDb.exec('PRAGMA busy_timeout = 5000;');
     if (readOnly) {
-      this.db.exec('PRAGMA foreign_keys = ON; PRAGMA query_only = ON;');
+      bootstrapDb.exec('PRAGMA foreign_keys = ON; PRAGMA query_only = ON;');
     } else {
-      enableWalWithBusyRetry(this.db);
-      this.db.exec('PRAGMA foreign_keys = ON;');
+      enableWalWithBusyRetry(bootstrapDb);
+      bootstrapDb.exec('PRAGMA foreign_keys = ON;');
+      initializeWritableSchema(bootstrapDb, { now: this.clock });
+      transaction(bootstrapDb, () => {
+        const current = bootstrapDb.prepare('SELECT id FROM schedule_state WHERE id = 1').get();
+        if (current) return;
+        const now = isoNow(this.clock);
+        const snapshot = { schemaVersion: 1, revision: 0, updatedAt: now, products: [], tasks: [], sessions: [] };
+        bootstrapDb.prepare(`
+          INSERT INTO schedule_state (id, revision, updated_at, snapshot_json)
+          VALUES (1, 0, ?, ?)
+          ON CONFLICT(id) DO NOTHING
+        `).run(now, JSON.stringify(snapshot));
+      });
     }
-    if (readOnly) return;
-    initializeWritableSchema(this.db, { now: this.clock });
-    transaction(this.db, () => {
-      const current = this.db.prepare('SELECT id FROM schedule_state WHERE id = 1').get();
-      if (current) return;
-      const now = isoNow(this.clock);
-      const snapshot = { schemaVersion: 1, revision: 0, updatedAt: now, products: [], tasks: [], sessions: [] };
-      this.db.prepare(`
-        INSERT INTO schedule_state (id, revision, updated_at, snapshot_json)
-        VALUES (1, 0, ?, ?)
-        ON CONFLICT(id) DO NOTHING
-      `).run(now, JSON.stringify(snapshot));
+
+    this.#database = database;
+    Object.defineProperty(this, 'db', {
+      value: createAdmissionCheckedDatabaseFacade(database, admissionControl),
+      enumerable: true,
+      writable: false,
+      configurable: false,
     });
+
+    if (readOnly) return;
     if (cleanupMode === 'enabled') {
       const enabled = this.#orphanCleanupControl.enable({ expectedEpoch: orphanCleanupEnableEpoch });
       if (!enabled.ok) {
         const error = new Error(enabled.code || 'ORPHAN_CLEANUP_ENABLE_FAILED');
         error.code = enabled.code || 'ORPHAN_CLEANUP_ENABLE_FAILED';
-        try { this.db.close(); } catch {}
+        try { APPLY(DATABASE_CLOSE, this.#database, []); } catch {}
         throw error;
       }
     }
@@ -207,14 +403,32 @@ export class ScheduleStore {
   }
 
   enableOrphanCleanup(options) {
+    if (this.writeAdmissionControl.isDisabled()) {
+      return Object.freeze({
+        ok: false,
+        code: 'WRITE_ADMISSION_DISABLED',
+        ...this.getOrphanCleanupControlStatus(),
+      });
+    }
     return this.#orphanCleanupControl.enable(options);
   }
 
   close() {
-    this.db.close();
+    APPLY(DATABASE_CLOSE, this.#database, []);
   }
 
   recoverStagedUploadCleanup({ allowDelete = true } = {}) {
+    if (this.writeAdmissionControl.isDisabled()) {
+      return Object.freeze({
+        ok: false,
+        code: 'WRITE_ADMISSION_DISABLED',
+        restored: 0,
+        removed: 0,
+        restoreErrors: 0,
+        cleanupErrors: 0,
+        errors: 0,
+      });
+    }
     if (this.readOnly || !this.uploadRoot || !this.cleanupRoot) {
       return { ok: true, restored: 0, removed: 0, restoreErrors: 0, cleanupErrors: 0, errors: 0 };
     }
@@ -262,7 +476,7 @@ export class ScheduleStore {
             removed += 1;
           }
         } else {
-          this.renameFile(stagedPath, originalPath);
+          this.#renameFile(stagedPath, originalPath);
           restored += 1;
         }
       } catch {
@@ -296,6 +510,7 @@ export class ScheduleStore {
   }
 
   replaceSnapshot({ expectedRevision, snapshot, operationId, role }) {
+    if (this.writeAdmissionControl.isDisabled()) return writeAdmissionFailure();
     const validationErrors = validateSnapshot(snapshot);
     if (validationErrors.length) return { ok: false, status: 422, code: 'INVALID_SNAPSHOT', errors: validationErrors };
     const cached = this.getOperation(operationId, 'snapshot.replace');
@@ -325,6 +540,7 @@ export class ScheduleStore {
   }
 
   submitRequest({ submission, role }) {
+    if (this.writeAdmissionControl.isDisabled()) return writeAdmissionFailure();
     const validationErrors = validateSubmission(submission);
     if (validationErrors.length) {
       if (OPERATION_ID.test(submission?.operationId || '')) {
@@ -419,6 +635,7 @@ export class ScheduleStore {
   }
 
   saveUpload({ operationId, originalName, contentType, kind, buffer, role = 'submitter' }) {
+    if (this.writeAdmissionControl.isDisabled()) return writeAdmissionFailure();
     if (typeof operationId !== 'string' || !OPERATION_ID.test(operationId)) {
       return { ok: false, status: 422, code: 'INVALID_OPERATION_ID' };
     }
@@ -477,6 +694,16 @@ export class ScheduleStore {
       recoverStaged: options?.recoverStaged,
     });
     if (normalizedOptions.dryRun) return this.#cleanupOrphanUploadsUnchecked(normalizedOptions);
+    if (this.writeAdmissionControl.isDisabled()) {
+      return Object.freeze({
+        ok: false,
+        code: 'WRITE_ADMISSION_DISABLED',
+        candidates: 0,
+        deleted: 0,
+        filesDeleted: 0,
+        fileErrors: 0,
+      });
+    }
     if (this.readOnly) return this.#cleanupOrphanUploadsUnchecked(normalizedOptions);
 
     const admission = this.#orphanCleanupControl.beginRun();
@@ -552,7 +779,7 @@ export class ScheduleStore {
             const originalPath = join(this.uploadRoot, storedName);
             const stagedPath = join(this.cleanupRoot, `${storedName}.cleanup-${randomUUID()}`);
             try {
-              this.renameFile(originalPath, stagedPath);
+              this.#renameFile(originalPath, stagedPath);
               stagedFiles.push({ originalPath, stagedPath });
             } catch (error) {
               if (error.code !== 'ENOENT') {
@@ -576,7 +803,7 @@ export class ScheduleStore {
     } catch (error) {
       for (const { originalPath, stagedPath } of stagedFiles.toReversed()) {
         try {
-          if (existsSync(stagedPath) && !existsSync(originalPath)) this.renameFile(stagedPath, originalPath);
+          if (existsSync(stagedPath) && !existsSync(originalPath)) this.#renameFile(stagedPath, originalPath);
         } catch {}
       }
       try { this.db.exec('ROLLBACK'); } catch {}
@@ -604,13 +831,17 @@ export class ScheduleStore {
   }
 
   recordOperation(operationId, kind, response, now) {
+    if (this.writeAdmissionControl.isDisabled()) return writeAdmissionFailure();
     if (!operationId) return;
     this.db.prepare('INSERT INTO operations (operation_id, kind, response_json, created_at) VALUES (?, ?, ?, ?)')
       .run(operationId, kind, JSON.stringify(response), now);
+    return Object.freeze({ ok: true });
   }
 
   recordAudit(action, role, entityId, revision, result, now) {
+    if (this.writeAdmissionControl.isDisabled()) return writeAdmissionFailure();
     this.db.prepare('INSERT INTO audit_log (action, role, entity_id, revision, result, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(action, role, entityId, revision, result, now);
+    return Object.freeze({ ok: true });
   }
 }

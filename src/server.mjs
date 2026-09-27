@@ -11,6 +11,7 @@ import { refreshSqliteSnapshotProjectionsV2 } from './sqlite-run-event-store-v2.
 import { assembleSchedulingInputFromSqliteV1 } from './sqlite-scheduling-input-assembler-v1.mjs';
 import { createSqliteSchedulingProposalStoreV1 } from './sqlite-scheduling-proposal-store-v1.mjs';
 import { ScheduleStore } from './store.mjs';
+import { createWriteAdmissionControl, normalizeWriteAdmissionMode } from './write-admission-v1.mjs';
 
 export function createKioskV2Application({
   store,
@@ -20,24 +21,37 @@ export function createKioskV2Application({
   allowedBriefHosts = [],
 } = {}) {
   if (!store?.db) throw new TypeError('ScheduleStore is required');
+  const writeAdmissionControl = store.writeAdmissionControl;
+  if (typeof writeAdmissionControl?.isDisabled !== 'function'
+      || typeof writeAdmissionControl?.status !== 'function') {
+    throw new TypeError('Kiosk ScheduleStore write admission control is required');
+  }
   if (typeof authenticate !== 'function') throw new TypeError('Kiosk authenticate port is required');
   if (typeof businessTimeZone !== 'string' || businessTimeZone.length === 0) {
     throw new TypeError('Kiosk businessTimeZone is required');
   }
+  const readCurrent = createReadKioskCurrent({
+    store: createSqliteKioskCurrentStore({ db: store.db }),
+    clock,
+  });
+  const applyRunEvent = createApplyKioskRunEvent({
+    store: createSqliteKioskRunEventStore({
+      db: store.db,
+      businessTimeZone,
+      allowedBriefHosts,
+    }),
+    clock,
+  });
   return Object.freeze({
     authenticate,
-    readCurrent: createReadKioskCurrent({
-      store: createSqliteKioskCurrentStore({ db: store.db }),
-      clock,
-    }),
-    applyRunEvent: createApplyKioskRunEvent({
-      store: createSqliteKioskRunEventStore({
-        db: store.db,
-        businessTimeZone,
-        allowedBriefHosts,
-      }),
-      clock,
-    }),
+    writeAdmissionControl,
+    readCurrent,
+    applyRunEvent(input) {
+      if (writeAdmissionControl.isDisabled()) {
+        return Object.freeze({ ok: false, code: 'WRITE_ADMISSION_DISABLED' });
+      }
+      return applyRunEvent(input);
+    },
   });
 }
 
@@ -48,6 +62,11 @@ export function createSchedulingV2Application({
   allowedBriefHosts = [],
 } = {}) {
   if (!store?.db) throw new TypeError('ScheduleStore is required');
+  const writeAdmissionControl = store.writeAdmissionControl;
+  if (typeof writeAdmissionControl?.isDisabled !== 'function'
+      || typeof writeAdmissionControl?.status !== 'function') {
+    throw new TypeError('Scheduling ScheduleStore write admission control is required');
+  }
   if (typeof authenticate !== 'function') {
     throw new TypeError('Scheduling authenticate port is required');
   }
@@ -82,7 +101,11 @@ export function createSchedulingV2Application({
   });
   return Object.freeze({
     authenticate,
+    writeAdmissionControl,
     decideProposal({ command, principal } = {}) {
+      if (writeAdmissionControl.isDisabled()) {
+        return Object.freeze({ ok: false, code: 'WRITE_ADMISSION_DISABLED' });
+      }
       if (command?.decisionType !== 'reject') {
         return proposalStore.accept(command, principal);
       }
@@ -121,7 +144,16 @@ export function createOperationsServer({
   kioskAllowedBriefHosts = [],
   schedulingAuthenticate,
   schedulingAllowedBriefHosts = [],
+  writeAdmissionMode = 'enabled',
 }) {
+  const initialWriteAdmissionMode = normalizeWriteAdmissionMode(writeAdmissionMode);
+  if (initialWriteAdmissionMode === 'disabled'
+      && String(orphanCleanupMode || 'inherit').trim().toLowerCase() !== 'disabled') {
+    throw new TypeError('disabled write admission requires disabled orphan cleanup');
+  }
+  const writeAdmissionControl = createWriteAdmissionControl({
+    initialMode: initialWriteAdmissionMode,
+  });
   const effectiveClock = clock ?? (() => new Date());
   const store = new ScheduleStore({
     filename: databasePath,
@@ -132,6 +164,7 @@ export function createOperationsServer({
     orphanCleanupMode,
     orphanCleanupEnableEpoch,
     orphanCleanupDomain,
+    writeAdmissionControl,
   });
   store.cleanupOrphanUploads();
   const kiosk = kioskAuthenticate === undefined
@@ -151,7 +184,13 @@ export function createOperationsServer({
         clock: effectiveClock,
         allowedBriefHosts: schedulingAllowedBriefHosts,
       });
-  const server = createServer(createHttpApp({ store, tokens, kiosk, scheduling }));
+  const server = createServer(createHttpApp({
+    store,
+    tokens,
+    kiosk,
+    scheduling,
+    writeAdmissionControl,
+  }));
   const cleanupTimer = cleanupIntervalMs > 0
     ? setInterval(() => {
         try {
@@ -173,7 +212,12 @@ export function createOperationsServer({
     if (cleanupTimer) clearInterval(cleanupTimer);
     store.close();
   });
-  return { server, store, orphanCleanupControl };
+  return {
+    server,
+    store,
+    orphanCleanupControl,
+    writeAdmissionControl,
+  };
 }
 
 const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
@@ -191,14 +235,30 @@ if (invokedDirectly) {
   const orphanCleanupMode = process.env.ORPHAN_CLEANUP_MODE || 'inherit';
   const orphanCleanupEnableEpoch = process.env.ORPHAN_CLEANUP_ENABLE_EPOCH || undefined;
   const orphanCleanupDomain = process.env.ORPHAN_CLEANUP_DOMAIN || undefined;
-  const { server } = createOperationsServer({
+  const writeAdmissionMode = process.env.WRITE_ADMISSION_MODE || 'enabled';
+  const { server, writeAdmissionControl } = createOperationsServer({
     databasePath,
     uploadRoot,
     tokens,
     orphanCleanupMode,
     orphanCleanupEnableEpoch,
     orphanCleanupDomain,
+    writeAdmissionMode,
   });
+
+  const enableWriteAdmission = () => {
+    const result = writeAdmissionControl.enable();
+    console.log(JSON.stringify({
+      event: result.code,
+      writeAdmission: result.mode,
+      transitionCount: result.transitionCount,
+    }));
+  };
+  if (writeAdmissionControl.isDisabled()) {
+    process.on('SIGUSR2', enableWriteAdmission);
+    server.on('close', () => process.off('SIGUSR2', enableWriteAdmission));
+  }
+
   server.listen(port, host, () => {
     console.log(`Jenn Shooting Operations listening on ${host}:${port}`);
   });

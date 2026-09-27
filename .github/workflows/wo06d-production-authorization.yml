@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - codex/wo-06d-production-change-manifest
+      - codex/greenfield-production-authority-r1
   workflow_dispatch:
 
 permissions:
@@ -45,3 +46,6 @@ jobs:
 
       - name: Emit authorization packet verdict
         run: npm run validate:production-manifest
+
+      - name: Emit greenfield authority verdict
+        run: npm run validate:production-greenfield-authority

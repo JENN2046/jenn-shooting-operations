@@ -10,6 +10,7 @@ import {
   mapKioskCurrentHttpResult,
   mapKioskRunEventHttpResult,
 } from './kiosk-http-result-v2.mjs';
+import { createWriteAdmissionControl } from './write-admission-v1.mjs';
 
 const PUBLIC_ROOT = fileURLToPath(new URL('../public/', import.meta.url));
 const STATIC = new Map([
@@ -215,14 +216,59 @@ function requireRole(authorize, request, response, role) {
   return auth;
 }
 
-export function createHttpApp({ store, tokens = {}, kiosk = null, scheduling = null }) {
+export function createHttpApp({
+  store,
+  tokens = {},
+  kiosk = null,
+  scheduling = null,
+  writeAdmissionMode = 'enabled',
+  writeAdmissionControl,
+}) {
   const authorize = createAuthorizer(tokens);
+  const storeAdmission = store?.writeAdmissionControl;
+  const kioskWrites = typeof kiosk?.applyRunEvent === 'function';
+  const schedulingWrites = typeof scheduling?.decideProposal === 'function';
+  const kioskAdmission = kiosk?.writeAdmissionControl;
+  const schedulingAdmission = scheduling?.writeAdmissionControl;
+
+  if (kioskWrites && kioskAdmission === undefined) {
+    throw new TypeError('write-capable kiosk must expose write admission control');
+  }
+  if (schedulingWrites && schedulingAdmission === undefined) {
+    throw new TypeError('write-capable scheduling must expose write admission control');
+  }
+
+  const suppliedControls = [
+    storeAdmission,
+    kioskAdmission,
+    schedulingAdmission,
+    writeAdmissionControl,
+  ].filter(control => control !== undefined);
+  const admission = suppliedControls[0]
+    ?? createWriteAdmissionControl({ initialMode: writeAdmissionMode });
+
+  if (suppliedControls.some(control => control !== admission)) {
+    throw new TypeError('all write-capable surfaces must share admission control');
+  }
+  if (typeof admission?.isDisabled !== 'function'
+      || typeof admission?.status !== 'function') {
+    throw new TypeError('valid write admission control is required');
+  }
 
   return async function app(request, response) {
     securityHeaders(response);
     const url = new URL(request.url, 'http://local.invalid');
     try {
+      if (admission.isDisabled()
+          && !['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+        return sendJson(response, 503, {
+          ok: false,
+          code: 'WRITE_ADMISSION_DISABLED',
+        });
+      }
+
       if (request.method === 'GET' && url.pathname === '/healthz') {
+        response.setHeader('X-Write-Admission', admission.status().mode);
         return sendJson(response, 200, { ok: true, service: 'jenn-shooting-operations' });
       }
 
