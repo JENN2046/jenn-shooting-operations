@@ -203,6 +203,16 @@ async function serveStatic(response, file) {
   createReadStream(path).pipe(response);
 }
 
+const WRITE_ADMISSION_MODES = new Set(['enabled', 'disabled']);
+
+export function normalizeWriteAdmissionMode(value = 'enabled') {
+  const mode = String(value || 'enabled').trim().toLowerCase();
+  if (!WRITE_ADMISSION_MODES.has(mode)) {
+    throw new TypeError('write admission mode must be enabled or disabled');
+  }
+  return mode;
+}
+
 function requireRole(authorize, request, response, role) {
   const auth = authorize(request, role);
   if (!auth.allowed) {
@@ -215,13 +225,28 @@ function requireRole(authorize, request, response, role) {
   return auth;
 }
 
-export function createHttpApp({ store, tokens = {}, kiosk = null, scheduling = null }) {
+export function createHttpApp({
+  store,
+  tokens = {},
+  kiosk = null,
+  scheduling = null,
+  writeAdmissionMode = 'enabled',
+}) {
   const authorize = createAuthorizer(tokens);
+  const normalizedWriteAdmissionMode = normalizeWriteAdmissionMode(writeAdmissionMode);
 
   return async function app(request, response) {
     securityHeaders(response);
     const url = new URL(request.url, 'http://local.invalid');
     try {
+      if (normalizedWriteAdmissionMode === 'disabled'
+          && !['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+        return sendJson(response, 503, {
+          ok: false,
+          code: 'WRITE_ADMISSION_DISABLED',
+        });
+      }
+
       if (request.method === 'GET' && url.pathname === '/healthz') {
         return sendJson(response, 200, { ok: true, service: 'jenn-shooting-operations' });
       }
