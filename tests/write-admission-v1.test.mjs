@@ -461,6 +461,61 @@ test('SQLite bootstrap and facades ignore runtime native prototype replacement',
   }
 });
 
+test('SQLite admission classification ignores Set.prototype.has replacement', () => {
+  const admission = createWriteAdmissionControl({ initialMode: 'disabled' });
+  const originalHas = Set.prototype.has;
+  let hostileCalls = 0;
+  let store = null;
+
+  try {
+    Object.defineProperty(Set.prototype, 'has', {
+      configurable: true,
+      writable: true,
+      value() {
+        hostileCalls += 1;
+        return true;
+      },
+    });
+
+    store = new ScheduleStore({
+      filename: ':memory:',
+      writeAdmissionControl: admission,
+      orphanCleanupMode: 'disabled',
+    });
+
+    const before = store.db.prepare('SELECT total_changes() AS changes').get().changes;
+    assert.equal(
+      store.db.prepare('SELECT revision FROM schedule_state WHERE id = 1').get().revision,
+      0,
+    );
+
+    const preparedWrite = store.db.prepare(
+      "INSERT INTO audit_log (action, role, entity_id, revision, result, created_at) VALUES ('set-has-bypass', 'admin', NULL, 0, 'blocked', '2026-09-27T13:00:00.000Z')",
+    );
+    assert.throws(() => preparedWrite.run());
+    assert.throws(
+      () => store.db.exec(
+        "INSERT INTO audit_log (action, role, entity_id, revision, result, created_at) VALUES ('set-has-exec-bypass', 'admin', NULL, 0, 'blocked', '2026-09-27T13:00:00.000Z')",
+      ),
+    );
+    assert.throws(
+      () => store.db.exec('UPDATE schedule_state SET revision = revision + 1 WHERE id = 1'),
+    );
+
+    const after = store.db.prepare('SELECT total_changes() AS changes').get().changes;
+    assert.equal(after, before);
+    assert.equal(store.getSnapshot().revision, 0);
+    assert.equal(hostileCalls, 0);
+  } finally {
+    Object.defineProperty(Set.prototype, 'has', {
+      configurable: true,
+      writable: true,
+      value: originalHas,
+    });
+    if (store) store.close();
+  }
+});
+
 test('database facade preserves native transaction state for outbox atomicity', () => {
   const store = new ScheduleStore({ filename: ':memory:' });
   try {
