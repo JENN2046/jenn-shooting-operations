@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
-import { normalizeWriteAdmissionMode } from '../src/write-admission-v1.mjs';
+import {
+  createWriteAdmissionControl,
+  normalizeWriteAdmissionMode,
+} from '../src/write-admission-v1.mjs';
 import { createOperationsServer } from '../src/server.mjs';
+import { ScheduleStore } from '../src/store.mjs';
 
 const tokens = {
   viewer: 'viewer-token-000000000001',
@@ -137,6 +144,40 @@ test('pre-activation HTTP fence blocks all mutating methods before dispatch', as
   } finally {
     service.server.close();
     await once(service.server, 'close');
+  }
+});
+
+test('ScheduleStore directly rejects disabled admission unless cleanup is disabled before filesystem mutation', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jso-write-admission-store-'));
+  const databasePath = join(root, 'nested', 'shooting-operations.sqlite');
+  const admission = createWriteAdmissionControl({ initialMode: 'disabled' });
+
+  try {
+    for (const orphanCleanupMode of ['inherit', 'enabled']) {
+      assert.throws(
+        () => new ScheduleStore({
+          filename: databasePath,
+          writeAdmissionControl: admission,
+          orphanCleanupMode,
+        }),
+        /disabled write admission requires disabled orphan cleanup/u,
+      );
+      assert.equal(existsSync(join(root, 'nested')), false);
+    }
+
+    const allowed = new ScheduleStore({
+      filename: ':memory:',
+      writeAdmissionControl: admission,
+      orphanCleanupMode: 'disabled',
+    });
+    try {
+      assert.equal(allowed.getSnapshot().revision, 0);
+      assert.equal(allowed.getOrphanCleanupControlStatus().enabled, false);
+    } finally {
+      allowed.close();
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
