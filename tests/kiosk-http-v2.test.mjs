@@ -5,6 +5,8 @@ import test from 'node:test';
 import { createTrustedPrincipal } from '../src/authorization-v2.mjs';
 import { createHttpApp } from '../src/http-app.mjs';
 import { validateKioskRunEventResult } from '../src/kiosk-contract-validator-v2.mjs';
+import { ScheduleStore } from '../src/store.mjs';
+import { createWriteAdmissionControl } from '../src/write-admission-v1.mjs';
 
 function principal(role = 'operator', resourceIds = ['RESOURCE-A']) {
   const result = createTrustedPrincipal({ subjectId: `ACTOR-${role}`, role, resourceIds });
@@ -122,6 +124,52 @@ test('V1 routes keep their existing public behavior when Kiosk is not configured
   const snapshot = await invoke(app, { url: '/api/v1/snapshot' });
   assert.equal(snapshot.status, 200);
   assert.equal(snapshot.body.ok, true);
+});
+
+test('direct HTTP composition reuses the ScheduleStore admission fence for V2 writes', async () => {
+  const admission = createWriteAdmissionControl({ initialMode: 'disabled' });
+  const store = new ScheduleStore({
+    filename: ':memory:',
+    writeAdmissionControl: admission,
+    orphanCleanupMode: 'disabled',
+  });
+  let applyCalls = 0;
+  const kiosk = {
+    authenticate: async () => principal(),
+    readCurrent: async () => ({ ok: true, dto: currentDto() }),
+    applyRunEvent: async () => {
+      applyCalls += 1;
+      return appliedResult();
+    },
+  };
+
+  try {
+    const app = createHttpApp({ store, kiosk });
+    const health = await invoke(app, { url: '/healthz' });
+    assert.equal(health.status, 200);
+    assert.equal(health.headers.get('x-write-admission'), 'disabled');
+
+    const event = await invoke(app, {
+      method: 'POST',
+      url: '/api/v2/schedule-items/SCHEDULE-ITEM-0001/events',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(eventCommand()),
+    });
+    assert.equal(event.status, 503);
+    assert.deepEqual(event.body, { ok: false, code: 'WRITE_ADMISSION_DISABLED' });
+    assert.equal(applyCalls, 0);
+
+    assert.throws(
+      () => createHttpApp({
+        store,
+        kiosk,
+        writeAdmissionControl: createWriteAdmissionControl({ initialMode: 'enabled' }),
+      }),
+      /write admission control must match store control/u,
+    );
+  } finally {
+    store.close();
+  }
 });
 
 test('Kiosk endpoints fail closed when authentication is not configured or principal is invalid', async () => {
