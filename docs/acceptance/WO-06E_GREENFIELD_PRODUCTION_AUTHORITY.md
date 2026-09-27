@@ -653,3 +653,81 @@ nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
 The failed intermediate runs #196 and #197 used the earlier permanent-authorizer variant, which blocked V2 adapter statement preparation. They are superseded by exact-head run #198 and are not acceptance evidence.
 
 No production side effect was performed by this correction.
+
+
+## Tenth Codex review correction
+
+Independent review found one additional valid P1: the admission-checked prepared statement was still implemented as a Proxy over the raw `StatementSync`. Because caller-defined properties were forwarded to the raw target, a consumer could install an `unwrap()` method and recover the unwrapped statement, then call `run()` without the admission guard.
+
+The Proxy has been removed entirely.
+
+### Frozen statement capability facade
+
+`store.db.prepare()` now returns a dedicated null-prototype, frozen, non-extensible facade rather than a Proxy.
+
+The facade exposes only an explicit allowlist of supported statement capabilities:
+
+- `run`
+- `get`
+- `all`
+- `iterate`
+- `columns`
+- named-parameter configuration methods
+- read-only `sourceSQL` / `expandedSQL` getters
+
+The raw `StatementSync` object remains closure-private.
+
+Mutating execution methods continue to consult the same live admission control before touching SQLite.
+
+Because the facade:
+
+- has no prototype;
+- is frozen;
+- is non-extensible;
+- never binds arbitrary caller-visible function properties to the raw statement;
+
+`Object.defineProperty`, assignment, prototype replacement, or prototype injection cannot create an unwrap path.
+
+### Exploit regression
+
+The exact reported exploit is covered:
+
+```text
+Object.defineProperty(stmt, 'unwrap', {
+  value() { return this; }
+})
+```
+
+is rejected.
+
+The regression also proves:
+
+- `Object.getPrototypeOf(stmt) === null`;
+- the facade is frozen and non-extensible;
+- assignment of an `unwrap` property fails;
+- `Object.setPrototypeOf` fails;
+- the mutating statement still cannot run while admission is disabled;
+- SQLite `total_changes()` remains unchanged.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = a7e695b05c71254edc82725268eed7fda3b8a1ce
+workflowRun        = 36326762035 (#201)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 755
+pass               = 754
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+No production side effect was performed by this correction.
