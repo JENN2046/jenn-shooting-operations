@@ -1589,3 +1589,29 @@ durableActivationAcrossRestartVerified = true
 ```
 
 The remediation records no credential values.
+
+### Durability remediation exact-head validation
+
+The implementation-bearing durability remediation head was validated after the restart proof and authority update:
+
+```text
+implementationHead = d5c5d6acb9b98dd475ddc55664a9964923bbfee5
+workflowRun        = 36359082926
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 763
+pass               = 762
+fail               = 0
+skip               = 1 expected external VCP adapter absence
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:b2fc967fc00e63d26dead398373eca886a59c6f32ac8cf6ad3fa77edaf235e4c
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
+```
+
+This validation followed a real restart proof: the replacement production container started with write admission enabled, was deliberately restarted, and remained enabled afterward while cleanup stayed disabled and the database/attachment baseline remained unchanged. This paragraph is docs-only, so the resulting final head is validated once more before merge eligibility.
+
