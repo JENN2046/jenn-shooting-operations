@@ -54,19 +54,70 @@ const SQLITE_ADMISSION_READ_ACTIONS = new Set([
   sqliteConstants.SQLITE_RECURSIVE,
 ]);
 
-function installWriteAdmissionAuthorizer(db, admissionControl) {
-  db.setAuthorizer(actionCode => {
-    if (!admissionControl.isDisabled()) return sqliteConstants.SQLITE_OK;
-    return SQLITE_ADMISSION_READ_ACTIONS.has(actionCode)
-      ? sqliteConstants.SQLITE_OK
-      : sqliteConstants.SQLITE_DENY;
+function withSqliteAuthorizer(db, authorizer, action) {
+  db.setAuthorizer(authorizer);
+  try {
+    return action();
+  } finally {
+    db.setAuthorizer(null);
+  }
+}
+
+function writeAdmissionSqliteError() {
+  const error = new Error('write admission disabled');
+  error.code = 'WRITE_ADMISSION_DISABLED';
+  return error;
+}
+
+function wrapAdmissionCheckedStatement(statement, admissionControl, mutating) {
+  const executingMethods = new Set(['run', 'get', 'all', 'iterate']);
+  return new Proxy(statement, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (typeof value !== 'function') return value;
+      if (executingMethods.has(property)) {
+        return (...args) => {
+          if (mutating && admissionControl.isDisabled()) {
+            throw writeAdmissionSqliteError();
+          }
+          return value.apply(target, args);
+        };
+      }
+      return value.bind(target);
+    },
   });
 }
 
-function createAdmissionCheckedDatabaseFacade(db) {
+function prepareAdmissionCheckedStatement(db, admissionControl, ...args) {
+  let mutating = false;
+  const statement = withSqliteAuthorizer(
+    db,
+    actionCode => {
+      if (!SQLITE_ADMISSION_READ_ACTIONS.has(actionCode)) mutating = true;
+      return sqliteConstants.SQLITE_OK;
+    },
+    () => db.prepare(...args),
+  );
+  return wrapAdmissionCheckedStatement(statement, admissionControl, mutating);
+}
+
+function execWithAdmission(db, admissionControl, ...args) {
+  return withSqliteAuthorizer(
+    db,
+    actionCode => {
+      if (!admissionControl.isDisabled()) return sqliteConstants.SQLITE_OK;
+      return SQLITE_ADMISSION_READ_ACTIONS.has(actionCode)
+        ? sqliteConstants.SQLITE_OK
+        : sqliteConstants.SQLITE_DENY;
+    },
+    () => db.exec(...args),
+  );
+}
+
+function createAdmissionCheckedDatabaseFacade(db, admissionControl) {
   return Object.freeze({
-    prepare: (...args) => db.prepare(...args),
-    exec: (...args) => db.exec(...args),
+    prepare: (...args) => prepareAdmissionCheckedStatement(db, admissionControl, ...args),
+    exec: (...args) => execWithAdmission(db, admissionControl, ...args),
     serialize: (...args) => db.serialize(...args),
     get isOpen() { return db.isOpen; },
     get isTransaction() { return db.isTransaction; },
@@ -237,10 +288,9 @@ export class ScheduleStore {
       });
     }
 
-    installWriteAdmissionAuthorizer(database, admissionControl);
     this.#database = database;
     Object.defineProperty(this, 'db', {
-      value: createAdmissionCheckedDatabaseFacade(database),
+      value: createAdmissionCheckedDatabaseFacade(database, admissionControl),
       enumerable: true,
       writable: false,
       configurable: false,
