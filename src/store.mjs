@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, realpathSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve } from 'node:path';
-import { DatabaseSync, constants as sqliteConstants } from 'node:sqlite';
+import { DatabaseSync, StatementSync, constants as sqliteConstants } from 'node:sqlite';
 import { validateSnapshot, validateSubmission } from './contract-validator.mjs';
 import { initializeWritableSchema } from './sqlite-schema-v2.mjs';
 import { createOrphanCleanupControl, normalizeOrphanCleanupMode } from './orphan-cleanup-control.mjs';
@@ -45,6 +45,59 @@ const WAL_SETUP_TIMEOUT_MS = 5000;
 const WAL_RETRY_WAIT = new Int32Array(new SharedArrayBuffer(4));
 const ORPHAN_CLEANUP_DOMAIN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
 
+const APPLY = Reflect.apply;
+
+const DATABASE_PREPARE = DatabaseSync.prototype.prepare;
+const DATABASE_EXEC = DatabaseSync.prototype.exec;
+const DATABASE_SET_AUTHORIZER = DatabaseSync.prototype.setAuthorizer;
+const DATABASE_SERIALIZE = DatabaseSync.prototype.serialize;
+const DATABASE_IS_OPEN_GET = Object.getOwnPropertyDescriptor(
+  DatabaseSync.prototype,
+  'isOpen',
+)?.get;
+const DATABASE_IS_TRANSACTION_GET = Object.getOwnPropertyDescriptor(
+  DatabaseSync.prototype,
+  'isTransaction',
+)?.get;
+
+const STATEMENT_RUN = StatementSync.prototype.run;
+const STATEMENT_GET = StatementSync.prototype.get;
+const STATEMENT_ALL = StatementSync.prototype.all;
+const STATEMENT_ITERATE = StatementSync.prototype.iterate;
+const STATEMENT_COLUMNS = StatementSync.prototype.columns;
+const STATEMENT_SET_ALLOW_BARE = StatementSync.prototype.setAllowBareNamedParameters;
+const STATEMENT_SET_ALLOW_UNKNOWN = StatementSync.prototype.setAllowUnknownNamedParameters;
+const STATEMENT_SOURCE_SQL_GET = Object.getOwnPropertyDescriptor(
+  StatementSync.prototype,
+  'sourceSQL',
+)?.get;
+const STATEMENT_EXPANDED_SQL_GET = Object.getOwnPropertyDescriptor(
+  StatementSync.prototype,
+  'expandedSQL',
+)?.get;
+
+for (const [name, value] of Object.entries({
+  DATABASE_PREPARE,
+  DATABASE_EXEC,
+  DATABASE_SET_AUTHORIZER,
+  DATABASE_SERIALIZE,
+  DATABASE_IS_OPEN_GET,
+  DATABASE_IS_TRANSACTION_GET,
+  STATEMENT_RUN,
+  STATEMENT_GET,
+  STATEMENT_ALL,
+  STATEMENT_ITERATE,
+  STATEMENT_COLUMNS,
+  STATEMENT_SET_ALLOW_BARE,
+  STATEMENT_SET_ALLOW_UNKNOWN,
+  STATEMENT_SOURCE_SQL_GET,
+  STATEMENT_EXPANDED_SQL_GET,
+})) {
+  if (typeof value !== 'function') {
+    throw new TypeError(`missing native SQLite capability: ${name}`);
+  }
+}
+
 const SQLITE_ADMISSION_READ_ACTIONS = new Set([
   sqliteConstants.SQLITE_SELECT,
   sqliteConstants.SQLITE_READ,
@@ -55,11 +108,11 @@ const SQLITE_ADMISSION_READ_ACTIONS = new Set([
 ]);
 
 function withSqliteAuthorizer(db, authorizer, action) {
-  db.setAuthorizer(authorizer);
+  APPLY(DATABASE_SET_AUTHORIZER, db, [authorizer]);
   try {
     return action();
   } finally {
-    db.setAuthorizer(null);
+    APPLY(DATABASE_SET_AUTHORIZER, db, [null]);
   }
 }
 
@@ -70,55 +123,55 @@ function writeAdmissionSqliteError() {
 }
 
 function wrapAdmissionCheckedStatement(statement, admissionControl, mutating) {
-  const guardMutation = action => (...args) => {
+  const guardedNativeCall = nativeMethod => (...args) => {
     if (mutating && admissionControl.isDisabled()) {
       throw writeAdmissionSqliteError();
     }
-    return action(...args);
+    return APPLY(nativeMethod, statement, args);
   };
   const facade = Object.create(null);
   Object.defineProperties(facade, {
     run: {
       enumerable: true,
-      value: guardMutation((...args) => statement.run(...args)),
+      value: guardedNativeCall(STATEMENT_RUN),
     },
     get: {
       enumerable: true,
-      value: guardMutation((...args) => statement.get(...args)),
+      value: guardedNativeCall(STATEMENT_GET),
     },
     all: {
       enumerable: true,
-      value: guardMutation((...args) => statement.all(...args)),
+      value: guardedNativeCall(STATEMENT_ALL),
     },
     iterate: {
       enumerable: true,
-      value: guardMutation((...args) => statement.iterate(...args)),
+      value: guardedNativeCall(STATEMENT_ITERATE),
     },
     columns: {
       enumerable: true,
-      value: (...args) => statement.columns(...args),
+      value: (...args) => APPLY(STATEMENT_COLUMNS, statement, args),
     },
     setAllowBareNamedParameters: {
       enumerable: true,
       value: (...args) => {
-        const result = statement.setAllowBareNamedParameters(...args);
+        const result = APPLY(STATEMENT_SET_ALLOW_BARE, statement, args);
         return result === statement ? facade : result;
       },
     },
     setAllowUnknownNamedParameters: {
       enumerable: true,
       value: (...args) => {
-        const result = statement.setAllowUnknownNamedParameters(...args);
+        const result = APPLY(STATEMENT_SET_ALLOW_UNKNOWN, statement, args);
         return result === statement ? facade : result;
       },
     },
     sourceSQL: {
       enumerable: true,
-      get: () => statement.sourceSQL,
+      get: () => APPLY(STATEMENT_SOURCE_SQL_GET, statement, []),
     },
     expandedSQL: {
       enumerable: true,
-      get: () => statement.expandedSQL,
+      get: () => APPLY(STATEMENT_EXPANDED_SQL_GET, statement, []),
     },
   });
   return Object.freeze(facade);
@@ -132,7 +185,7 @@ function prepareAdmissionCheckedStatement(db, admissionControl, ...args) {
       if (!SQLITE_ADMISSION_READ_ACTIONS.has(actionCode)) mutating = true;
       return sqliteConstants.SQLITE_OK;
     },
-    () => db.prepare(...args),
+    () => APPLY(DATABASE_PREPARE, db, args),
   );
   return wrapAdmissionCheckedStatement(statement, admissionControl, mutating);
 }
@@ -146,7 +199,7 @@ function execWithAdmission(db, admissionControl, ...args) {
         ? sqliteConstants.SQLITE_OK
         : sqliteConstants.SQLITE_DENY;
     },
-    () => db.exec(...args),
+    () => APPLY(DATABASE_EXEC, db, args),
   );
 }
 
@@ -154,9 +207,9 @@ function createAdmissionCheckedDatabaseFacade(db, admissionControl) {
   return Object.freeze({
     prepare: (...args) => prepareAdmissionCheckedStatement(db, admissionControl, ...args),
     exec: (...args) => execWithAdmission(db, admissionControl, ...args),
-    serialize: (...args) => db.serialize(...args),
-    get isOpen() { return db.isOpen; },
-    get isTransaction() { return db.isTransaction; },
+    serialize: (...args) => APPLY(DATABASE_SERIALIZE, db, args),
+    get isOpen() { return APPLY(DATABASE_IS_OPEN_GET, db, []); },
+    get isTransaction() { return APPLY(DATABASE_IS_TRANSACTION_GET, db, []); },
   });
 }
 
