@@ -731,3 +731,83 @@ nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
 ```
 
 No production side effect was performed by this correction.
+
+
+## Eleventh Codex review correction
+
+Independent review found two additional valid P1 prototype-capture paths:
+
+1. `DatabaseSync.prototype` methods could be replaced after module import; dynamic database method lookup would then supply the closure-private raw database as `this`.
+2. `StatementSync.prototype` methods could likewise be replaced; dynamic statement method lookup would supply the raw statement as `this`, allowing the caller to retain and reuse it outside the admission facade.
+
+The SQLite boundary now captures its native capabilities exactly once when `store.mjs` is evaluated.
+
+### Captured DatabaseSync capabilities
+
+Module initialization captures the native function objects for:
+
+- `prepare`
+- `exec`
+- `setAuthorizer`
+- `serialize`
+- `close`
+
+All later database calls use these captured function objects through the captured `Reflect.apply`. Runtime reads from `DatabaseSync.prototype` are not used by the admission facade, store bootstrap, schema/revision-zero initialization, or close path.
+
+The ScheduleStore bootstrap itself now runs through an internal bootstrap database facade that uses the same captured native capabilities. This means prototype replacement performed **after module import but before ScheduleStore construction** cannot capture the raw database during PRAGMA/schema/revision-zero initialization.
+
+### Captured StatementSync capabilities
+
+Module initialization also captures the native function objects for:
+
+- `run`
+- `get`
+- `all`
+- `iterate`
+- `columns`
+- named-parameter configuration methods
+
+The frozen statement facade invokes only these captured function objects. It never performs a runtime method lookup on `StatementSync.prototype`.
+
+Optional SQLite state/SQL-inspection properties that are not prototype methods in Node 24.21.0 and are unused by this repository were deliberately omitted from the facade rather than reintroducing dynamic prototype reads.
+
+### Hostile prototype-capture regression
+
+The regression patches `DatabaseSync.prototype.prepare/exec/setAuthorizer/close` and `StatementSync.prototype.setAllowBareNamedParameters/run` **before constructing ScheduleStore**.
+
+Each hostile wrapper records its `this` target if invoked.
+
+The test proves:
+
+- ScheduleStore bootstrap succeeds without invoking any hostile DatabaseSync wrapper;
+- public database reads/writes continue to use captured native functions;
+- named-parameter statement configuration does not invoke the hostile StatementSync wrapper;
+- disabled mutation remains blocked with zero SQLite changes;
+- the admitted post-enable mutation succeeds without invoking the hostile StatementSync wrapper;
+- store close uses the captured native close function;
+- every hostile raw-database/raw-statement capture variable remains null.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = b03e2700293c3ee129438d2d143da324630d4ac1
+workflowRun        = 36327922573 (#208)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 756
+pass               = 755
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+Intermediate runs #203-#205 exercised incomplete native-capability snapshots and are superseded by exact-head run #208. They are not acceptance evidence.
+
+No production side effect was performed by this correction.
