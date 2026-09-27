@@ -98,20 +98,19 @@ requestedActionIds             = []
 approvedActionIds              = []
 requestableActionIds           = []
 blanketApprovalAllowed         = false
-nextActionId                   = PROD-GF-13-ACTIVATE
+nextActionId                   = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
 nextActionRequiresAuthorization = true
 ```
 
-This authority definition records PROD-03 through PROD-07 as completed evidence but does not grant PROD-GF-13 or any later production mutation. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
+This authority definition records PROD-03 through PROD-07 plus PROD-GF-13 activation as completed evidence but does not grant PROD-GF-14 or any later production mutation. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
 
 ## Remaining facts before later gates
 
 - Tencent Cloud security-group control-plane fact if a change is actually required;
-- greenfield activation evidence;
 - post-activation VCP/Kiosk wiring and their separately authorized real acceptance;
 - greenfield cleanup restoration evidence.
 
-No source migration, production data copy, additional public route change, additional container start, integration enablement, or production activation is authorized by this document. PROD-03 through PROD-07 are recorded as completed production evidence only; their completion grants no PROD-GF-13 authority.
+No source migration, production data copy, additional public route change, additional container start, VCP/Kiosk integration enablement, or orphan-cleanup restoration is authorized by this document. PROD-03 through PROD-07 and PROD-GF-13 activation are recorded as completed production evidence; their completion grants no PROD-GF-14 authority.
 
 ## Codex review correction
 
@@ -1434,4 +1433,95 @@ nextAction         = PROD-GF-13-ACTIVATE
 ```
 
 This validation performed no production mutation. Because this paragraph changes only the acceptance document, the resulting final docs head is validated separately before merge eligibility.
+
+## Production evidence promotion: PROD-GF-13
+
+The owner explicitly authorized `PROD-GF-13-ACTIVATE`. Activation was performed only after a fresh read-only pre-enable verification of the already-routed Greenfield service.
+
+Pre-enable verification established all of the following while the write fence was still disabled:
+
+```text
+instanceId                       = ins-mi85f3my
+route                            = https://jso.skmt617.top
+clientScope                      = HTTPS_ROUTE_ONLY_NO_VCP_NO_KIOSK
+containerId                      = 45ff5469cbd8874fbc3f5ac71260a57596b19f86a26b4131fa38d5d678162a99
+imageId                          = sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545
+hostPid                          = 747599
+containerStartedAt               = 2026-09-27T17:49:01.319828677Z
+targetVolumeContainerMountCount  = 1
+containerProcessCount            = 1
+preEnableWriteAdmission          = disabled
+preEnableMutatingMethodsDenied   = true
+preEnableOrphanCleanupState      = disabled
+preEnableOrphanCleanupActiveRuns = 0
+preEnableRevision                = 0
+preEnableUploadRows              = 0
+preEnableOperationRows           = 0
+preEnableAuditRows               = 0
+preEnableAttachmentFiles         = 0
+integrationEnvCount              = 0
+directStoreGuardCount            = 5
+```
+
+The route, container, image, process, target volume and database baseline were then fixed as the pre-enable identity set. Activation sent exactly one `SIGUSR2` to the existing container process. The process emitted:
+
+```text
+event           = WRITE_ADMISSION_ENABLED
+writeAdmission  = enabled
+transitionCount = 1
+```
+
+No container restart, image replacement, route change, Nginx change or volume remount occurred.
+
+Post-enable verification confirmed:
+
+```text
+activatedAtUtc                     = 2026-09-27T23:11:00Z
+verifiedAtUtc                      = 2026-09-27T23:12:00Z
+sameContainerPost                  = true
+sameHostPidPost                    = true
+sameStartedAtPost                  = true
+sameImagePost                      = true
+sameRouteConfigPost                = true
+sameDataVolumePost                 = true
+loopbackHealth                     = 200
+routedHealth                       = 200
+loopbackWriteAdmission             = enabled
+routedWriteAdmission               = enabled
+unauthenticatedWriteProbeStatus    = 401
+unauthenticatedWriteProbeCode      = UNAUTHORIZED
+orphanCleanupPost                  = disabled
+orphanCleanupActiveRunsPost        = 0
+postEnableRevision                 = 0
+postEnableUploadRows               = 0
+postEnableOperationRows            = 0
+postEnableAuditRows                = 0
+postEnableAttachmentFiles          = 0
+integrationsRemainDisabled         = true
+orphanCleanupRestorationDeferred   = true
+```
+
+The unauthenticated write probe changing from pre-activation `503 WRITE_ADMISSION_DISABLED` to post-activation `401 UNAUTHORIZED` proves the in-process admission fence was enabled while the normal authorization boundary remained effective. The probe caused no business mutation; revision and every database/attachment baseline remained zero.
+
+Low-disclosure production evidence:
+
+```text
+evidencePath   = /mnt/datadisk0/apps/jenn-shooting-operations/prod-gf13-activation-evidence.txt
+evidenceMode   = 0600
+evidenceSha256 = sha256:88a3880a126166b0934a8d60e487b450ff5d49af6b487bf28456d39b1c824bdb
+secretValuesRecorded = false
+```
+
+Authority state after this promotion:
+
+```text
+completedAcceptanceIds includes PROD-GF-13-ACTIVATE
+authorization.status  = FROZEN_NOT_REQUESTED
+requestedActionIds    = []
+approvedActionIds     = []
+requestableActionIds  = []
+nextActionId          = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
+```
+
+VCP and Kiosk remain separate post-activation actions. Orphan cleanup remains disabled until a separately authorized `PROD-GF-14-RESTORE-ORPHAN-CLEANUP`. This promotion does not authorize any of them.
 
