@@ -564,6 +564,26 @@ test('database facade preserves native transaction state for outbox atomicity', 
   }
 });
 
+test('ScheduleStore does not expose the raw rename capability', () => {
+  const admission = createWriteAdmissionControl({ initialMode: 'disabled' });
+  const injectedRename = () => {
+    throw new Error('injected rename should remain private');
+  };
+  const store = new ScheduleStore({
+    filename: ':memory:',
+    writeAdmissionControl: admission,
+    orphanCleanupMode: 'disabled',
+    fileOperations: { rename: injectedRename },
+  });
+  try {
+    assert.equal('renameFile' in store, false);
+    assert.equal(store.renameFile, undefined);
+    assert.equal(Object.hasOwn(store, 'renameFile'), false);
+  } finally {
+    store.close();
+  }
+});
+
 test('pre-activation write admission cannot start with cleanup enabled', () => {
   assert.throws(
     () => createOperationsServer({
