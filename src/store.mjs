@@ -167,7 +167,12 @@ export class ScheduleStore {
     this.idFactory = idFactory;
     this.orphanMaxAgeMs = orphanMaxAgeMs;
     this.readOnly = readOnly;
-    this.writeAdmissionControl = admissionControl;
+    Object.defineProperty(this, 'writeAdmissionControl', {
+      value: admissionControl,
+      enumerable: true,
+      writable: false,
+      configurable: false,
+    });
     this.renameFile = fileOperations.rename || renameSync;
 
     if (!readOnly && cleanupMode === 'disabled') {
@@ -239,6 +244,17 @@ export class ScheduleStore {
   }
 
   recoverStagedUploadCleanup({ allowDelete = true } = {}) {
+    if (this.writeAdmissionControl.isDisabled()) {
+      return Object.freeze({
+        ok: false,
+        code: 'WRITE_ADMISSION_DISABLED',
+        restored: 0,
+        removed: 0,
+        restoreErrors: 0,
+        cleanupErrors: 0,
+        errors: 0,
+      });
+    }
     if (this.readOnly || !this.uploadRoot || !this.cleanupRoot) {
       return { ok: true, restored: 0, removed: 0, restoreErrors: 0, cleanupErrors: 0, errors: 0 };
     }
@@ -641,13 +657,17 @@ export class ScheduleStore {
   }
 
   recordOperation(operationId, kind, response, now) {
+    if (this.writeAdmissionControl.isDisabled()) return writeAdmissionFailure();
     if (!operationId) return;
     this.db.prepare('INSERT INTO operations (operation_id, kind, response_json, created_at) VALUES (?, ?, ?, ?)')
       .run(operationId, kind, JSON.stringify(response), now);
+    return Object.freeze({ ok: true });
   }
 
   recordAudit(action, role, entityId, revision, result, now) {
+    if (this.writeAdmissionControl.isDisabled()) return writeAdmissionFailure();
     this.db.prepare('INSERT INTO audit_log (action, role, entity_id, revision, result, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(action, role, entityId, revision, result, now);
+    return Object.freeze({ ok: true });
   }
 }
