@@ -241,11 +241,8 @@ export function createHttpApp({
       }
 
       if (request.method === 'GET' && url.pathname === '/healthz') {
-        return sendJson(response, 200, {
-          ok: true,
-          service: 'jenn-shooting-operations',
-          writeAdmission: admission.status().mode,
-        });
+        response.setHeader('X-Write-Admission', admission.status().mode);
+        return sendJson(response, 200, { ok: true, service: 'jenn-shooting-operations' });
       }
 
       if (request.method === 'GET' && STATIC.has(url.pathname)) {
