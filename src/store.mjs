@@ -47,6 +47,7 @@ const ORPHAN_CLEANUP_DOMAIN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
 
 const APPLY = Reflect.apply;
 const GET_OWN_PROPERTY_DESCRIPTOR = Object.getOwnPropertyDescriptor;
+const SET_HAS = Set.prototype.has;
 
 const DATABASE_PREPARE = DatabaseSync.prototype.prepare;
 const DATABASE_EXEC = DatabaseSync.prototype.exec;
@@ -159,7 +160,7 @@ function prepareAdmissionCheckedStatement(db, admissionControl, ...args) {
   const statement = withSqliteAuthorizer(
     db,
     actionCode => {
-      if (!SQLITE_ADMISSION_READ_ACTIONS.has(actionCode)) mutating = true;
+      if (!APPLY(SET_HAS, SQLITE_ADMISSION_READ_ACTIONS, [actionCode])) mutating = true;
       return sqliteConstants.SQLITE_OK;
     },
     () => APPLY(DATABASE_PREPARE, db, args),
@@ -172,7 +173,7 @@ function execWithAdmission(db, admissionControl, ...args) {
     db,
     actionCode => {
       if (!admissionControl.isDisabled()) return sqliteConstants.SQLITE_OK;
-      return SQLITE_ADMISSION_READ_ACTIONS.has(actionCode)
+      return APPLY(SET_HAS, SQLITE_ADMISSION_READ_ACTIONS, [actionCode])
         ? sqliteConstants.SQLITE_OK
         : sqliteConstants.SQLITE_DENY;
     },
