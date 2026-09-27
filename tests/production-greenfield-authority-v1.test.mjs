@@ -31,17 +31,18 @@ test('greenfield authority binds the frozen parent and grants no production muta
   assert.deepEqual(authority.authorization.requestedActionIds, []);
   assert.deepEqual(authority.authorization.approvedActionIds, []);
   assert.deepEqual(authority.authorization.requestableActionIds, []);
-  assert.equal(authority.authorization.nextActionId, 'PROD-06-LOOPBACK-HEALTH-SMOKE');
+  assert.equal(authority.authorization.nextActionId, 'PROD-07-CONFIGURE-REVERSE-PROXY-TLS');
   assert.equal(authority.authorization.nextActionRequiresExplicitAuthorization, true);
 });
 
-test('greenfield authority records PROD-03 through PROD-05 production evidence without secrets', () => {
+test('greenfield authority records PROD-03 through PROD-06 production evidence without secrets', () => {
   assert.deepEqual(
-    authority.completedAcceptanceIds.slice(-3),
+    authority.completedAcceptanceIds.slice(-4),
     [
       'PROD-03-GENERATE-INSTALL-TOKENS',
       'PROD-04-BUILD-IMAGE',
       'PROD-05-START-ISOLATED-CONTAINER',
+      'PROD-06-LOOPBACK-HEALTH-SMOKE',
     ],
   );
   assert.deepEqual(authority.acceptance.prod03, {
@@ -109,6 +110,35 @@ test('greenfield authority records PROD-03 through PROD-05 production evidence w
     rollbackActionId: 'ROLLBACK-02-STOP-NEW-CONTAINER',
     rollbackPreserveDataVolume: 'jenn-shooting-operations_shooting_data',
   });
+  assert.deepEqual(authority.acceptance.prod06, {
+    status: 'PASS',
+    recordedAtUtc: '2026-09-27T18:08:17Z',
+    containerName: 'jenn-shooting-operations-prod',
+    containerId: '45ff5469cbd8874fbc3f5ac71260a57596b19f86a26b4131fa38d5d678162a99',
+    imageId: 'sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545',
+    healthzStatus: 200,
+    healthzBody: {
+      ok: true,
+      service: 'jenn-shooting-operations',
+    },
+    healthzWriteAdmissionHeader: 'disabled',
+    containerState: 'running',
+    containerHealth: 'healthy',
+    containerUid: 1000,
+    containerGid: 1000,
+    databasePath: '/app/data/shooting-operations.sqlite',
+    volumeMountType: 'volume',
+    volumeName: 'jenn-shooting-operations_shooting_data',
+    volumeDestination: '/app/data',
+    volumeReadWrite: true,
+    loopbackBind: '127.0.0.1:3800',
+    writeAdmissionMode: 'disabled',
+    orphanCleanupMode: 'disabled',
+    bootstrapRevision: 0,
+    containerStartCompletionProof: 'PROD-05-START-ISOLATED-CONTAINER',
+    readOnlySmoke: true,
+    secretValuesRecorded: false,
+  });
 
   rejected(value => {
     value.acceptance.prod03.uniqueRoleTokenCount = 3;
@@ -118,6 +148,9 @@ test('greenfield authority records PROD-03 through PROD-05 production evidence w
   }, 'GREENFIELD_ACCEPTANCE_INVALID');
   rejected(value => {
     value.acceptance.prod05.writeAdmissionMode = 'enabled';
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prod06.healthzStatus = 503;
   }, 'GREENFIELD_ACCEPTANCE_INVALID');
 });
 
@@ -355,7 +388,7 @@ test('greenfield cleanup cannot bypass activation or disable-and-drain recovery'
 
 test('greenfield authority cannot self-authorize the next production action', () => {
   rejected(value => {
-    value.authorization.requestableActionIds = ['PROD-06-LOOPBACK-HEALTH-SMOKE'];
+    value.authorization.requestableActionIds = ['PROD-07-CONFIGURE-REVERSE-PROXY-TLS'];
   }, 'GREENFIELD_AUTHORIZATION_STATE_INVALID');
   rejected(value => {
     value.authorization.blanketApprovalAllowed = true;
