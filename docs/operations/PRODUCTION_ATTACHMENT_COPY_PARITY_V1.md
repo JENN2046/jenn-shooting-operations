@@ -17,7 +17,7 @@ The parity engine requires four explicit storage inputs:
 - target SQLite database;
 - target upload root.
 
-Candidate-engine mutation tests use a private-class-branded `TEST_SANDBOX` capability minted only by `createAttachmentParityIsolatedTestAuthority()`. That authority creates its own temporary sandbox and refuses to mint for any resolved DB/root identity outside that sandbox. The exported mutating test wrapper accepts only this TEST brand; production copy bypasses the test wrapper and calls the private mutator only after LIVE_PROVIDER authentication.
+Candidate-engine mutation tests use a private-class-branded `TEST_SANDBOX` capability, but the TEST mint and mutating test wrapper are not exported by the production module. `node --test` installs a repository test loader from `tests/support/` that exposes those private seams only in the test module instance; the production Docker image does not copy `tests/`. Production copy calls the private mutator only after LIVE_PROVIDER authentication.
 
 Production receipt APIs do **not** trust caller-supplied lease fields or mutable collection prototypes. Capability authenticity is checked by private class fields, and construction additionally requires a module-private mint token. Production APIs require the `LIVE_PROVIDER` authority class, while Stage 3 intentionally exposes no live mint. Knowing the scope digest, monkeypatching `WeakSet.prototype.has`, supplying `assertHeld: () => true`, or obtaining a legitimate TEST instance's `.constructor` cannot create production authority without the private mint token. A future live provider must execute inside this private authority boundary while actually holding offline-maintenance or coordinated-write exclusion.
 
@@ -29,7 +29,7 @@ The original source/target database and upload-root identities remain authoritat
 
 The final parity window captures the complete SQLite physical family for both databases: main database identity plus WAL/SHM/journal state, with both the main SQLite file and WAL bytes content-hashed for the closing proof.
 
-Physical-family snapshots remain supplemental drift evidence, not a substitute for writer exclusion. Candidate evaluation continuously checks its branded capability, including between the two closing family captures. Mutating candidate execution accepts only `TEST_SANDBOX` or future `LIVE_PROVIDER` brands; a sandbox capability is scope-bound to the module-created temporary root and cannot be repointed at production paths. Production receipt issuance accepts only `LIVE_PROVIDER`.
+Physical-family snapshots remain supplemental drift evidence, not a substitute for writer exclusion. Candidate evaluation continuously checks its branded capability, including between the two closing family captures. The production module has no public TEST mutation surface: TEST_SANDBOX minting and the mutating candidate wrapper exist only in the test-loader module instance. Production receipt issuance accepts only `LIVE_PROVIDER`.
 
 For Stage-3 strong-family verification, the main SQLite file and every present `-wal`, `-shm`, or `-journal` sidecar must have exactly one hard link. Source and target families are compared as a **full cross-product** of present device/inode identities, not merely same-role members. Their expected database/WAL/SHM/journal namespaces are also compared as a full cross-product using filesystem-aware comparison keys. The key models both case semantics and Unicode canonical equivalence: on canonical-equivalent filesystems such as APFS, paths are normalized to a canonical decomposed form before case folding; other filesystems may be probed against the existing main database path. Captured string-normalization/case-fold intrinsics prevent later prototype monkeypatching from weakening the comparison. Future absent sidecars therefore use the same namespace equivalence semantics as their filesystem. Any physical or namespace overlap is rejected as `SOURCE_TARGET_SQLITE_FAMILY_ALIAS`.
 
@@ -137,7 +137,7 @@ Modes:
 
 The direct CLI intentionally has **no built-in production quiescence provider** in this work package. Direct execution therefore fails closed with `ATTACHMENT_PARITY_PROVIDER_AUTH_REQUIRED`.
 
-Programmatic callers cannot bypass this by constructing an object with the documented scope digest, kind, or `assertHeld()` callback, nor by monkeypatching `WeakSet.prototype.has`. Production receipt APIs accept only the private `LIVE_PROVIDER` class brand; Stage 3 exposes no mint for it. The only exported mint is the isolated TEST authority, and it can authorize mutation only inside its own freshly created temporary sandbox.
+Programmatic callers cannot bypass this by constructing an object with the documented scope digest, kind, or `assertHeld()` callback, nor by monkeypatching `WeakSet.prototype.has`. Production receipt APIs accept only the private `LIVE_PROVIDER` class brand; Stage 3 exposes no production mint for it. The normal production module exports neither the TEST authority mint nor the mutating test wrapper; those seams are injected only by the `tests/support` loader during `node --test` and are absent from the production Docker image.
 
 Required path arguments:
 

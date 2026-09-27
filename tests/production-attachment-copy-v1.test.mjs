@@ -26,14 +26,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
-import {
-  copyAndVerifyAttachments,
-  copyAttachmentsAndEvaluateParityTestCandidate,
-  createAttachmentParityIsolatedTestAuthority,
-  describeAttachmentParityScope,
-  evaluateAttachmentDatabaseParityCandidate,
-  verifyAttachmentDatabaseParity,
-} from '../src/production-attachment-copy-v1.mjs';
+import './support/register-production-attachment-copy-test-seam.mjs';
 import {
   captureSqlitePhysicalFamily,
   resolveExistingPath,
@@ -52,6 +45,15 @@ import {
   parseAttachmentCopyArgs,
   runAttachmentCopyCommand,
 } from '../scripts/copy-production-attachments.mjs';
+
+const {
+  copyAndVerifyAttachments,
+  copyAttachmentsAndEvaluateParityTestCandidate,
+  createAttachmentParityIsolatedTestAuthority,
+  describeAttachmentParityScope,
+  evaluateAttachmentDatabaseParityCandidate,
+  verifyAttachmentDatabaseParity,
+} = await import('../src/production-attachment-copy-v1.mjs?attachment-copy-test-seam');
 
 const CREATED_AT = '2026-09-26T00:00:00.000Z';
 
@@ -186,6 +188,15 @@ function copyOptions(fixture, extra = {}) {
     }),
   };
 }
+
+test('production attachment-copy module exposes no TEST authority or mutating test wrapper', async () => {
+  const productionSurface = await import('../src/production-attachment-copy-v1.mjs');
+  assert.equal('createAttachmentParityIsolatedTestAuthority' in productionSurface, false);
+  assert.equal('copyAttachmentsAndEvaluateParityTestCandidate' in productionSurface, false);
+
+  const dockerfile = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
+  assert.doesNotMatch(dockerfile, /^COPY\s+tests(?:\/|\s)/mu);
+});
 
 test('copy cleanup attempts source target and root descriptor closes independently', () => {
   const moduleSource = readFileSync(
