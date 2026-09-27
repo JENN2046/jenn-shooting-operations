@@ -4,6 +4,7 @@ import test from 'node:test';
 import { createTrustedPrincipal } from '../src/authorization-v2.mjs';
 import { createKioskV2Application } from '../src/server.mjs';
 import { ScheduleStore } from '../src/store.mjs';
+import { createWriteAdmissionControl } from '../src/write-admission-v1.mjs';
 
 const NOW = '2026-09-22T09:30:00.000Z';
 
@@ -83,6 +84,60 @@ test('Kiosk V2 direct mutation is fenced by the bound ScheduleStore admission co
     assert.equal(after, before);
   } finally {
     store.close();
+  }
+});
+
+test('Kiosk V2 wrapper keeps the admission control captured at construction', () => {
+  const backingStore = new ScheduleStore({
+    filename: ':memory:',
+    writeAdmissionMode: 'disabled',
+    orphanCleanupMode: 'disabled',
+  });
+  const captured = backingStore.writeAdmissionControl;
+  const mutableStore = {
+    db: backingStore.db,
+    writeAdmissionControl: captured,
+  };
+  try {
+    const created = createTrustedPrincipal({
+      subjectId: 'ACTOR-KIOSK-CAPTURED',
+      role: 'operator',
+      resourceIds: ['STUDIO-A'],
+    });
+    assert.equal(created.ok, true);
+    const kiosk = createKioskV2Application({
+      store: mutableStore,
+      authenticate: () => created.principal,
+      businessTimeZone: 'UTC',
+      clock: () => new Date(NOW),
+    });
+    assert.equal(kiosk.writeAdmissionControl, captured);
+
+    mutableStore.writeAdmissionControl =
+      createWriteAdmissionControl({ initialMode: 'enabled' });
+
+    const before = backingStore.db.prepare('SELECT total_changes() AS changes').get().changes;
+    const result = kiosk.applyRunEvent({
+      command: {
+        schemaVersion: 2,
+        eventId: 'EVENT-CAPTURED-0001',
+        runId: 'RUN-CAPTURED-0001',
+        scheduleItemId: 'SCHEDULE-CAPTURED-0001',
+        eventType: 'start',
+        expectedRunRevision: 0,
+        occurredAt: NOW,
+        deviceId: 'KIOSK-CAPTURED-0001',
+        localSequence: 0,
+      },
+      principal: created.principal,
+    });
+    const after = backingStore.db.prepare('SELECT total_changes() AS changes').get().changes;
+
+    assert.deepEqual(result, { ok: false, code: 'WRITE_ADMISSION_DISABLED' });
+    assert.equal(kiosk.writeAdmissionControl, captured);
+    assert.equal(after, before);
+  } finally {
+    backingStore.close();
   }
 });
 
