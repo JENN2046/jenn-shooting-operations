@@ -29,6 +29,7 @@ test('Kiosk V2 runtime composition is explicit, injected, and empty-resource saf
       businessTimeZone: 'UTC',
       clock: () => new Date(NOW),
     });
+    assert.equal(kiosk.writeAdmissionControl, store.writeAdmissionControl);
     assert.equal(kiosk.authenticate(), created.principal);
     const current = kiosk.readCurrent({
       principal: created.principal,
