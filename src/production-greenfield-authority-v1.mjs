@@ -43,9 +43,42 @@ const EXPECTED_FORWARD_CHAIN = Object.freeze([
   'PROD-05-START-ISOLATED-CONTAINER',
   'PROD-06-LOOPBACK-HEALTH-SMOKE',
   'PROD-07-CONFIGURE-REVERSE-PROXY-TLS',
+]);
+
+const EXPECTED_CONDITIONAL_ACTIONS = Object.freeze([
+  'PROD-08-FIREWALL-SECURITY-GROUP',
+]);
+
+const EXPECTED_POST_ACTIVATION_INTEGRATION_ACTIONS = Object.freeze([
   'PROD-10-ENABLE-VCP-REMOTE-SYNC',
   'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE',
-  'PROD-08-FIREWALL-SECURITY-GROUP_IF_USED',
+]);
+
+const EXPECTED_INTEGRATION_PREREQUISITES = Object.freeze([
+  'GREENFIELD_ACTIVATION_COMPLETION',
+  'GREENFIELD_FORWARD_CHAIN',
+  'PRODUCTION_TARGET_FACTS',
+  'PRODUCTION_DEPLOYMENT_GATE',
+]);
+
+const EXPECTED_TOP_LEVEL_KEYS = Object.freeze([
+  'schemaVersion',
+  'authorityId',
+  'baseManifestDigest',
+  'deploymentMode',
+  'target',
+  'acceptance',
+  'notApplicableBaseGateIds',
+  'supersededBaseGateIds',
+  'completedAcceptanceIds',
+  'greenfieldContainerStartPrerequisites',
+  'greenfieldForwardChain',
+  'greenfieldConditionalActionIds',
+  'postActivationIntegrationActionIds',
+  'greenfieldIntegrationPrerequisites',
+  'greenfieldActivationAction',
+  'greenfieldCleanupAction',
+  'authorization',
 ]);
 
 const EXPECTED_ACTIVATION = Object.freeze({
@@ -61,15 +94,16 @@ const EXPECTED_ACTIVATION = Object.freeze({
     'GREENFIELD_NO_EXISTING_SOURCE',
     'PRODUCTION_TARGET_FACTS',
     'GREENFIELD_FORWARD_CHAIN',
+    'GREENFIELD_WRITE_CAPABLE_INTEGRATIONS_DISABLED',
     'CUTOVER_LIVE_SERVICE_READINESS',
     'PRODUCTION_DEPLOYMENT_GATE',
   ]),
   effects: Object.freeze([
     'After exact PROD-GF-13 authorization, revalidate the bound host, exact target storage identities, no-existing-source evidence, activation route and client scope; no source barrier, source sync or old-source demotion exists on this greenfield path',
-    'Keep every orphan-cleanup entry point disabled and keep public unauthenticated writes blocked while verifying the isolated target service, loopback health, routed TLS and approved VCP/Kiosk mappings',
-    'Promote only the approved new route and client mappings to production and record one activation receipt; do not overwrite or claim any previous Jenn Shooting Operations authority',
+    'Keep every orphan-cleanup entry point disabled, keep public unauthenticated writes blocked, and keep PROD-10/PROD-11 write-capable integrations disabled while verifying the isolated target service, loopback health and routed TLS',
+    'Promote only the approved new route and client entrypoint mappings to production and record one activation receipt; do not overwrite or claim any previous Jenn Shooting Operations authority',
     'Perform read-only post-activation health, routing, client-mapping, database and attachment-baseline verification; failure removes only newly introduced exposure/runtime bindings and preserves the data volume',
-    'Only after every read-only verification succeeds may approved production writes be admitted; orphan cleanup stays disabled until separately authorized greenfield cleanup restoration',
+    'Only after every read-only verification succeeds may approved production writes be admitted; PROD-10/PROD-11 remain separately blocked until post-activation prerequisites and exact authorization, and orphan cleanup stays disabled until separately authorized greenfield cleanup restoration',
   ]),
   rollbackActionIds: Object.freeze([
     'ROLLBACK-01-REMOVE-NEW-ROUTE',
@@ -77,15 +111,13 @@ const EXPECTED_ACTIVATION = Object.freeze({
     'ROLLBACK-02-STOP-NEW-CONTAINER',
     'ROLLBACK-08-REMOVE-BUILT-IMAGE',
     'ROLLBACK-06-REVOKE-ROLE-TOKENS',
-    'ROLLBACK-09-DISABLE-VCP-CONFIG',
-    'ROLLBACK-10-DISABLE-KIOSK-CONFIG',
     'ROLLBACK-04-PRESERVE-DATA-VOLUME',
   ]),
   evidenceRequired: Object.freeze([
     'GREENFIELD_NO_EXISTING_SOURCE_PROOF',
     'NO_PREVIOUS_PRODUCTION_AUTHORITY_PROOF',
     'GREENFIELD_FORWARD_CHAIN_COMPLETION_PROOF',
-    'VCP_KIOSK_ENABLEMENT_COMPLETION_PROOF',
+    'PRE_ACTIVATION_WRITE_CAPABLE_INTEGRATIONS_DISABLED_PROOF',
     'TARGET_STORAGE_IDENTITIES',
     'ACTIVATION_ROUTE_AND_CLIENT_SCOPE',
     'PRE_ACTIVATION_LOOPBACK_HEALTH',
@@ -158,7 +190,6 @@ function issue(code, path) {
 
 export function validateProductionGreenfieldAuthority(value, {
   baseManifest,
-  baseManifestDigest,
 } = {}) {
   const issues = [];
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -167,7 +198,13 @@ export function validateProductionGreenfieldAuthority(value, {
   if (containsForbiddenEvidenceInput(value)) {
     return Object.freeze({ ok: false, issues: Object.freeze([issue('SECRET_MATERIAL_DETECTED', '/')]) });
   }
-  if (baseManifestDigest !== EXPECTED_BASE_MANIFEST_DIGEST
+  if (!sameSet(Object.keys(value), EXPECTED_TOP_LEVEL_KEYS)) {
+    issues.push(issue('GREENFIELD_TOP_LEVEL_KEYS_INVALID', '/'));
+  }
+  const derivedBaseManifestDigest = baseManifest && typeof baseManifest === 'object'
+    ? 'sha256:' + createHash('sha256').update(stableJson(baseManifest)).digest('hex')
+    : null;
+  if (derivedBaseManifestDigest !== EXPECTED_BASE_MANIFEST_DIGEST
       || value.baseManifestDigest !== EXPECTED_BASE_MANIFEST_DIGEST) {
     issues.push(issue('BASE_MANIFEST_DIGEST_INVALID', '/baseManifestDigest'));
   }
@@ -248,6 +285,44 @@ export function validateProductionGreenfieldAuthority(value, {
   if (!sameSet(value.greenfieldForwardChain, EXPECTED_FORWARD_CHAIN)) {
     issues.push(issue('GREENFIELD_FORWARD_CHAIN_INVALID', '/greenfieldForwardChain'));
   }
+  if (!sameSet(value.greenfieldConditionalActionIds, EXPECTED_CONDITIONAL_ACTIONS)) {
+    issues.push(issue('GREENFIELD_CONDITIONAL_ACTION_SET_INVALID', '/greenfieldConditionalActionIds'));
+  }
+  if (!sameSet(
+    value.postActivationIntegrationActionIds,
+    EXPECTED_POST_ACTIVATION_INTEGRATION_ACTIONS,
+  )) {
+    issues.push(issue(
+      'GREENFIELD_INTEGRATION_ACTION_SET_INVALID',
+      '/postActivationIntegrationActionIds',
+    ));
+  }
+  if (!sameSet(
+    value.greenfieldIntegrationPrerequisites,
+    EXPECTED_INTEGRATION_PREREQUISITES,
+  )) {
+    issues.push(issue(
+      'GREENFIELD_INTEGRATION_PREREQUISITES_INVALID',
+      '/greenfieldIntegrationPrerequisites',
+    ));
+  }
+
+  const baseActionMap = new Map((baseManifest?.actions ?? []).map(action => [action.id, action]));
+  for (const id of [
+    ...EXPECTED_FORWARD_CHAIN,
+    ...EXPECTED_CONDITIONAL_ACTIONS,
+    ...EXPECTED_POST_ACTIVATION_INTEGRATION_ACTIONS,
+  ]) {
+    if (!baseActionMap.has(id)) {
+      issues.push(issue('GREENFIELD_ACTION_REFERENCE_INVALID', '/baseManifest/actions/' + id));
+    }
+  }
+  for (const id of EXPECTED_POST_ACTIVATION_INTEGRATION_ACTIONS) {
+    if (!baseActionMap.get(id)?.preconditions?.includes('INTEGRATION_DEPLOYMENT_READINESS')) {
+      issues.push(issue('GREENFIELD_INTEGRATION_BASE_CONTRACT_INVALID', '/baseManifest/actions/' + id));
+    }
+  }
+
   if (!sameObject(value.greenfieldActivationAction, EXPECTED_ACTIVATION)) {
     issues.push(issue('GREENFIELD_ACTIVATION_ACTION_INVALID', '/greenfieldActivationAction'));
   }
@@ -257,8 +332,11 @@ export function validateProductionGreenfieldAuthority(value, {
 
   if (value.greenfieldContainerStartPrerequisites.includes('PROD-09-PRODUCTION-DATA-IMPORT')
       || value.greenfieldForwardChain.includes('PROD-09-PRODUCTION-DATA-IMPORT')
+      || value.greenfieldForwardChain.some(id => EXPECTED_POST_ACTIVATION_INTEGRATION_ACTIONS.includes(id))
       || value.greenfieldActivationAction.preconditions.includes('CUTOVER_SOURCE_CONSISTENCY')
-      || value.greenfieldActivationAction.rollbackActionIds.includes('ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH')) {
+      || value.greenfieldActivationAction.rollbackActionIds.includes('ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH')
+      || value.greenfieldActivationAction.rollbackActionIds.includes('ROLLBACK-09-DISABLE-VCP-CONFIG')
+      || value.greenfieldActivationAction.rollbackActionIds.includes('ROLLBACK-10-DISABLE-KIOSK-CONFIG')) {
     issues.push(issue('GREENFIELD_SOURCE_PATH_LEAK_INVALID', '/'));
   }
 
