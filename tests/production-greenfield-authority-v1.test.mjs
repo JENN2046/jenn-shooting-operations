@@ -31,8 +31,53 @@ test('greenfield authority binds the frozen parent and grants no production muta
   assert.deepEqual(authority.authorization.requestedActionIds, []);
   assert.deepEqual(authority.authorization.approvedActionIds, []);
   assert.deepEqual(authority.authorization.requestableActionIds, []);
-  assert.equal(authority.authorization.nextActionId, 'PROD-03-GENERATE-INSTALL-TOKENS');
+  assert.equal(authority.authorization.nextActionId, 'PROD-05-START-ISOLATED-CONTAINER');
   assert.equal(authority.authorization.nextActionRequiresExplicitAuthorization, true);
+});
+
+test('greenfield authority records PROD-03 and PROD-04 production evidence without secrets', () => {
+  assert.deepEqual(
+    authority.completedAcceptanceIds.slice(-2),
+    ['PROD-03-GENERATE-INSTALL-TOKENS', 'PROD-04-BUILD-IMAGE'],
+  );
+  assert.deepEqual(authority.acceptance.prod03, {
+    status: 'PASS',
+    recordedAtUtc: '2026-09-27T16:34:04.678274744Z',
+    secretStoragePath: '/mnt/datadisk0/apps/jenn-shooting-operations/.env.tokens',
+    fileOwner: 'ubuntu:ubuntu',
+    fileMode: 600,
+    fileSizeBytes: 317,
+    roleTokenCount: 4,
+    uniqueRoleTokenCount: 4,
+    tokenHexLength: 64,
+    secretValuesRecorded: false,
+    noSecretOutput: true,
+    rollbackActionId: 'ROLLBACK-06-REVOKE-ROLE-TOKENS',
+  });
+  assert.deepEqual(authority.acceptance.prod04, {
+    status: 'PASS',
+    recordedAtUtc: '2026-09-27T16:48:50.128965614Z',
+    authorityCommit: '92b7137211bf807f178901e878a8c3d6e335cec4',
+    imageTag: 'jenn-shooting-operations:prod-92b7137211bf807f178901e878a8c3d6e335cec4',
+    imageId: 'sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545',
+    nodeBaseIndexDigest: 'sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1',
+    nodeBaseAmd64Digest: 'sha256:83f1c388c31fb2e51f7cbd4dea949b96260798c98f206e8e4696bc93bd964e3a',
+    imageUser: 'node',
+    targetContainers: 0,
+    port3800Listeners: 0,
+    tempBuildArtifacts: 0,
+    buildLogLowDisclosure: true,
+    secretValuesOutput: false,
+    evidencePath: '/mnt/datadisk0/apps/jenn-shooting-operations/prod04-build-evidence.txt',
+    rollbackActionId: 'ROLLBACK-08-REMOVE-BUILT-IMAGE',
+  });
+
+  rejected(value => {
+    value.acceptance.prod03.uniqueRoleTokenCount = 3;
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prod04.imageId = 'sha256:' + '0'.repeat(64);
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
 });
 
 test('greenfield authority derives the parent digest from the supplied manifest', () => {
@@ -269,7 +314,7 @@ test('greenfield cleanup cannot bypass activation or disable-and-drain recovery'
 
 test('greenfield authority cannot self-authorize the next production action', () => {
   rejected(value => {
-    value.authorization.requestableActionIds = ['PROD-03-GENERATE-INSTALL-TOKENS'];
+    value.authorization.requestableActionIds = ['PROD-05-START-ISOLATED-CONTAINER'];
   }, 'GREENFIELD_AUTHORIZATION_STATE_INVALID');
   rejected(value => {
     value.authorization.blanketApprovalAllowed = true;
