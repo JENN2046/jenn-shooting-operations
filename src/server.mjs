@@ -21,12 +21,17 @@ export function createKioskV2Application({
   allowedBriefHosts = [],
 } = {}) {
   if (!store?.db) throw new TypeError('ScheduleStore is required');
+  if (typeof store.writeAdmissionControl?.isDisabled !== 'function'
+      || typeof store.writeAdmissionControl?.status !== 'function') {
+    throw new TypeError('Kiosk ScheduleStore write admission control is required');
+  }
   if (typeof authenticate !== 'function') throw new TypeError('Kiosk authenticate port is required');
   if (typeof businessTimeZone !== 'string' || businessTimeZone.length === 0) {
     throw new TypeError('Kiosk businessTimeZone is required');
   }
   return Object.freeze({
     authenticate,
+    writeAdmissionControl: store.writeAdmissionControl,
     readCurrent: createReadKioskCurrent({
       store: createSqliteKioskCurrentStore({ db: store.db }),
       clock,
@@ -49,6 +54,10 @@ export function createSchedulingV2Application({
   allowedBriefHosts = [],
 } = {}) {
   if (!store?.db) throw new TypeError('ScheduleStore is required');
+  if (typeof store.writeAdmissionControl?.isDisabled !== 'function'
+      || typeof store.writeAdmissionControl?.status !== 'function') {
+    throw new TypeError('Scheduling ScheduleStore write admission control is required');
+  }
   if (typeof authenticate !== 'function') {
     throw new TypeError('Scheduling authenticate port is required');
   }
@@ -83,6 +92,7 @@ export function createSchedulingV2Application({
   });
   return Object.freeze({
     authenticate,
+    writeAdmissionControl: store.writeAdmissionControl,
     decideProposal({ command, principal } = {}) {
       if (command?.decisionType !== 'reject') {
         return proposalStore.accept(command, principal);
