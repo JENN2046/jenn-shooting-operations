@@ -10,6 +10,8 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  readlinkSync,
+  realpathSync,
   renameSync,
   rmSync,
   statSync,
@@ -189,6 +191,22 @@ test('production copy wrapper delegates to the private mutator without test-only
   assert.match(source, /copyAttachmentsAndEvaluateParityInternal/u);
   assert.doesNotMatch(source, /copyAttachmentsAndEvaluateParityCandidate/u);
   assert.doesNotMatch(source, /faultInjector/u);
+});
+
+test('WO-05E exact-head verification uses the Node 24 runtime required by SQLite deserialize', () => {
+  const workflow = readFileSync(
+    new URL('../.github/workflows/wo05e-final-runtime.yml', import.meta.url),
+    'utf8',
+  );
+  const packageJson = JSON.parse(readFileSync(
+    new URL('../package.json', import.meta.url),
+    'utf8',
+  ));
+
+  assert.equal(packageJson.engines.node, '>=24.16.0');
+  assert.match(workflow, /Set up Node 24\.21\.0/u);
+  assert.match(workflow, /node-version: 24\.21\.0/u);
+  assert.doesNotMatch(workflow, /22\.22\.2/u);
 });
 
 test('production receipt APIs reject caller-forged quiescence capabilities even with the exact scope digest', () => {
@@ -487,6 +505,18 @@ function readdirFileCount(root) {
     .filter(entry => entry.isFile()).length;
 }
 
+function countOpenDescriptorsToPath(path) {
+  if (process.platform !== 'linux') return 0;
+  const expected = realpathSync(path);
+  let count = 0;
+  for (const entry of readdirSync('/proc/self/fd')) {
+    try {
+      if (readlinkSync(`/proc/self/fd/${entry}`) === expected) count += 1;
+    } catch {}
+  }
+  return count;
+}
+
 test('filesystem root upload domains still detect descendants', () => {
   const body = Buffer.from('filesystem-root-domain');
   const row = uploadFact({ id: 'UPLOAD-FILESYSTEM-ROOT', body });
@@ -593,6 +623,39 @@ test('target creation stays bound to the validated root inode across pathname re
   } finally {
     fixture.cleanup();
     rmSync(outsideRoot, { recursive: true, force: true });
+  }
+});
+
+test('failed post-create verification always releases the bound target-root descriptor', () => {
+  if (process.platform !== 'linux') return;
+
+  const body = Buffer.from('target-root-fd-close');
+  const row = uploadFact({ id: 'UPLOAD-TARGET-FD-CLOSE', body });
+  const fixture = createFixture([row]);
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+    const baseline = countOpenDescriptorsToPath(fixture.targetUploadRoot);
+
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      assert.throws(
+        () => copyAttachmentsAndEvaluateParityTestCandidate(copyOptions(fixture, {
+          faultInjector(stage, _storedName, details) {
+            if (stage !== 'before_target_verify') return;
+            unlinkSync(details.targetBoundPath);
+          },
+        })),
+        error => error.code === 'TARGET_ATTACHMENT_COPY_FAILED',
+      );
+
+      assert.equal(
+        countOpenDescriptorsToPath(fixture.targetUploadRoot),
+        baseline,
+        'failed verification must not leak the bound target-root directory descriptor',
+      );
+      assert.equal(existsSync(join(fixture.targetUploadRoot, row.stored_name)), false);
+    }
+  } finally {
+    fixture.cleanup();
   }
 });
 
