@@ -3,8 +3,9 @@ import { Readable } from 'node:stream';
 import test from 'node:test';
 
 import { createTrustedPrincipal } from '../src/authorization-v2.mjs';
-import { createHttpApp } from '../src/http-app.mjs';
+import { createHttpApp as createHttpAppRaw } from '../src/http-app.mjs';
 import { validateKioskRunEventResult } from '../src/kiosk-contract-validator-v2.mjs';
+import { createKioskV2Application } from '../src/server.mjs';
 import { ScheduleStore } from '../src/store.mjs';
 import { createWriteAdmissionControl } from '../src/write-admission-v1.mjs';
 
@@ -113,6 +114,25 @@ async function invoke(app, {
   };
 }
 
+function createHttpApp({ store, kiosk = null, ...rest }) {
+  const admission = store?.writeAdmissionControl
+    ?? kiosk?.writeAdmissionControl
+    ?? createWriteAdmissionControl({ initialMode: 'enabled' });
+  const boundStore = store?.writeAdmissionControl === undefined
+    ? { ...store, writeAdmissionControl: admission }
+    : store;
+  const boundKiosk = kiosk
+    && typeof kiosk.applyRunEvent === 'function'
+    && kiosk.writeAdmissionControl === undefined
+    ? { ...kiosk, writeAdmissionControl: admission }
+    : kiosk;
+  return createHttpAppRaw({
+    store: boundStore,
+    kiosk: boundKiosk,
+    ...rest,
+  });
+}
+
 function appWith(kiosk) {
   return createHttpApp({ store: fakeStore(), kiosk });
 }
@@ -135,6 +155,7 @@ test('direct HTTP composition reuses the ScheduleStore admission fence for V2 wr
   });
   let applyCalls = 0;
   const kiosk = {
+    writeAdmissionControl: admission,
     authenticate: async () => principal(),
     readCurrent: async () => ({ ok: true, dto: currentDto() }),
     applyRunEvent: async () => {
@@ -165,10 +186,50 @@ test('direct HTTP composition reuses the ScheduleStore admission fence for V2 wr
         kiosk,
         writeAdmissionControl: createWriteAdmissionControl({ initialMode: 'enabled' }),
       }),
-      /write admission control must match store control/u,
+      /all write-capable surfaces must share admission control/u,
     );
   } finally {
     store.close();
+  }
+});
+
+test('Kiosk V2 application authority controls direct HTTP composition across different stores', async () => {
+  const disabledAdmission = createWriteAdmissionControl({ initialMode: 'disabled' });
+  const disabledStore = new ScheduleStore({
+    filename: ':memory:',
+    writeAdmissionControl: disabledAdmission,
+    orphanCleanupMode: 'disabled',
+  });
+  const enabledStore = new ScheduleStore({ filename: ':memory:' });
+  let applyCalls = 0;
+  try {
+    const kiosk = createKioskV2Application({
+      store: disabledStore,
+      authenticate: async () => principal(),
+      businessTimeZone: 'UTC',
+    });
+    assert.equal(kiosk.writeAdmissionControl, disabledAdmission);
+
+    const app = createHttpAppRaw({ store: fakeStore(), kiosk });
+    const health = await invoke(app, { url: '/healthz' });
+    assert.equal(health.headers.get('x-write-admission'), 'disabled');
+
+    const event = await invoke(app, {
+      method: 'POST',
+      url: '/api/v2/schedule-items/SCHEDULE-ITEM-0001/events',
+      body: JSON.stringify(eventCommand()),
+    });
+    assert.equal(event.status, 503);
+    assert.equal(event.body.code, 'WRITE_ADMISSION_DISABLED');
+    assert.equal(applyCalls, 0);
+
+    assert.throws(
+      () => createHttpAppRaw({ store: enabledStore, kiosk }),
+      /all write-capable surfaces must share admission control/u,
+    );
+  } finally {
+    disabledStore.close();
+    enabledStore.close();
   }
 });
 
