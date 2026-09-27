@@ -11,7 +11,23 @@ const tokens = {
   administrator: 'administrator-token-0001',
 };
 
-test('pre-activation write admission blocks every HTTP mutation before store dispatch', async () => {
+function requestPayload(operationId = 'write-admission-request-0001') {
+  return {
+    schemaVersion: 1,
+    operationId,
+    productionType: '平面',
+    shootingSubtype: '产品',
+    deliverableCount: 1,
+    aspectRatio: '1:1',
+    sku: 'SKU-WRITE-ADMISSION',
+    name: 'Write admission test',
+    kind: '产品',
+    deliver: 'test',
+    requestedBy: 'test',
+  };
+}
+
+test('pre-activation fence stays closed until one in-process admission transition', async () => {
   const service = createOperationsServer({
     databasePath: ':memory:',
     tokens,
@@ -25,81 +41,86 @@ test('pre-activation write admission blocks every HTTP mutation before store dis
   const origin = `http://127.0.0.1:${service.server.address().port}`;
 
   try {
+    const healthBefore = await fetch(`${origin}/healthz`);
+    assert.equal(healthBefore.status, 200);
+    assert.equal((await healthBefore.json()).writeAdmission, 'disabled');
+
     const before = await fetch(`${origin}/api/v1/snapshot`);
-    assert.equal(before.status, 200);
     const beforeBody = await before.json();
     assert.equal(beforeBody.snapshot.revision, 0);
 
-    const cases = [
-      {
-        path: '/api/v1/requests',
-        init: {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: '{}',
-        },
-      },
-      {
-        path: '/api/v1/uploads?operationId=write-admission-0001&kind=attachment',
-        init: {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'text/plain',
-            'X-File-Name': 'blocked.txt',
-          },
-          body: 'blocked',
-        },
-      },
-      {
-        path: '/api/v1/snapshot',
-        init: {
-          method: 'PUT',
-          headers: {
-            ...{ Authorization: `Bearer ${tokens.scheduler}` },
-            'Content-Type': 'application/json',
-            'If-Match': '0',
-            'Idempotency-Key': 'write-admission-snapshot-0001',
-          },
-          body: JSON.stringify(beforeBody.snapshot),
-        },
-      },
-      {
-        path: '/api/v2/schedule-items/example/events',
-        init: {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: '{}',
-        },
-      },
-      {
-        path: '/api/v2/proposals/example/decisions',
-        init: {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: '{}',
-        },
-      },
-    ];
-
-    for (const candidate of cases) {
-      const response = await fetch(origin + candidate.path, candidate.init);
-      assert.equal(response.status, 503, candidate.path);
-      assert.deepEqual(await response.json(), {
-        ok: false,
-        code: 'WRITE_ADMISSION_DISABLED',
-      });
-    }
+    const blocked = await fetch(`${origin}/api/v1/requests`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestPayload()),
+    });
+    assert.equal(blocked.status, 503);
+    assert.equal((await blocked.json()).code, 'WRITE_ADMISSION_DISABLED');
 
     assert.deepEqual(
-      service.store.submitRequest({ submission: {}, role: 'direct-store' }),
+      service.store.submitRequest({ submission: requestPayload(), role: 'direct-store' }),
       { ok: false, status: 503, code: 'WRITE_ADMISSION_DISABLED' },
     );
 
+    const cleanupBefore = service.orphanCleanupControl.status();
+    assert.equal(cleanupBefore.enabled, false);
+    const cleanupEnableBlocked = service.orphanCleanupControl.enable({
+      expectedEpoch: cleanupBefore.epoch,
+    });
+    assert.equal(cleanupEnableBlocked.ok, false);
+    assert.equal(cleanupEnableBlocked.code, 'WRITE_ADMISSION_DISABLED');
+    assert.equal(service.orphanCleanupControl.status().enabled, false);
+
+    const admission = service.writeAdmissionControl.enable();
+    assert.equal(admission.ok, true);
+    assert.equal(admission.code, 'WRITE_ADMISSION_ENABLED');
+    assert.equal(admission.mode, 'enabled');
+    assert.equal(admission.transitionCount, 1);
+
+    const healthAfter = await fetch(`${origin}/healthz`);
+    assert.equal(healthAfter.status, 200);
+    assert.equal((await healthAfter.json()).writeAdmission, 'enabled');
+
+    const admitted = await fetch(`${origin}/api/v1/requests`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestPayload('write-admission-request-0002')),
+    });
+    assert.equal(admitted.status, 201);
+
     const after = await fetch(`${origin}/api/v1/snapshot`);
-    assert.equal(after.status, 200);
     const afterBody = await after.json();
-    assert.equal(afterBody.snapshot.revision, 0);
-    assert.deepEqual(afterBody.snapshot.tasks, []);
+    assert.equal(afterBody.snapshot.revision, 1);
+    assert.equal(afterBody.snapshot.tasks.length, 1);
+
+    assert.equal(service.orphanCleanupControl.status().enabled, false);
+  } finally {
+    service.server.close();
+    await once(service.server, 'close');
+  }
+});
+
+test('pre-activation HTTP fence blocks all mutating methods before dispatch', async () => {
+  const service = createOperationsServer({
+    databasePath: ':memory:',
+    tokens,
+    writeAdmissionMode: 'disabled',
+    orphanCleanupMode: 'disabled',
+    cleanupIntervalMs: 0,
+  });
+  service.server.listen(0, '127.0.0.1');
+  await once(service.server, 'listening');
+  const origin = `http://127.0.0.1:${service.server.address().port}`;
+  try {
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      const response = await fetch(`${origin}/api/v1/snapshot`, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: method === 'DELETE' ? undefined : '{}',
+      });
+      assert.equal(response.status, 503, method);
+      assert.equal((await response.json()).code, 'WRITE_ADMISSION_DISABLED');
+    }
   } finally {
     service.server.close();
     await once(service.server, 'close');
