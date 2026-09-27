@@ -392,3 +392,63 @@ nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
 ```
 
 No production side effect was performed by this correction.
+
+
+## Sixth Codex review correction
+
+Independent review found one additional valid P1: an injected Kiosk or Scheduling V2 application could retain adapters over a different `ScheduleStore` while `createHttpApp` selected another admission control, creating a V2 admission split-brain.
+
+The composition contract now binds every write-capable surface to one admission authority.
+
+### V2 application authority
+
+`createKioskV2Application` and `createSchedulingV2Application` now require their `ScheduleStore` to expose a valid write-admission control and return that exact control on the application object.
+
+### HTTP composition authority
+
+`createHttpApp` collects the controls exposed by:
+
+- the supplied store;
+- write-capable Kiosk application;
+- write-capable Scheduling application;
+- any explicit HTTP admission control.
+
+Every supplied control must be the **same object**. If any differ, composition fails closed with `all write-capable surfaces must share admission control`.
+
+A write-capable injected Kiosk or Scheduling application that exposes no admission control is rejected before the HTTP app is returned.
+
+Only when no write-capable/store authority exists may the standalone composition fallback create a local control.
+
+### Regression coverage
+
+New regressions prove:
+
+- Kiosk and Scheduling factories expose the exact `ScheduleStore.writeAdmissionControl` object;
+- a disabled V2 application composed with a store-like HTTP object that has no control causes HTTP to select the application's disabled authority and reject POST before V2 dispatch;
+- composing that same disabled V2 application with a different enabled `ScheduleStore` fails during composition;
+- existing HTTP fixture applications explicitly bind their fake write handlers to one shared enabled test control.
+
+This closes admission split-brain across Store / HTTP / Kiosk / Scheduling composition surfaces.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 165056d67d97d06416328f5fceea9b885347ae77
+workflowRun        = 36323202621 (#180)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 748
+pass               = 747
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+No production side effect was performed by this correction.
