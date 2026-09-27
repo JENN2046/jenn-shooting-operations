@@ -28,13 +28,14 @@ OS                   = Ubuntu 24.04.4 LTS
 architecture         = amd64
 applicationBind      = 127.0.0.1:3800
 applicationDirectory = /mnt/datadisk0/apps/jenn-shooting-operations
+containerName        = jenn-shooting-operations-prod
 dataVolume           = jenn-shooting-operations_shooting_data
 volumeMountpoint     = /mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data
 backingDevice        = /dev/vdb
 filesystem           = ext4
 ```
 
-Public hostname, reverse-proxy route, container name, and cloud security-group control-plane facts remain unresolved and are not invented by this supplement.
+Public hostname, reverse-proxy route, and cloud security-group control-plane facts remain unresolved and are not invented by this supplement.
 
 ## Completed production acceptance
 
@@ -95,15 +96,14 @@ requestedActionIds             = []
 approvedActionIds              = []
 requestableActionIds           = []
 blanketApprovalAllowed         = false
-nextActionId                   = PROD-05-START-ISOLATED-CONTAINER
+nextActionId                   = PROD-06-LOOPBACK-HEALTH-SMOKE
 nextActionRequiresAuthorization = true
 ```
 
-This authority definition records PROD-03 and PROD-04 as completed evidence but does not grant PROD-05 or any later production mutation. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
+This authority definition records PROD-03, PROD-04 and PROD-05 as completed evidence but does not grant PROD-06 or any later production mutation. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
 
 ## Remaining facts before later gates
 
-- exact container name;
 - exact public hostname / DNS binding;
 - exact reverse-proxy route;
 - TLS binding for that route;
@@ -112,7 +112,7 @@ This authority definition records PROD-03 and PROD-04 as completed evidence but 
 - post-activation VCP/Kiosk wiring and their separately authorized real acceptance;
 - greenfield cleanup restoration evidence.
 
-No source migration, production data copy, public route change, container start, integration enablement, or production activation is authorized by this document. PROD-03 token generation and PROD-04 image build are recorded as completed production evidence only; their completion grants no PROD-05 authority.
+No source migration, production data copy, public route change, additional container start, integration enablement, or production activation is authorized by this document. PROD-03 token generation, PROD-04 image build and PROD-05 isolated container start are recorded as completed production evidence only; their completion grants no PROD-06 authority.
 
 ## Codex review correction
 
@@ -1196,3 +1196,86 @@ nextAction         = PROD-05-START-ISOLATED-CONTAINER
 ```
 
 The first disposable validation attempt used Alpine and failed only two migration tests because BusyBox `touch` does not accept the GNU nanosecond epoch syntax used by those fixtures. The command-equivalent Node 24.21.0 GNU-userland rerun passed the complete suite. The disposable validation container and temporary checkout were removed, and the production application container count remained zero throughout.
+
+## Production evidence promotion: PROD-05
+
+The owner explicitly authorized only `PROD-05-START-ISOLATED-CONTAINER`. Before the start, the bound host was revalidated as `ins-mi85f3my / VM-0-12-ubuntu / 172.16.0.12`, with zero Jenn Shooting Operations containers, zero target-volume container mounts, zero port-3800 listeners and zero matching Nginx routes. The exact PROD-04 image remained present.
+
+Recorded production evidence:
+
+```text
+result                          = PASS
+recordedAtUtc                   = 2026-09-27T17:50:49Z
+containerName                   = jenn-shooting-operations-prod
+containerId                     = 45ff5469cbd8874fbc3f5ac71260a57596b19f86a26b4131fa38d5d678162a99
+imageId                         = sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545
+loopbackBind                    = 127.0.0.1:3800
+healthStatus                    = healthy
+runtimeUid                      = 1000
+runtimeGid                      = 1000
+dataVolume                      = jenn-shooting-operations_shooting_data
+dataVolumeBind                  = /app/data
+targetVolumeContainerMountCount = 1
+readOnlyRootfs                  = true
+restartPolicy                   = unless-stopped
+writeAdmissionMode              = disabled
+orphanCleanupMode               = disabled
+orphanCleanupState              = disabled
+orphanCleanupMarkerValid        = true
+orphanCleanupActiveRuns         = 0
+bootstrapRevision               = 0
+secretValuesRecorded            = false
+evidencePath                    = /mnt/datadisk0/apps/jenn-shooting-operations/prod05-start-evidence.txt
+evidenceSha256                  = sha256:f33a4175f10318fde375e85ca21a55fb7b1243717d039ffdaee96f3480e047a6
+rollbackActionId                = ROLLBACK-02-STOP-NEW-CONTAINER
+```
+
+The container was started from the exact approved image using the existing restricted token file as an environment-file binding. No token value was copied into Git, chat, build context or evidence output.
+
+The greenfield write fence is held from PROD-05: `WRITE_ADMISSION_MODE=disabled` and `ORPHAN_CLEANUP_MODE=disabled`. Runtime inspection showed the orphan-cleanup control marker in `disabled` state with a valid marker and zero active runs. The frozen source also denies `saveUpload`, `submitRequest`, manual/periodic non-dry-run cleanup and cleanup enablement while write admission is disabled. Only the allowed empty-target schema and revision-zero bootstrap occurred before listen.
+
+Authority state after this evidence promotion:
+
+```text
+completedAcceptanceIds =
+  PROD-01-TARGET-READONLY-PREFLIGHT
+  PROD-02-CREATE-ISOLATED-APP-STORAGE
+  PHASE-B-TARGET-VOLUME-ACCEPTANCE
+  PROD-03-GENERATE-INSTALL-TOKENS
+  PROD-04-BUILD-IMAGE
+  PROD-05-START-ISOLATED-CONTAINER
+
+authorization.status  = FROZEN_NOT_REQUESTED
+requestedActionIds    = []
+approvedActionIds     = []
+requestableActionIds  = []
+nextActionId          = PROD-06-LOOPBACK-HEALTH-SMOKE
+```
+
+This promotion records completed PROD-05 facts only. It does not authorize PROD-06.
+
+### PROD-05 promotion exact-head validation
+
+The implementation-bearing promotion head was independently validated by the repository's production-authorization workflow:
+
+```text
+implementationHead = 73578d55e7949213fd8e93b0a9a18f366e1ee044
+workflowRun        = 36338748349
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 763
+pass               = 762
+fail               = 0
+skip               = 1 expected external VCP adapter absence
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:47e931320eeceb0af7089497a3f8e09410019f7881d25045b826ac14636ed995
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-06-LOOPBACK-HEALTH-SMOKE
+```
+
+This validation performed no production mutation. Because this evidence paragraph changes only the acceptance document, the resulting final docs head is validated separately before merge eligibility.
+

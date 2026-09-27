@@ -26,6 +26,7 @@ const EXPECTED_COMPLETED = Object.freeze([
   'PHASE-B-TARGET-VOLUME-ACCEPTANCE',
   'PROD-03-GENERATE-INSTALL-TOKENS',
   'PROD-04-BUILD-IMAGE',
+  'PROD-05-START-ISOLATED-CONTAINER',
 ]);
 
 const EXPECTED_CONTAINER_START = Object.freeze([
@@ -365,7 +366,7 @@ export function validateProductionGreenfieldAuthority(value, {
     filesystem: 'ext4',
     publicHostname: null,
     reverseProxyRoute: null,
-    containerName: null,
+    containerName: 'jenn-shooting-operations-prod',
     cloudSecurityGroupStatus: 'UNVERIFIED_CONTROL_PLANE_FACT',
   };
   if (!sameObject(value.target, expectedTarget)) {
@@ -423,6 +424,44 @@ export function validateProductionGreenfieldAuthority(value, {
       evidencePath:
         '/mnt/datadisk0/apps/jenn-shooting-operations/prod04-build-evidence.txt',
       rollbackActionId: 'ROLLBACK-08-REMOVE-BUILT-IMAGE',
+    },
+    prod05: {
+      status: 'PASS',
+      recordedAtUtc: '2026-09-27T17:50:49Z',
+      sourceAuthorityCommit: '92b7137211bf807f178901e878a8c3d6e335cec4',
+      containerName: 'jenn-shooting-operations-prod',
+      containerId:
+        '45ff5469cbd8874fbc3f5ac71260a57596b19f86a26b4131fa38d5d678162a99',
+      imageId:
+        'sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545',
+      loopbackBind: '127.0.0.1:3800',
+      healthStatus: 'healthy',
+      runtimeUid: 1000,
+      runtimeGid: 1000,
+      dataVolumeName: 'jenn-shooting-operations_shooting_data',
+      dataVolumeBind: '/app/data',
+      targetVolumeContainerMountCount: 1,
+      readOnlyRootfs: true,
+      restartPolicy: 'unless-stopped',
+      writeAdmissionMode: 'disabled',
+      orphanCleanupMode: 'disabled',
+      orphanCleanupState: 'disabled',
+      orphanCleanupMarkerValid: true,
+      orphanCleanupActiveRuns: 0,
+      startupOrphanCleanupDisabled: true,
+      periodicOrphanCleanupDisabled: true,
+      requestTriggeredOrphanCleanupDisabled: true,
+      allOrphanCleanupEntryPointsDisabled: true,
+      bootstrapRevision: 0,
+      greenfieldNoExistingSource: true,
+      productionImportCompletionProof: 'NOT_APPLICABLE_GREENFIELD',
+      secretValuesRecorded: false,
+      evidencePath:
+        '/mnt/datadisk0/apps/jenn-shooting-operations/prod05-start-evidence.txt',
+      evidenceSha256:
+        'sha256:f33a4175f10318fde375e85ca21a55fb7b1243717d039ffdaee96f3480e047a6',
+      rollbackActionId: 'ROLLBACK-02-STOP-NEW-CONTAINER',
+      rollbackPreserveDataVolume: 'jenn-shooting-operations_shooting_data',
     },
   };
   if (!sameObject(value.acceptance, expectedAcceptance)) {
@@ -525,7 +564,7 @@ export function validateProductionGreenfieldAuthority(value, {
     requestedActionIds: [],
     approvedActionIds: [],
     requestableActionIds: [],
-    nextActionId: 'PROD-05-START-ISOLATED-CONTAINER',
+    nextActionId: 'PROD-06-LOOPBACK-HEALTH-SMOKE',
     nextActionRequiresExplicitAuthorization: true,
   };
   if (!sameObject(value.authorization, expectedAuthorization)) {
