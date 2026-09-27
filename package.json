@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "npm run validate:contract && npm run validate:shadow && npm run validate:production-manifest && npm test",
+    "check": "npm run validate:contract && npm run validate:shadow && npm run validate:production-manifest && npm run validate:production-greenfield-authority && npm test",
     "backup": "node scripts/backup.mjs",
     "uploads:cleanup": "node scripts/cleanup-uploads.mjs",
     "validate:contract": "node scripts/validate-contracts.mjs",
@@ -15,7 +15,8 @@
     "evaluate:shadow:report": "node scripts/verify-shadow-low-disclosure.mjs",
     "validate:shadow": "node scripts/verify-shadow-low-disclosure.mjs --check",
     "validate:production-manifest": "node scripts/validate-production-change-manifest.mjs",
-    "attachments:copy": "node scripts/copy-production-attachments.mjs"
+    "attachments:copy": "node scripts/copy-production-attachments.mjs",
+    "validate:production-greenfield-authority": "node scripts/validate-production-greenfield-authority.mjs"
   },
   "engines": {
     "node": ">=24.16.0"
