@@ -226,14 +226,30 @@ export function createHttpApp({
 }) {
   const authorize = createAuthorizer(tokens);
   const storeAdmission = store?.writeAdmissionControl;
-  if (storeAdmission !== undefined
-      && writeAdmissionControl !== undefined
-      && writeAdmissionControl !== storeAdmission) {
-    throw new TypeError('write admission control must match store control');
+  const kioskWrites = typeof kiosk?.applyRunEvent === 'function';
+  const schedulingWrites = typeof scheduling?.decideProposal === 'function';
+  const kioskAdmission = kiosk?.writeAdmissionControl;
+  const schedulingAdmission = scheduling?.writeAdmissionControl;
+
+  if (kioskWrites && kioskAdmission === undefined) {
+    throw new TypeError('write-capable kiosk must expose write admission control');
   }
-  const admission = storeAdmission
-    ?? writeAdmissionControl
+  if (schedulingWrites && schedulingAdmission === undefined) {
+    throw new TypeError('write-capable scheduling must expose write admission control');
+  }
+
+  const suppliedControls = [
+    storeAdmission,
+    kioskAdmission,
+    schedulingAdmission,
+    writeAdmissionControl,
+  ].filter(control => control !== undefined);
+  const admission = suppliedControls[0]
     ?? createWriteAdmissionControl({ initialMode: writeAdmissionMode });
+
+  if (suppliedControls.some(control => control !== admission)) {
+    throw new TypeError('all write-capable surfaces must share admission control');
+  }
   if (typeof admission?.isDisabled !== 'function'
       || typeof admission?.status !== 'function') {
     throw new TypeError('valid write admission control is required');
