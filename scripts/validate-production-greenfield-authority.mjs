@@ -29,7 +29,6 @@ try {
     } else {
       const result = validateProductionGreenfieldAuthority(greenfield.value, {
         baseManifest: manifest.value,
-        baseManifestDigest: baseResult.digest,
       });
       if (!result.ok) {
         reject(result.issues[0]?.code ?? 'GREENFIELD_AUTHORITY_INVALID');
