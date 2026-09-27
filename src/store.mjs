@@ -141,6 +141,16 @@ export class ScheduleStore {
     writeAdmissionControl,
   }) {
     const cleanupMode = readOnly ? 'inherit' : normalizeOrphanCleanupMode(orphanCleanupMode);
+    const admissionControl = writeAdmissionControl
+      ?? createWriteAdmissionControl({ initialMode: writeAdmissionMode });
+    if (typeof admissionControl?.isDisabled !== 'function'
+        || typeof admissionControl?.isEnabled !== 'function') {
+      throw new TypeError('valid write admission control is required');
+    }
+    if (!readOnly && admissionControl.isDisabled() && cleanupMode !== 'disabled') {
+      throw new TypeError('disabled write admission requires disabled orphan cleanup');
+    }
+
     if (!readOnly && filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
     this.uploadRoot = uploadRoot || (filename === ':memory:' ? null : join(dirname(filename), 'uploads'));
     this.cleanupRoot = this.uploadRoot ? join(this.uploadRoot, '.cleanup') : null;
@@ -157,12 +167,7 @@ export class ScheduleStore {
     this.idFactory = idFactory;
     this.orphanMaxAgeMs = orphanMaxAgeMs;
     this.readOnly = readOnly;
-    this.writeAdmissionControl = writeAdmissionControl
-      ?? createWriteAdmissionControl({ initialMode: writeAdmissionMode });
-    if (typeof this.writeAdmissionControl?.isDisabled !== 'function'
-        || typeof this.writeAdmissionControl?.isEnabled !== 'function') {
-      throw new TypeError('valid write admission control is required');
-    }
+    this.writeAdmissionControl = admissionControl;
     this.renameFile = fileOperations.rename || renameSync;
 
     if (!readOnly && cleanupMode === 'disabled') {
