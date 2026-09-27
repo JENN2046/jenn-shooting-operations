@@ -4,7 +4,7 @@
 - Parent manifest digest: `sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b`
 - Supplement: `docs/operations/production-greenfield-authority.v1.json`
 - Deployment mode: `GREENFIELD_NO_EXISTING_SOURCE`
-- Status: `GREENFIELD_AUTHORITY_IMPLEMENTATION_PASS / FINAL_DOCS_HEAD_VALIDATION_PENDING / PRODUCTION_AUTHORIZATION_NOT_REQUESTED`
+- Status: `GREENFIELD_WRITE_FENCE_IMPLEMENTATION_PASS / FINAL_DOCS_HEAD_VALIDATION_PENDING / PRODUCTION_AUTHORIZATION_NOT_REQUESTED`
 
 ## Why this supplement exists
 
@@ -150,3 +150,69 @@ nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
 The failed runs immediately before #130 belong to intentionally incomplete intermediate commits while validator, authority JSON, CLI and regressions were being aligned. They are superseded by exact-head run #130 and are not acceptance evidence.
 
 No production mutation was performed by this review correction.
+
+## Second Codex review correction
+
+Independent review of exact head `ddc54cb23d4b0c100278bb4df1281d5eb9acbaca` found two additional valid findings:
+
+1. **P1 / staging-principal writes** — the unchanged PROD-07 contract permits bounded staging principals to write before cutover. Moving PROD-10/11 post-activation was therefore insufficient by itself.
+2. **P2 / malformed nested authority values** — JSON-valid malformed fields such as a null forward chain or null activation action could reach unconditional property access and throw instead of returning a fail-closed validation result.
+
+Both are corrected without changing the frozen existing-source migration manifest.
+
+### Greenfield pre-activation write fence
+
+The runtime now has an explicit write-admission mode. Greenfield pre-activation deployment requires the disabled mode from PROD-05 through PROD-GF-13 read-only verification.
+
+When disabled:
+
+- every mutating HTTP method is rejected with a stable low-disclosure `WRITE_ADMISSION_DISABLED` response before business/store dispatch;
+- V1 direct store mutation entrypoints `replaceSnapshot`, `submitRequest`, and `saveUpload` reject before mutation;
+- PROD-07 bounded staging-principal writes are forbidden on the greenfield path even though the unchanged migration-path PROD-07 contract permits them;
+- PROD-10 / PROD-11 remain disabled until after greenfield activation;
+- orphan cleanup must already be disabled and drained; the server refuses to start in pre-activation write-disabled mode if orphan cleanup is enabled or inherited;
+- background writer inventory must be zero;
+- uncontrolled direct-storage bypass writer inventory must be zero;
+- no other container may mount the target volume;
+- only the initial empty-target schema and revision-zero bootstrap before the service begins listening is admitted as a pre-activation storage mutation.
+
+Activation keeps this fence held while routed TLS, storage identity and read-only service checks run. Production write admission is enabled only after those checks, using the exact same image and target volume, followed by another loopback health and storage-identity check. PROD-10 / PROD-11 remain separately authorized post-activation actions.
+
+The existing `CUTOVER_TARGET_WRITE_FENCE_CAPABILITY` remains unchanged and blocked in the base existing-source contract. The greenfield fence is a separate first-deployment admission boundary and does not claim to implement the source/target cross-process cutover fence.
+
+### Validator shape hardening
+
+The greenfield validator now validates all nested array/object shapes before any `.includes`, mapping, or nested property access. Malformed but JSON-valid direct inputs return:
+
+```text
+ok = false
+code = GREENFIELD_SCHEMA_INVALID
+digest = absent
+```
+
+They do not throw to direct consumers.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 25f9ac5f615ee00e8a8c366613cf068c0ee4aa83
+workflowRun        = 36319432367 (#156)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 741
+pass               = 740
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:4dae92d329628c7b4736bfdfafe7c8f432810e6c9f00059bbd201f47787ad24a
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+Intermediate failed workflow runs during the multi-file correction are not acceptance evidence. Exact-head run #156 supersedes them.
+
+No production token, container, route, DNS, TLS, firewall/security-group, database import, attachment copy, or production activation was performed by these corrections.
