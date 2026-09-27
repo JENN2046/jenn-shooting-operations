@@ -55,6 +55,26 @@ test('greenfield authority rejects undeclared top-level fields', () => {
   }, 'GREENFIELD_TOP_LEVEL_KEYS_INVALID');
 });
 
+test('greenfield authority rejects malformed nested shapes without throwing', () => {
+  for (const mutate of [
+    value => { value.greenfieldForwardChain = null; },
+    value => { value.greenfieldActivationAction = null; },
+    value => { value.greenfieldPreActivationWriteFence = null; },
+    value => { value.authorization.requestableActionIds = null; },
+  ]) {
+    const candidate = structuredClone(authority);
+    mutate(candidate);
+    const result = validate(candidate);
+    assert.equal(result.ok, false);
+    assert.equal(
+      result.issues.some(issue => issue.code === 'GREENFIELD_SCHEMA_INVALID'),
+      true,
+      JSON.stringify(result.issues),
+    );
+    assert.equal(Object.hasOwn(result, 'digest'), false);
+  }
+});
+
 test('greenfield authority cannot invent an existing source or another host', () => {
   rejected(value => { value.acceptance.existingProductionSource = 'PRESENT'; }, 'GREENFIELD_ACCEPTANCE_INVALID');
   rejected(value => { value.target.publicIpv4 = '127.0.0.1'; }, 'GREENFIELD_TARGET_BINDING_INVALID');
@@ -102,6 +122,39 @@ test('conditional firewall action uses the actual base action id', () => {
   }, 'GREENFIELD_CONDITIONAL_ACTION_SET_INVALID');
 });
 
+test('pre-activation writer fence denies staging, admin, API, background and direct-storage writers', () => {
+  const fence = authority.greenfieldPreActivationWriteFence;
+  assert.equal(fence.runtimeEnv, 'WRITE_ADMISSION_MODE=disabled');
+  assert.deepEqual(
+    [...fence.coveredWriterClasses].sort(),
+    [
+      'STAGING_PRINCIPAL',
+      'ADMIN_PRINCIPAL',
+      'API_WRITE_ENDPOINTS',
+      'BACKGROUND_WRITER',
+      'DIRECT_STORAGE_WRITER',
+    ].sort(),
+  );
+  for (const requirement of [
+    'ALL_HTTP_WRITES_REJECTED_BEFORE_STORE_DISPATCH',
+    'PROD_07_STAGING_WRITES_FORBIDDEN_ON_GREENFIELD_PATH',
+    'ORPHAN_CLEANUP_DISABLED_AND_DRAINED',
+    'BACKGROUND_WRITER_INVENTORY_ZERO',
+    'DIRECT_STORAGE_WRITER_INVENTORY_ZERO',
+    'NO_OTHER_CONTAINER_MOUNTS_TARGET_VOLUME',
+  ]) {
+    assert.equal(fence.requirements.includes(requirement), true, requirement);
+  }
+  rejected(value => {
+    value.greenfieldPreActivationWriteFence.runtimeMode = 'enabled';
+  }, 'GREENFIELD_PRE_ACTIVATION_WRITE_FENCE_INVALID');
+  rejected(value => {
+    value.greenfieldPreActivationWriteFence.requirements =
+      value.greenfieldPreActivationWriteFence.requirements
+        .filter(id => id !== 'PROD_07_STAGING_WRITES_FORBIDDEN_ON_GREENFIELD_PATH');
+  }, 'GREENFIELD_PRE_ACTIVATION_WRITE_FENCE_INVALID');
+});
+
 test('greenfield activation cannot acquire source barriers or integration rollback authority', () => {
   rejected(value => {
     value.greenfieldActivationAction.preconditions.push('CUTOVER_SOURCE_CONSISTENCY');
@@ -114,7 +167,19 @@ test('greenfield activation cannot acquire source barriers or integration rollba
   }, 'GREENFIELD_ACTIVATION_ACTION_INVALID');
   assert.equal(
     authority.greenfieldActivationAction.evidenceRequired.includes(
-      'PRE_ACTIVATION_WRITE_CAPABLE_INTEGRATIONS_DISABLED_PROOF',
+      'GREENFIELD_PRE_ACTIVATION_WRITE_FENCE_PROOF',
+    ),
+    true,
+  );
+  assert.equal(
+    authority.greenfieldActivationAction.evidenceRequired.includes(
+      'PRE_ACTIVATION_WRITER_DRAIN_PROOF',
+    ),
+    true,
+  );
+  assert.equal(
+    authority.greenfieldActivationAction.evidenceRequired.includes(
+      'PROD_07_STAGING_WRITE_DENIAL_PROOF',
     ),
     true,
   );
