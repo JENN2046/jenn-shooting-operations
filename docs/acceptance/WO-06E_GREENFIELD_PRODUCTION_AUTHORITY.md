@@ -344,3 +344,51 @@ nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
 ```
 
 No production side effect was performed by this correction.
+
+
+## Fifth Codex review correction
+
+Independent review found one additional valid P1: direct HTTP composition could create a second enabled admission control even when a supplied `ScheduleStore` already owned a disabled control, allowing V2 handlers to bypass the pre-dispatch fence.
+
+The HTTP composition boundary now treats the store-owned admission control as authoritative.
+
+`createHttpApp` resolves admission in this order:
+
+1. `store.writeAdmissionControl`;
+2. an explicitly supplied HTTP control only when the store has no control;
+3. a standalone fallback only for store-like test/composition objects that expose no control.
+
+If a store-owned control exists and the caller supplies a different explicit control, composition fails closed with `write admission control must match store control`.
+
+The HTTP boundary also validates that the selected control exposes the required admission interface before returning the app.
+
+A regression directly constructs a real write-disabled `ScheduleStore`, passes it to `createHttpApp({ store, kiosk })` without supplying a separate admission control, and proves:
+
+- `/healthz` reports the disabled admission state through `X-Write-Admission`;
+- a V2 run-event POST is rejected with `WRITE_ADMISSION_DISABLED` before the injected V2 handler is called;
+- attempting to override the store with a different enabled admission control throws before composition.
+
+This closes the HTTP/store admission split-brain for direct consumers.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 23ce6af2663ca90c6e0ddc82e48539242e536b2c
+workflowRun        = 36322711683 (#173)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 746
+pass               = 745
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+No production side effect was performed by this correction.
