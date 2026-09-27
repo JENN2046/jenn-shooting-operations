@@ -5,6 +5,10 @@ import { DatabaseSync } from 'node:sqlite';
 import { validateSnapshot, validateSubmission } from './contract-validator.mjs';
 import { initializeWritableSchema } from './sqlite-schema-v2.mjs';
 import { createOrphanCleanupControl, normalizeOrphanCleanupMode } from './orphan-cleanup-control.mjs';
+import {
+  normalizeWriteAdmissionMode,
+  writeAdmissionFailure,
+} from './write-admission-v1.mjs';
 
 function isoNow(clock) {
   return clock().toISOString();
@@ -133,6 +137,7 @@ export class ScheduleStore {
     orphanCleanupMode = 'inherit',
     orphanCleanupEnableEpoch,
     orphanCleanupDomain,
+    writeAdmissionMode = 'enabled',
   }) {
     const cleanupMode = readOnly ? 'inherit' : normalizeOrphanCleanupMode(orphanCleanupMode);
     if (!readOnly && filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
@@ -151,6 +156,7 @@ export class ScheduleStore {
     this.idFactory = idFactory;
     this.orphanMaxAgeMs = orphanMaxAgeMs;
     this.readOnly = readOnly;
+    this.writeAdmissionMode = normalizeWriteAdmissionMode(writeAdmissionMode);
     this.renameFile = fileOperations.rename || renameSync;
 
     if (!readOnly && cleanupMode === 'disabled') {
@@ -325,6 +331,7 @@ export class ScheduleStore {
   }
 
   submitRequest({ submission, role }) {
+    if (this.writeAdmissionMode === 'disabled') return writeAdmissionFailure();
     const validationErrors = validateSubmission(submission);
     if (validationErrors.length) {
       if (OPERATION_ID.test(submission?.operationId || '')) {
@@ -419,6 +426,7 @@ export class ScheduleStore {
   }
 
   saveUpload({ operationId, originalName, contentType, kind, buffer, role = 'submitter' }) {
+    if (this.writeAdmissionMode === 'disabled') return writeAdmissionFailure();
     if (typeof operationId !== 'string' || !OPERATION_ID.test(operationId)) {
       return { ok: false, status: 422, code: 'INVALID_OPERATION_ID' };
     }
