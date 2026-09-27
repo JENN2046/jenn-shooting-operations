@@ -124,7 +124,8 @@ test('conditional firewall action uses the actual base action id', () => {
 
 test('pre-activation writer fence denies staging, admin, API, background and direct-storage writers', () => {
   const fence = authority.greenfieldPreActivationWriteFence;
-  assert.equal(fence.runtimeEnv, 'WRITE_ADMISSION_MODE=disabled');
+  assert.equal(fence.runtimeEnvironmentVariable, 'WRITE_ADMISSION_MODE');
+  assert.equal(fence.runtimeEnvironmentValue, 'disabled');
   assert.deepEqual(
     [...fence.coveredWriterClasses].sort(),
     [
