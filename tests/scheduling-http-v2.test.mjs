@@ -277,6 +277,7 @@ test('scheduling application denials use stable low-disclosure HTTP mappings', a
     ['TRUSTED_SCHEDULER_REQUIRED', 403],
     ['SCHEDULING_INPUT_ASSEMBLY_FAILED', 503],
     ['PROPOSAL_ACCEPT_NOT_WIRED', 503],
+    ['WRITE_ADMISSION_DISABLED', 503],
   ];
   for (const [code, status] of cases) {
     const app = createHttpApp({
