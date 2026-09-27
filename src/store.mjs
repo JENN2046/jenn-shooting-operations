@@ -58,15 +58,6 @@ const STATEMENT_ITERATE = StatementSync.prototype.iterate;
 const STATEMENT_COLUMNS = StatementSync.prototype.columns;
 const STATEMENT_SET_ALLOW_BARE = StatementSync.prototype.setAllowBareNamedParameters;
 const STATEMENT_SET_ALLOW_UNKNOWN = StatementSync.prototype.setAllowUnknownNamedParameters;
-const STATEMENT_SOURCE_SQL_GET = Object.getOwnPropertyDescriptor(
-  StatementSync.prototype,
-  'sourceSQL',
-)?.get;
-const STATEMENT_EXPANDED_SQL_GET = Object.getOwnPropertyDescriptor(
-  StatementSync.prototype,
-  'expandedSQL',
-)?.get;
-
 for (const [name, value] of Object.entries({
   DATABASE_PREPARE,
   DATABASE_EXEC,
@@ -79,8 +70,6 @@ for (const [name, value] of Object.entries({
   STATEMENT_COLUMNS,
   STATEMENT_SET_ALLOW_BARE,
   STATEMENT_SET_ALLOW_UNKNOWN,
-  STATEMENT_SOURCE_SQL_GET,
-  STATEMENT_EXPANDED_SQL_GET,
 })) {
   if (typeof value !== 'function') {
     throw new TypeError(`missing native SQLite capability: ${name}`);
@@ -153,14 +142,6 @@ function wrapAdmissionCheckedStatement(statement, admissionControl, mutating) {
         const result = APPLY(STATEMENT_SET_ALLOW_UNKNOWN, statement, args);
         return result === statement ? facade : result;
       },
-    },
-    sourceSQL: {
-      enumerable: true,
-      get: () => APPLY(STATEMENT_SOURCE_SQL_GET, statement, []),
-    },
-    expandedSQL: {
-      enumerable: true,
-      get: () => APPLY(STATEMENT_EXPANDED_SQL_GET, statement, []),
     },
   });
   return Object.freeze(facade);
