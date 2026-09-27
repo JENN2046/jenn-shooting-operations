@@ -96,11 +96,11 @@ requestedActionIds             = []
 approvedActionIds              = []
 requestableActionIds           = []
 blanketApprovalAllowed         = false
-nextActionId                   = PROD-06-LOOPBACK-HEALTH-SMOKE
+nextActionId                   = PROD-07-CONFIGURE-REVERSE-PROXY-TLS
 nextActionRequiresAuthorization = true
 ```
 
-This authority definition records PROD-03, PROD-04 and PROD-05 as completed evidence but does not grant PROD-06 or any later production mutation. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
+This authority definition records PROD-03 through PROD-06 as completed evidence but does not grant PROD-07 or any later production mutation. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
 
 ## Remaining facts before later gates
 
@@ -112,7 +112,7 @@ This authority definition records PROD-03, PROD-04 and PROD-05 as completed evid
 - post-activation VCP/Kiosk wiring and their separately authorized real acceptance;
 - greenfield cleanup restoration evidence.
 
-No source migration, production data copy, public route change, additional container start, integration enablement, or production activation is authorized by this document. PROD-03 token generation, PROD-04 image build and PROD-05 isolated container start are recorded as completed production evidence only; their completion grants no PROD-06 authority.
+No source migration, production data copy, public route change, additional container start, integration enablement, or production activation is authorized by this document. PROD-03 token generation, PROD-04 image build, PROD-05 isolated container start and PROD-06 loopback health smoke are recorded as completed production evidence only; their completion grants no PROD-07 authority.
 
 ## Codex review correction
 
@@ -1278,4 +1278,59 @@ nextAction         = PROD-06-LOOPBACK-HEALTH-SMOKE
 ```
 
 This validation performed no production mutation. Because this evidence paragraph changes only the acceptance document, the resulting final docs head is validated separately before merge eligibility.
+
+## Production evidence promotion: PROD-06
+
+After PR #22 merged, integration authority advanced to merge commit `68834a19e86c67a5281ffdee406ab56c1417725a`, which was identical to `codex/v2-1-architecture-freeze`. The owner then explicitly authorized only `PROD-06-LOOPBACK-HEALTH-SMOKE`.
+
+PROD-06 performed read-only production-host probes only. It did not modify the container, route, DNS, TLS, firewall, write admission, cleanup state, database contents or integrations.
+
+Recorded production evidence:
+
+```text
+result                        = PASS
+recordedAtUtc                 = 2026-09-27T18:08:17Z
+containerName                 = jenn-shooting-operations-prod
+containerId                   = 45ff5469cbd8874fbc3f5ac71260a57596b19f86a26b4131fa38d5d678162a99
+imageId                       = sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545
+containerState                = running
+containerHealth               = healthy
+healthzStatus                 = 200
+healthzBody                   = {"ok":true,"service":"jenn-shooting-operations"}
+healthzWriteAdmissionHeader   = disabled
+containerUid                  = 1000
+containerGid                  = 1000
+databasePath                  = /app/data/shooting-operations.sqlite
+volumeMount                   = volume|jenn-shooting-operations_shooting_data|/app/data|true
+loopbackBind                  = 127.0.0.1:3800
+writeAdmissionMode            = disabled
+orphanCleanupMode             = disabled
+bootstrapRevision             = 0
+containerStartCompletionProof = PROD-05-START-ISOLATED-CONTAINER
+readOnlySmoke                 = true
+secretValuesRecorded          = false
+```
+
+The loopback health response matched the frozen service contract and the read-only `X-Write-Admission` header remained `disabled`. The same PROD-05 container ID and image were still running and healthy, the database path and named-volume mount remained exact, and revision remained zero.
+
+Authority state after this evidence promotion:
+
+```text
+completedAcceptanceIds =
+  PROD-01-TARGET-READONLY-PREFLIGHT
+  PROD-02-CREATE-ISOLATED-APP-STORAGE
+  PHASE-B-TARGET-VOLUME-ACCEPTANCE
+  PROD-03-GENERATE-INSTALL-TOKENS
+  PROD-04-BUILD-IMAGE
+  PROD-05-START-ISOLATED-CONTAINER
+  PROD-06-LOOPBACK-HEALTH-SMOKE
+
+authorization.status  = FROZEN_NOT_REQUESTED
+requestedActionIds    = []
+approvedActionIds     = []
+requestableActionIds  = []
+nextActionId          = PROD-07-CONFIGURE-REVERSE-PROXY-TLS
+```
+
+This promotion records completed PROD-06 facts only. It does not authorize PROD-07.
 
