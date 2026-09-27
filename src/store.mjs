@@ -70,22 +70,58 @@ function writeAdmissionSqliteError() {
 }
 
 function wrapAdmissionCheckedStatement(statement, admissionControl, mutating) {
-  const executingMethods = new Set(['run', 'get', 'all', 'iterate']);
-  return new Proxy(statement, {
-    get(target, property) {
-      const value = Reflect.get(target, property, target);
-      if (typeof value !== 'function') return value;
-      if (executingMethods.has(property)) {
-        return (...args) => {
-          if (mutating && admissionControl.isDisabled()) {
-            throw writeAdmissionSqliteError();
-          }
-          return value.apply(target, args);
-        };
-      }
-      return value.bind(target);
+  const guardMutation = action => (...args) => {
+    if (mutating && admissionControl.isDisabled()) {
+      throw writeAdmissionSqliteError();
+    }
+    return action(...args);
+  };
+  const facade = Object.create(null);
+  Object.defineProperties(facade, {
+    run: {
+      enumerable: true,
+      value: guardMutation((...args) => statement.run(...args)),
+    },
+    get: {
+      enumerable: true,
+      value: guardMutation((...args) => statement.get(...args)),
+    },
+    all: {
+      enumerable: true,
+      value: guardMutation((...args) => statement.all(...args)),
+    },
+    iterate: {
+      enumerable: true,
+      value: guardMutation((...args) => statement.iterate(...args)),
+    },
+    columns: {
+      enumerable: true,
+      value: (...args) => statement.columns(...args),
+    },
+    setAllowBareNamedParameters: {
+      enumerable: true,
+      value: (...args) => {
+        const result = statement.setAllowBareNamedParameters(...args);
+        return result === statement ? facade : result;
+      },
+    },
+    setAllowUnknownNamedParameters: {
+      enumerable: true,
+      value: (...args) => {
+        const result = statement.setAllowUnknownNamedParameters(...args);
+        return result === statement ? facade : result;
+      },
+    },
+    sourceSQL: {
+      enumerable: true,
+      get: () => statement.sourceSQL,
+    },
+    expandedSQL: {
+      enumerable: true,
+      get: () => statement.expandedSQL,
     },
   });
+  return Object.freeze(facade);
 }
 
 function prepareAdmissionCheckedStatement(db, admissionControl, ...args) {
