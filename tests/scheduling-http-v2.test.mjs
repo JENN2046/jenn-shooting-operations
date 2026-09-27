@@ -3,7 +3,10 @@ import { Readable } from 'node:stream';
 import test from 'node:test';
 
 import { createTrustedPrincipal } from '../src/authorization-v2.mjs';
-import { createHttpApp } from '../src/http-app.mjs';
+import { createHttpApp as createHttpAppRaw } from '../src/http-app.mjs';
+import { createSchedulingV2Application } from '../src/server.mjs';
+import { ScheduleStore } from '../src/store.mjs';
+import { createWriteAdmissionControl } from '../src/write-admission-v1.mjs';
 
 function principal(role = 'scheduler', resourceIds = ['STUDIO-A']) {
   const created = createTrustedPrincipal({
@@ -52,6 +55,25 @@ async function invoke(app, {
   return { status, body: text === '' ? null : JSON.parse(text) };
 }
 
+function createHttpApp({ store, scheduling = null, ...rest }) {
+  const admission = store?.writeAdmissionControl
+    ?? scheduling?.writeAdmissionControl
+    ?? createWriteAdmissionControl({ initialMode: 'enabled' });
+  const boundStore = store?.writeAdmissionControl === undefined
+    ? { ...store, writeAdmissionControl: admission }
+    : store;
+  const boundScheduling = scheduling
+    && typeof scheduling.decideProposal === 'function'
+    && scheduling.writeAdmissionControl === undefined
+    ? { ...scheduling, writeAdmissionControl: admission }
+    : scheduling;
+  return createHttpAppRaw({
+    store: boundStore,
+    scheduling: boundScheduling,
+    ...rest,
+  });
+}
+
 function command(overrides = {}) {
   return {
     decisionId: 'DEC-HTTP-0001',
@@ -63,6 +85,36 @@ function command(overrides = {}) {
     ...overrides,
   };
 }
+
+test('Scheduling V2 application authority controls direct HTTP composition across different stores', async () => {
+  const disabledAdmission = createWriteAdmissionControl({ initialMode: 'disabled' });
+  const disabledStore = new ScheduleStore({
+    filename: ':memory:',
+    writeAdmissionControl: disabledAdmission,
+    orphanCleanupMode: 'disabled',
+  });
+  const enabledStore = new ScheduleStore({ filename: ':memory:' });
+  try {
+    const scheduling = createSchedulingV2Application({
+      store: disabledStore,
+      authenticate: () => principal(),
+    });
+    assert.equal(scheduling.writeAdmissionControl, disabledAdmission);
+
+    const app = createHttpAppRaw({ store: fakeStore(), scheduling });
+    const response = await invoke(app, { body: JSON.stringify(command()) });
+    assert.equal(response.status, 503);
+    assert.equal(response.body.code, 'WRITE_ADMISSION_DISABLED');
+
+    assert.throws(
+      () => createHttpAppRaw({ store: enabledStore, scheduling }),
+      /all write-capable surfaces must share admission control/u,
+    );
+  } finally {
+    disabledStore.close();
+    enabledStore.close();
+  }
+});
 
 test('scheduling decisions fail closed without a trusted HTTP principal', async () => {
   for (const { scheduling, expectedStatus, expectedCode } of [
