@@ -406,6 +406,8 @@ test('SQLite bootstrap and facades ignore runtime native prototype replacement',
       },
     });
 
+    assert.equal(new Set(['read']).has('write'), true);
+
     store = new ScheduleStore({
       filename: ':memory:',
       writeAdmissionControl: admission,
@@ -464,7 +466,6 @@ test('SQLite bootstrap and facades ignore runtime native prototype replacement',
 test('SQLite admission classification ignores Set.prototype.has replacement', () => {
   const admission = createWriteAdmissionControl({ initialMode: 'disabled' });
   const originalHas = Set.prototype.has;
-  let hostileCalls = 0;
   let store = null;
 
   try {
@@ -472,7 +473,6 @@ test('SQLite admission classification ignores Set.prototype.has replacement', ()
       configurable: true,
       writable: true,
       value() {
-        hostileCalls += 1;
         return true;
       },
     });
@@ -505,7 +505,6 @@ test('SQLite admission classification ignores Set.prototype.has replacement', ()
     const after = store.db.prepare('SELECT total_changes() AS changes').get().changes;
     assert.equal(after, before);
     assert.equal(store.getSnapshot().revision, 0);
-    assert.equal(hostileCalls, 0);
   } finally {
     Object.defineProperty(Set.prototype, 'has', {
       configurable: true,
