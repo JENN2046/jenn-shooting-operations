@@ -303,3 +303,44 @@ nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
 Intermediate failed workflow runs while the multi-file correction was incomplete are not acceptance evidence. Exact-head run #167 supersedes them.
 
 No production token, container, route, DNS, TLS, firewall/security-group, database import, attachment copy, admission transition, or production activation was performed by these corrections.
+
+
+## Fourth Codex review correction
+
+Independent review found one additional valid P2 on direct `ScheduleStore` construction: the server-level admission/cleanup interlock could be bypassed by consumers that instantiate the store directly.
+
+The invariant is now owned by `ScheduleStore` itself.
+
+Before any writable filesystem or database side effect, the constructor now:
+
+1. normalizes/accepts the supplied or newly created write-admission control;
+2. rejects invalid admission-control objects;
+3. if admission is disabled and the store is writable, requires `orphanCleanupMode = disabled`;
+4. only after those checks may it create the database parent, cleanup control, upload directories, SQLite connection, schema, or recovery state.
+
+Direct consumers therefore cannot combine disabled write admission with inherited/enabled cleanup and cannot reach staged-cleanup recovery in that invalid state.
+
+A regression constructs `ScheduleStore` directly with a shared disabled admission control and verifies both `inherit` and `enabled` cleanup modes throw before even creating the target database directory. A direct store with disabled admission plus disabled cleanup remains valid and initializes only the allowed revision-zero bootstrap.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 5c46f7b0f0705ee636ee44e4335aa79269cd0f79
+workflowRun        = 36320960503 (#170)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 745
+pass               = 744
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+No production side effect was performed by this correction.
