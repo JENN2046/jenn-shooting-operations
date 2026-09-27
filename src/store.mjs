@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, realpathSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, constants as sqliteConstants } from 'node:sqlite';
 import { validateSnapshot, validateSubmission } from './contract-validator.mjs';
 import { initializeWritableSchema } from './sqlite-schema-v2.mjs';
 import { createOrphanCleanupControl, normalizeOrphanCleanupMode } from './orphan-cleanup-control.mjs';
@@ -44,6 +44,34 @@ const SQLITE_BUSY = 5;
 const WAL_SETUP_TIMEOUT_MS = 5000;
 const WAL_RETRY_WAIT = new Int32Array(new SharedArrayBuffer(4));
 const ORPHAN_CLEANUP_DOMAIN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
+
+const SQLITE_ADMISSION_READ_ACTIONS = new Set([
+  sqliteConstants.SQLITE_SELECT,
+  sqliteConstants.SQLITE_READ,
+  sqliteConstants.SQLITE_FUNCTION,
+  sqliteConstants.SQLITE_TRANSACTION,
+  sqliteConstants.SQLITE_SAVEPOINT,
+  sqliteConstants.SQLITE_RECURSIVE,
+]);
+
+function installWriteAdmissionAuthorizer(db, admissionControl) {
+  db.setAuthorizer(actionCode => {
+    if (!admissionControl.isDisabled()) return sqliteConstants.SQLITE_OK;
+    return SQLITE_ADMISSION_READ_ACTIONS.has(actionCode)
+      ? sqliteConstants.SQLITE_OK
+      : sqliteConstants.SQLITE_DENY;
+  });
+}
+
+function createAdmissionCheckedDatabaseFacade(db) {
+  return Object.freeze({
+    prepare: (...args) => db.prepare(...args),
+    exec: (...args) => db.exec(...args),
+    serialize: (...args) => db.serialize(...args),
+    get isOpen() { return db.isOpen; },
+    get isTransaction() { return db.isTransaction; },
+  });
+}
 
 export function resolveOrphanCleanupControlRoot({
   filename,
@@ -125,6 +153,7 @@ function matchesSignature(contentType, buffer) {
 
 export class ScheduleStore {
   #orphanCleanupControl;
+  #database;
 
   constructor({
     filename,
@@ -187,33 +216,43 @@ export class ScheduleStore {
     if (!readOnly && this.uploadRoot) mkdirSync(this.uploadRoot, { recursive: true });
     if (!readOnly && this.cleanupRoot) mkdirSync(this.cleanupRoot, { recursive: true });
 
-    this.db = new DatabaseSync(filename, { readOnly });
-    this.db.exec('PRAGMA busy_timeout = 5000;');
+    const database = new DatabaseSync(filename, { readOnly });
+    database.exec('PRAGMA busy_timeout = 5000;');
     if (readOnly) {
-      this.db.exec('PRAGMA foreign_keys = ON; PRAGMA query_only = ON;');
+      database.exec('PRAGMA foreign_keys = ON; PRAGMA query_only = ON;');
     } else {
-      enableWalWithBusyRetry(this.db);
-      this.db.exec('PRAGMA foreign_keys = ON;');
+      enableWalWithBusyRetry(database);
+      database.exec('PRAGMA foreign_keys = ON;');
+      initializeWritableSchema(database, { now: this.clock });
+      transaction(database, () => {
+        const current = database.prepare('SELECT id FROM schedule_state WHERE id = 1').get();
+        if (current) return;
+        const now = isoNow(this.clock);
+        const snapshot = { schemaVersion: 1, revision: 0, updatedAt: now, products: [], tasks: [], sessions: [] };
+        database.prepare(`
+          INSERT INTO schedule_state (id, revision, updated_at, snapshot_json)
+          VALUES (1, 0, ?, ?)
+          ON CONFLICT(id) DO NOTHING
+        `).run(now, JSON.stringify(snapshot));
+      });
     }
-    if (readOnly) return;
-    initializeWritableSchema(this.db, { now: this.clock });
-    transaction(this.db, () => {
-      const current = this.db.prepare('SELECT id FROM schedule_state WHERE id = 1').get();
-      if (current) return;
-      const now = isoNow(this.clock);
-      const snapshot = { schemaVersion: 1, revision: 0, updatedAt: now, products: [], tasks: [], sessions: [] };
-      this.db.prepare(`
-        INSERT INTO schedule_state (id, revision, updated_at, snapshot_json)
-        VALUES (1, 0, ?, ?)
-        ON CONFLICT(id) DO NOTHING
-      `).run(now, JSON.stringify(snapshot));
+
+    installWriteAdmissionAuthorizer(database, admissionControl);
+    this.#database = database;
+    Object.defineProperty(this, 'db', {
+      value: createAdmissionCheckedDatabaseFacade(database),
+      enumerable: true,
+      writable: false,
+      configurable: false,
     });
+
+    if (readOnly) return;
     if (cleanupMode === 'enabled') {
       const enabled = this.#orphanCleanupControl.enable({ expectedEpoch: orphanCleanupEnableEpoch });
       if (!enabled.ok) {
         const error = new Error(enabled.code || 'ORPHAN_CLEANUP_ENABLE_FAILED');
         error.code = enabled.code || 'ORPHAN_CLEANUP_ENABLE_FAILED';
-        try { this.db.close(); } catch {}
+        try { this.#database.close(); } catch {}
         throw error;
       }
     }
@@ -240,7 +279,7 @@ export class ScheduleStore {
   }
 
   close() {
-    this.db.close();
+    this.#database.close();
   }
 
   recoverStagedUploadCleanup({ allowDelete = true } = {}) {
