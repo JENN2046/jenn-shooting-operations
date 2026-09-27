@@ -1019,6 +1019,13 @@ function copyAttachmentsAndEvaluateParityInternal({
       }
       try {
         if (created) {
+          if (faultInjector) {
+            faultInjector(
+              'before_target_verify',
+              file.storedName,
+              Object.freeze({ targetBoundPath }),
+            );
+          }
           // Verify through the descriptor-bound root before releasing that root
           // handle. A renamed/replaced pathname cannot redirect this check.
           verifyFileBytes(
