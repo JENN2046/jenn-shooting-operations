@@ -31,18 +31,19 @@ test('greenfield authority binds the frozen parent and grants no production muta
   assert.deepEqual(authority.authorization.requestedActionIds, []);
   assert.deepEqual(authority.authorization.approvedActionIds, []);
   assert.deepEqual(authority.authorization.requestableActionIds, []);
-  assert.equal(authority.authorization.nextActionId, 'PROD-07-CONFIGURE-REVERSE-PROXY-TLS');
+  assert.equal(authority.authorization.nextActionId, 'PROD-GF-13-ACTIVATE');
   assert.equal(authority.authorization.nextActionRequiresExplicitAuthorization, true);
 });
 
-test('greenfield authority records PROD-03 through PROD-06 production evidence without secrets', () => {
+test('greenfield authority records PROD-03 through PROD-07 production evidence without secrets', () => {
   assert.deepEqual(
-    authority.completedAcceptanceIds.slice(-4),
+    authority.completedAcceptanceIds.slice(-5),
     [
       'PROD-03-GENERATE-INSTALL-TOKENS',
       'PROD-04-BUILD-IMAGE',
       'PROD-05-START-ISOLATED-CONTAINER',
       'PROD-06-LOOPBACK-HEALTH-SMOKE',
+      'PROD-07-CONFIGURE-REVERSE-PROXY-TLS',
     ],
   );
   assert.deepEqual(authority.acceptance.prod03, {
@@ -139,6 +140,50 @@ test('greenfield authority records PROD-03 through PROD-06 production evidence w
     readOnlySmoke: true,
     secretValuesRecorded: false,
   });
+  assert.deepEqual(authority.acceptance.prod07, {
+    status: 'PASS',
+    recordedAtUtc: '2026-09-27T22:52:59Z',
+    hostname: 'jso.skmt617.top',
+    route: 'https://jso.skmt617.top',
+    nginxConfigPath: '/etc/nginx/conf.d/jso-shooting-operations.conf',
+    nginxConfigMode: 644,
+    nginxConfigTest: 'PASS_ROOT_OPERATOR',
+    nginxReload: 'PASS_ROOT_OPERATOR',
+    nginxActive: true,
+    noExistingRouteOverwrite: true,
+    preMutationRouteMatchCount: 0,
+    postMutationRouteMatchCount: 1,
+    backend: 'http://127.0.0.1:3800',
+    backendHealthStatus: 200,
+    publicHealthStatus: 200,
+    publicHealthWriteAdmission: 'disabled',
+    httpRedirectStatus: 308,
+    tlsOriginCertificateFamily: 'skmt617.top',
+    tlsOriginHostnameCoverage: true,
+    tlsOriginValidFromUtc: '2026-06-22T08:45:00Z',
+    tlsOriginValidToUtc: '2041-06-18T08:45:00Z',
+    tlsEdgeStatus: 'PASS',
+    dnsProvider: 'Cloudflare',
+    dnsProxyMode: 'PROXIED',
+    publicWritePostStatus: 503,
+    publicWritePutStatus: 503,
+    publicWritePatchStatus: 503,
+    publicWriteDeleteStatus: 503,
+    publicWriteFailureCode: 'WRITE_ADMISSION_DISABLED',
+    boundedStagingPrincipalScope: 'NO_PREACTIVATION_WRITES',
+    writeAdmissionMode: 'disabled',
+    orphanCleanupMode: 'disabled',
+    orphanCleanupState: 'disabled',
+    orphanCleanupMarkerValid: true,
+    orphanCleanupActiveRuns: 0,
+    bootstrapRevision: 0,
+    stagingRequestPathCleanupDisabled: true,
+    prod08RequiredForCurrentHttpsReachability: false,
+    secretValuesRecorded: false,
+    evidencePath: '/mnt/datadisk0/apps/jenn-shooting-operations/prod07-route-evidence.txt',
+    evidenceSha256: 'sha256:a49ecf5e5d358f1774f631af57dd930401a3bc9c6468d339322966d1e6329cc1',
+    rollbackActionId: 'ROLLBACK-01-REMOVE-NEW-ROUTE',
+  });
 
   rejected(value => {
     value.acceptance.prod03.uniqueRoleTokenCount = 3;
@@ -151,6 +196,9 @@ test('greenfield authority records PROD-03 through PROD-06 production evidence w
   }, 'GREENFIELD_ACCEPTANCE_INVALID');
   rejected(value => {
     value.acceptance.prod06.healthzStatus = 503;
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prod07.publicWritePostStatus = 200;
   }, 'GREENFIELD_ACCEPTANCE_INVALID');
 });
 
@@ -388,7 +436,7 @@ test('greenfield cleanup cannot bypass activation or disable-and-drain recovery'
 
 test('greenfield authority cannot self-authorize the next production action', () => {
   rejected(value => {
-    value.authorization.requestableActionIds = ['PROD-07-CONFIGURE-REVERSE-PROXY-TLS'];
+    value.authorization.requestableActionIds = ['PROD-GF-13-ACTIVATE'];
   }, 'GREENFIELD_AUTHORIZATION_STATE_INVALID');
   rejected(value => {
     value.authorization.blanketApprovalAllowed = true;
