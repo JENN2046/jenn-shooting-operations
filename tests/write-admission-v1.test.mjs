@@ -406,8 +406,6 @@ test('SQLite bootstrap and facades ignore runtime native prototype replacement',
       },
     });
 
-    assert.equal(new Set(['read']).has('write'), true);
-
     store = new ScheduleStore({
       filename: ':memory:',
       writeAdmissionControl: admission,
@@ -465,10 +463,20 @@ test('SQLite bootstrap and facades ignore runtime native prototype replacement',
 
 test('SQLite admission classification ignores Set.prototype.has replacement', () => {
   const admission = createWriteAdmissionControl({ initialMode: 'disabled' });
+  const store = new ScheduleStore({
+    filename: ':memory:',
+    writeAdmissionControl: admission,
+    orphanCleanupMode: 'disabled',
+  });
   const originalHas = Set.prototype.has;
-  let store = null;
 
   try {
+    const before = store.db.prepare('SELECT total_changes() AS changes').get().changes;
+    assert.equal(
+      store.db.prepare('SELECT revision FROM schedule_state WHERE id = 1').get().revision,
+      0,
+    );
+
     Object.defineProperty(Set.prototype, 'has', {
       configurable: true,
       writable: true,
@@ -476,18 +484,7 @@ test('SQLite admission classification ignores Set.prototype.has replacement', ()
         return true;
       },
     });
-
-    store = new ScheduleStore({
-      filename: ':memory:',
-      writeAdmissionControl: admission,
-      orphanCleanupMode: 'disabled',
-    });
-
-    const before = store.db.prepare('SELECT total_changes() AS changes').get().changes;
-    assert.equal(
-      store.db.prepare('SELECT revision FROM schedule_state WHERE id = 1').get().revision,
-      0,
-    );
+    assert.equal(new Set(['read']).has('write'), true);
 
     const preparedWrite = store.db.prepare(
       "INSERT INTO audit_log (action, role, entity_id, revision, result, created_at) VALUES ('set-has-bypass', 'admin', NULL, 0, 'blocked', '2026-09-27T13:00:00.000Z')",
@@ -511,7 +508,7 @@ test('SQLite admission classification ignores Set.prototype.has replacement', ()
       writable: true,
       value: originalHas,
     });
-    if (store) store.close();
+    store.close();
   }
 });
 
