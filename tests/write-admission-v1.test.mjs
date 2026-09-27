@@ -576,6 +576,83 @@ test('pre-activation write admission cannot start with cleanup enabled', () => {
   );
 });
 
+test('write admission authority ignores runtime String primitive replacement', () => {
+  const originalString = globalThis.String;
+  const originalTrim = String.prototype.trim;
+  const originalToLowerCase = String.prototype.toLowerCase;
+
+  try {
+    globalThis.String = () => 'enabled';
+    Object.defineProperty(originalString.prototype, 'trim', {
+      configurable: true,
+      writable: true,
+      value() { return 'enabled'; },
+    });
+    Object.defineProperty(originalString.prototype, 'toLowerCase', {
+      configurable: true,
+      writable: true,
+      value() { return 'enabled'; },
+    });
+
+    const control = createWriteAdmissionControl({ initialMode: 'disabled' });
+    assert.equal(control.isDisabled(), true);
+    assert.equal(control.isEnabled(), false);
+    assert.deepEqual(control.status(), {
+      mode: 'disabled',
+      enabled: false,
+      transitionCount: 0,
+    });
+  } finally {
+    globalThis.String = originalString;
+    Object.defineProperty(originalString.prototype, 'trim', {
+      configurable: true,
+      writable: true,
+      value: originalTrim,
+    });
+    Object.defineProperty(originalString.prototype, 'toLowerCase', {
+      configurable: true,
+      writable: true,
+      value: originalToLowerCase,
+    });
+  }
+});
+
+test('write admission control remains immutable when Object.freeze is replaced', () => {
+  const originalFreeze = Object.freeze;
+  try {
+    Object.freeze = value => value;
+
+    const control = createWriteAdmissionControl({ initialMode: 'disabled' });
+    assert.equal(Object.isFrozen(control), true);
+    assert.equal(Object.isFrozen(control.status()), true);
+    assert.equal(Object.isFrozen(writeAdmissionFailure()), true);
+
+    assert.throws(
+      () => { control.isDisabled = () => false; },
+      TypeError,
+    );
+    assert.throws(
+      () => { control.enable = () => ({ ok: true, code: 'FORGED_ENABLE' }); },
+      TypeError,
+    );
+
+    assert.equal(control.isDisabled(), true);
+    assert.equal(control.isEnabled(), false);
+    assert.deepEqual(control.status(), {
+      mode: 'disabled',
+      enabled: false,
+      transitionCount: 0,
+    });
+
+    const enabled = control.enable();
+    assert.equal(enabled.code, 'WRITE_ADMISSION_ENABLED');
+    assert.equal(control.isEnabled(), true);
+    assert.equal(control.status().transitionCount, 1);
+  } finally {
+    Object.freeze = originalFreeze;
+  }
+});
+
 test('write admission mode rejects unknown deployment values', () => {
   assert.equal(normalizeWriteAdmissionMode('enabled'), 'enabled');
   assert.equal(normalizeWriteAdmissionMode('DISABLED'), 'disabled');
