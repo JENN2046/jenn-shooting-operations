@@ -1084,3 +1084,116 @@ nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
 Intermediate run #225 failed only because one legacy test still called the deliberately removed public rename helper; it was updated to use its own test-side filesystem rename and is superseded by exact-head run #226.
 
 No production side effect was performed by this correction.
+
+
+## Production evidence promotion: PROD-03 and PROD-04
+
+The first greenfield production deployment has now completed the next two explicitly authorized bounded actions on the bound target host. This section promotes only low-disclosure execution facts into Git authority. It does not reproduce secret values and it does not authorize the next production mutation.
+
+### PROD-03-GENERATE-INSTALL-TOKENS
+
+Bound target:
+
+```text
+instanceId           = ins-mi85f3my
+instanceName         = AGENTS-OS
+privateIpv4          = 172.16.0.12
+applicationDirectory = /mnt/datadisk0/apps/jenn-shooting-operations
+```
+
+Recorded production evidence:
+
+```text
+result                = PASS
+recordedAtUtc         = 2026-09-27T16:34:04.678274744Z
+secretStoragePath     = /mnt/datadisk0/apps/jenn-shooting-operations/.env.tokens
+fileOwner             = ubuntu:ubuntu
+fileMode              = 0600
+fileSizeBytes         = 317
+roleTokenCount        = 4
+uniqueRoleTokenCount  = 4
+tokenHexLength        = 64
+secretValuesRecorded  = false
+noSecretOutput        = true
+rollbackActionId      = ROLLBACK-06-REVOKE-ROLE-TOKENS
+```
+
+The four role-token values were generated independently on the production host. Their values were not committed to Git, copied into this document, or emitted by the verification output.
+
+### PROD-04-BUILD-IMAGE
+
+The production image was built from exact authority commit:
+
+```text
+92b7137211bf807f178901e878a8c3d6e335cec4
+```
+
+Recorded production evidence:
+
+```text
+result                  = PASS
+recordedAtUtc           = 2026-09-27T16:48:50.128965614Z
+imageTag                = jenn-shooting-operations:prod-92b7137211bf807f178901e878a8c3d6e335cec4
+imageId                 = sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545
+nodeBaseIndexDigest     = sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1
+nodeBaseAmd64Digest     = sha256:83f1c388c31fb2e51f7cbd4dea949b96260798c98f206e8e4696bc93bd964e3a
+imageUser               = node
+targetContainers        = 0
+port3800Listeners       = 0
+tempBuildArtifacts      = 0
+buildLogLowDisclosure   = true
+secretValuesOutput      = false
+evidencePath            = /mnt/datadisk0/apps/jenn-shooting-operations/prod04-build-evidence.txt
+rollbackActionId        = ROLLBACK-08-REMOVE-BUILT-IMAGE
+```
+
+No application container was started by PROD-04.
+
+### Authority promotion
+
+The greenfield authority now records:
+
+```text
+completedAcceptanceIds =
+  PROD-01-TARGET-READONLY-PREFLIGHT
+  PROD-02-CREATE-ISOLATED-APP-STORAGE
+  PHASE-B-TARGET-VOLUME-ACCEPTANCE
+  PROD-03-GENERATE-INSTALL-TOKENS
+  PROD-04-BUILD-IMAGE
+
+authorization.status  = FROZEN_NOT_REQUESTED
+requestedActionIds    = []
+approvedActionIds     = []
+requestableActionIds  = []
+nextActionId          = PROD-05-START-ISOLATED-CONTAINER
+```
+
+This promotion records completed facts only. It does not authorize PROD-05.
+
+### Exact-head independent validation
+
+Implementation-bearing head:
+
+```text
+cf56a94207b56d1df2c7d37f9f3b9da082cabc3b
+```
+
+The repository's GitHub workflow currently auto-runs only on its two historical branch names, so PR #21 did not receive an automatic Actions run on this new branch. The exact head was independently checked using Node 24.21.0 with the same repository commands as the workflow, in a disposable validation container with no production data volume, no secret mount, no port binding and no application startup.
+
+```text
+runtime            = Node 24.21.0
+fullTests          = 763
+pass               = 762
+fail               = 0
+skip               = 1 expected external VCP adapter absence
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:45d50b79f4d6be8a3f8635ee48086ab1d6ef6c81adcc4d77c35b58b6b5f927ec
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-05-START-ISOLATED-CONTAINER
+```
+
+The first disposable validation attempt used Alpine and failed only two migration tests because BusyBox `touch` does not accept the GNU nanosecond epoch syntax used by those fixtures. The command-equivalent Node 24.21.0 GNU-userland rerun passed the complete suite. The disposable validation container and temporary checkout were removed, and the production application container count remained zero throughout.
