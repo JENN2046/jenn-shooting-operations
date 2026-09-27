@@ -1017,19 +1017,22 @@ function copyAttachmentsAndEvaluateParityInternal({
         closeSync(targetDescriptor);
         targetDescriptor = undefined;
       }
-      if (created) {
-        // Verify through the descriptor-bound root before releasing that root
-        // handle. A renamed/replaced pathname cannot redirect this check.
-        verifyFileBytes(
-          targetBoundPath,
-          file,
-          'TARGET_ATTACHMENT_COPY_FAILED',
-          { requireMode0600: true },
-        );
-      }
-      if (targetRootDescriptor !== undefined) {
-        closeSync(targetRootDescriptor);
-        targetRootDescriptor = undefined;
+      try {
+        if (created) {
+          // Verify through the descriptor-bound root before releasing that root
+          // handle. A renamed/replaced pathname cannot redirect this check.
+          verifyFileBytes(
+            targetBoundPath,
+            file,
+            'TARGET_ATTACHMENT_COPY_FAILED',
+            { requireMode0600: true },
+          );
+        }
+      } finally {
+        if (targetRootDescriptor !== undefined) {
+          closeSync(targetRootDescriptor);
+          targetRootDescriptor = undefined;
+        }
       }
     }
 
