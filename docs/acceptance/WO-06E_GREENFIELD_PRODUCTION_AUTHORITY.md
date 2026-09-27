@@ -95,11 +95,11 @@ requestedActionIds             = []
 approvedActionIds              = []
 requestableActionIds           = []
 blanketApprovalAllowed         = false
-nextActionId                   = PROD-03-GENERATE-INSTALL-TOKENS
+nextActionId                   = PROD-05-START-ISOLATED-CONTAINER
 nextActionRequiresAuthorization = true
 ```
 
-This authority definition does not grant PROD-03 or any later production mutation. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
+This authority definition records PROD-03 and PROD-04 as completed evidence but does not grant PROD-05 or any later production mutation. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
 
 ## Remaining facts before later gates
 
@@ -108,12 +108,11 @@ This authority definition does not grant PROD-03 or any later production mutatio
 - exact reverse-proxy route;
 - TLS binding for that route;
 - Tencent Cloud security-group control-plane fact if a change is actually required;
-- built image digest;
 - greenfield activation evidence;
 - post-activation VCP/Kiosk wiring and their separately authorized real acceptance;
 - greenfield cleanup restoration evidence.
 
-No source migration, production data copy, public route change, token generation, container start, integration enablement, or production activation is authorized by this document.
+No source migration, production data copy, public route change, container start, integration enablement, or production activation is authorized by this document. PROD-03 token generation and PROD-04 image build are recorded as completed production evidence only; their completion grants no PROD-05 authority.
 
 ## Codex review correction
 
