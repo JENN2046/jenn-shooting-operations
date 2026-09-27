@@ -1012,12 +1012,12 @@ function copyAttachmentsAndEvaluateParityInternal({
       if (error instanceof MigrationError) throw error;
       fail('TARGET_ATTACHMENT_COPY_FAILED');
     } finally {
-      closeSync(source.descriptor);
-      if (targetDescriptor !== undefined) {
-        closeSync(targetDescriptor);
-        targetDescriptor = undefined;
-      }
       try {
+        closeSync(source.descriptor);
+        if (targetDescriptor !== undefined) {
+          closeSync(targetDescriptor);
+          targetDescriptor = undefined;
+        }
         if (created) {
           if (faultInjector) {
             faultInjector(
