@@ -186,6 +186,31 @@ function copyOptions(fixture, extra = {}) {
   };
 }
 
+test('copy cleanup attempts source target and root descriptor closes independently', () => {
+  const moduleSource = readFileSync(
+    new URL('../src/production-attachment-copy-v1.mjs', import.meta.url),
+    'utf8',
+  );
+  const copyStart = moduleSource.indexOf('const source = openStableFile(');
+  const fsyncStart = moduleSource.indexOf('fsyncDirectory(targetRoot.realPath);', copyStart);
+  assert.notEqual(copyStart, -1);
+  assert.notEqual(fsyncStart, -1);
+
+  const cleanupSource = moduleSource.slice(copyStart, fsyncStart);
+  const sourceClose = cleanupSource.indexOf('closeSync(source.descriptor)');
+  const targetClose = cleanupSource.indexOf('closeSync(targetDescriptor)');
+  const rootClose = cleanupSource.indexOf('closeSync(targetRootDescriptor)');
+  assert.notEqual(sourceClose, -1);
+  assert.notEqual(targetClose, -1);
+  assert.notEqual(rootClose, -1);
+
+  assert.match(cleanupSource.slice(sourceClose - 120, sourceClose + 180), /try\s*\{/u);
+  assert.match(cleanupSource.slice(targetClose - 120, targetClose + 180), /try\s*\{/u);
+  assert.match(cleanupSource.slice(rootClose - 120, rootClose + 180), /try\s*\{/u);
+  assert.ok(sourceClose < targetClose);
+  assert.ok(targetClose < rootClose);
+});
+
 test('production copy wrapper delegates to the private mutator without test-only fault injection', () => {
   const source = copyAndVerifyAttachments.toString();
   assert.match(source, /copyAttachmentsAndEvaluateParityInternal/u);
@@ -912,6 +937,28 @@ test('filesystem namespace folding ignores later String case and normalization m
     String.prototype.toUpperCase = originalUpper;
     String.prototype.normalize = originalNormalize;
   }
+});
+
+test('canonical-equivalent namespace keys collide across source main and target future WAL roles', () => {
+  const sourceMainKey = sha256Digest(filesystemPathComparisonKey(
+    '/tmp/targét.sqlite-wal',
+    '/tmp/targét.sqlite-wal',
+    { caseInsensitive: false, canonicalEquivalent: true },
+  ));
+  const targetWalKey = sha256Digest(filesystemPathComparisonKey(
+    '/tmp/targe\u0301t.sqlite-wal',
+    '/tmp/targe\u0301t.sqlite',
+    { caseInsensitive: false, canonicalEquivalent: true },
+  ));
+
+  assert.equal(sourceMainKey, targetWalKey);
+  assert.equal(
+    sqlitePhysicalFamiliesAreDisjoint(
+      { namespace: { database: sourceMainKey } },
+      { namespace: { wal: targetWalKey } },
+    ),
+    false,
+  );
 });
 
 test('filesystem-aware namespace keys fold case when the filesystem is case-insensitive', () => {
