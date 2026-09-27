@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import test from 'node:test';
-import { normalizeWriteAdmissionMode } from '../src/http-app.mjs';
+import { normalizeWriteAdmissionMode } from '../src/write-admission-v1.mjs';
 import { createOperationsServer } from '../src/server.mjs';
 
 const tokens = {
@@ -88,6 +88,11 @@ test('pre-activation write admission blocks every HTTP mutation before store dis
         code: 'WRITE_ADMISSION_DISABLED',
       });
     }
+
+    assert.deepEqual(
+      service.store.submitRequest({ submission: {}, role: 'direct-store' }),
+      { ok: false, status: 503, code: 'WRITE_ADMISSION_DISABLED' },
+    );
 
     const after = await fetch(`${origin}/api/v1/snapshot`);
     assert.equal(after.status, 200);
