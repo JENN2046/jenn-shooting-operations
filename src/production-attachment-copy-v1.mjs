@@ -5,16 +5,13 @@ import {
   fstatSync,
   fsyncSync,
   lstatSync,
-  mkdtempSync,
   openSync,
   readSync,
   readdirSync,
   realpathSync,
-  rmSync,
   statSync,
   writeSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
