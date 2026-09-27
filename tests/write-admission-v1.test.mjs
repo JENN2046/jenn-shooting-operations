@@ -329,50 +329,96 @@ test('prepared statement facade cannot expose or extend the raw StatementSync ta
   }
 });
 
-test('SQLite facades ignore runtime native prototype replacement', () => {
+test('SQLite bootstrap and facades ignore runtime native prototype replacement', () => {
   const admission = createWriteAdmissionControl({ initialMode: 'disabled' });
-  const store = new ScheduleStore({
-    filename: ':memory:',
-    writeAdmissionControl: admission,
-    orphanCleanupMode: 'disabled',
-  });
 
-  const originalDatabasePrepare = DatabaseSync.prototype.prepare;
-  const originalStatementSetBare = StatementSync.prototype.setAllowBareNamedParameters;
-  const originalStatementRun = StatementSync.prototype.run;
-  let capturedDatabase = null;
+  const databaseDescriptors = Object.fromEntries(
+    ['prepare', 'exec', 'setAuthorizer', 'close'].map(name => [
+      name,
+      Object.getOwnPropertyDescriptor(DatabaseSync.prototype, name),
+    ]),
+  );
+  const statementDescriptors = Object.fromEntries(
+    ['setAllowBareNamedParameters', 'run'].map(name => [
+      name,
+      Object.getOwnPropertyDescriptor(StatementSync.prototype, name),
+    ]),
+  );
+
+  const originalDatabasePrepare = databaseDescriptors.prepare.value;
+  const originalDatabaseExec = databaseDescriptors.exec.value;
+  const originalDatabaseSetAuthorizer = databaseDescriptors.setAuthorizer.value;
+  const originalDatabaseClose = databaseDescriptors.close.value;
+  const originalStatementSetBare = statementDescriptors.setAllowBareNamedParameters.value;
+  const originalStatementRun = statementDescriptors.run.value;
+
+  let capturedDatabaseFromPrepare = null;
+  let capturedDatabaseFromExec = null;
+  let capturedDatabaseFromAuthorizer = null;
+  let capturedDatabaseFromClose = null;
   let capturedStatementFromSetBare = null;
   let capturedStatementFromRun = null;
+  let store = null;
 
   try {
     Object.defineProperty(DatabaseSync.prototype, 'prepare', {
-      configurable: true,
-      writable: true,
+      ...databaseDescriptors.prepare,
       value(...args) {
-        capturedDatabase = this;
+        capturedDatabaseFromPrepare = this;
         return originalDatabasePrepare.apply(this, args);
       },
     });
+    Object.defineProperty(DatabaseSync.prototype, 'exec', {
+      ...databaseDescriptors.exec,
+      value(...args) {
+        capturedDatabaseFromExec = this;
+        return originalDatabaseExec.apply(this, args);
+      },
+    });
+    Object.defineProperty(DatabaseSync.prototype, 'setAuthorizer', {
+      ...databaseDescriptors.setAuthorizer,
+      value(...args) {
+        capturedDatabaseFromAuthorizer = this;
+        return originalDatabaseSetAuthorizer.apply(this, args);
+      },
+    });
+    Object.defineProperty(DatabaseSync.prototype, 'close', {
+      ...databaseDescriptors.close,
+      value(...args) {
+        capturedDatabaseFromClose = this;
+        return originalDatabaseClose.apply(this, args);
+      },
+    });
     Object.defineProperty(StatementSync.prototype, 'setAllowBareNamedParameters', {
-      configurable: true,
-      writable: true,
+      ...statementDescriptors.setAllowBareNamedParameters,
       value(...args) {
         capturedStatementFromSetBare = this;
         return originalStatementSetBare.apply(this, args);
       },
     });
     Object.defineProperty(StatementSync.prototype, 'run', {
-      configurable: true,
-      writable: true,
+      ...statementDescriptors.run,
       value(...args) {
         capturedStatementFromRun = this;
         return originalStatementRun.apply(this, args);
       },
     });
 
+    store = new ScheduleStore({
+      filename: ':memory:',
+      writeAdmissionControl: admission,
+      orphanCleanupMode: 'disabled',
+    });
+
+    assert.equal(capturedDatabaseFromPrepare, null);
+    assert.equal(capturedDatabaseFromExec, null);
+    assert.equal(capturedDatabaseFromAuthorizer, null);
+
     const read = store.db.prepare('SELECT revision FROM schedule_state WHERE id = 1');
     assert.equal(read.get().revision, 0);
-    assert.equal(capturedDatabase, null);
+    assert.equal(capturedDatabaseFromPrepare, null);
+    assert.equal(capturedDatabaseFromExec, null);
+    assert.equal(capturedDatabaseFromAuthorizer, null);
 
     const write = store.db.prepare(
       "INSERT INTO audit_log (action, role, entity_id, revision, result, created_at) VALUES ('prototype-bypass', 'admin', NULL, 0, 'blocked', '2026-09-27T13:00:00.000Z')",
@@ -383,8 +429,10 @@ test('SQLite facades ignore runtime native prototype replacement', () => {
     const before = store.db.prepare('SELECT total_changes() AS changes').get().changes;
     assert.throws(() => write.run());
     assert.equal(capturedStatementFromRun, null);
-    const after = store.db.prepare('SELECT total_changes() AS changes').get().changes;
-    assert.equal(after, before);
+    assert.equal(
+      store.db.prepare('SELECT total_changes() AS changes').get().changes,
+      before,
+    );
 
     admission.enable();
     write.run();
@@ -393,24 +441,21 @@ test('SQLite facades ignore runtime native prototype replacement', () => {
       store.db.prepare('SELECT total_changes() AS changes').get().changes,
       before + 1,
     );
-    assert.equal(capturedDatabase, null);
-  } finally {
-    Object.defineProperty(DatabaseSync.prototype, 'prepare', {
-      configurable: true,
-      writable: true,
-      value: originalDatabasePrepare,
-    });
-    Object.defineProperty(StatementSync.prototype, 'setAllowBareNamedParameters', {
-      configurable: true,
-      writable: true,
-      value: originalStatementSetBare,
-    });
-    Object.defineProperty(StatementSync.prototype, 'run', {
-      configurable: true,
-      writable: true,
-      value: originalStatementRun,
-    });
+
     store.close();
+    store = null;
+    assert.equal(capturedDatabaseFromClose, null);
+    assert.equal(capturedDatabaseFromPrepare, null);
+    assert.equal(capturedDatabaseFromExec, null);
+    assert.equal(capturedDatabaseFromAuthorizer, null);
+  } finally {
+    for (const [name, descriptor] of Object.entries(databaseDescriptors)) {
+      Object.defineProperty(DatabaseSync.prototype, name, descriptor);
+    }
+    for (const [name, descriptor] of Object.entries(statementDescriptors)) {
+      Object.defineProperty(StatementSync.prototype, name, descriptor);
+    }
+    if (store) store.close();
   }
 });
 
