@@ -1254,3 +1254,28 @@ nextActionId          = PROD-06-LOOPBACK-HEALTH-SMOKE
 
 This promotion records completed PROD-05 facts only. It does not authorize PROD-06.
 
+### PROD-05 promotion exact-head validation
+
+The implementation-bearing promotion head was independently validated by the repository's production-authorization workflow:
+
+```text
+implementationHead = 73578d55e7949213fd8e93b0a9a18f366e1ee044
+workflowRun        = 36338748349
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 763
+pass               = 762
+fail               = 0
+skip               = 1 expected external VCP adapter absence
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:47e931320eeceb0af7089497a3f8e09410019f7881d25045b826ac14636ed995
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-06-LOOPBACK-HEALTH-SMOKE
+```
+
+This validation performed no production mutation. Because this evidence paragraph changes only the acceptance document, the resulting final docs head is validated separately before merge eligibility.
+
