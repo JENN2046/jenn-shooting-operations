@@ -10,7 +10,7 @@ import {
   mapKioskCurrentHttpResult,
   mapKioskRunEventHttpResult,
 } from './kiosk-http-result-v2.mjs';
-import { normalizeWriteAdmissionMode } from './write-admission-v1.mjs';
+import { createWriteAdmissionControl } from './write-admission-v1.mjs';
 
 const PUBLIC_ROOT = fileURLToPath(new URL('../public/', import.meta.url));
 const STATIC = new Map([
@@ -222,15 +222,17 @@ export function createHttpApp({
   kiosk = null,
   scheduling = null,
   writeAdmissionMode = 'enabled',
+  writeAdmissionControl,
 }) {
   const authorize = createAuthorizer(tokens);
-  const normalizedWriteAdmissionMode = normalizeWriteAdmissionMode(writeAdmissionMode);
+  const admission = writeAdmissionControl
+    ?? createWriteAdmissionControl({ initialMode: writeAdmissionMode });
 
   return async function app(request, response) {
     securityHeaders(response);
     const url = new URL(request.url, 'http://local.invalid');
     try {
-      if (normalizedWriteAdmissionMode === 'disabled'
+      if (admission.isDisabled()
           && !['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
         return sendJson(response, 503, {
           ok: false,
@@ -239,7 +241,11 @@ export function createHttpApp({
       }
 
       if (request.method === 'GET' && url.pathname === '/healthz') {
-        return sendJson(response, 200, { ok: true, service: 'jenn-shooting-operations' });
+        return sendJson(response, 200, {
+          ok: true,
+          service: 'jenn-shooting-operations',
+          writeAdmission: admission.status().mode,
+        });
       }
 
       if (request.method === 'GET' && STATIC.has(url.pathname)) {
