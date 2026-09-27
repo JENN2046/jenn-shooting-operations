@@ -1508,7 +1508,7 @@ Low-disclosure production evidence:
 ```text
 evidencePath   = /mnt/datadisk0/apps/jenn-shooting-operations/prod-gf13-activation-evidence.txt
 evidenceMode   = 0600
-evidenceSha256 = sha256:88a3880a126166b0934a8d60e487b450ff5d49af6b487bf28456d39b1c824bdb
+evidenceSha256 = sha256:1af2e9dd6ca511631ac5d7efb949d0b96c306b1d2c551241a5910b7ba7b81cb2
 secretValuesRecorded = false
 ```
 
@@ -1550,3 +1550,42 @@ nextAction         = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
 
 This validation performed no additional production mutation. Because this paragraph changes only the acceptance document, the resulting final docs head is validated separately before merge eligibility.
 
+
+
+### Activation durability remediation
+
+Review identified that the original one-time in-process activation would not survive a container restart because the original container startup mode remained disabled.
+
+The remediation uses the existing startup contract rather than an unattended signal watcher. A non-sensitive runtime configuration now starts the production service with write admission enabled while orphan cleanup remains disabled. The exact production image was first verified against an isolated disposable volume.
+
+The production container was then replaced using the same image, route, port, target volume and security posture. The prior container was retained as rollback protection until first-start verification passed. A deliberate restart of the replacement container then proved that activation survives restart without another signal.
+
+```text
+durabilityRemediationStatus            = PASS
+startedAtUtc                           = 2026-09-27T23:29:06Z
+verifiedAtUtc                          = 2026-09-27T23:29:42Z
+priorContainerId                       = 45ff5469cbd8874fbc3f5ac71260a57596b19f86a26b4131fa38d5d678162a99
+durableContainerId                     = 1b2afb092d3ec1d834d12ff58fa86f4b1c05ec27913e8e80da278e9e9d0838cb
+durableContainerStartedAt              = 2026-09-27T23:29:33.784982222Z
+durableContainerImageId                = sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545
+restartPolicy                          = unless-stopped
+readOnlyRootfs                         = true
+durableRuntimeEnvSha256                = sha256:98519e90c4ac40862af935e52d519ee5ba5b9f2f08b88be7e005253c30a5478c
+firstDurableStartAdmission             = enabled
+restartProbePerformed                  = true
+restartProbeAdmission                  = enabled
+publicHealthAfterRestart               = 200
+publicAdmissionAfterRestart            = enabled
+unauthenticatedWriteAfterRestart       = 401 UNAUTHORIZED
+orphanCleanupAfterRestart              = disabled
+orphanCleanupActiveRunsAfterRestart    = 0
+databaseRevisionAfterRestart           = 0
+uploadRowsAfterRestart                 = 0
+operationRowsAfterRestart              = 0
+auditRowsAfterRestart                  = 0
+activeTargetVolumeMountCount           = 1
+priorContainerRemovedAfterVerification = true
+durableActivationAcrossRestartVerified = true
+```
+
+The remediation records no credential values.
