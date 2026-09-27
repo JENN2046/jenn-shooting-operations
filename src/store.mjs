@@ -302,6 +302,7 @@ export class ScheduleStore {
   }
 
   replaceSnapshot({ expectedRevision, snapshot, operationId, role }) {
+    if (this.writeAdmissionMode === 'disabled') return writeAdmissionFailure();
     const validationErrors = validateSnapshot(snapshot);
     if (validationErrors.length) return { ok: false, status: 422, code: 'INVALID_SNAPSHOT', errors: validationErrors };
     const cached = this.getOperation(operationId, 'snapshot.replace');
