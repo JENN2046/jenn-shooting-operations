@@ -8,6 +8,20 @@ The candidate engine can copy and evaluate isolated test data, but it returns on
 
 It is repository engine evidence for `PRODUCTION_ATTACHMENT_COPY_CAPABILITY`. It is not production deployment evidence and grants no production authorization.
 
+## Stage 3 closure boundary
+
+Stage 3 freezes the **repository attachment-copy/parity engine**, not a universal proof over arbitrary host filesystem or mount topology.
+
+The following are deliberately **not** closed by this work package and remain mandatory LIVE_PROVIDER / real target-volume acceptance checks:
+
+- exact case-sensitivity and Unicode-name equivalence semantics of the real source and target mounts;
+- physical source/target upload-root non-containment across bind mounts, mount aliases, namespace remapping, or other mount-topology indirection;
+- any provider primitive required to prove those properties on the deployed host.
+
+Repository candidate results remain non-authoritative when those live-volume facts are unresolved. Stage 3 exposes no LIVE_PROVIDER mint, the direct CLI cannot manufacture one, and `PRODUCTION_ATTACHMENT_COPY_CAPABILITY` remains `BLOCKED`. A later provider/deployment acceptance step must either prove these exact-volume properties or fail closed before any production attachment copy or `*_VERIFIED` receipt can occur.
+
+This boundary is intentional: Stage 3 does not expand into a general-purpose filesystem/mount-topology verifier.
+
 ## Inputs
 
 The parity engine requires four explicit storage inputs:
@@ -23,7 +37,7 @@ Production receipt APIs do **not** trust caller-supplied lease fields or mutable
 
 The source and target databases must be different physical files. Database files must have one hard link and every read is bound to the device/inode captured during initial path resolution.
 
-The source and target upload roots must be different physical directories and may not contain one another. Database files may not be located inside either upload root.
+Within the repository engine's supported path model, the source and target upload roots must be different physical directories and may not contain one another. Database files may not be located inside either upload root. Arbitrary bind-mount or mount-alias ancestry is **not certified by Stage 3**; proving physical non-containment on the real deployment topology is a later target-volume acceptance requirement.
 
 The original source/target database and upload-root identities remain authoritative for the whole operation. Final parity does not re-resolve a pathname into a new baseline; path replacement at any later stage fails closed.
 
@@ -31,7 +45,7 @@ The final parity window captures the complete SQLite physical family for both da
 
 Physical-family snapshots remain supplemental drift evidence, not a substitute for writer exclusion. Candidate evaluation continuously checks its branded capability, including between the two closing family captures. The production module has no public TEST mutation surface: TEST_SANDBOX minting and the mutating candidate wrapper exist only in the test-loader module instance. Production receipt issuance accepts only `LIVE_PROVIDER`.
 
-For Stage-3 strong-family verification, the main SQLite file and every present `-wal`, `-shm`, or `-journal` sidecar must have exactly one hard link. Source and target families are compared as a **full cross-product** of present device/inode identities, not merely same-role members. Their expected database/WAL/SHM/journal namespaces are also compared as a full cross-product using filesystem-aware comparison keys. The key models both case semantics and Unicode canonical equivalence: on canonical-equivalent filesystems such as APFS, paths are normalized to a canonical decomposed form before case folding; other filesystems may be probed against the existing main database path. Captured string-normalization/case-fold intrinsics prevent later prototype monkeypatching from weakening the comparison. Future absent sidecars therefore use the same namespace equivalence semantics as their filesystem. Any physical or namespace overlap is rejected as `SOURCE_TARGET_SQLITE_FAMILY_ALIAS`.
+For Stage-3 strong-family verification, the main SQLite file and every present `-wal`, `-shm`, or `-journal` sidecar must have exactly one hard link. Source and target families are compared as a **full cross-product** of present device/inode identities, not merely same-role members. Their expected database/WAL/SHM/journal namespaces are also compared as a full cross-product using filesystem-aware comparison keys. Captured string-normalization/case-fold intrinsics prevent later prototype monkeypatching from weakening the comparison. These repository probes are defensive evidence, but Stage 3 does **not** claim that pathname probing can prove the semantics of every mounted filesystem. If exact case/canonical-equivalence behavior of the real source or target mount cannot be established by the later live-volume acceptance, production activation must fail closed. Any collision proven by the repository engine is rejected as `SOURCE_TARGET_SQLITE_FAMILY_ALIAS`.
 
 The target database is expected to be the isolated migration target produced by the existing migration path. This capability does not create or migrate the target database.
 
@@ -176,6 +190,6 @@ A failed or incomplete run never produces a parity receipt.
 
 This repository implementation does not close `PRODUCTION_ATTACHMENT_COPY_CAPABILITY`.
 
-The gate remains `BLOCKED` until a later authority revision implements and acceptance-verifies the live provider that can mint the opaque capability while actually holding source/target quiescence, plus the real target upload volume, real production source state, deployed command/runtime identity, and PROD-09 execution evidence. This Stage-3 contract does not implement the later Stage-5 long-lived source/target writer fence.
+The gate remains `BLOCKED` until a later authority revision implements and acceptance-verifies the live provider that can mint the opaque capability while actually holding source/target quiescence, plus the real target upload volume, real production source state, deployed command/runtime identity, and PROD-09 execution evidence. That live-volume acceptance must also prove the exact source/target mount name semantics and physical non-containment topology described in the Stage 3 closure boundary above. If either cannot be proven, activation remains blocked. This Stage-3 contract does not implement the later Stage-5 long-lived source/target writer fence.
 
 No production database, attachment tree, deployment host, container, provider, device, route, credential, or cutover is touched by this work package.
