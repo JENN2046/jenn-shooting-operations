@@ -27,6 +27,7 @@ const EXPECTED_COMPLETED = Object.freeze([
   'PROD-03-GENERATE-INSTALL-TOKENS',
   'PROD-04-BUILD-IMAGE',
   'PROD-05-START-ISOLATED-CONTAINER',
+  'PROD-06-LOOPBACK-HEALTH-SMOKE',
 ]);
 
 const EXPECTED_CONTAINER_START = Object.freeze([
@@ -463,6 +464,35 @@ export function validateProductionGreenfieldAuthority(value, {
       rollbackActionId: 'ROLLBACK-02-STOP-NEW-CONTAINER',
       rollbackPreserveDataVolume: 'jenn-shooting-operations_shooting_data',
     },
+    prod06: {
+      status: 'PASS',
+      recordedAtUtc: '2026-09-27T18:08:17Z',
+      containerName: 'jenn-shooting-operations-prod',
+      containerId:
+        '45ff5469cbd8874fbc3f5ac71260a57596b19f86a26b4131fa38d5d678162a99',
+      imageId:
+        'sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545',
+      healthzStatus: 200,
+      healthzBody: {
+        ok: true,
+        service: 'jenn-shooting-operations',
+      },
+      healthzWriteAdmissionHeader: 'disabled',
+      containerState: 'running',
+      containerHealth: 'healthy',
+      containerUid: 1000,
+      containerGid: 1000,
+      databasePath: '/app/data/shooting-operations.sqlite',
+      volumeMount:
+        'volume|jenn-shooting-operations_shooting_data|/app/data|true',
+      loopbackBind: '127.0.0.1:3800',
+      writeAdmissionMode: 'disabled',
+      orphanCleanupMode: 'disabled',
+      bootstrapRevision: 0,
+      containerStartCompletionProof: 'PROD-05-START-ISOLATED-CONTAINER',
+      readOnlySmoke: true,
+      secretValuesRecorded: false,
+    },
   };
   if (!sameObject(value.acceptance, expectedAcceptance)) {
     issues.push(issue('GREENFIELD_ACCEPTANCE_INVALID', '/acceptance'));
@@ -564,7 +594,7 @@ export function validateProductionGreenfieldAuthority(value, {
     requestedActionIds: [],
     approvedActionIds: [],
     requestableActionIds: [],
-    nextActionId: 'PROD-06-LOOPBACK-HEALTH-SMOKE',
+    nextActionId: 'PROD-07-CONFIGURE-REVERSE-PROXY-TLS',
     nextActionRequiresExplicitAuthorization: true,
   };
   if (!sameObject(value.authorization, expectedAuthorization)) {
