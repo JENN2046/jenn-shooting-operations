@@ -29,21 +29,28 @@ export function createKioskV2Application({
   if (typeof businessTimeZone !== 'string' || businessTimeZone.length === 0) {
     throw new TypeError('Kiosk businessTimeZone is required');
   }
+  const readCurrent = createReadKioskCurrent({
+    store: createSqliteKioskCurrentStore({ db: store.db }),
+    clock,
+  });
+  const applyRunEvent = createApplyKioskRunEvent({
+    store: createSqliteKioskRunEventStore({
+      db: store.db,
+      businessTimeZone,
+      allowedBriefHosts,
+    }),
+    clock,
+  });
   return Object.freeze({
     authenticate,
     writeAdmissionControl: store.writeAdmissionControl,
-    readCurrent: createReadKioskCurrent({
-      store: createSqliteKioskCurrentStore({ db: store.db }),
-      clock,
-    }),
-    applyRunEvent: createApplyKioskRunEvent({
-      store: createSqliteKioskRunEventStore({
-        db: store.db,
-        businessTimeZone,
-        allowedBriefHosts,
-      }),
-      clock,
-    }),
+    readCurrent,
+    applyRunEvent(input) {
+      if (store.writeAdmissionControl.isDisabled()) {
+        return Object.freeze({ ok: false, code: 'WRITE_ADMISSION_DISABLED' });
+      }
+      return applyRunEvent(input);
+    },
   });
 }
 
@@ -94,6 +101,9 @@ export function createSchedulingV2Application({
     authenticate,
     writeAdmissionControl: store.writeAdmissionControl,
     decideProposal({ command, principal } = {}) {
+      if (store.writeAdmissionControl.isDisabled()) {
+        return Object.freeze({ ok: false, code: 'WRITE_ADMISSION_DISABLED' });
+      }
       if (command?.decisionType !== 'reject') {
         return proposalStore.accept(command, principal);
       }
