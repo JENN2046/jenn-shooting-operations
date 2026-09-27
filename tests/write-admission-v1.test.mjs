@@ -16,6 +16,7 @@ test('pre-activation write admission blocks every HTTP mutation before store dis
     databasePath: ':memory:',
     tokens,
     writeAdmissionMode: 'disabled',
+    orphanCleanupMode: 'disabled',
     cleanupIntervalMs: 0,
     clock: () => new Date('2026-09-27T12:00:00.000Z'),
   });
@@ -103,6 +104,19 @@ test('pre-activation write admission blocks every HTTP mutation before store dis
     service.server.close();
     await once(service.server, 'close');
   }
+});
+
+test('pre-activation write admission cannot start with cleanup enabled', () => {
+  assert.throws(
+    () => createOperationsServer({
+      databasePath: ':memory:',
+      tokens,
+      writeAdmissionMode: 'disabled',
+      orphanCleanupMode: 'enabled',
+      cleanupIntervalMs: 0,
+    }),
+    /disabled write admission requires disabled orphan cleanup/u,
+  );
 });
 
 test('write admission mode rejects unknown deployment values', () => {
