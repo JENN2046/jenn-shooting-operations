@@ -31,14 +31,18 @@ test('greenfield authority binds the frozen parent and grants no production muta
   assert.deepEqual(authority.authorization.requestedActionIds, []);
   assert.deepEqual(authority.authorization.approvedActionIds, []);
   assert.deepEqual(authority.authorization.requestableActionIds, []);
-  assert.equal(authority.authorization.nextActionId, 'PROD-05-START-ISOLATED-CONTAINER');
+  assert.equal(authority.authorization.nextActionId, 'PROD-06-LOOPBACK-HEALTH-SMOKE');
   assert.equal(authority.authorization.nextActionRequiresExplicitAuthorization, true);
 });
 
-test('greenfield authority records PROD-03 and PROD-04 production evidence without secrets', () => {
+test('greenfield authority records PROD-03 through PROD-05 production evidence without secrets', () => {
   assert.deepEqual(
-    authority.completedAcceptanceIds.slice(-2),
-    ['PROD-03-GENERATE-INSTALL-TOKENS', 'PROD-04-BUILD-IMAGE'],
+    authority.completedAcceptanceIds.slice(-3),
+    [
+      'PROD-03-GENERATE-INSTALL-TOKENS',
+      'PROD-04-BUILD-IMAGE',
+      'PROD-05-START-ISOLATED-CONTAINER',
+    ],
   );
   assert.deepEqual(authority.acceptance.prod03, {
     status: 'PASS',
@@ -71,12 +75,49 @@ test('greenfield authority records PROD-03 and PROD-04 production evidence witho
     evidencePath: '/mnt/datadisk0/apps/jenn-shooting-operations/prod04-build-evidence.txt',
     rollbackActionId: 'ROLLBACK-08-REMOVE-BUILT-IMAGE',
   });
+  assert.deepEqual(authority.acceptance.prod05, {
+    status: 'PASS',
+    recordedAtUtc: '2026-09-27T17:50:49Z',
+    sourceAuthorityCommit: '92b7137211bf807f178901e878a8c3d6e335cec4',
+    containerName: 'jenn-shooting-operations-prod',
+    containerId: '45ff5469cbd8874fbc3f5ac71260a57596b19f86a26b4131fa38d5d678162a99',
+    imageId: 'sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545',
+    loopbackBind: '127.0.0.1:3800',
+    healthStatus: 'healthy',
+    runtimeUid: 1000,
+    runtimeGid: 1000,
+    dataVolumeName: 'jenn-shooting-operations_shooting_data',
+    dataVolumeBind: '/app/data',
+    targetVolumeContainerMountCount: 1,
+    readOnlyRootfs: true,
+    restartPolicy: 'unless-stopped',
+    writeAdmissionMode: 'disabled',
+    orphanCleanupMode: 'disabled',
+    orphanCleanupState: 'disabled',
+    orphanCleanupMarkerValid: true,
+    orphanCleanupActiveRuns: 0,
+    startupOrphanCleanupDisabled: true,
+    periodicOrphanCleanupDisabled: true,
+    requestTriggeredOrphanCleanupDisabled: true,
+    allOrphanCleanupEntryPointsDisabled: true,
+    bootstrapRevision: 0,
+    greenfieldNoExistingSource: true,
+    productionImportCompletionProof: 'NOT_APPLICABLE_GREENFIELD',
+    secretValuesRecorded: false,
+    evidencePath: '/mnt/datadisk0/apps/jenn-shooting-operations/prod05-start-evidence.txt',
+    evidenceSha256: 'sha256:f33a4175f10318fde375e85ca21a55fb7b1243717d039ffdaee96f3480e047a6',
+    rollbackActionId: 'ROLLBACK-02-STOP-NEW-CONTAINER',
+    rollbackPreserveDataVolume: 'jenn-shooting-operations_shooting_data',
+  });
 
   rejected(value => {
     value.acceptance.prod03.uniqueRoleTokenCount = 3;
   }, 'GREENFIELD_ACCEPTANCE_INVALID');
   rejected(value => {
     value.acceptance.prod04.imageId = 'sha256:' + '0'.repeat(64);
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prod05.writeAdmissionMode = 'enabled';
   }, 'GREENFIELD_ACCEPTANCE_INVALID');
 });
 
@@ -314,7 +355,7 @@ test('greenfield cleanup cannot bypass activation or disable-and-drain recovery'
 
 test('greenfield authority cannot self-authorize the next production action', () => {
   rejected(value => {
-    value.authorization.requestableActionIds = ['PROD-05-START-ISOLATED-CONTAINER'];
+    value.authorization.requestableActionIds = ['PROD-06-LOOPBACK-HEALTH-SMOKE'];
   }, 'GREENFIELD_AUTHORIZATION_STATE_INVALID');
   rejected(value => {
     value.authorization.blanketApprovalAllowed = true;
