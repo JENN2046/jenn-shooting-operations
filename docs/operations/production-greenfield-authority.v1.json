@@ -99,7 +99,7 @@
       "Hold the greenfield pre-activation write fence across staging, admin, API, background and direct-storage bypass writer classes; reject every mutating HTTP method before store dispatch, reject V1 direct-store mutation entrypoints, keep PROD-07 staging writes forbidden, keep cleanup disabled and drained, keep write-capable integrations disabled, and require zero background and uncontrolled direct-storage writer inventory while verifying loopback health and routed TLS; only empty-target schema and revision-zero bootstrap before listen is allowed",
       "Promote only the approved new route and client entrypoint mappings to production and record one activation receipt while the same write fence remains held; do not overwrite or claim any previous Jenn Shooting Operations authority",
       "Perform read-only post-activation health, routing, client-mapping, database and attachment-baseline verification while the write fence remains held; failure removes only newly introduced exposure/runtime bindings and preserves the data volume",
-      "Only after every read-only verification succeeds, recreate the exact service container from the same image and target volume with the write-admission runtime mode enabled, verify loopback health and exact storage identity again, and then admit approved production writes; PROD-10/PROD-11 remain separately blocked until post-activation prerequisites and exact authorization, and orphan cleanup stays disabled until separately authorized greenfield cleanup restoration"
+      "Only after every read-only verification succeeds while the same process, route, image, target volume and disabled write fence remain unchanged, perform one atomic in-process write-admission enable transition and record its receipt; there is no container restart or route change between verification and admission, PROD-10/PROD-11 remain separately blocked until post-activation prerequisites and exact authorization, and orphan cleanup stays disabled until separately authorized greenfield cleanup restoration"
     ],
     "rollbackActionIds": [
       "ROLLBACK-01-REMOVE-NEW-ROUTE",
@@ -123,6 +123,8 @@
       "PRE_ACTIVATION_ORPHAN_CLEANUP_GUARD_PROOF",
       "ACTIVATION_RECORD",
       "READ_ONLY_POST_ACTIVATION_VERIFICATION",
+      "PRE_ENABLE_SAME_PROCESS_AND_FENCE_PROOF",
+      "WRITE_ADMISSION_ENABLE_RECEIPT",
       "ROLLBACK_TARGETS"
     ]
   },
@@ -207,7 +209,10 @@
       "BACKGROUND_WRITER_INVENTORY_ZERO",
       "UNCONTROLLED_DIRECT_STORAGE_WRITER_INVENTORY_ZERO",
       "NO_OTHER_CONTAINER_MOUNTS_TARGET_VOLUME",
-      "EMPTY_TARGET_SCHEMA_BOOTSTRAP_BEFORE_LISTEN_ONLY"
+      "EMPTY_TARGET_SCHEMA_BOOTSTRAP_BEFORE_LISTEN_ONLY",
+      "CLEANUP_ENABLE_FORBIDDEN_WHILE_WRITE_ADMISSION_DISABLED",
+      "NO_CONTAINER_RESTART_FOR_ADMISSION_ENABLE",
+      "ATOMIC_IN_PROCESS_ADMISSION_ENABLE_AFTER_VERIFICATION"
     ],
     "heldFromActionId": "PROD-05-START-ISOLATED-CONTAINER",
     "heldThroughActionId": "PROD-GF-13-ACTIVATE",
@@ -221,9 +226,13 @@
       "BACKGROUND_WRITER_INVENTORY_ZERO_PROOF",
       "UNCONTROLLED_DIRECT_STORAGE_WRITER_INVENTORY_ZERO_PROOF",
       "TARGET_VOLUME_SINGLE_CONTAINER_MOUNT_PROOF",
-      "EMPTY_TARGET_BOOTSTRAP_REVISION_ZERO_PROOF"
+      "EMPTY_TARGET_BOOTSTRAP_REVISION_ZERO_PROOF",
+      "CLEANUP_ENABLE_DENIAL_PROOF",
+      "SAME_PROCESS_ADMISSION_TRANSITION_PROOF",
+      "WRITE_ADMISSION_ENABLE_RECEIPT"
     ],
     "runtimeEnvironmentVariable": "WRITE_ADMISSION_MODE",
-    "runtimeEnvironmentValue": "disabled"
+    "runtimeEnvironmentValue": "disabled",
+    "activationTransition": "SIGUSR2_IN_PROCESS_WRITE_ADMISSION_ENABLE"
   }
 }
