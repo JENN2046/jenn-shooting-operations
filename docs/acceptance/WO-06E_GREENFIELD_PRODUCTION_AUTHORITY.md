@@ -1525,3 +1525,28 @@ nextActionId          = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
 
 VCP and Kiosk remain separate post-activation actions. Orphan cleanup remains disabled until a separately authorized `PROD-GF-14-RESTORE-ORPHAN-CLEANUP`. This promotion does not authorize any of them.
 
+### PROD-GF-13 promotion exact-head validation
+
+The implementation-bearing activation promotion head was independently validated by the repository production-authorization workflow:
+
+```text
+implementationHead = f537ebadd8a45f430245e5b7456a17fdd4aa172b
+workflowRun        = 36358069647
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 763
+pass               = 762
+fail               = 0
+skip               = 1 expected external VCP adapter absence
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:cbabd9756a465d0d616e09407a08e173601a24e4e3f99a283a0ac7dcd509793d
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
+```
+
+This validation performed no additional production mutation. Because this paragraph changes only the acceptance document, the resulting final docs head is validated separately before merge eligibility.
+
