@@ -11,7 +11,7 @@ import {
   realpathSync,
   statSync,
 } from 'node:fs';
-import { basename, isAbsolute, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, resolve, sep } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import {
@@ -21,6 +21,7 @@ import {
   sha256Digest,
 } from './migration-v2.mjs';
 import { assertKnownSchema } from './sqlite-schema-v2.mjs';
+import { filesystemPathComparisonKey } from './platform-filesystem.mjs';
 import {
   projectV1CompatibilitySnapshot,
   projectV2Snapshot,
@@ -191,7 +192,7 @@ function hashFamilyFileStable(path, expectedMetadata) {
   }
 }
 
-function fileIdentity(path, { includeCtime = true, includeDigest = false } = {}) {
+function fileIdentity(path, { includeCtime = true, includeDigest = false, requireSingleLink = false } = {}) {
   let metadata;
   try {
     metadata = lstatSync(path, { bigint: true });
@@ -199,7 +200,8 @@ function fileIdentity(path, { includeCtime = true, includeDigest = false } = {})
     if (error?.code === 'ENOENT') return null;
     fail('SOURCE_CHANGED_DURING_SCAN', 'INVALID_SOURCE');
   }
-  if (!metadata.isFile() || metadata.isSymbolicLink()) {
+  if (!metadata.isFile() || metadata.isSymbolicLink()
+      || (requireSingleLink && metadata.nlink !== 1n)) {
     fail('SOURCE_CHANGED_DURING_SCAN', 'INVALID_SOURCE');
   }
   const identity = {
@@ -213,17 +215,101 @@ function fileIdentity(path, { includeCtime = true, includeDigest = false } = {})
   return identity;
 }
 
-function sourceFamily(path) {
+function sqliteFamilyParentIdentity(path) {
+  let metadata;
+  try {
+    metadata = statSync(dirname(path), { bigint: true });
+  } catch {
+    fail('SOURCE_CHANGED_DURING_SCAN', 'INVALID_SOURCE');
+  }
+  if (!metadata.isDirectory()) {
+    fail('SOURCE_CHANGED_DURING_SCAN', 'INVALID_SOURCE');
+  }
+  return Object.freeze({
+    device: metadata.dev.toString(),
+    inode: metadata.ino.toString(),
+  });
+}
+
+function sqliteNamespaceMemberIdentity(parentIdentity, memberPath, anchorPath) {
+  return Object.freeze({
+    parentDevice: parentIdentity.device,
+    parentInode: parentIdentity.inode,
+    semanticBasename: basename(filesystemPathComparisonKey(memberPath, anchorPath)),
+  });
+}
+
+function sqliteFamilyNamespace(path) {
+  const parentIdentity = sqliteFamilyParentIdentity(path);
+  return Object.freeze({
+    database: sqliteNamespaceMemberIdentity(parentIdentity, path, path),
+    wal: sqliteNamespaceMemberIdentity(parentIdentity, `${path}-wal`, path),
+    shm: sqliteNamespaceMemberIdentity(parentIdentity, `${path}-shm`, path),
+    journal: sqliteNamespaceMemberIdentity(parentIdentity, `${path}-journal`, path),
+  });
+}
+
+function sourceFamily(
+  path,
+  { includeDatabaseDigest = false, requireSingleLink = false } = {},
+) {
   return {
-    database: fileIdentity(path),
-    wal: fileIdentity(`${path}-wal`, { includeCtime: false, includeDigest: true }),
-    shm: fileIdentity(`${path}-shm`),
-    journal: fileIdentity(`${path}-journal`),
+    namespace: sqliteFamilyNamespace(path),
+    database: fileIdentity(path, {
+      includeDigest: includeDatabaseDigest,
+      requireSingleLink,
+    }),
+    wal: fileIdentity(`${path}-wal`, {
+      includeCtime: false,
+      includeDigest: true,
+      requireSingleLink,
+    }),
+    shm: fileIdentity(`${path}-shm`, { requireSingleLink }),
+    journal: fileIdentity(`${path}-journal`, { requireSingleLink }),
   };
 }
 
 function sameSourceFamily(left, right) {
   return canonicalJson(left) === canonicalJson(right);
+}
+
+export function captureSqlitePhysicalFamily(
+  pathInfo,
+  { includeDatabaseDigest = false, requireSingleLink = false } = {},
+) {
+  if (!pathInfo || typeof pathInfo.realPath !== 'string') {
+    fail('INVALID_PATH', 'INVALID_USAGE');
+  }
+  return sourceFamily(pathInfo.realPath, { includeDatabaseDigest, requireSingleLink });
+}
+
+export function sameSqlitePhysicalFamily(left, right) {
+  return sameSourceFamily(left, right);
+}
+
+export function sqlitePhysicalFamiliesAreDisjoint(left, right) {
+  const keys = ['database', 'wal', 'shm', 'journal'];
+
+  for (const leftPath of Object.values(left?.namespace ?? {})) {
+    const leftNamespaceKey = canonicalJson(leftPath);
+    for (const rightPath of Object.values(right?.namespace ?? {})) {
+      if (leftNamespaceKey === canonicalJson(rightPath)) return false;
+    }
+  }
+
+  for (const leftKey of keys) {
+    const leftMember = left?.[leftKey];
+    if (!leftMember) continue;
+    for (const rightKey of keys) {
+      const rightMember = right?.[rightKey];
+      if (!rightMember) continue;
+      if (leftMember.device === rightMember.device
+          && leftMember.inode === rightMember.inode) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 export function readV1Source(pathInfo, { duringScan } = {}) {
