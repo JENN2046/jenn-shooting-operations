@@ -811,3 +811,86 @@ nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
 Intermediate runs #203-#205 exercised incomplete native-capability snapshots and are superseded by exact-head run #208. They are not acceptance evidence.
 
 No production side effect was performed by this correction.
+
+
+## Twelfth Codex review correction
+
+Independent review found one additional valid P1: the hardened database facade had removed the native transaction-state signal required by the Outbox repository. As a result, factory-built Kiosk completion could enter a real `BEGIN IMMEDIATE` transaction while `db.isTransaction` appeared absent/falsy, causing `OUTBOX_TRANSACTION_REQUIRED` and rolling the completion back as `INTERNAL_ERROR`.
+
+The facade now preserves the trustworthy native transaction-state signal without reopening prototype dispatch.
+
+### Native instance transaction-state getter
+
+Node 24 exposes `DatabaseSync.isTransaction` as an own, read-only native getter on each database instance.
+
+At ScheduleStore construction, the facade obtains that **instance-owned, non-configurable native getter** using the module-load-captured `Object.getOwnPropertyDescriptor`.
+
+The public facade exposes only:
+
+```text
+get isTransaction() {
+  return capturedNativeGetter.call(privateDatabase)
+}
+```
+
+through the already captured `Reflect.apply`.
+
+No runtime lookup through `DatabaseSync.prototype` is used.
+
+### Outbox transaction regression
+
+A real `createSqliteOutboxRepositoryV1` is constructed over `ScheduleStore.db`.
+
+The regression proves:
+
+- outside a transaction, `db.isTransaction === false` and enqueue returns `OUTBOX_TRANSACTION_REQUIRED`;
+- after `BEGIN IMMEDIATE`, `db.isTransaction === true`;
+- the same repository enqueues successfully with `OUTBOX_ENQUEUED`;
+- after `COMMIT`, `db.isTransaction === false`;
+- a subsequent `BEGIN IMMEDIATE / ROLLBACK` toggles true → false correctly.
+
+### Factory-built Kiosk completion regression
+
+The repository's existing grouped-run fixture is seeded into a file-backed database, reopened through `ScheduleStore`, and then exercised through `createKioskV2Application`.
+
+The test performs:
+
+```text
+start
+→ complete
+→ notification_outbox enqueue
+```
+
+through the admission-checked database facade.
+
+It proves:
+
+- the start succeeds;
+- the complete succeeds with `resultingState = completed`;
+- the transaction is closed again after each application call;
+- the completion notification is persisted in `notification_outbox` with the expected outbox id, aggregate revision, route key and pending status.
+
+This directly covers the failure path reported by review rather than only testing the facade getter in isolation.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = dca148e74450c2829d81e4460ecf8a6aa003d7a9
+workflowRun        = 36328772929 (#213)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 758
+pass               = 757
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+No production side effect was performed by this correction.
