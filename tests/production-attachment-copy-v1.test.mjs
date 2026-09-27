@@ -53,6 +53,7 @@ const {
   describeAttachmentParityScope,
   evaluateAttachmentDatabaseParityCandidate,
   verifyAttachmentDatabaseParity,
+  assertPathDomainsDisjointTestCandidate,
 } = await import('../src/production-attachment-copy-v1.mjs?attachment-copy-test-seam');
 
 const CREATED_AT = '2026-09-26T00:00:00.000Z';
@@ -694,6 +695,64 @@ function countOpenDescriptorsToPath(path) {
   return count;
 }
 
+test('upload roots reject physical ancestor overlap across alternate mount paths', () => {
+  if (process.platform !== 'linux') return;
+
+  const originalStatSync = fs.statSync;
+  const sourceRoot = Object.freeze({
+    realPath: '/source-root',
+    device: '41',
+    inode: '100',
+  });
+  const targetRoot = Object.freeze({
+    realPath: '/alias/target-root',
+    device: '41',
+    inode: '200',
+  });
+  const sourceDatabase = Object.freeze({
+    realPath: '/db/source.sqlite',
+    device: '42',
+    inode: '300',
+  });
+  const targetDatabase = Object.freeze({
+    realPath: '/db/target.sqlite',
+    device: '42',
+    inode: '400',
+  });
+  const fakeStats = new Map([
+    ['/alias/target-root', Object.freeze({ dev: 41n, ino: 200n })],
+    ['/alias', Object.freeze({ dev: 41n, ino: 100n })],
+  ]);
+
+  try {
+    fs.statSync = (path, options) => {
+      const value = String(path);
+      const metadata = fakeStats.get(value);
+      if (metadata) {
+        return Object.freeze({
+          ...metadata,
+          isDirectory: () => true,
+        });
+      }
+      return originalStatSync(path, options);
+    };
+    syncBuiltinESMExports();
+
+    assert.throws(
+      () => assertPathDomainsDisjointTestCandidate({
+        sourceDatabase,
+        targetDatabase,
+        sourceRoot,
+        targetRoot,
+      }),
+      error => error.code === 'SOURCE_TARGET_UPLOAD_ROOT_CONFLICT',
+    );
+  } finally {
+    fs.statSync = originalStatSync;
+    syncBuiltinESMExports();
+  }
+});
+
 test('filesystem root upload domains still detect descendants', () => {
   const body = Buffer.from('filesystem-root-domain');
   const row = uploadFact({ id: 'UPLOAD-FILESYSTEM-ROOT', body });
@@ -1123,6 +1182,38 @@ test('case-insensitive namespace keys follow uppercase collation for Greek sigma
 
   assert.equal(finalSigma, normalSigma);
   assert.match(finalSigma, /Σ\.SQLITE-WAL$/u);
+});
+
+test('case-insensitivity probe continues past an unsuitable case expansion', () => {
+  const root = join(tmpdir(), 'jenn-case-probe');
+  const anchor = join(root, 'aß');
+  const unsuitable = join(root, 'aSS');
+  const suitable = join(root, 'Aß');
+  const originalLstatSync = fs.lstatSync;
+  const observed = [];
+  const sameIdentity = Object.freeze({ dev: 91n, ino: 37n });
+
+  try {
+    fs.lstatSync = (path, options) => {
+      const value = String(path);
+      observed.push(value);
+      if (value === anchor || value === suitable) return sameIdentity;
+      if (value === unsuitable) {
+        const error = new Error('missing unsuitable case expansion');
+        error.code = 'ENOENT';
+        throw error;
+      }
+      return originalLstatSync(path, options);
+    };
+    syncBuiltinESMExports();
+
+    assert.equal(filesystemPathIsCaseInsensitive(anchor), true);
+    assert.ok(observed.includes(unsuitable));
+    assert.ok(observed.includes(suitable));
+  } finally {
+    fs.lstatSync = originalLstatSync;
+    syncBuiltinESMExports();
+  }
 });
 
 test('filesystem probes use the actual mounted directory rather than process-platform defaults', () => {

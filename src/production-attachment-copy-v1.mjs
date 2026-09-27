@@ -12,7 +12,7 @@ import {
   statSync,
   writeSync,
 } from 'node:fs';
-import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import {
@@ -99,18 +99,42 @@ function pathWithin(path, directory) {
   return relation === '' || (!escapesParent && !isAbsolute(relation));
 }
 
+function physicalPathWithin(path, directoryInfo) {
+  let current = path;
+  while (true) {
+    let metadata;
+    try {
+      metadata = statSync(current, { bigint: true });
+    } catch {
+      fail('INVALID_PATH', 'INVALID_USAGE');
+    }
+    if (metadata.dev.toString() === directoryInfo.device
+        && metadata.ino.toString() === directoryInfo.inode) {
+      return true;
+    }
+
+    const parent = dirname(current);
+    if (parent === current) return false;
+    current = parent;
+  }
+}
+
 function assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot) {
   if (sameFile(sourceDatabase, targetDatabase)) {
     fail('SOURCE_TARGET_DATABASE_CONFLICT', 'INVALID_USAGE');
   }
   if (sameFile(sourceRoot, targetRoot)
       || pathWithin(sourceRoot.realPath, targetRoot.realPath)
-      || pathWithin(targetRoot.realPath, sourceRoot.realPath)) {
+      || pathWithin(targetRoot.realPath, sourceRoot.realPath)
+      || physicalPathWithin(targetRoot.realPath, sourceRoot)
+      || physicalPathWithin(sourceRoot.realPath, targetRoot)) {
     fail('SOURCE_TARGET_UPLOAD_ROOT_CONFLICT', 'INVALID_USAGE');
   }
   for (const database of [sourceDatabase, targetDatabase]) {
     if (pathWithin(database.realPath, sourceRoot.realPath)
-        || pathWithin(database.realPath, targetRoot.realPath)) {
+        || pathWithin(database.realPath, targetRoot.realPath)
+        || physicalPathWithin(database.realPath, sourceRoot)
+        || physicalPathWithin(database.realPath, targetRoot)) {
       fail('DATABASE_UPLOAD_ROOT_CONFLICT', 'INVALID_USAGE');
     }
   }

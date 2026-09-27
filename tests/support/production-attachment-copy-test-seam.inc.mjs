@@ -279,3 +279,11 @@ export function copyAttachmentsAndEvaluateParityTestCandidate({
   });
 }
 
+export function assertPathDomainsDisjointTestCandidate({
+  sourceDatabase,
+  targetDatabase,
+  sourceRoot,
+  targetRoot,
+} = {}) {
+  return assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot);
+}

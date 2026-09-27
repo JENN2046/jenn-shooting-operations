@@ -25,34 +25,40 @@ function slice(value, start, end) {
   return REFLECT_APPLY(STRING_SLICE, value, [start, end]);
 }
 
-function toggledCasePath(path) {
-  for (let index = path.length - 1; index >= 0; index -= 1) {
-    const character = path[index];
-    const lowerCharacter = lower(character);
-    const upperCharacter = upper(character);
-    if (lowerCharacter === upperCharacter) continue;
-    const toggled = character === lowerCharacter ? upperCharacter : lowerCharacter;
-    return `${slice(path, 0, index)}${toggled}${slice(path, index + 1)}`;
-  }
-  return null;
-}
-
 export function filesystemPathIsCaseInsensitive(existingPath) {
   const normalized = resolve(existingPath);
-  const alternate = toggledCasePath(normalized);
-  if (!alternate || alternate === normalized) {
-    return process.platform === 'darwin';
-  }
 
   let original;
-  let toggled;
   try {
     original = lstatSync(normalized, { bigint: true });
-    toggled = lstatSync(alternate, { bigint: true });
   } catch {
     return false;
   }
-  return original.dev === toggled.dev && original.ino === toggled.ino;
+
+  let sawCaseVariant = false;
+  for (let index = normalized.length - 1; index >= 0; index -= 1) {
+    const character = normalized[index];
+    const lowerCharacter = lower(character);
+    const upperCharacter = upper(character);
+    if (lowerCharacter === upperCharacter) continue;
+
+    const toggled = character === lowerCharacter ? upperCharacter : lowerCharacter;
+    const alternate = `${slice(normalized, 0, index)}${toggled}${slice(normalized, index + 1)}`;
+    if (alternate === normalized) continue;
+    sawCaseVariant = true;
+
+    let candidate;
+    try {
+      candidate = lstatSync(alternate, { bigint: true });
+    } catch {
+      continue;
+    }
+    if (original.dev === candidate.dev && original.ino === candidate.ino) {
+      return true;
+    }
+  }
+
+  return !sawCaseVariant && process.platform === 'darwin';
 }
 
 export function filesystemPathUsesCanonicalEquivalence(existingPath) {
