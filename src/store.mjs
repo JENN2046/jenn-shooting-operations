@@ -6,7 +6,7 @@ import { validateSnapshot, validateSubmission } from './contract-validator.mjs';
 import { initializeWritableSchema } from './sqlite-schema-v2.mjs';
 import { createOrphanCleanupControl, normalizeOrphanCleanupMode } from './orphan-cleanup-control.mjs';
 import {
-  normalizeWriteAdmissionMode,
+  createWriteAdmissionControl,
   writeAdmissionFailure,
 } from './write-admission-v1.mjs';
 
@@ -138,6 +138,7 @@ export class ScheduleStore {
     orphanCleanupEnableEpoch,
     orphanCleanupDomain,
     writeAdmissionMode = 'enabled',
+    writeAdmissionControl,
   }) {
     const cleanupMode = readOnly ? 'inherit' : normalizeOrphanCleanupMode(orphanCleanupMode);
     if (!readOnly && filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
@@ -156,7 +157,12 @@ export class ScheduleStore {
     this.idFactory = idFactory;
     this.orphanMaxAgeMs = orphanMaxAgeMs;
     this.readOnly = readOnly;
-    this.writeAdmissionMode = normalizeWriteAdmissionMode(writeAdmissionMode);
+    this.writeAdmissionControl = writeAdmissionControl
+      ?? createWriteAdmissionControl({ initialMode: writeAdmissionMode });
+    if (typeof this.writeAdmissionControl?.isDisabled !== 'function'
+        || typeof this.writeAdmissionControl?.isEnabled !== 'function') {
+      throw new TypeError('valid write admission control is required');
+    }
     this.renameFile = fileOperations.rename || renameSync;
 
     if (!readOnly && cleanupMode === 'disabled') {
@@ -213,6 +219,13 @@ export class ScheduleStore {
   }
 
   enableOrphanCleanup(options) {
+    if (this.writeAdmissionControl.isDisabled()) {
+      return Object.freeze({
+        ok: false,
+        code: 'WRITE_ADMISSION_DISABLED',
+        ...this.getOrphanCleanupControlStatus(),
+      });
+    }
     return this.#orphanCleanupControl.enable(options);
   }
 
@@ -302,7 +315,7 @@ export class ScheduleStore {
   }
 
   replaceSnapshot({ expectedRevision, snapshot, operationId, role }) {
-    if (this.writeAdmissionMode === 'disabled') return writeAdmissionFailure();
+    if (this.writeAdmissionControl.isDisabled()) return writeAdmissionFailure();
     const validationErrors = validateSnapshot(snapshot);
     if (validationErrors.length) return { ok: false, status: 422, code: 'INVALID_SNAPSHOT', errors: validationErrors };
     const cached = this.getOperation(operationId, 'snapshot.replace');
@@ -332,7 +345,7 @@ export class ScheduleStore {
   }
 
   submitRequest({ submission, role }) {
-    if (this.writeAdmissionMode === 'disabled') return writeAdmissionFailure();
+    if (this.writeAdmissionControl.isDisabled()) return writeAdmissionFailure();
     const validationErrors = validateSubmission(submission);
     if (validationErrors.length) {
       if (OPERATION_ID.test(submission?.operationId || '')) {
@@ -427,7 +440,7 @@ export class ScheduleStore {
   }
 
   saveUpload({ operationId, originalName, contentType, kind, buffer, role = 'submitter' }) {
-    if (this.writeAdmissionMode === 'disabled') return writeAdmissionFailure();
+    if (this.writeAdmissionControl.isDisabled()) return writeAdmissionFailure();
     if (typeof operationId !== 'string' || !OPERATION_ID.test(operationId)) {
       return { ok: false, status: 422, code: 'INVALID_OPERATION_ID' };
     }
@@ -486,6 +499,16 @@ export class ScheduleStore {
       recoverStaged: options?.recoverStaged,
     });
     if (normalizedOptions.dryRun) return this.#cleanupOrphanUploadsUnchecked(normalizedOptions);
+    if (this.writeAdmissionControl.isDisabled()) {
+      return Object.freeze({
+        ok: false,
+        code: 'WRITE_ADMISSION_DISABLED',
+        candidates: 0,
+        deleted: 0,
+        filesDeleted: 0,
+        fileErrors: 0,
+      });
+    }
     if (this.readOnly) return this.#cleanupOrphanUploadsUnchecked(normalizedOptions);
 
     const admission = this.#orphanCleanupControl.beginRun();
