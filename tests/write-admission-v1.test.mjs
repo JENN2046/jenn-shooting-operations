@@ -11,6 +11,8 @@ import {
 } from '../src/write-admission-v1.mjs';
 import { createOperationsServer } from '../src/server.mjs';
 import { ScheduleStore } from '../src/store.mjs';
+import { buildProductionRunCompletedNotificationV1 } from '../src/production-run-completed-notification-v1.mjs';
+import { createSqliteOutboxRepositoryV1 } from '../src/sqlite-outbox-repository-v1.mjs';
 
 const tokens = {
   viewer: 'viewer-token-000000000001',
@@ -456,6 +458,57 @@ test('SQLite bootstrap and facades ignore runtime native prototype replacement',
       Object.defineProperty(StatementSync.prototype, name, descriptor);
     }
     if (store) store.close();
+  }
+});
+
+test('database facade preserves native transaction state for outbox atomicity', () => {
+  const store = new ScheduleStore({ filename: ':memory:' });
+  try {
+    const repository = createSqliteOutboxRepositoryV1({ db: store.db });
+    const built = buildProductionRunCompletedNotificationV1({
+      eventId: 'EVENT-FACADE-TX-0001',
+      runId: 'RUN-FACADE-TX-0001',
+      scheduleItemId: 'SCHEDULE-FACADE-TX-0001',
+      resourceId: 'RESOURCE-A',
+      scope: 'task',
+      taskCount: 1,
+      completedAt: '2026-09-27T13:00:00.000Z',
+      netDurationMs: 60_000,
+      runRevision: 2,
+      createdAt: '2026-09-27T13:00:00.000Z',
+    });
+    assert.equal(built.ok, true, built.code);
+
+    assert.equal(store.db.isTransaction, false);
+    assert.deepEqual(repository.enqueue(built.intent), {
+      ok: false,
+      code: 'OUTBOX_TRANSACTION_REQUIRED',
+    });
+
+    store.db.exec('BEGIN IMMEDIATE');
+    assert.equal(store.db.isTransaction, true);
+    assert.deepEqual(repository.enqueue(built.intent), {
+      ok: true,
+      code: 'OUTBOX_ENQUEUED',
+      outboxId: built.intent.outboxId,
+      status: 'pending',
+    });
+    store.db.exec('COMMIT');
+    assert.equal(store.db.isTransaction, false);
+
+    assert.equal(
+      store.db.prepare(
+        'SELECT COUNT(*) AS count FROM notification_outbox WHERE outbox_id = ?',
+      ).get(built.intent.outboxId).count,
+      1,
+    );
+
+    store.db.exec('BEGIN IMMEDIATE');
+    assert.equal(store.db.isTransaction, true);
+    store.db.exec('ROLLBACK');
+    assert.equal(store.db.isTransaction, false);
+  } finally {
+    store.close();
   }
 });
 
