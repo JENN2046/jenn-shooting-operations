@@ -894,3 +894,64 @@ nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
 ```
 
 No production side effect was performed by this correction.
+
+
+## Thirteenth Codex review correction
+
+Independent review found one additional valid P1: SQLite authorizer classification still called `SQLITE_ADMISSION_READ_ACTIONS.has(...)` dynamically. An in-process caller could replace `Set.prototype.has` after `store.mjs` loaded and force every SQLite authorizer action to appear read-only, allowing the public database facade to misclassify prepared writes and direct `exec` writes while admission was disabled.
+
+The admission classifier now captures the native `Set.prototype.has` function exactly once when `store.mjs` is evaluated.
+
+All SQLite read-action membership checks now use:
+
+```text
+captured Reflect.apply(
+  captured Set.prototype.has,
+  SQLITE_ADMISSION_READ_ACTIONS,
+  [actionCode]
+)
+```
+
+There is no runtime dispatch through mutable `Set.prototype.has` in either:
+
+- prepared-statement write classification; or
+- direct `exec` authorizer enforcement.
+
+### Hostile regression
+
+A disabled ScheduleStore is constructed normally. The test then replaces `Set.prototype.has` with a hostile implementation that returns `true` for every membership check and proves the replacement is active.
+
+While that hostile replacement is installed:
+
+- a prepared INSERT is still classified as mutating and cannot execute;
+- direct `exec(INSERT ...)` is rejected;
+- direct `exec(UPDATE ...)` is rejected;
+- SQLite `total_changes()` remains unchanged;
+- the canonical schedule snapshot revision remains unchanged.
+
+This directly covers the reported live-facade bypass without widening the PR into unrelated same-process sandboxing.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 0525ff978c737c1023dadd7646e498c9d75d79d9
+workflowRun        = 36330358691 (#218)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 759
+pass               = 758
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+Intermediate runs #216 and #217 exercised over-broad hostile test timing/assertions and are superseded by exact-head run #218. They are not acceptance evidence.
+
+No production side effect was performed by this correction.
