@@ -28,6 +28,8 @@ OS                   = Ubuntu 24.04.4 LTS
 architecture         = amd64
 applicationBind      = 127.0.0.1:3800
 applicationDirectory = /mnt/datadisk0/apps/jenn-shooting-operations
+publicHostname       = jso.skmt617.top
+reverseProxyRoute    = https://jso.skmt617.top
 containerName        = jenn-shooting-operations-prod
 dataVolume           = jenn-shooting-operations_shooting_data
 volumeMountpoint     = /mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data
@@ -35,7 +37,7 @@ backingDevice        = /dev/vdb
 filesystem           = ext4
 ```
 
-Public hostname, reverse-proxy route, and cloud security-group control-plane facts remain unresolved and are not invented by this supplement.
+Cloud security-group control-plane facts remain unresolved. PROD-07 live HTTPS reachability did not require a security-group mutation, so conditional PROD-08 was not triggered.
 
 ## Completed production acceptance
 
@@ -96,23 +98,20 @@ requestedActionIds             = []
 approvedActionIds              = []
 requestableActionIds           = []
 blanketApprovalAllowed         = false
-nextActionId                   = PROD-07-CONFIGURE-REVERSE-PROXY-TLS
+nextActionId                   = PROD-GF-13-ACTIVATE
 nextActionRequiresAuthorization = true
 ```
 
-This authority definition records PROD-03 through PROD-06 as completed evidence but does not grant PROD-07 or any later production mutation. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
+This authority definition records PROD-03 through PROD-07 as completed evidence but does not grant PROD-GF-13 or any later production mutation. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
 
 ## Remaining facts before later gates
 
-- exact public hostname / DNS binding;
-- exact reverse-proxy route;
-- TLS binding for that route;
 - Tencent Cloud security-group control-plane fact if a change is actually required;
 - greenfield activation evidence;
 - post-activation VCP/Kiosk wiring and their separately authorized real acceptance;
 - greenfield cleanup restoration evidence.
 
-No source migration, production data copy, public route change, additional container start, integration enablement, or production activation is authorized by this document. PROD-03 token generation, PROD-04 image build, PROD-05 isolated container start and PROD-06 loopback health smoke are recorded as completed production evidence only; their completion grants no PROD-07 authority.
+No source migration, production data copy, additional public route change, additional container start, integration enablement, or production activation is authorized by this document. PROD-03 through PROD-07 are recorded as completed production evidence only; their completion grants no PROD-GF-13 authority.
 
 ## Codex review correction
 
@@ -1333,4 +1332,81 @@ nextActionId          = PROD-07-CONFIGURE-REVERSE-PROXY-TLS
 ```
 
 This promotion records completed PROD-06 facts only. It does not authorize PROD-07.
+
+## Production evidence promotion: PROD-07
+
+The owner explicitly selected `jso.skmt617.top` and authorized only `PROD-07-CONFIGURE-REVERSE-PROXY-TLS`.
+
+Before the route mutation, read-only production inspection confirmed no existing `jso.skmt617.top` Nginx route and no existing proxy to `127.0.0.1:3800`. The running PROD-05 container remained healthy with write admission and orphan cleanup disabled. The existing Cloudflare Origin certificate served on the host covers the `skmt617.top` wildcard family, so no new certificate issuance or private-key material was required.
+
+The owner installed the dedicated Nginx route as root, ran `nginx -t` successfully, reloaded Nginx and confirmed the service remained active. Independent post-change verification then confirmed:
+
+```text
+result                         = PASS
+recordedAtUtc                  = 2026-09-27T22:52:59Z
+hostname                       = jso.skmt617.top
+route                          = https://jso.skmt617.top
+nginxConfigPath                = /etc/nginx/conf.d/jso-shooting-operations.conf
+nginxConfigMode                = 0644
+nginxConfigTest                = PASS_ROOT_OPERATOR
+nginxReload                    = PASS_ROOT_OPERATOR
+nginxActive                    = true
+noExistingRouteOverwrite       = true
+preMutationRouteMatchCount     = 0
+postMutationRouteMatchCount    = 1
+backend                        = http://127.0.0.1:3800
+backendHealthStatus            = 200
+publicHealthStatus             = 200
+publicHealthWriteAdmission     = disabled
+httpRedirectStatus             = 308
+tlsOriginCertificateFamily     = skmt617.top
+tlsOriginHostnameCoverage      = true
+tlsOriginValidFromUtc          = 2026-06-22T08:45:00Z
+tlsOriginValidToUtc            = 2041-06-18T08:45:00Z
+tlsEdgeStatus                  = PASS
+dnsProvider                    = Cloudflare
+dnsProxyMode                   = PROXIED
+publicWritePostStatus          = 503
+publicWritePutStatus           = 503
+publicWritePatchStatus         = 503
+publicWriteDeleteStatus        = 503
+publicWriteFailureCode         = WRITE_ADMISSION_DISABLED
+boundedStagingPrincipalScope   = NO_PREACTIVATION_WRITES
+writeAdmissionMode             = disabled
+orphanCleanupMode              = disabled
+orphanCleanupState             = disabled
+orphanCleanupMarkerValid       = true
+orphanCleanupActiveRuns        = 0
+bootstrapRevision              = 0
+stagingRequestPathCleanupDisabled = true
+prod08RequiredForCurrentHttpsReachability = false
+secretValuesRecorded           = false
+evidencePath                   = /mnt/datadisk0/apps/jenn-shooting-operations/prod07-route-evidence.txt
+evidenceSha256                 = sha256:a49ecf5e5d358f1774f631af57dd930401a3bc9c6468d339322966d1e6329cc1
+rollbackActionId               = ROLLBACK-01-REMOVE-NEW-ROUTE
+```
+
+The public route is intentionally readable before activation but all mutating HTTP methods remain rejected by the same in-process greenfield write fence. PROD-07 did not enable staging writes, write admission, orphan cleanup, VCP, Kiosk or activation.
+
+Authority state after this promotion:
+
+```text
+completedAcceptanceIds =
+  PROD-01-TARGET-READONLY-PREFLIGHT
+  PROD-02-CREATE-ISOLATED-APP-STORAGE
+  PHASE-B-TARGET-VOLUME-ACCEPTANCE
+  PROD-03-GENERATE-INSTALL-TOKENS
+  PROD-04-BUILD-IMAGE
+  PROD-05-START-ISOLATED-CONTAINER
+  PROD-06-LOOPBACK-HEALTH-SMOKE
+  PROD-07-CONFIGURE-REVERSE-PROXY-TLS
+
+authorization.status  = FROZEN_NOT_REQUESTED
+requestedActionIds    = []
+approvedActionIds     = []
+requestableActionIds  = []
+nextActionId          = PROD-GF-13-ACTIVATE
+```
+
+Conditional `PROD-08-FIREWALL-SECURITY-GROUP` remains defined but was not required for the current HTTPS route, which is already externally reachable through Cloudflare. This promotion does not authorize `PROD-GF-13-ACTIVATE`.
 
