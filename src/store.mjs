@@ -51,6 +51,7 @@ const DATABASE_PREPARE = DatabaseSync.prototype.prepare;
 const DATABASE_EXEC = DatabaseSync.prototype.exec;
 const DATABASE_SET_AUTHORIZER = DatabaseSync.prototype.setAuthorizer;
 const DATABASE_SERIALIZE = DatabaseSync.prototype.serialize;
+const DATABASE_CLOSE = DatabaseSync.prototype.close;
 const STATEMENT_RUN = StatementSync.prototype.run;
 const STATEMENT_GET = StatementSync.prototype.get;
 const STATEMENT_ALL = StatementSync.prototype.all;
@@ -63,6 +64,7 @@ for (const [name, value] of Object.entries({
   DATABASE_EXEC,
   DATABASE_SET_AUTHORIZER,
   DATABASE_SERIALIZE,
+  DATABASE_CLOSE,
   STATEMENT_RUN,
   STATEMENT_GET,
   STATEMENT_ALL,
@@ -75,6 +77,10 @@ for (const [name, value] of Object.entries({
     throw new TypeError(`missing native SQLite capability: ${name}`);
   }
 }
+
+const BOOTSTRAP_ADMISSION_CONTROL = Object.freeze({
+  isDisabled: () => false,
+});
 
 const SQLITE_ADMISSION_READ_ACTIONS = new Set([
   sqliteConstants.SQLITE_SELECT,
@@ -325,19 +331,23 @@ export class ScheduleStore {
     if (!readOnly && this.cleanupRoot) mkdirSync(this.cleanupRoot, { recursive: true });
 
     const database = new DatabaseSync(filename, { readOnly });
-    database.exec('PRAGMA busy_timeout = 5000;');
+    const bootstrapDb = createAdmissionCheckedDatabaseFacade(
+      database,
+      BOOTSTRAP_ADMISSION_CONTROL,
+    );
+    bootstrapDb.exec('PRAGMA busy_timeout = 5000;');
     if (readOnly) {
-      database.exec('PRAGMA foreign_keys = ON; PRAGMA query_only = ON;');
+      bootstrapDb.exec('PRAGMA foreign_keys = ON; PRAGMA query_only = ON;');
     } else {
-      enableWalWithBusyRetry(database);
-      database.exec('PRAGMA foreign_keys = ON;');
-      initializeWritableSchema(database, { now: this.clock });
-      transaction(database, () => {
-        const current = database.prepare('SELECT id FROM schedule_state WHERE id = 1').get();
+      enableWalWithBusyRetry(bootstrapDb);
+      bootstrapDb.exec('PRAGMA foreign_keys = ON;');
+      initializeWritableSchema(bootstrapDb, { now: this.clock });
+      transaction(bootstrapDb, () => {
+        const current = bootstrapDb.prepare('SELECT id FROM schedule_state WHERE id = 1').get();
         if (current) return;
         const now = isoNow(this.clock);
         const snapshot = { schemaVersion: 1, revision: 0, updatedAt: now, products: [], tasks: [], sessions: [] };
-        database.prepare(`
+        bootstrapDb.prepare(`
           INSERT INTO schedule_state (id, revision, updated_at, snapshot_json)
           VALUES (1, 0, ?, ?)
           ON CONFLICT(id) DO NOTHING
@@ -359,7 +369,7 @@ export class ScheduleStore {
       if (!enabled.ok) {
         const error = new Error(enabled.code || 'ORPHAN_CLEANUP_ENABLE_FAILED');
         error.code = enabled.code || 'ORPHAN_CLEANUP_ENABLE_FAILED';
-        try { this.#database.close(); } catch {}
+        try { APPLY(DATABASE_CLOSE, this.#database, []); } catch {}
         throw error;
       }
     }
@@ -386,7 +396,7 @@ export class ScheduleStore {
   }
 
   close() {
-    this.#database.close();
+    APPLY(DATABASE_CLOSE, this.#database, []);
   }
 
   recoverStagedUploadCleanup({ allowDelete = true } = {}) {
