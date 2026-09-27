@@ -4,7 +4,7 @@
 - Parent manifest digest: `sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b`
 - Supplement: `docs/operations/production-greenfield-authority.v1.json`
 - Deployment mode: `GREENFIELD_NO_EXISTING_SOURCE`
-- Status: `AUTHORITY_DEFINITION_PENDING_EXACT_HEAD_VALIDATION / PRODUCTION_AUTHORIZATION_NOT_REQUESTED`
+- Status: `GREENFIELD_AUTHORITY_IMPLEMENTATION_PASS / FINAL_DOCS_HEAD_VALIDATION_PENDING / PRODUCTION_AUTHORIZATION_NOT_REQUESTED`
 
 ## Why this supplement exists
 
@@ -79,8 +79,10 @@ No `*_VERIFIED` attachment-copy receipt or LIVE_PROVIDER mint is fabricated.
 The supplement replaces only the current deployment-path assumptions that unconditionally require an existing source:
 
 - container start requires verified PROD-02 / PROD-03 / PROD-04, fresh target-SQLite absence, no-existing-source proof, cleanup disabled, and the production deployment gate;
-- the greenfield forward chain omits PROD-09;
-- greenfield activation uses a new exact action contract `PROD-GF-13-ACTIVATE` rather than the source-migration `PROD-13-CUTOVER-SWITCH`;
+- the required greenfield pre-activation forward chain omits PROD-09 and all write-capable integration enablement;
+- conditional firewall/security-group work references the real `PROD-08-FIREWALL-SECURITY-GROUP` action ID and is tracked separately from the required chain;
+- `PROD-10-ENABLE-VCP-REMOTE-SYNC` and `PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE` are post-activation integrations: they remain disabled before activation and require `GREENFIELD_ACTIVATION_COMPLETION` plus their unchanged base wiring/authorization gates before they can be separately authorized;
+- greenfield activation uses a new exact action contract `PROD-GF-13-ACTIVATE` rather than the source-migration `PROD-13-CUTOVER-SWITCH`; its rollback cannot derive VCP/Kiosk disable authority because those actions have not yet run;
 - greenfield cleanup restoration uses `PROD-GF-14-RESTORE-ORPHAN-CLEANUP` rather than pretending post-migration attachment parity exists.
 
 The original PROD-09 / PROD-13 / PROD-14 contracts remain unchanged for an existing-source deployment.
@@ -107,7 +109,44 @@ This authority definition does not grant PROD-03 or any later production mutatio
 - TLS binding for that route;
 - Tencent Cloud security-group control-plane fact if a change is actually required;
 - built image digest;
-- deployed VCP/Kiosk wiring and their separately authorized real acceptance;
-- greenfield activation and cleanup restoration evidence.
+- greenfield activation evidence;
+- post-activation VCP/Kiosk wiring and their separately authorized real acceptance;
+- greenfield cleanup restoration evidence.
 
 No source migration, production data copy, public route change, token generation, container start, integration enablement, or production activation is authorized by this document.
+
+## Codex review correction
+
+Independent review of exact head `de487b8c5cc65635a2142ffd0b52fac61b8191e4` found four valid authority defects. The implementation correction preserves the unchanged base migration manifest and fixes all four:
+
+1. Parent-manifest binding is now derived inside the greenfield validator from the supplied `baseManifest`; callers can no longer pair a modified manifest with a trusted digest argument.
+2. PROD-10 and PROD-11 are removed from the pre-activation forward chain. Greenfield activation requires proof that those write-capable integrations remain disabled; they become separately authorizable only after `GREENFIELD_ACTIVATION_COMPLETION`.
+3. Conditional firewall work now references the actual base action ID `PROD-08-FIREWALL-SECURITY-GROUP` in a separate conditional-action set.
+4. The authority format rejects every undeclared top-level field, preventing alternate action/authorization surfaces from being embedded in an otherwise valid supplement.
+
+The correction also removes VCP/Kiosk rollback IDs and enablement proof from `PROD-GF-13-ACTIVATE`, because those integrations no longer run before activation.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 8bd73a419b24ae7fc0a3b340806edcac3cab956c
+workflowRun        = 36318045627 (#130)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 736
+pass               = 735
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:faaf177bfe562b9306fb6f1728d957f2c731ebdd88d7c4e5a44583dd6999b1fc
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+The failed runs immediately before #130 belong to intentionally incomplete intermediate commits while validator, authority JSON, CLI and regressions were being aligned. They are superseded by exact-head run #130 and are not acceptance evidence.
+
+No production mutation was performed by this review correction.
