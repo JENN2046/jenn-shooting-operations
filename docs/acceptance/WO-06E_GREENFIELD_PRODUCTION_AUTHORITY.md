@@ -569,3 +569,87 @@ nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
 ```
 
 No production side effect was performed by this correction.
+
+
+## Ninth Codex review correction
+
+Independent review found one additional valid P1: even after store/helper/application fences, the public `store.db` property still exposed the raw writable `DatabaseSync` handle and therefore allowed direct SQLite writes that bypassed the admission authority.
+
+The raw database handle is now private inside `ScheduleStore`.
+
+### Admission-checked database facade
+
+`ScheduleStore` owns the actual `DatabaseSync` connection in a private field. The public `store.db` value is now a frozen minimal facade used by existing adapters/tests.
+
+The facade exposes only:
+
+- `prepare`;
+- `exec`;
+- `serialize`;
+- read-only connection-state getters.
+
+It does **not** expose SQLite policy/escape surfaces such as:
+
+- `setAuthorizer`;
+- `deserialize`;
+- `createSession`;
+- `createTagStore`;
+- `loadExtension`.
+
+### SQLite-native admission enforcement
+
+Node 24's SQLite authorizer is used as the statement classifier/execution guard rather than parsing SQL text in JavaScript.
+
+For `prepare`:
+
+1. a temporary authorizer observes the SQLite action codes while the statement is compiled;
+2. the statement is classified as read-only or mutating;
+3. compilation is allowed so V2 adapters can be constructed while pre-activation admission remains disabled;
+4. the returned Statement wrapper checks the live admission control before every execution method (`run/get/all/iterate`) and rejects mutating statements while disabled.
+
+For `exec`:
+
+- the authorizer is installed for the actual execution;
+- while admission is disabled, only the read-safe SQLite action set is admitted;
+- INSERT/UPDATE/DELETE/DDL/PRAGMA/ATTACH and other non-read actions receive `SQLITE_DENY`;
+- after the one-way admission enable transition, the same facade permits normal production writes.
+
+This preserves pre-activation read transactions and V2 adapter construction without exposing a raw writable database handle.
+
+### Regression coverage
+
+The hostile raw-database regression proves that, while admission is disabled:
+
+- SELECT remains available;
+- `prepare(INSERT).run()` is rejected;
+- direct `exec(UPDATE ...)` is rejected;
+- direct mutating PRAGMA is rejected;
+- SQLite `total_changes()` remains unchanged;
+- the facade exposes no authorizer/deserialization/session/extension/tag-store escape method.
+
+After the same admission control is explicitly enabled, the exact same facade can perform an admitted write, proving the boundary follows the live admission authority rather than permanently converting the database to read-only mode.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 41decc2bd79b43bd4ade858c6dddcb12f203f8cd
+workflowRun        = 36326012272 (#198)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 754
+pass               = 753
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+The failed intermediate runs #196 and #197 used the earlier permanent-authorizer variant, which blocked V2 adapter statement preparation. They are superseded by exact-head run #198 and are not acceptance evidence.
+
+No production side effect was performed by this correction.
