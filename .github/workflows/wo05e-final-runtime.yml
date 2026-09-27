@@ -18,10 +18,10 @@ jobs:
       - name: Checkout exact workflow head
         uses: actions/checkout@v4
 
-      - name: Set up Node 22.22.2
+      - name: Set up Node 24.21.0
         uses: actions/setup-node@v4
         with:
-          node-version: 22.22.2
+          node-version: 24.21.0
           cache: npm
 
       - name: Pin npm 11.4.2
