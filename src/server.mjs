@@ -133,6 +133,7 @@ export function createOperationsServer({
     orphanCleanupMode,
     orphanCleanupEnableEpoch,
     orphanCleanupDomain,
+    writeAdmissionMode,
   });
   store.cleanupOrphanUploads();
   const kiosk = kioskAuthenticate === undefined
