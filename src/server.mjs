@@ -123,6 +123,10 @@ export function createOperationsServer({
   schedulingAllowedBriefHosts = [],
   writeAdmissionMode = 'enabled',
 }) {
+  if (String(writeAdmissionMode || 'enabled').trim().toLowerCase() === 'disabled'
+      && String(orphanCleanupMode || 'inherit').trim().toLowerCase() !== 'disabled') {
+    throw new TypeError('disabled write admission requires disabled orphan cleanup');
+  }
   const effectiveClock = clock ?? (() => new Date());
   const store = new ScheduleStore({
     filename: databasePath,
