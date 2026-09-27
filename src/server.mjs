@@ -11,6 +11,7 @@ import { refreshSqliteSnapshotProjectionsV2 } from './sqlite-run-event-store-v2.
 import { assembleSchedulingInputFromSqliteV1 } from './sqlite-scheduling-input-assembler-v1.mjs';
 import { createSqliteSchedulingProposalStoreV1 } from './sqlite-scheduling-proposal-store-v1.mjs';
 import { ScheduleStore } from './store.mjs';
+import { createWriteAdmissionControl, normalizeWriteAdmissionMode } from './write-admission-v1.mjs';
 
 export function createKioskV2Application({
   store,
@@ -123,10 +124,14 @@ export function createOperationsServer({
   schedulingAllowedBriefHosts = [],
   writeAdmissionMode = 'enabled',
 }) {
-  if (String(writeAdmissionMode || 'enabled').trim().toLowerCase() === 'disabled'
+  const initialWriteAdmissionMode = normalizeWriteAdmissionMode(writeAdmissionMode);
+  if (initialWriteAdmissionMode === 'disabled'
       && String(orphanCleanupMode || 'inherit').trim().toLowerCase() !== 'disabled') {
     throw new TypeError('disabled write admission requires disabled orphan cleanup');
   }
+  const writeAdmissionControl = createWriteAdmissionControl({
+    initialMode: initialWriteAdmissionMode,
+  });
   const effectiveClock = clock ?? (() => new Date());
   const store = new ScheduleStore({
     filename: databasePath,
@@ -137,7 +142,7 @@ export function createOperationsServer({
     orphanCleanupMode,
     orphanCleanupEnableEpoch,
     orphanCleanupDomain,
-    writeAdmissionMode,
+    writeAdmissionControl,
   });
   store.cleanupOrphanUploads();
   const kiosk = kioskAuthenticate === undefined
@@ -162,7 +167,7 @@ export function createOperationsServer({
     tokens,
     kiosk,
     scheduling,
-    writeAdmissionMode,
+    writeAdmissionControl,
   }));
   const cleanupTimer = cleanupIntervalMs > 0
     ? setInterval(() => {
@@ -185,7 +190,12 @@ export function createOperationsServer({
     if (cleanupTimer) clearInterval(cleanupTimer);
     store.close();
   });
-  return { server, store, orphanCleanupControl };
+  return {
+    server,
+    store,
+    orphanCleanupControl,
+    writeAdmissionControl,
+  };
 }
 
 const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
@@ -204,7 +214,7 @@ if (invokedDirectly) {
   const orphanCleanupEnableEpoch = process.env.ORPHAN_CLEANUP_ENABLE_EPOCH || undefined;
   const orphanCleanupDomain = process.env.ORPHAN_CLEANUP_DOMAIN || undefined;
   const writeAdmissionMode = process.env.WRITE_ADMISSION_MODE || 'enabled';
-  const { server } = createOperationsServer({
+  const { server, writeAdmissionControl } = createOperationsServer({
     databasePath,
     uploadRoot,
     tokens,
@@ -213,6 +223,20 @@ if (invokedDirectly) {
     orphanCleanupDomain,
     writeAdmissionMode,
   });
+
+  const enableWriteAdmission = () => {
+    const result = writeAdmissionControl.enable();
+    console.log(JSON.stringify({
+      event: result.code,
+      writeAdmission: result.mode,
+      transitionCount: result.transitionCount,
+    }));
+  };
+  if (writeAdmissionControl.isDisabled()) {
+    process.on('SIGUSR2', enableWriteAdmission);
+    server.on('close', () => process.off('SIGUSR2', enableWriteAdmission));
+  }
+
   server.listen(port, host, () => {
     console.log(`Jenn Shooting Operations listening on ${host}:${port}`);
   });
