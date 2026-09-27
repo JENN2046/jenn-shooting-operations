@@ -76,10 +76,7 @@
     "PROD-04-BUILD-IMAGE",
     "PROD-05-START-ISOLATED-CONTAINER",
     "PROD-06-LOOPBACK-HEALTH-SMOKE",
-    "PROD-07-CONFIGURE-REVERSE-PROXY-TLS",
-    "PROD-10-ENABLE-VCP-REMOTE-SYNC",
-    "PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE",
-    "PROD-08-FIREWALL-SECURITY-GROUP_IF_USED"
+    "PROD-07-CONFIGURE-REVERSE-PROXY-TLS"
   ],
   "greenfieldActivationAction": {
     "id": "PROD-GF-13-ACTIVATE",
@@ -93,15 +90,16 @@
       "GREENFIELD_NO_EXISTING_SOURCE",
       "PRODUCTION_TARGET_FACTS",
       "GREENFIELD_FORWARD_CHAIN",
+      "GREENFIELD_WRITE_CAPABLE_INTEGRATIONS_DISABLED",
       "CUTOVER_LIVE_SERVICE_READINESS",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
     "effects": [
       "After exact PROD-GF-13 authorization, revalidate the bound host, exact target storage identities, no-existing-source evidence, activation route and client scope; no source barrier, source sync or old-source demotion exists on this greenfield path",
-      "Keep every orphan-cleanup entry point disabled and keep public unauthenticated writes blocked while verifying the isolated target service, loopback health, routed TLS and approved VCP/Kiosk mappings",
-      "Promote only the approved new route and client mappings to production and record one activation receipt; do not overwrite or claim any previous Jenn Shooting Operations authority",
+      "Keep every orphan-cleanup entry point disabled, keep public unauthenticated writes blocked, and keep PROD-10/PROD-11 write-capable integrations disabled while verifying the isolated target service, loopback health and routed TLS",
+      "Promote only the approved new route and client entrypoint mappings to production and record one activation receipt; do not overwrite or claim any previous Jenn Shooting Operations authority",
       "Perform read-only post-activation health, routing, client-mapping, database and attachment-baseline verification; failure removes only newly introduced exposure/runtime bindings and preserves the data volume",
-      "Only after every read-only verification succeeds may approved production writes be admitted; orphan cleanup stays disabled until separately authorized greenfield cleanup restoration"
+      "Only after every read-only verification succeeds may approved production writes be admitted; PROD-10/PROD-11 remain separately blocked until post-activation prerequisites and exact authorization, and orphan cleanup stays disabled until separately authorized greenfield cleanup restoration"
     ],
     "rollbackActionIds": [
       "ROLLBACK-01-REMOVE-NEW-ROUTE",
@@ -109,15 +107,13 @@
       "ROLLBACK-02-STOP-NEW-CONTAINER",
       "ROLLBACK-08-REMOVE-BUILT-IMAGE",
       "ROLLBACK-06-REVOKE-ROLE-TOKENS",
-      "ROLLBACK-09-DISABLE-VCP-CONFIG",
-      "ROLLBACK-10-DISABLE-KIOSK-CONFIG",
       "ROLLBACK-04-PRESERVE-DATA-VOLUME"
     ],
     "evidenceRequired": [
       "GREENFIELD_NO_EXISTING_SOURCE_PROOF",
       "NO_PREVIOUS_PRODUCTION_AUTHORITY_PROOF",
       "GREENFIELD_FORWARD_CHAIN_COMPLETION_PROOF",
-      "VCP_KIOSK_ENABLEMENT_COMPLETION_PROOF",
+      "PRE_ACTIVATION_WRITE_CAPABLE_INTEGRATIONS_DISABLED_PROOF",
       "TARGET_STORAGE_IDENTITIES",
       "ACTIVATION_ROUTE_AND_CLIENT_SCOPE",
       "PRE_ACTIVATION_LOOPBACK_HEALTH",
@@ -171,5 +167,18 @@
     "requestableActionIds": [],
     "nextActionId": "PROD-03-GENERATE-INSTALL-TOKENS",
     "nextActionRequiresExplicitAuthorization": true
-  }
+  },
+  "greenfieldConditionalActionIds": [
+    "PROD-08-FIREWALL-SECURITY-GROUP"
+  ],
+  "postActivationIntegrationActionIds": [
+    "PROD-10-ENABLE-VCP-REMOTE-SYNC",
+    "PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE"
+  ],
+  "greenfieldIntegrationPrerequisites": [
+    "GREENFIELD_ACTIVATION_COMPLETION",
+    "GREENFIELD_FORWARD_CHAIN",
+    "PRODUCTION_TARGET_FACTS",
+    "PRODUCTION_DEPLOYMENT_GATE"
+  ]
 }
