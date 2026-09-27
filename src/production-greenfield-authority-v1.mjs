@@ -24,6 +24,8 @@ const EXPECTED_COMPLETED = Object.freeze([
   'PROD-01-TARGET-READONLY-PREFLIGHT',
   'PROD-02-CREATE-ISOLATED-APP-STORAGE',
   'PHASE-B-TARGET-VOLUME-ACCEPTANCE',
+  'PROD-03-GENERATE-INSTALL-TOKENS',
+  'PROD-04-BUILD-IMAGE',
 ]);
 
 const EXPECTED_CONTAINER_START = Object.freeze([
@@ -386,6 +388,42 @@ export function validateProductionGreenfieldAuthority(value, {
     activeTargetBindAliases: 0,
     targetVolumeEmptyAfterAcceptance: true,
     acceptanceProbeAssetsRemoved: true,
+    prod03: {
+      status: 'PASS',
+      recordedAtUtc: '2026-09-27T16:34:04.678274744Z',
+      secretStoragePath: '/mnt/datadisk0/apps/jenn-shooting-operations/.env.tokens',
+      fileOwner: 'ubuntu:ubuntu',
+      fileMode: 600,
+      fileSizeBytes: 317,
+      roleTokenCount: 4,
+      uniqueRoleTokenCount: 4,
+      tokenHexLength: 64,
+      secretValuesRecorded: false,
+      noSecretOutput: true,
+      rollbackActionId: 'ROLLBACK-06-REVOKE-ROLE-TOKENS',
+    },
+    prod04: {
+      status: 'PASS',
+      recordedAtUtc: '2026-09-27T16:48:50.128965614Z',
+      authorityCommit: '92b7137211bf807f178901e878a8c3d6e335cec4',
+      imageTag:
+        'jenn-shooting-operations:prod-92b7137211bf807f178901e878a8c3d6e335cec4',
+      imageId:
+        'sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545',
+      nodeBaseIndexDigest:
+        'sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1',
+      nodeBaseAmd64Digest:
+        'sha256:83f1c388c31fb2e51f7cbd4dea949b96260798c98f206e8e4696bc93bd964e3a',
+      imageUser: 'node',
+      targetContainers: 0,
+      port3800Listeners: 0,
+      tempBuildArtifacts: 0,
+      buildLogLowDisclosure: true,
+      secretValuesOutput: false,
+      evidencePath:
+        '/mnt/datadisk0/apps/jenn-shooting-operations/prod04-build-evidence.txt',
+      rollbackActionId: 'ROLLBACK-08-REMOVE-BUILT-IMAGE',
+    },
   };
   if (!sameObject(value.acceptance, expectedAcceptance)) {
     issues.push(issue('GREENFIELD_ACCEPTANCE_INVALID', '/acceptance'));
@@ -487,7 +525,7 @@ export function validateProductionGreenfieldAuthority(value, {
     requestedActionIds: [],
     approvedActionIds: [],
     requestableActionIds: [],
-    nextActionId: 'PROD-03-GENERATE-INSTALL-TOKENS',
+    nextActionId: 'PROD-05-START-ISOLATED-CONTAINER',
     nextActionRequiresExplicitAuthorization: true,
   };
   if (!sameObject(value.authorization, expectedAuthorization)) {
