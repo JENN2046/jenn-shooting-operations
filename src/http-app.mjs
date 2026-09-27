@@ -10,6 +10,7 @@ import {
   mapKioskCurrentHttpResult,
   mapKioskRunEventHttpResult,
 } from './kiosk-http-result-v2.mjs';
+import { normalizeWriteAdmissionMode } from './write-admission-v1.mjs';
 
 const PUBLIC_ROOT = fileURLToPath(new URL('../public/', import.meta.url));
 const STATIC = new Map([
@@ -201,16 +202,6 @@ async function serveStatic(response, file) {
     'Cache-Control': file.endsWith('.html') ? 'no-store' : 'public, max-age=300',
   });
   createReadStream(path).pipe(response);
-}
-
-const WRITE_ADMISSION_MODES = new Set(['enabled', 'disabled']);
-
-export function normalizeWriteAdmissionMode(value = 'enabled') {
-  const mode = String(value || 'enabled').trim().toLowerCase();
-  if (!WRITE_ADMISSION_MODES.has(mode)) {
-    throw new TypeError('write admission mode must be enabled or disabled');
-  }
-  return mode;
 }
 
 function requireRole(authorize, request, response, role) {
