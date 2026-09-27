@@ -483,8 +483,10 @@ export function validateProductionGreenfieldAuthority(value, {
       containerUid: 1000,
       containerGid: 1000,
       databasePath: '/app/data/shooting-operations.sqlite',
-      volumeMount:
-        'volume|jenn-shooting-operations_shooting_data|/app/data|true',
+      volumeMountType: 'volume',
+      volumeName: 'jenn-shooting-operations_shooting_data',
+      volumeDestination: '/app/data',
+      volumeReadWrite: true,
       loopbackBind: '127.0.0.1:3800',
       writeAdmissionMode: 'disabled',
       orphanCleanupMode: 'disabled',
