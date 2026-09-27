@@ -235,6 +235,55 @@ test('ScheduleStore public write helpers and recovery stay fenced while admissio
   }
 });
 
+test('raw SQLite access is hidden behind the live admission authorizer', () => {
+  const admission = createWriteAdmissionControl({ initialMode: 'disabled' });
+  const store = new ScheduleStore({
+    filename: ':memory:',
+    writeAdmissionControl: admission,
+    orphanCleanupMode: 'disabled',
+  });
+  try {
+    assert.equal(typeof store.db.prepare, 'function');
+    assert.equal(typeof store.db.exec, 'function');
+    assert.equal(typeof store.db.setAuthorizer, 'undefined');
+    assert.equal(typeof store.db.deserialize, 'undefined');
+    assert.equal(typeof store.db.createSession, 'undefined');
+    assert.equal(typeof store.db.createTagStore, 'undefined');
+    assert.equal(typeof store.db.loadExtension, 'undefined');
+
+    const before = store.db.prepare('SELECT total_changes() AS changes').get().changes;
+    assert.equal(store.db.prepare('SELECT revision FROM schedule_state WHERE id = 1').get().revision, 0);
+
+    assert.throws(
+      () => store.db.prepare(
+        "INSERT INTO audit_log (action, role, entity_id, revision, result, created_at) VALUES ('raw', 'admin', NULL, 0, 'blocked', '2026-09-27T13:00:00.000Z')",
+      ).run(),
+    );
+    assert.throws(
+      () => store.db.exec('UPDATE schedule_state SET revision = revision + 1 WHERE id = 1'),
+    );
+    assert.throws(
+      () => store.db.exec('PRAGMA user_version = 1'),
+    );
+
+    const fenced = store.db.prepare('SELECT total_changes() AS changes').get().changes;
+    assert.equal(fenced, before);
+    assert.equal(store.getSnapshot().revision, 0);
+
+    const enabled = admission.enable();
+    assert.equal(enabled.ok, true);
+    assert.equal(enabled.code, 'WRITE_ADMISSION_ENABLED');
+
+    store.db.prepare(
+      "INSERT INTO audit_log (action, role, entity_id, revision, result, created_at) VALUES ('raw-after-enable', 'admin', NULL, 0, 'allowed', '2026-09-27T13:00:00.000Z')",
+    ).run();
+    const after = store.db.prepare('SELECT total_changes() AS changes').get().changes;
+    assert.equal(after, before + 1);
+  } finally {
+    store.close();
+  }
+});
+
 test('pre-activation write admission cannot start with cleanup enabled', () => {
   assert.throws(
     () => createOperationsServer({
