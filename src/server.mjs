@@ -133,7 +133,6 @@ export function createOperationsServer({
     orphanCleanupMode,
     orphanCleanupEnableEpoch,
     orphanCleanupDomain,
-    writeAdmissionMode,
   });
   store.cleanupOrphanUploads();
   const kiosk = kioskAuthenticate === undefined
@@ -207,6 +206,7 @@ if (invokedDirectly) {
     orphanCleanupMode,
     orphanCleanupEnableEpoch,
     orphanCleanupDomain,
+    writeAdmissionMode,
   });
   server.listen(port, host, () => {
     console.log(`Jenn Shooting Operations listening on ${host}:${port}`);
