@@ -44,6 +44,48 @@ test('Kiosk V2 runtime composition is explicit, injected, and empty-resource saf
   }
 });
 
+test('Kiosk V2 direct mutation is fenced by the bound ScheduleStore admission control', () => {
+  const store = new ScheduleStore({
+    filename: ':memory:',
+    writeAdmissionMode: 'disabled',
+    orphanCleanupMode: 'disabled',
+  });
+  try {
+    const created = createTrustedPrincipal({
+      subjectId: 'ACTOR-KIOSK-DISABLED',
+      role: 'operator',
+      resourceIds: ['STUDIO-A'],
+    });
+    assert.equal(created.ok, true);
+    const kiosk = createKioskV2Application({
+      store,
+      authenticate: () => created.principal,
+      businessTimeZone: 'UTC',
+      clock: () => new Date(NOW),
+    });
+    const before = store.db.prepare('SELECT total_changes() AS changes').get().changes;
+    const result = kiosk.applyRunEvent({
+      command: {
+        schemaVersion: 2,
+        eventId: 'EVENT-DISABLED-0001',
+        runId: 'RUN-DISABLED-0001',
+        scheduleItemId: 'SCHEDULE-DISABLED-0001',
+        eventType: 'start',
+        expectedRunRevision: 0,
+        occurredAt: NOW,
+        deviceId: 'KIOSK-DISABLED-0001',
+        localSequence: 0,
+      },
+      principal: created.principal,
+    });
+    const after = store.db.prepare('SELECT total_changes() AS changes').get().changes;
+    assert.deepEqual(result, { ok: false, code: 'WRITE_ADMISSION_DISABLED' });
+    assert.equal(after, before);
+  } finally {
+    store.close();
+  }
+});
+
 test('Kiosk V2 runtime composition refuses implicit authentication or time-zone defaults', () => {
   const store = new ScheduleStore({ filename: ':memory:' });
   try {
