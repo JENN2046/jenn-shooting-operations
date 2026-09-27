@@ -8,6 +8,7 @@ import { DatabaseSync, StatementSync } from 'node:sqlite';
 import {
   createWriteAdmissionControl,
   normalizeWriteAdmissionMode,
+  writeAdmissionFailure,
 } from '../src/write-admission-v1.mjs';
 import { createOperationsServer } from '../src/server.mjs';
 import { ScheduleStore } from '../src/store.mjs';
