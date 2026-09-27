@@ -452,3 +452,66 @@ nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
 ```
 
 No production side effect was performed by this correction.
+
+
+## Seventh Codex review correction
+
+Independent review found one additional valid P1: exposing V2 application admission authority at composition time was not sufficient for direct consumers that call `kiosk.applyRunEvent` or `scheduling.decideProposal` without HTTP.
+
+The V2 application factories now enforce the bound admission control inside their mutation methods before dispatching to any SQLite-backed adapter.
+
+### Direct Kiosk mutation fence
+
+`createKioskV2Application` constructs the underlying run-event use case but wraps the exported `applyRunEvent` method.
+
+When the bound `ScheduleStore.writeAdmissionControl` is disabled:
+
+```text
+applyRunEvent(...)
+=> ok = false
+=> code = WRITE_ADMISSION_DISABLED
+=> underlying SQLite run-event adapter is not invoked
+```
+
+### Direct Scheduling mutation fence
+
+`createSchedulingV2Application` checks the same bound control at the first line of `decideProposal`.
+
+When disabled, neither accept nor reject logic reaches the proposal store or projection refresh path.
+
+### Stable low-disclosure V2 failure surface
+
+`WRITE_ADMISSION_DISABLED` is recognized as a 503 failure by both Kiosk and Scheduling HTTP result mappings. The Kiosk run-event result schema also admits the low-disclosure failure code.
+
+### Regression coverage
+
+Direct factory tests use real disabled `ScheduleStore` instances and call the mutation methods without HTTP. They capture SQLite `total_changes()` before and after the call and prove:
+
+- result is exactly `{ ok:false, code:WRITE_ADMISSION_DISABLED }`;
+- SQLite change count is unchanged;
+- the bound application control remains identical to the store control.
+
+This closes the direct V2 application mutation bypass in addition to the existing HTTP composition fence.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = af9e5682696dea7a78f8b085424bd01d0764cd93
+workflowRun        = 36323703201 (#188)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 750
+pass               = 749
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+No production side effect was performed by this correction.
