@@ -90,16 +90,16 @@
       "GREENFIELD_NO_EXISTING_SOURCE",
       "PRODUCTION_TARGET_FACTS",
       "GREENFIELD_FORWARD_CHAIN",
-      "GREENFIELD_WRITE_CAPABLE_INTEGRATIONS_DISABLED",
+      "GREENFIELD_PRE_ACTIVATION_WRITE_FENCE_HELD_AND_DRAINED",
       "CUTOVER_LIVE_SERVICE_READINESS",
       "PRODUCTION_DEPLOYMENT_GATE"
     ],
     "effects": [
       "After exact PROD-GF-13 authorization, revalidate the bound host, exact target storage identities, no-existing-source evidence, activation route and client scope; no source barrier, source sync or old-source demotion exists on this greenfield path",
-      "Keep every orphan-cleanup entry point disabled, keep public unauthenticated writes blocked, and keep PROD-10/PROD-11 write-capable integrations disabled while verifying the isolated target service, loopback health and routed TLS",
-      "Promote only the approved new route and client entrypoint mappings to production and record one activation receipt; do not overwrite or claim any previous Jenn Shooting Operations authority",
-      "Perform read-only post-activation health, routing, client-mapping, database and attachment-baseline verification; failure removes only newly introduced exposure/runtime bindings and preserves the data volume",
-      "Only after every read-only verification succeeds may approved production writes be admitted; PROD-10/PROD-11 remain separately blocked until post-activation prerequisites and exact authorization, and orphan cleanup stays disabled until separately authorized greenfield cleanup restoration"
+      "Hold the greenfield pre-activation write fence across staging, admin, API, background and direct-storage writer classes; reject every mutating HTTP method before store dispatch, keep PROD-07 staging writes forbidden, keep cleanup disabled and drained, keep write-capable integrations disabled, and require zero background/direct-storage writer inventory while verifying loopback health and routed TLS",
+      "Promote only the approved new route and client entrypoint mappings to production and record one activation receipt while the same write fence remains held; do not overwrite or claim any previous Jenn Shooting Operations authority",
+      "Perform read-only post-activation health, routing, client-mapping, database and attachment-baseline verification while the write fence remains held; failure removes only newly introduced exposure/runtime bindings and preserves the data volume",
+      "Only after every read-only verification succeeds, recreate the exact service container from the same image and target volume with WRITE_ADMISSION_MODE=enabled, verify loopback health and exact storage identity again, and then admit approved production writes; PROD-10/PROD-11 remain separately blocked until post-activation prerequisites and exact authorization, and orphan cleanup stays disabled until separately authorized greenfield cleanup restoration"
     ],
     "rollbackActionIds": [
       "ROLLBACK-01-REMOVE-NEW-ROUTE",
@@ -113,7 +113,9 @@
       "GREENFIELD_NO_EXISTING_SOURCE_PROOF",
       "NO_PREVIOUS_PRODUCTION_AUTHORITY_PROOF",
       "GREENFIELD_FORWARD_CHAIN_COMPLETION_PROOF",
-      "PRE_ACTIVATION_WRITE_CAPABLE_INTEGRATIONS_DISABLED_PROOF",
+      "GREENFIELD_PRE_ACTIVATION_WRITE_FENCE_PROOF",
+      "PRE_ACTIVATION_WRITER_DRAIN_PROOF",
+      "PROD_07_STAGING_WRITE_DENIAL_PROOF",
       "TARGET_STORAGE_IDENTITIES",
       "ACTIVATION_ROUTE_AND_CLIENT_SCOPE",
       "PRE_ACTIVATION_LOOPBACK_HEALTH",
@@ -180,5 +182,43 @@
     "GREENFIELD_FORWARD_CHAIN",
     "PRODUCTION_TARGET_FACTS",
     "PRODUCTION_DEPLOYMENT_GATE"
-  ]
+  ],
+  "greenfieldPreActivationWriteFence": {
+    "runtimeMode": "disabled",
+    "runtimeEnv": "WRITE_ADMISSION_MODE=disabled",
+    "blockedHttpMethods": [
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE"
+    ],
+    "coveredWriterClasses": [
+      "STAGING_PRINCIPAL",
+      "ADMIN_PRINCIPAL",
+      "API_WRITE_ENDPOINTS",
+      "BACKGROUND_WRITER",
+      "DIRECT_STORAGE_WRITER"
+    ],
+    "requirements": [
+      "ALL_HTTP_WRITES_REJECTED_BEFORE_STORE_DISPATCH",
+      "PROD_07_STAGING_WRITES_FORBIDDEN_ON_GREENFIELD_PATH",
+      "ORPHAN_CLEANUP_DISABLED_AND_DRAINED",
+      "WRITE_CAPABLE_INTEGRATIONS_DISABLED",
+      "BACKGROUND_WRITER_INVENTORY_ZERO",
+      "DIRECT_STORAGE_WRITER_INVENTORY_ZERO",
+      "NO_OTHER_CONTAINER_MOUNTS_TARGET_VOLUME"
+    ],
+    "heldFromActionId": "PROD-05-START-ISOLATED-CONTAINER",
+    "heldThroughActionId": "PROD-GF-13-ACTIVATE",
+    "evidenceRequired": [
+      "WRITE_ADMISSION_DISABLED_PROOF",
+      "ALL_MUTATING_HTTP_METHODS_DENIED_PROOF",
+      "PROD_07_STAGING_WRITE_DENIAL_PROOF",
+      "ORPHAN_CLEANUP_DISABLE_AND_DRAIN_PROOF",
+      "WRITE_CAPABLE_INTEGRATIONS_DISABLED_PROOF",
+      "BACKGROUND_WRITER_INVENTORY_ZERO_PROOF",
+      "DIRECT_STORAGE_WRITER_INVENTORY_ZERO_PROOF",
+      "TARGET_VOLUME_SINGLE_CONTAINER_MOUNT_PROOF"
+    ]
+  }
 }
