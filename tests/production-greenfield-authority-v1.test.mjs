@@ -9,11 +9,8 @@ const base = JSON.parse(readFileSync(new URL('../docs/operations/production-chan
 const authority = JSON.parse(readFileSync(new URL('../docs/operations/production-greenfield-authority.v1.json', import.meta.url), 'utf8'));
 const baseResult = createProductionChangeManifestValidator(schema)(base);
 
-function validate(value, manifest = base, digest = baseResult.digest) {
-  return validateProductionGreenfieldAuthority(value, {
-    baseManifest: manifest,
-    baseManifestDigest: digest,
-  });
+function validate(value, manifest = base) {
+  return validateProductionGreenfieldAuthority(value, { baseManifest: manifest });
 }
 
 function rejected(mutator, code) {
@@ -25,7 +22,7 @@ function rejected(mutator, code) {
   assert.equal(Object.hasOwn(result, 'digest'), false);
 }
 
-test('greenfield authority binds the existing frozen manifest and grants no production mutation', () => {
+test('greenfield authority binds the frozen parent and grants no production mutation', () => {
   assert.equal(baseResult.ok, true);
   const result = validate(authority);
   assert.equal(result.ok, true);
@@ -38,11 +35,24 @@ test('greenfield authority binds the existing frozen manifest and grants no prod
   assert.equal(authority.authorization.nextActionRequiresExplicitAuthorization, true);
 });
 
-test('greenfield authority cannot detach from the exact parent manifest digest', () => {
-  rejected(value => { value.baseManifestDigest = 'sha256:' + '0'.repeat(64); }, 'BASE_MANIFEST_DIGEST_INVALID');
-  const result = validate(authority, base, 'sha256:' + '1'.repeat(64));
+test('greenfield authority derives the parent digest from the supplied manifest', () => {
+  rejected(value => {
+    value.baseManifestDigest = 'sha256:' + '0'.repeat(64);
+  }, 'BASE_MANIFEST_DIGEST_INVALID');
+
+  const tamperedBase = structuredClone(base);
+  tamperedBase.actions.find(action => action.id === 'PROD-09-PRODUCTION-DATA-IMPORT').title =
+    'Tampered import contract';
+  const result = validate(authority, tamperedBase);
   assert.equal(result.ok, false);
   assert.equal(result.issues.some(issue => issue.code === 'BASE_MANIFEST_DIGEST_INVALID'), true);
+  assert.equal(Object.hasOwn(result, 'digest'), false);
+});
+
+test('greenfield authority rejects undeclared top-level fields', () => {
+  rejected(value => {
+    value.alternateActions = ['PROD-09-PRODUCTION-DATA-IMPORT'];
+  }, 'GREENFIELD_TOP_LEVEL_KEYS_INVALID');
 });
 
 test('greenfield authority cannot invent an existing source or another host', () => {
@@ -61,19 +71,59 @@ test('greenfield start path cannot smuggle PROD-09 or drop empty-target proof', 
   }, 'GREENFIELD_CONTAINER_START_CONTRACT_INVALID');
 });
 
-test('greenfield forward chain cannot require migration import', () => {
+test('pre-activation forward chain contains no write-capable integrations', () => {
+  assert.equal(authority.greenfieldForwardChain.includes('PROD-10-ENABLE-VCP-REMOTE-SYNC'), false);
+  assert.equal(authority.greenfieldForwardChain.includes('PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE'), false);
+  assert.deepEqual(
+    [...authority.postActivationIntegrationActionIds].sort(),
+    ['PROD-10-ENABLE-VCP-REMOTE-SYNC', 'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE'].sort(),
+  );
+  assert.equal(
+    authority.greenfieldIntegrationPrerequisites.includes('GREENFIELD_ACTIVATION_COMPLETION'),
+    true,
+  );
+
   rejected(value => {
-    value.greenfieldForwardChain.push('PROD-09-PRODUCTION-DATA-IMPORT');
+    value.greenfieldForwardChain.push('PROD-10-ENABLE-VCP-REMOTE-SYNC');
   }, 'GREENFIELD_FORWARD_CHAIN_INVALID');
+  rejected(value => {
+    value.greenfieldIntegrationPrerequisites =
+      value.greenfieldIntegrationPrerequisites.filter(id => id !== 'GREENFIELD_ACTIVATION_COMPLETION');
+  }, 'GREENFIELD_INTEGRATION_PREREQUISITES_INVALID');
 });
 
-test('greenfield activation cannot acquire source barriers or restore a previous authority', () => {
+test('conditional firewall action uses the actual base action id', () => {
+  assert.deepEqual(
+    authority.greenfieldConditionalActionIds,
+    ['PROD-08-FIREWALL-SECURITY-GROUP'],
+  );
+  rejected(value => {
+    value.greenfieldConditionalActionIds = ['PROD-08-FIREWALL-SECURITY-GROUP_IF_USED'];
+  }, 'GREENFIELD_CONDITIONAL_ACTION_SET_INVALID');
+});
+
+test('greenfield activation cannot acquire source barriers or integration rollback authority', () => {
   rejected(value => {
     value.greenfieldActivationAction.preconditions.push('CUTOVER_SOURCE_CONSISTENCY');
   }, 'GREENFIELD_ACTIVATION_ACTION_INVALID');
   rejected(value => {
     value.greenfieldActivationAction.rollbackActionIds.push('ROLLBACK-07-RESTORE-PREVIOUS-AUTHORITY-SWITCH');
   }, 'GREENFIELD_ACTIVATION_ACTION_INVALID');
+  rejected(value => {
+    value.greenfieldActivationAction.rollbackActionIds.push('ROLLBACK-09-DISABLE-VCP-CONFIG');
+  }, 'GREENFIELD_ACTIVATION_ACTION_INVALID');
+  assert.equal(
+    authority.greenfieldActivationAction.evidenceRequired.includes(
+      'PRE_ACTIVATION_WRITE_CAPABLE_INTEGRATIONS_DISABLED_PROOF',
+    ),
+    true,
+  );
+  assert.equal(
+    authority.greenfieldActivationAction.evidenceRequired.includes(
+      'VCP_KIOSK_ENABLEMENT_COMPLETION_PROOF',
+    ),
+    false,
+  );
 });
 
 test('greenfield activation remains exact-target and explicitly authorized', () => {
@@ -93,14 +143,6 @@ test('greenfield cleanup cannot bypass activation or disable-and-drain recovery'
   rejected(value => {
     value.greenfieldCleanupAction.rollbackActionIds = [];
   }, 'GREENFIELD_CLEANUP_ACTION_INVALID');
-});
-
-test('greenfield supplement only supersedes base gates that remain blocked', () => {
-  const forged = structuredClone(base);
-  forged.gates.find(gate => gate.id === 'CUTOVER_SOURCE_CONSISTENCY').status = 'SATISFIED';
-  const result = validate(authority, forged, baseResult.digest);
-  assert.equal(result.ok, false);
-  assert.equal(result.issues.some(issue => issue.code === 'GREENFIELD_BASE_GATE_STATE_INVALID'), true);
 });
 
 test('greenfield authority cannot self-authorize the next production action', () => {
