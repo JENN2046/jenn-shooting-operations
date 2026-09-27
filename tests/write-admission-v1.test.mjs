@@ -43,7 +43,11 @@ test('pre-activation fence stays closed until one in-process admission transitio
   try {
     const healthBefore = await fetch(`${origin}/healthz`);
     assert.equal(healthBefore.status, 200);
-    assert.equal((await healthBefore.json()).writeAdmission, 'disabled');
+    assert.equal(healthBefore.headers.get('x-write-admission'), 'disabled');
+    assert.deepEqual(await healthBefore.json(), {
+      ok: true,
+      service: 'jenn-shooting-operations',
+    });
 
     const before = await fetch(`${origin}/api/v1/snapshot`);
     const beforeBody = await before.json();
@@ -79,19 +83,28 @@ test('pre-activation fence stays closed until one in-process admission transitio
 
     const healthAfter = await fetch(`${origin}/healthz`);
     assert.equal(healthAfter.status, 200);
-    assert.equal((await healthAfter.json()).writeAdmission, 'enabled');
-
-    const admitted = await fetch(`${origin}/api/v1/requests`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestPayload('write-admission-request-0002')),
+    assert.equal(healthAfter.headers.get('x-write-admission'), 'enabled');
+    assert.deepEqual(await healthAfter.json(), {
+      ok: true,
+      service: 'jenn-shooting-operations',
     });
-    assert.equal(admitted.status, 201);
+
+    const admitted = await fetch(`${origin}/api/v1/snapshot`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${tokens.scheduler}`,
+        'Content-Type': 'application/json',
+        'If-Match': '0',
+        'Idempotency-Key': 'write-admission-snapshot-0002',
+      },
+      body: JSON.stringify(beforeBody.snapshot),
+    });
+    assert.equal(admitted.status, 200);
 
     const after = await fetch(`${origin}/api/v1/snapshot`);
     const afterBody = await after.json();
     assert.equal(afterBody.snapshot.revision, 1);
-    assert.equal(afterBody.snapshot.tasks.length, 1);
+    assert.equal(afterBody.snapshot.tasks.length, 0);
 
     assert.equal(service.orphanCleanupControl.status().enabled, false);
   } finally {
