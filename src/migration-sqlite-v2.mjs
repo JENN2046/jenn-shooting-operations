@@ -11,7 +11,7 @@ import {
   realpathSync,
   statSync,
 } from 'node:fs';
-import { basename, isAbsolute, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, resolve, sep } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import {
@@ -215,12 +215,37 @@ function fileIdentity(path, { includeCtime = true, includeDigest = false, requir
   return identity;
 }
 
-function sqliteFamilyNamespace(path) {
+function sqliteFamilyParentIdentity(path) {
+  let metadata;
+  try {
+    metadata = statSync(dirname(path), { bigint: true });
+  } catch {
+    fail('SOURCE_CHANGED_DURING_SCAN', 'INVALID_SOURCE');
+  }
+  if (!metadata.isDirectory()) {
+    fail('SOURCE_CHANGED_DURING_SCAN', 'INVALID_SOURCE');
+  }
   return Object.freeze({
-    database: sha256Digest(filesystemPathComparisonKey(path, path)),
-    wal: sha256Digest(filesystemPathComparisonKey(`${path}-wal`, path)),
-    shm: sha256Digest(filesystemPathComparisonKey(`${path}-shm`, path)),
-    journal: sha256Digest(filesystemPathComparisonKey(`${path}-journal`, path)),
+    device: metadata.dev.toString(),
+    inode: metadata.ino.toString(),
+  });
+}
+
+function sqliteNamespaceMemberIdentity(parentIdentity, memberPath, anchorPath) {
+  return Object.freeze({
+    parentDevice: parentIdentity.device,
+    parentInode: parentIdentity.inode,
+    semanticBasename: basename(filesystemPathComparisonKey(memberPath, anchorPath)),
+  });
+}
+
+function sqliteFamilyNamespace(path) {
+  const parentIdentity = sqliteFamilyParentIdentity(path);
+  return Object.freeze({
+    database: sqliteNamespaceMemberIdentity(parentIdentity, path, path),
+    wal: sqliteNamespaceMemberIdentity(parentIdentity, `${path}-wal`, path),
+    shm: sqliteNamespaceMemberIdentity(parentIdentity, `${path}-shm`, path),
+    journal: sqliteNamespaceMemberIdentity(parentIdentity, `${path}-journal`, path),
   });
 }
 
@@ -266,8 +291,9 @@ export function sqlitePhysicalFamiliesAreDisjoint(left, right) {
   const keys = ['database', 'wal', 'shm', 'journal'];
 
   for (const leftPath of Object.values(left?.namespace ?? {})) {
+    const leftNamespaceKey = canonicalJson(leftPath);
     for (const rightPath of Object.values(right?.namespace ?? {})) {
-      if (leftPath === rightPath) return false;
+      if (leftNamespaceKey === canonicalJson(rightPath)) return false;
     }
   }
 

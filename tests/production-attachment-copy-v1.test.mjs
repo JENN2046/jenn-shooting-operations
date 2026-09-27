@@ -218,30 +218,52 @@ test('production copy wrapper delegates to the private mutator without test-only
   assert.doesNotMatch(source, /faultInjector/u);
 });
 
-test('target-root descriptor close structurally encloses child cleanup and verification failures', () => {
+test('target-root cleanup remains independent from child cleanup and verification failures', () => {
   const moduleSource = readFileSync(
     new URL('../src/production-attachment-copy-v1.mjs', import.meta.url),
     'utf8',
   );
 
   const cleanupStart = moduleSource.indexOf(
-    "} finally {\n      try {\n        closeSync(source.descriptor);",
+    '    try {\n      closeSync(source.descriptor);',
   );
-  assert.notEqual(cleanupStart, -1);
-
-  const rootFinally = moduleSource.indexOf(
-    "} finally {\n        if (targetRootDescriptor !== undefined) {",
+  const cleanupEnd = moduleSource.indexOf(
+    '    if (operationError) throw operationError;',
     cleanupStart,
   );
-  assert.notEqual(rootFinally, -1);
+  assert.notEqual(cleanupStart, -1);
+  assert.notEqual(cleanupEnd, -1);
 
-  const sourceClose = moduleSource.indexOf('closeSync(source.descriptor);', cleanupStart);
-  const targetClose = moduleSource.indexOf('closeSync(targetDescriptor);', cleanupStart);
-  const verify = moduleSource.indexOf('verifyFileBytes(', cleanupStart);
+  const cleanupSource = moduleSource.slice(cleanupStart, cleanupEnd);
+  const sourceClose = cleanupSource.indexOf('closeSync(source.descriptor);');
+  const targetClose = cleanupSource.indexOf('closeSync(targetDescriptor);');
+  const verify = cleanupSource.indexOf('verifyFileBytes(');
+  const rootClose = cleanupSource.indexOf('closeSync(targetRootDescriptor);');
 
-  for (const position of [sourceClose, targetClose, verify]) {
-    assert.ok(position > cleanupStart && position < rootFinally);
+  for (const position of [sourceClose, targetClose, verify, rootClose]) {
+    assert.notEqual(position, -1);
   }
+  assert.ok(sourceClose < targetClose);
+  assert.ok(targetClose < verify);
+  assert.ok(verify < rootClose);
+
+  assert.match(
+    cleanupSource.slice(Math.max(0, sourceClose - 40), sourceClose + 120),
+    /try\s*\{[\s\S]*closeSync\(source\.descriptor\)/u,
+  );
+  assert.match(
+    cleanupSource.slice(Math.max(0, targetClose - 80), targetClose + 160),
+    /try\s*\{[\s\S]*closeSync\(targetDescriptor\)/u,
+  );
+  const createdGuard = cleanupSource.indexOf('if (created) {');
+  const verifyTry = cleanupSource.lastIndexOf('try {', verify);
+  assert.notEqual(createdGuard, -1);
+  assert.ok(createdGuard < verifyTry);
+  assert.ok(verifyTry < verify);
+  assert.match(
+    cleanupSource.slice(Math.max(0, rootClose - 120), rootClose + 160),
+    /try\s*\{[\s\S]*closeSync\(targetRootDescriptor\)/u,
+  );
 });
 
 test('WO-05E exact-head verification uses the Node 24 runtime required by SQLite deserialize', () => {
@@ -1080,6 +1102,55 @@ test('SQLite family disjointness rejects cross-role future sidecar path collisio
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('SQLite namespace identity binds semantic basenames to the physical parent directory', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-sqlite-physical-parent-'));
+  const sourcePath = join(root, 'source.sqlite');
+
+  try {
+    writeFileSync(sourcePath, Buffer.from('source-db'), { mode: 0o600 });
+    const sourceInfo = resolveExistingPath(sourcePath, 'file');
+    const sourceFamily = captureSqlitePhysicalFamily(sourceInfo);
+    const parent = statSync(root, { bigint: true });
+
+    assert.deepEqual(sourceFamily.namespace.database, {
+      parentDevice: parent.dev.toString(),
+      parentInode: parent.ino.toString(),
+      semanticBasename: 'source.sqlite',
+    });
+    assert.deepEqual(sourceFamily.namespace.wal, {
+      parentDevice: parent.dev.toString(),
+      parentInode: parent.ino.toString(),
+      semanticBasename: 'source.sqlite-wal',
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('physical-parent-equivalent mount aliases collide across future SQLite sidecar roles', () => {
+  const sharedParent = {
+    parentDevice: '2049',
+    parentInode: '424242',
+  };
+  const sourceMain = {
+    ...sharedParent,
+    semanticBasename: 'target.sqlite-wal',
+  };
+  const targetFutureWal = {
+    ...sharedParent,
+    semanticBasename: 'target.sqlite-wal',
+  };
+
+  assert.equal(
+    sqlitePhysicalFamiliesAreDisjoint(
+      { namespace: { database: sourceMain } },
+      { namespace: { wal: targetFutureWal } },
+    ),
+    false,
+    'two lexical mount paths for one physical parent namespace must not certify isolation',
+  );
 });
 
 test('SQLite family sidecars must be single-link and source/target families disjoint', () => {
