@@ -285,6 +285,7 @@ function matchesSignature(contentType, buffer) {
 export class ScheduleStore {
   #orphanCleanupControl;
   #database;
+  #renameFile;
 
   constructor({
     filename,
@@ -333,7 +334,7 @@ export class ScheduleStore {
       writable: false,
       configurable: false,
     });
-    this.renameFile = fileOperations.rename || renameSync;
+    this.#renameFile = fileOperations.rename || renameSync;
 
     if (!readOnly && cleanupMode === 'disabled') {
       const disabled = this.#orphanCleanupControl.disable({ reason: 'store-startup', waitForDrainMs: 0 });
@@ -475,7 +476,7 @@ export class ScheduleStore {
             removed += 1;
           }
         } else {
-          this.renameFile(stagedPath, originalPath);
+          this.#renameFile(stagedPath, originalPath);
           restored += 1;
         }
       } catch {
@@ -778,7 +779,7 @@ export class ScheduleStore {
             const originalPath = join(this.uploadRoot, storedName);
             const stagedPath = join(this.cleanupRoot, `${storedName}.cleanup-${randomUUID()}`);
             try {
-              this.renameFile(originalPath, stagedPath);
+              this.#renameFile(originalPath, stagedPath);
               stagedFiles.push({ originalPath, stagedPath });
             } catch (error) {
               if (error.code !== 'ENOENT') {
@@ -802,7 +803,7 @@ export class ScheduleStore {
     } catch (error) {
       for (const { originalPath, stagedPath } of stagedFiles.toReversed()) {
         try {
-          if (existsSync(stagedPath) && !existsSync(originalPath)) this.renameFile(stagedPath, originalPath);
+          if (existsSync(stagedPath) && !existsSync(originalPath)) this.#renameFile(stagedPath, originalPath);
         } catch {}
       }
       try { this.db.exec('ROLLBACK'); } catch {}
