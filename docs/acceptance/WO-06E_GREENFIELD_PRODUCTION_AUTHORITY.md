@@ -1020,3 +1020,67 @@ nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
 Intermediate run #221 failed only because the new freeze regression omitted the existing `writeAdmissionFailure` import; it is superseded by exact-head run #222 and is not acceptance evidence.
 
 No production side effect was performed by this correction.
+
+
+## Fifteenth Codex review correction
+
+Independent review found one additional valid P1: `ScheduleStore` still exposed the raw filesystem rename function as public `store.renameFile`. A caller holding the returned store could therefore mutate database/upload/cleanup-control paths directly without consulting write admission.
+
+The raw rename capability is now private to `ScheduleStore`.
+
+### Private filesystem mutation capability
+
+The store now declares a private `#renameFile` field.
+
+Construction still accepts the existing test seam:
+
+```text
+fileOperations.rename
+```
+
+or defaults to native `renameSync`, but the selected function is stored only in `#renameFile`.
+
+All cleanup/recovery internals use `this.#renameFile(...)`.
+
+The returned store no longer exposes:
+
+```text
+store.renameFile
+```
+
+or any equivalent public rename method.
+
+### Regression coverage
+
+A disabled ScheduleStore is constructed with an injected rename function and proves:
+
+- `'renameFile' in store === false`;
+- `store.renameFile === undefined`;
+- the store has no own `renameFile` property.
+
+Existing cleanup/recovery tests continue to exercise the private injected rename seam. The one legacy test that previously used the public store method merely to manufacture a staged test file now uses the test-side `renameSync` directly, preserving its scenario without restoring the production capability.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 2dcc824c0114aa1358002667569995e205742285
+workflowRun        = 36331817252 (#226)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 762
+pass               = 761
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+Intermediate run #225 failed only because one legacy test still called the deliberately removed public rename helper; it was updated to use its own test-side filesystem rename and is superseded by exact-head run #226.
+
+No production side effect was performed by this correction.
