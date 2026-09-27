@@ -123,14 +123,17 @@
       "containerUid": 1000,
       "containerGid": 1000,
       "databasePath": "/app/data/shooting-operations.sqlite",
-      "volumeMount": "volume|jenn-shooting-operations_shooting_data|/app/data|true",
       "loopbackBind": "127.0.0.1:3800",
       "writeAdmissionMode": "disabled",
       "orphanCleanupMode": "disabled",
       "bootstrapRevision": 0,
       "containerStartCompletionProof": "PROD-05-START-ISOLATED-CONTAINER",
       "readOnlySmoke": true,
-      "secretValuesRecorded": false
+      "secretValuesRecorded": false,
+      "volumeMountType": "volume",
+      "volumeName": "jenn-shooting-operations_shooting_data",
+      "volumeDestination": "/app/data",
+      "volumeReadWrite": true
     }
   },
   "notApplicableBaseGateIds": [
