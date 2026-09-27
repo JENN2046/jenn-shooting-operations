@@ -46,6 +46,7 @@ const WAL_RETRY_WAIT = new Int32Array(new SharedArrayBuffer(4));
 const ORPHAN_CLEANUP_DOMAIN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
 
 const APPLY = Reflect.apply;
+const GET_OWN_PROPERTY_DESCRIPTOR = Object.getOwnPropertyDescriptor;
 
 const DATABASE_PREPARE = DatabaseSync.prototype.prepare;
 const DATABASE_EXEC = DatabaseSync.prototype.exec;
@@ -179,11 +180,26 @@ function execWithAdmission(db, admissionControl, ...args) {
   );
 }
 
-function createAdmissionCheckedDatabaseFacade(db, admissionControl) {
+function captureDatabaseTransactionGetter(db) {
+  const descriptor = APPLY(GET_OWN_PROPERTY_DESCRIPTOR, Object, [db, 'isTransaction']);
+  if (typeof descriptor?.get !== 'function' || descriptor.configurable !== false) {
+    throw new TypeError('native SQLite transaction-state getter is required');
+  }
+  return descriptor.get;
+}
+
+function createAdmissionCheckedDatabaseFacade(
+  db,
+  admissionControl,
+  transactionGetter = captureDatabaseTransactionGetter(db),
+) {
   return Object.freeze({
     prepare: (...args) => prepareAdmissionCheckedStatement(db, admissionControl, ...args),
     exec: (...args) => execWithAdmission(db, admissionControl, ...args),
     serialize: (...args) => APPLY(DATABASE_SERIALIZE, db, args),
+    get isTransaction() {
+      return APPLY(transactionGetter, db, []);
+    },
   });
 }
 
