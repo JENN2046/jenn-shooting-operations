@@ -225,8 +225,19 @@ export function createHttpApp({
   writeAdmissionControl,
 }) {
   const authorize = createAuthorizer(tokens);
-  const admission = writeAdmissionControl
+  const storeAdmission = store?.writeAdmissionControl;
+  if (storeAdmission !== undefined
+      && writeAdmissionControl !== undefined
+      && writeAdmissionControl !== storeAdmission) {
+    throw new TypeError('write admission control must match store control');
+  }
+  const admission = storeAdmission
+    ?? writeAdmissionControl
     ?? createWriteAdmissionControl({ initialMode: writeAdmissionMode });
+  if (typeof admission?.isDisabled !== 'function'
+      || typeof admission?.status !== 'function') {
+    throw new TypeError('valid write admission control is required');
+  }
 
   return async function app(request, response) {
     securityHeaders(response);
