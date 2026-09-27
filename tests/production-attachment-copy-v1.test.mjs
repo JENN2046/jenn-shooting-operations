@@ -193,6 +193,32 @@ test('production copy wrapper delegates to the private mutator without test-only
   assert.doesNotMatch(source, /faultInjector/u);
 });
 
+test('target-root descriptor close structurally encloses child cleanup and verification failures', () => {
+  const moduleSource = readFileSync(
+    new URL('../src/production-attachment-copy-v1.mjs', import.meta.url),
+    'utf8',
+  );
+
+  const cleanupStart = moduleSource.indexOf(
+    "} finally {\n      try {\n        closeSync(source.descriptor);",
+  );
+  assert.notEqual(cleanupStart, -1);
+
+  const rootFinally = moduleSource.indexOf(
+    "} finally {\n        if (targetRootDescriptor !== undefined) {",
+    cleanupStart,
+  );
+  assert.notEqual(rootFinally, -1);
+
+  const sourceClose = moduleSource.indexOf('closeSync(source.descriptor);', cleanupStart);
+  const targetClose = moduleSource.indexOf('closeSync(targetDescriptor);', cleanupStart);
+  const verify = moduleSource.indexOf('verifyFileBytes(', cleanupStart);
+
+  for (const position of [sourceClose, targetClose, verify]) {
+    assert.ok(position > cleanupStart && position < rootFinally);
+  }
+});
+
 test('WO-05E exact-head verification uses the Node 24 runtime required by SQLite deserialize', () => {
   const workflow = readFileSync(
     new URL('../.github/workflows/wo05e-final-runtime.yml', import.meta.url),
