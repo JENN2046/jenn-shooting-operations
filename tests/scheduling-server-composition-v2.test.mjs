@@ -52,6 +52,44 @@ test('Scheduling V2 runtime composition is explicit and connects the canonical p
   }
 });
 
+test('Scheduling V2 direct mutation is fenced by the bound ScheduleStore admission control', () => {
+  const store = new ScheduleStore({
+    filename: ':memory:',
+    writeAdmissionMode: 'disabled',
+    orphanCleanupMode: 'disabled',
+  });
+  try {
+    const created = createTrustedPrincipal({
+      subjectId: 'SCHEDULER-DISABLED',
+      role: 'scheduler',
+      resourceIds: ['STUDIO-A'],
+    });
+    assert.equal(created.ok, true);
+    const scheduling = createSchedulingV2Application({
+      store,
+      authenticate: () => created.principal,
+      clock: () => new Date('2026-09-23T08:00:00.000Z'),
+    });
+    const before = store.db.prepare('SELECT total_changes() AS changes').get().changes;
+    const result = scheduling.decideProposal({
+      command: {
+        decisionId: 'DEC-DISABLED-0001',
+        proposalId: 'sp_missing',
+        decisionType: 'accept',
+        selectedProposalItemIds: ['spi_missing'],
+        decisionNote: null,
+        reasonCode: null,
+      },
+      principal: created.principal,
+    });
+    const after = store.db.prepare('SELECT total_changes() AS changes').get().changes;
+    assert.deepEqual(result, { ok: false, code: 'WRITE_ADMISSION_DISABLED' });
+    assert.equal(after, before);
+  } finally {
+    store.close();
+  }
+});
+
 test('Scheduling V2 runtime composition refuses implicit authentication', () => {
   const store = new ScheduleStore({ filename: ':memory:' });
   try {
