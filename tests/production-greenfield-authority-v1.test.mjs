@@ -31,19 +31,20 @@ test('greenfield authority binds the frozen parent and grants no production muta
   assert.deepEqual(authority.authorization.requestedActionIds, []);
   assert.deepEqual(authority.authorization.approvedActionIds, []);
   assert.deepEqual(authority.authorization.requestableActionIds, []);
-  assert.equal(authority.authorization.nextActionId, 'PROD-GF-13-ACTIVATE');
+  assert.equal(authority.authorization.nextActionId, 'PROD-GF-14-RESTORE-ORPHAN-CLEANUP');
   assert.equal(authority.authorization.nextActionRequiresExplicitAuthorization, true);
 });
 
-test('greenfield authority records PROD-03 through PROD-07 production evidence without secrets', () => {
+test('greenfield authority records activation evidence without secrets', () => {
   assert.deepEqual(
-    authority.completedAcceptanceIds.slice(-5),
+    authority.completedAcceptanceIds.slice(-6),
     [
       'PROD-03-GENERATE-INSTALL-TOKENS',
       'PROD-04-BUILD-IMAGE',
       'PROD-05-START-ISOLATED-CONTAINER',
       'PROD-06-LOOPBACK-HEALTH-SMOKE',
       'PROD-07-CONFIGURE-REVERSE-PROXY-TLS',
+      'PROD-GF-13-ACTIVATE',
     ],
   );
   assert.deepEqual(authority.acceptance.prod03, {
@@ -184,6 +185,66 @@ test('greenfield authority records PROD-03 through PROD-07 production evidence w
     evidenceSha256: 'sha256:a49ecf5e5d358f1774f631af57dd930401a3bc9c6468d339322966d1e6329cc1',
     rollbackActionId: 'ROLLBACK-01-REMOVE-NEW-ROUTE',
   });
+  assert.deepEqual(authority.acceptance.prodGf13, {
+    status: 'PASS',
+    activatedAtUtc: '2026-09-27T23:11:00Z',
+    verifiedAtUtc: '2026-09-27T23:12:00Z',
+    route: 'https://jso.skmt617.top',
+    clientScope: 'HTTPS_ROUTE_ONLY_NO_VCP_NO_KIOSK',
+    containerName: 'jenn-shooting-operations-prod',
+    containerId: '45ff5469cbd8874fbc3f5ac71260a57596b19f86a26b4131fa38d5d678162a99',
+    imageId: 'sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545',
+    hostPid: 747599,
+    containerStartedAt: '2026-09-27T17:49:01.319828677Z',
+    dataVolumeName: 'jenn-shooting-operations_shooting_data',
+    dataVolumeDeviceInode: '64784:1835042',
+    databaseDeviceInode: '64784:1835048',
+    preEnableLoopbackHealth: 200,
+    preEnableRoutedHealth: 200,
+    preEnableWriteAdmission: 'disabled',
+    preEnableMutatingMethodsDenied: true,
+    preEnableOrphanCleanupState: 'disabled',
+    preEnableOrphanCleanupActiveRuns: 0,
+    preEnableRevision: 0,
+    preEnableUploadRows: 0,
+    preEnableOperationRows: 0,
+    preEnableAuditRows: 0,
+    preEnableAttachmentFiles: 0,
+    targetVolumeContainerMountCount: 1,
+    containerProcessCount: 1,
+    integrationEnvCount: 0,
+    directStoreGuardCount: 5,
+    nginxConfigSha256: 'sha256:35ea9acd80ba600e88d8c594a3a2558ec4cb57dd078c61d6832f5798c2eabc33',
+    transitionSignal: 'SIGUSR2',
+    writeAdmissionEvent: 'WRITE_ADMISSION_ENABLED',
+    writeAdmissionRuntimePost: 'enabled',
+    writeAdmissionTransitionCount: 1,
+    sameContainerPost: true,
+    sameHostPidPost: true,
+    sameStartedAtPost: true,
+    sameImagePost: true,
+    sameRouteConfigPost: true,
+    sameDataVolumePost: true,
+    postEnableLoopbackHealth: 200,
+    postEnableRoutedHealth: 200,
+    postEnableLoopbackWriteAdmission: 'enabled',
+    postEnableRoutedWriteAdmission: 'enabled',
+    unauthenticatedWriteProbeStatus: 401,
+    unauthenticatedWriteProbeCode: 'UNAUTHORIZED',
+    orphanCleanupPost: 'disabled',
+    orphanCleanupActiveRunsPost: 0,
+    postEnableRevision: 0,
+    postEnableUploadRows: 0,
+    postEnableOperationRows: 0,
+    postEnableAuditRows: 0,
+    postEnableAttachmentFiles: 0,
+    integrationsRemainDisabled: true,
+    orphanCleanupRestorationDeferred: true,
+    secretValuesRecorded: false,
+    evidencePath: '/mnt/datadisk0/apps/jenn-shooting-operations/prod-gf13-activation-evidence.txt',
+    evidenceSha256: 'sha256:88a3880a126166b0934a8d60e487b450ff5d49af6b487bf28456d39b1c824bdb',
+    rollbackPreserveDataVolume: 'jenn-shooting-operations_shooting_data',
+  });
 
   rejected(value => {
     value.acceptance.prod03.uniqueRoleTokenCount = 3;
@@ -199,6 +260,9 @@ test('greenfield authority records PROD-03 through PROD-07 production evidence w
   }, 'GREENFIELD_ACCEPTANCE_INVALID');
   rejected(value => {
     value.acceptance.prod07.publicWritePostStatus = 200;
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf13.writeAdmissionTransitionCount = 2;
   }, 'GREENFIELD_ACCEPTANCE_INVALID');
 });
 
@@ -436,7 +500,7 @@ test('greenfield cleanup cannot bypass activation or disable-and-drain recovery'
 
 test('greenfield authority cannot self-authorize the next production action', () => {
   rejected(value => {
-    value.authorization.requestableActionIds = ['PROD-GF-13-ACTIVATE'];
+    value.authorization.requestableActionIds = ['PROD-GF-14-RESTORE-ORPHAN-CLEANUP'];
   }, 'GREENFIELD_AUTHORIZATION_STATE_INVALID');
   rejected(value => {
     value.authorization.blanketApprovalAllowed = true;
