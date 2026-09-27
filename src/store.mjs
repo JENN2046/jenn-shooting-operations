@@ -51,15 +51,6 @@ const DATABASE_PREPARE = DatabaseSync.prototype.prepare;
 const DATABASE_EXEC = DatabaseSync.prototype.exec;
 const DATABASE_SET_AUTHORIZER = DatabaseSync.prototype.setAuthorizer;
 const DATABASE_SERIALIZE = DatabaseSync.prototype.serialize;
-const DATABASE_IS_OPEN_GET = Object.getOwnPropertyDescriptor(
-  DatabaseSync.prototype,
-  'isOpen',
-)?.get;
-const DATABASE_IS_TRANSACTION_GET = Object.getOwnPropertyDescriptor(
-  DatabaseSync.prototype,
-  'isTransaction',
-)?.get;
-
 const STATEMENT_RUN = StatementSync.prototype.run;
 const STATEMENT_GET = StatementSync.prototype.get;
 const STATEMENT_ALL = StatementSync.prototype.all;
@@ -81,8 +72,6 @@ for (const [name, value] of Object.entries({
   DATABASE_EXEC,
   DATABASE_SET_AUTHORIZER,
   DATABASE_SERIALIZE,
-  DATABASE_IS_OPEN_GET,
-  DATABASE_IS_TRANSACTION_GET,
   STATEMENT_RUN,
   STATEMENT_GET,
   STATEMENT_ALL,
@@ -208,8 +197,6 @@ function createAdmissionCheckedDatabaseFacade(db, admissionControl) {
     prepare: (...args) => prepareAdmissionCheckedStatement(db, admissionControl, ...args),
     exec: (...args) => execWithAdmission(db, admissionControl, ...args),
     serialize: (...args) => APPLY(DATABASE_SERIALIZE, db, args),
-    get isOpen() { return APPLY(DATABASE_IS_OPEN_GET, db, []); },
-    get isTransaction() { return APPLY(DATABASE_IS_TRANSACTION_GET, db, []); },
   });
 }
 
