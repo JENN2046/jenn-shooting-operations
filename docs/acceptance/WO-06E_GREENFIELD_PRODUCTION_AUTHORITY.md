@@ -515,3 +515,57 @@ nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
 ```
 
 No production side effect was performed by this correction.
+
+
+## Eighth Codex review correction
+
+Independent review found two additional valid findings on the in-process write boundary.
+
+### P1: public ScheduleStore write helpers
+
+`recordOperation` and `recordAudit` were still public unconditional SQLite write methods. A caller holding the store returned by `createOperationsServer` could invoke them directly while admission was disabled.
+
+The store boundary now enforces admission on those helpers before any INSERT.
+
+The same correction also hardens two adjacent public surfaces:
+
+- `recoverStagedUploadCleanup` returns `WRITE_ADMISSION_DISABLED` before any restore/delete mutation while admission is disabled;
+- `ScheduleStore.writeAdmissionControl` is installed as a non-writable, non-configurable authority property at construction, so callers cannot swap in an enabled control after startup.
+
+Regression coverage directly calls `recordOperation`, `recordAudit`, and staged recovery on a disabled store, verifies stable admission failure, verifies SQLite `total_changes()` is unchanged, and proves both assignment and property redefinition of the admission control fail.
+
+### P2: V2 wrappers must capture admission authority once
+
+Kiosk and Scheduling wrappers previously exposed one control but consulted `store.writeAdmissionControl` again at mutation time. A mutable store-like object could therefore swap that property after factory construction and create a split between the application’s advertised authority and its mutation guard.
+
+Both factories now:
+
+1. read and validate the store admission control once at construction;
+2. capture that exact object in a closure constant;
+3. expose that same captured object on the returned application;
+4. use only that captured object for every mutation admission check.
+
+Hostile regressions construct each V2 application over a deliberately mutable store-like object, replace the object’s control with an enabled control after construction, and prove the application still uses the originally captured disabled control and performs zero SQLite changes.
+
+### Fresh implementation-bearing evidence
+
+```text
+implementationHead = 40750cea50dcb8cb598f2ec31367cd2d00a2cff4
+workflowRun        = 36324285941 (#194)
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 753
+pass               = 752
+fail               = 0
+skip               = 1 (expected external VCP adapter absence)
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:51341436645ad9dad96aa54b6bd1710392cbd28ec08795bddee0d4366d3820a9
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-03-GENERATE-INSTALL-TOKENS
+```
+
+No production side effect was performed by this correction.
