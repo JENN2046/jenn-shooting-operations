@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import {
+import fs, {
   chmodSync,
   existsSync,
   linkSync,
@@ -19,6 +19,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, parse } from 'node:path';
 import test from 'node:test';
@@ -420,6 +421,34 @@ test('sandbox containment does not depend on mutable String prototype methods', 
     String.prototype.startsWith = originalStartsWith;
     fixtureA.cleanup();
     fixtureB.cleanup();
+  }
+});
+
+test('test authority cleanup stays bound to its created sandbox after public-path replacement', () => {
+  if (process.platform !== 'linux') return;
+
+  const authority = createAttachmentParityIsolatedTestAuthority();
+  const publicRoot = authority.root;
+  const displacedRoot = `${publicRoot}-displaced`;
+  const originalSentinel = join(publicRoot, 'original.txt');
+  const replacementSentinel = join(publicRoot, 'replacement.txt');
+
+  try {
+    writeFileSync(originalSentinel, 'original', { mode: 0o600 });
+    renameSync(publicRoot, displacedRoot);
+    mkdirSync(publicRoot, { mode: 0o700 });
+    writeFileSync(replacementSentinel, 'replacement', { mode: 0o600 });
+
+    assert.throws(
+      () => authority.close(),
+      error => error.code === 'ATTACHMENT_PARITY_TEST_SANDBOX_CHANGED',
+    );
+    assert.equal(readFileSync(replacementSentinel, 'utf8'), 'replacement');
+    assert.equal(existsSync(join(displacedRoot, 'original.txt')), false);
+  } finally {
+    try { authority.close(); } catch {}
+    rmSync(publicRoot, { recursive: true, force: true });
+    rmSync(displacedRoot, { recursive: true, force: true });
   }
 });
 
@@ -1389,6 +1418,37 @@ test('exact target bytes with permissive mode are rejected instead of reused', (
     );
     assert.equal((statSync(targetPath).mode & 0o777), 0o644);
   } finally {
+    fixture.cleanup();
+  }
+});
+
+test('zero-progress target writes fail closed instead of spinning forever', () => {
+  const body = Buffer.from('zero-progress-write');
+  const row = uploadFact({ id: 'UPLOAD-ZERO-PROGRESS-WRITE', body });
+  const fixture = createFixture([row]);
+  const originalWriteSync = fs.writeSync;
+  let forcedZero = false;
+
+  try {
+    writeSourceFiles(fixture, [row], new Map([[row.stored_name, body]]));
+
+    fs.writeSync = (...args) => {
+      if (!forcedZero && args[3] > 0) {
+        forcedZero = true;
+        return 0;
+      }
+      return originalWriteSync(...args);
+    };
+    syncBuiltinESMExports();
+
+    assert.throws(
+      () => copyAttachmentsAndEvaluateParityTestCandidate(copyOptions(fixture)),
+      error => error.code === 'TARGET_ATTACHMENT_COPY_FAILED',
+    );
+    assert.equal(forcedZero, true);
+  } finally {
+    fs.writeSync = originalWriteSync;
+    syncBuiltinESMExports();
     fixture.cleanup();
   }
 });

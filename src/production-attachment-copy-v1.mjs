@@ -102,6 +102,18 @@ function pathWithin(path, directory) {
   return relation === '' || (!escapesParent && !isAbsolute(relation));
 }
 
+function directoryMatchesIdentity(path, identity) {
+  try {
+    const metadata = lstatSync(path, { bigint: true });
+    return metadata.isDirectory()
+      && !metadata.isSymbolicLink()
+      && metadata.dev.toString() === identity.device
+      && metadata.ino.toString() === identity.inode;
+  } catch {
+    return false;
+  }
+}
+
 function assertPathDomainsDisjoint(sourceDatabase, targetDatabase, sourceRoot, targetRoot) {
   if (sameFile(sourceDatabase, targetDatabase)) {
     fail('SOURCE_TARGET_DATABASE_CONFLICT', 'INVALID_USAGE');
@@ -183,7 +195,63 @@ export function describeAttachmentParityScope({
 }
 
 export function createAttachmentParityIsolatedTestAuthority() {
-  const sandboxRoot = realpathSync(mkdtempSync(join(tmpdir(), 'jenn-attachment-parity-test-')));
+  let sandboxRoot;
+  let sandboxDescriptor;
+  let sandboxIdentity;
+
+  if (process.platform === 'linux') {
+    let parentDescriptor;
+    let createdPath;
+    try {
+      const sandboxParent = realpathSync(tmpdir());
+      parentDescriptor = openSync(
+        sandboxParent,
+        fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW,
+      );
+      const parentMetadata = fstatSync(parentDescriptor, { bigint: true });
+      if (!parentMetadata.isDirectory()) {
+        fail('ATTACHMENT_PARITY_TEST_AUTH_UNAVAILABLE', 'BLOCKED_PREREQUISITE');
+      }
+
+      createdPath = mkdtempSync(
+        join(`/proc/self/fd/${parentDescriptor}`, 'jenn-attachment-parity-test-'),
+      );
+      sandboxDescriptor = openSync(
+        createdPath,
+        fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW,
+      );
+      const sandboxMetadata = fstatSync(sandboxDescriptor, { bigint: true });
+      if (!sandboxMetadata.isDirectory()) {
+        fail('ATTACHMENT_PARITY_TEST_AUTH_UNAVAILABLE', 'BLOCKED_PREREQUISITE');
+      }
+      sandboxIdentity = Object.freeze({
+        device: sandboxMetadata.dev.toString(),
+        inode: sandboxMetadata.ino.toString(),
+      });
+      sandboxRoot = realpathSync(createdPath);
+    } catch (error) {
+      if (sandboxDescriptor !== undefined) {
+        try { closeSync(sandboxDescriptor); } catch {}
+      }
+      if (createdPath !== undefined) {
+        try { rmSync(createdPath, { recursive: true, force: true }); } catch {}
+      }
+      if (error instanceof MigrationError) throw error;
+      fail('ATTACHMENT_PARITY_TEST_AUTH_UNAVAILABLE', 'BLOCKED_PREREQUISITE');
+    } finally {
+      if (parentDescriptor !== undefined) {
+        try { closeSync(parentDescriptor); } catch {}
+      }
+    }
+  } else {
+    sandboxRoot = realpathSync(mkdtempSync(join(tmpdir(), 'jenn-attachment-parity-test-')));
+    const sandboxMetadata = lstatSync(sandboxRoot, { bigint: true });
+    sandboxIdentity = Object.freeze({
+      device: sandboxMetadata.dev.toString(),
+      inode: sandboxMetadata.ino.toString(),
+    });
+  }
+
   let active = true;
 
   const ensureInsideSandbox = info => {
@@ -217,8 +285,65 @@ export function createAttachmentParityIsolatedTestAuthority() {
       });
     },
     close() {
+      if (!active) return;
       active = false;
-      rmSync(sandboxRoot, { recursive: true, force: true });
+
+      if (process.platform !== 'linux') {
+        if (!directoryMatchesIdentity(sandboxRoot, sandboxIdentity)) {
+          fail('ATTACHMENT_PARITY_TEST_SANDBOX_CHANGED', 'INVALID_USAGE');
+        }
+        rmSync(sandboxRoot, { recursive: true, force: true });
+        return;
+      }
+
+      let cleanupError = null;
+      let publicPathChanged = !directoryMatchesIdentity(sandboxRoot, sandboxIdentity);
+      try {
+        const heldMetadata = fstatSync(sandboxDescriptor, { bigint: true });
+        if (!heldMetadata.isDirectory()
+            || heldMetadata.dev.toString() !== sandboxIdentity.device
+            || heldMetadata.ino.toString() !== sandboxIdentity.inode) {
+          cleanupError = new MigrationError(
+            'ATTACHMENT_PARITY_TEST_SANDBOX_CHANGED',
+            'INVALID_USAGE',
+          );
+        } else {
+          const boundRoot = `/proc/self/fd/${sandboxDescriptor}`;
+          for (const child of readdirSync(boundRoot)) {
+            rmSync(join(boundRoot, child), { recursive: true, force: true });
+          }
+        }
+      } catch (error) {
+        cleanupError ??= error;
+      }
+
+      // Never recursively remove the reusable public pathname. Keeping the
+      // exact directory descriptor open lets us clean only the directory that
+      // this authority created, even if its visible name has been replaced.
+      // The now-empty temp directory itself is intentionally left behind:
+      // Node core has no unlinkat(dirfd, name, AT_REMOVEDIR), and a pathname
+      // rmdir would reintroduce a same-UID rename race.
+      publicPathChanged ||= !directoryMatchesIdentity(sandboxRoot, sandboxIdentity);
+      try {
+        closeSync(sandboxDescriptor);
+      } catch (error) {
+        cleanupError ??= error;
+      }
+      sandboxDescriptor = undefined;
+
+      if (publicPathChanged) {
+        cleanupError ??= new MigrationError(
+          'ATTACHMENT_PARITY_TEST_SANDBOX_CHANGED',
+          'INVALID_USAGE',
+        );
+      }
+      if (cleanupError) {
+        if (cleanupError instanceof MigrationError) throw cleanupError;
+        throw new MigrationError(
+          'ATTACHMENT_PARITY_TEST_CLEANUP_FAILED',
+          'INVALID_USAGE',
+        );
+      }
     },
   });
 }
@@ -1000,7 +1125,13 @@ function copyAttachmentsAndEvaluateParityInternal({
         hash.update(buffer.subarray(0, bytes));
         let offset = 0;
         while (offset < bytes) {
-          offset += writeSync(targetDescriptor, buffer, offset, bytes - offset);
+          const written = writeSync(targetDescriptor, buffer, offset, bytes - offset);
+          if (!Number.isSafeInteger(written)
+              || written <= 0
+              || written > bytes - offset) {
+            fail('TARGET_ATTACHMENT_COPY_FAILED');
+          }
+          offset += written;
         }
         bytesWritten += bytes;
       }
