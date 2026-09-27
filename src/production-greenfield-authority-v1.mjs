@@ -84,7 +84,8 @@ const EXPECTED_TOP_LEVEL_KEYS = Object.freeze([
 
 const EXPECTED_PRE_ACTIVATION_WRITE_FENCE = Object.freeze({
   runtimeMode: 'disabled',
-  runtimeEnv: 'WRITE_ADMISSION_MODE=disabled',
+  runtimeEnvironmentVariable: 'WRITE_ADMISSION_MODE',
+  runtimeEnvironmentValue: 'disabled',
   blockedHttpMethods: Object.freeze(['POST', 'PUT', 'PATCH', 'DELETE']),
   coveredWriterClasses: Object.freeze([
     'STAGING_PRINCIPAL',
