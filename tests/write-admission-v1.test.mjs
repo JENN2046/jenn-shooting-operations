@@ -284,6 +284,50 @@ test('raw SQLite access is hidden behind the live admission authorizer', () => {
   }
 });
 
+test('prepared statement facade cannot expose or extend the raw StatementSync target', () => {
+  const admission = createWriteAdmissionControl({ initialMode: 'disabled' });
+  const store = new ScheduleStore({
+    filename: ':memory:',
+    writeAdmissionControl: admission,
+    orphanCleanupMode: 'disabled',
+  });
+  try {
+    const statement = store.db.prepare(
+      "INSERT INTO audit_log (action, role, entity_id, revision, result, created_at) VALUES ('proxy-bypass', 'admin', NULL, 0, 'blocked', '2026-09-27T13:00:00.000Z')",
+    );
+    assert.equal(Object.getPrototypeOf(statement), null);
+    assert.equal(Object.isFrozen(statement), true);
+    assert.equal(Object.isExtensible(statement), false);
+    assert.equal('unwrap' in statement, false);
+
+    assert.throws(
+      () => Object.defineProperty(statement, 'unwrap', {
+        value() { return this; },
+      }),
+      TypeError,
+    );
+    assert.equal('unwrap' in statement, false);
+
+    assert.throws(
+      () => { statement.unwrap = () => statement; },
+      TypeError,
+    );
+    assert.throws(
+      () => Object.setPrototypeOf(statement, {
+        unwrap() { return this; },
+      }),
+      TypeError,
+    );
+
+    const before = store.db.prepare('SELECT total_changes() AS changes').get().changes;
+    assert.throws(() => statement.run());
+    const after = store.db.prepare('SELECT total_changes() AS changes').get().changes;
+    assert.equal(after, before);
+  } finally {
+    store.close();
+  }
+});
+
 test('pre-activation write admission cannot start with cleanup enabled', () => {
   assert.throws(
     () => createOperationsServer({
