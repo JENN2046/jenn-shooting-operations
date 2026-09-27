@@ -55,6 +55,29 @@ test('greenfield authority rejects undeclared top-level fields', () => {
   }, 'GREENFIELD_TOP_LEVEL_KEYS_INVALID');
 });
 
+test('greenfield authority rejects malformed base-manifest entries without throwing', () => {
+  for (const manifest of [
+    { ...structuredClone(base), gates: [null] },
+    { ...structuredClone(base), actions: [null] },
+    {
+      ...structuredClone(base),
+      authorizationPacket: {
+        ...structuredClone(base.authorizationPacket),
+        requestedActionIds: null,
+      },
+    },
+  ]) {
+    const result = validate(authority, manifest);
+    assert.equal(result.ok, false);
+    assert.equal(
+      result.issues.some(issue => issue.code === 'BASE_MANIFEST_SCHEMA_INVALID'),
+      true,
+      JSON.stringify(result.issues),
+    );
+    assert.equal(Object.hasOwn(result, 'digest'), false);
+  }
+});
+
 test('greenfield authority rejects malformed nested shapes without throwing', () => {
   for (const mutate of [
     value => { value.greenfieldForwardChain = null; },
@@ -145,8 +168,22 @@ test('pre-activation writer fence denies staging, admin, API, background and dir
     'UNCONTROLLED_DIRECT_STORAGE_WRITER_INVENTORY_ZERO',
     'NO_OTHER_CONTAINER_MOUNTS_TARGET_VOLUME',
     'EMPTY_TARGET_SCHEMA_BOOTSTRAP_BEFORE_LISTEN_ONLY',
+    'CLEANUP_ENABLE_FORBIDDEN_WHILE_WRITE_ADMISSION_DISABLED',
+    'NO_CONTAINER_RESTART_FOR_ADMISSION_ENABLE',
+    'ATOMIC_IN_PROCESS_ADMISSION_ENABLE_AFTER_VERIFICATION',
   ]) {
     assert.equal(fence.requirements.includes(requirement), true, requirement);
+  }
+  assert.equal(
+    fence.activationTransition,
+    'SIGUSR2_IN_PROCESS_WRITE_ADMISSION_ENABLE',
+  );
+  for (const proof of [
+    'CLEANUP_ENABLE_DENIAL_PROOF',
+    'SAME_PROCESS_ADMISSION_TRANSITION_PROOF',
+    'WRITE_ADMISSION_ENABLE_RECEIPT',
+  ]) {
+    assert.equal(fence.evidenceRequired.includes(proof), true, proof);
   }
   rejected(value => {
     value.greenfieldPreActivationWriteFence.runtimeMode = 'enabled';
@@ -192,6 +229,23 @@ test('greenfield activation cannot acquire source barriers or integration rollba
     ),
     false,
   );
+});
+
+test('greenfield activation keeps the same process fenced through verification then enables atomically', () => {
+  const effects = authority.greenfieldActivationAction.effects;
+  assert.match(effects[3], /write fence remains held/u);
+  assert.match(
+    effects[4],
+    /same process, route, image, target volume and disabled write fence remain unchanged/u,
+  );
+  assert.match(effects[4], /atomic in-process write-admission enable transition/u);
+  assert.match(effects[4], /no container restart or route change/u);
+  for (const proof of [
+    'PRE_ENABLE_SAME_PROCESS_AND_FENCE_PROOF',
+    'WRITE_ADMISSION_ENABLE_RECEIPT',
+  ]) {
+    assert.equal(authority.greenfieldActivationAction.evidenceRequired.includes(proof), true, proof);
+  }
 });
 
 test('greenfield activation remains exact-target and explicitly authorized', () => {
