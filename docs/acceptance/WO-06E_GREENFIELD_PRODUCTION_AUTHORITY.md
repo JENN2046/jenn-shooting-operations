@@ -1410,3 +1410,28 @@ nextActionId          = PROD-GF-13-ACTIVATE
 
 Conditional `PROD-08-FIREWALL-SECURITY-GROUP` remains defined but was not required for the current HTTPS route, which is already externally reachable through Cloudflare. This promotion does not authorize `PROD-GF-13-ACTIVATE`.
 
+### PROD-07 promotion exact-head validation
+
+The implementation-bearing promotion head was independently validated by the repository production-authorization workflow:
+
+```text
+implementationHead = 60287c4ca29ad04e11550602286ba10c68932741
+workflowRun        = 36356957798
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 763
+pass               = 762
+fail               = 0
+skip               = 1 expected external VCP adapter absence
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:6f5b43acd1bf868f46c26237d7231f1023a1825cee4c9700a5b4eca5d15a901c
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-GF-13-ACTIVATE
+```
+
+This validation performed no production mutation. Because this paragraph changes only the acceptance document, the resulting final docs head is validated separately before merge eligibility.
+
