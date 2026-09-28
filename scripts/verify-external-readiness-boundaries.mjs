@@ -154,8 +154,10 @@ function verifyVcpBoundary() {
   const configuredPath = process.env.VCP_SHOOTING_OPERATIONS_ADAPTER_PATH || '';
   if (!configuredPath) {
     return {
+      sourceAdapterPresent: false,
       externalAdapterPresent: false,
       adapterOwner: 'VCPTOOLBOX_JENN_EXTENSIONS',
+      sourceCompatibility: 'BLOCKED_ADAPTER_SOURCE',
       compatibility: 'BLOCKED_EXTERNAL_RUNTIME',
     };
   }
@@ -164,9 +166,11 @@ function verifyVcpBoundary() {
     throw new Error('configured VCP Shooting Operations adapter path does not exist');
   }
   return {
-    externalAdapterPresent: true,
+    sourceAdapterPresent: true,
+    externalAdapterPresent: false,
     adapterOwner: 'VCPTOOLBOX_JENN_EXTENSIONS',
-    compatibility: 'EXTERNAL_ADAPTER_PRESENT_REQUIRES_COMPATIBILITY_RUN',
+    sourceCompatibility: 'ADAPTER_SOURCE_PRESENT_REQUIRES_COMPATIBILITY_RUN',
+    compatibility: 'BLOCKED_EXTERNAL_RUNTIME',
   };
 }
 
