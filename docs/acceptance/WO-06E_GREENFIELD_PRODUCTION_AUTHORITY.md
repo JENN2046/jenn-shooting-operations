@@ -2149,3 +2149,28 @@ nextActionId          = PROD-10-ENABLE-VCP-REMOTE-SYNC
 
 This promotion does not authorize PROD-10, PROD-11, DingTalk, any additional container lifecycle change, or any other production mutation.
 
+### PROD-GF-14L promotion exact-head validation
+
+The implementation-bearing GF14L promotion head was independently validated by the production-authorization workflow:
+
+```text
+implementationHead = 758bdedfcf76d0876a6683422627b5519d14301c
+workflowRun        = 36381548887
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 766
+pass               = 765
+fail               = 0
+skip               = 1 expected external VCP adapter absence
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:502faf54c9179b47e7643a5f60e4b54b9b90bb2f10e0ad7862ddf0631490a123
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-10-ENABLE-VCP-REMOTE-SYNC
+```
+
+This validation performed no production mutation. Because this paragraph is docs-only, the resulting final head is validated once more before merge eligibility.
+
