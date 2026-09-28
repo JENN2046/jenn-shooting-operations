@@ -407,7 +407,6 @@
       "currentRuntimeEnvSha256": "sha256:cdfa4ebba78b413c608f12670b3c02bde9af1315333bae00c1d2de97ad4f081a",
       "preGf14RuntimeEnvSha256": "sha256:98519e90c4ac40862af935e52d519ee5ba5b9f2f08b88be7e005253c30a5478c",
       "preGf14RuntimeEnvBackup": "/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime.pre-gf14",
-      "rollbackActionId": "ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP",
       "rollbackControlRoot": "/app/data/.orphan-cleanup-control/1ad8b65e5b8819bc9c7e4df213b9bb2ef3d0721a45e0a62d54c4e7f6c0bb1d27",
       "deletionIrreversibilityAcknowledged": true,
       "businessDataUnchanged": true,
@@ -417,7 +416,11 @@
       "governanceStatus": "OUT_OF_ORDER_GF14_RUNTIME_LIFECYCLE_REQUIRES_EXACT_RECONCILIATION",
       "governanceReconciliationRequired": true,
       "governanceReconciliationCompleted": false,
-      "runtimeCleanupRestorationPass": true
+      "runtimeCleanupRestorationPass": true,
+      "rollbackActionAtExecution": "ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP",
+      "rollbackBindingStatus": "BASE_ROLLBACK_NOT_APPLICABLE_TO_GF14",
+      "pendingGreenfieldRollbackActionId": "ROLLBACK-GF-12-DISABLE-RESTORED-ORPHAN-CLEANUP",
+      "cleanupRollbackTargetBinding": "PENDING_GF14R_RECONCILIATION"
     }
   },
   "notApplicableBaseGateIds": [
