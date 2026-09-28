@@ -245,7 +245,7 @@ The identified Jenn-owned adapter source is:
 ```text
 repository = JENN2046/VCPToolBox-JENN-Extensions
 path       = ShootingOperationsPackages/VcpSyncAdapter/index.cjs
-revision   = f996e2dc7b85279aa9ce4d8c1e83ceab4a30e8ca
+revision   = 1d4ac43183296adccc570ac62598bc078d140317
 owner      = VCPTOOLBOX_JENN_EXTENSIONS
 ```
 
@@ -265,11 +265,11 @@ productionActionRequired      = PROD-10-ENABLE-VCP-REMOTE-SYNC
 rollbackActionId              = ROLLBACK-09-DISABLE-VCP-CONFIG
 ```
 
-Fresh adapter-source validation at exact extension head `f996e2dc7b85279aa9ce4d8c1e83ceab4a30e8ca`:
+Fresh adapter-source validation at exact extension head `1d4ac43183296adccc570ac62598bc078d140317`:
 
 ```text
-targeted adapter suite = 6 / 6 PASS
-full extension suite   = 1845 / 1845 PASS
+targeted adapter suite = 10 / 10 PASS
+full extension suite   = 1849 / 1849 PASS
 fail                   = 0
 skip                   = 0
 ```
@@ -277,8 +277,8 @@ skip                   = 0
 Fresh isolated cross-repository compatibility proof used:
 
 ```text
-Jenn Shooting Operations head = 972713b95c4ff5b938895c8edd6ebf1396c73a40
-Jenn extension adapter head    = f996e2dc7b85279aa9ce4d8c1e83ceab4a30e8ca
+Jenn Shooting Operations head = 8e9585b0f4505c3dbdd93be593d1360d3a84b0f0
+Jenn extension adapter head    = 1d4ac43183296adccc570ac62598bc078d140317
 runtime                         = approved JSO production image / Node 24.21.0
 network                         = Docker --network none
 production data volume          = not mounted
@@ -312,7 +312,7 @@ overallExternalClosure = PENDING
 
 The normal repository workflow intentionally does not inject an external adapter path. Its local run therefore continues to classify VCP as externally blocked rather than fabricating live runtime evidence.
 
-This checkpoint establishes **source implementation compatibility only**. It does not establish:
+The adapter review correction additionally proves streaming response caps, write-side 5xx uncertainty, property-order-independent verification, and checksum-manifest binding. This checkpoint establishes **source implementation compatibility only**. It does not establish:
 
 - installation or registration in the live VCPToolBox runtime;
 - exact live VCPToolBox release/package binding;
