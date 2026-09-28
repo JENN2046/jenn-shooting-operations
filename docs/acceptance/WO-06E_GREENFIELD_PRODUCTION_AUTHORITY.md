@@ -98,18 +98,19 @@ requestedActionIds             = []
 approvedActionIds              = []
 requestableActionIds           = []
 blanketApprovalAllowed         = false
-nextActionId                   = PROD-10-ENABLE-VCP-REMOTE-SYNC
+nextActionId                   = PROD-GF-14R-RECONCILE-CLEANUP-RUNTIME-LIFECYCLE
 nextActionRequiresAuthorization = true
 ```
 
-This authority definition records PROD-03 through PROD-07, PROD-GF-13R reconciliation, PROD-GF-13 activation, and PROD-GF-14 cleanup restoration as completed evidence. GF14 restored startup, periodic, saveUpload-triggered and submitRequest-triggered orphan cleanup under an exact cleanup-control authorization and preserved write admission, storage identities, route bindings and business-data baselines. The exact next candidate action is PROD-10-ENABLE-VCP-REMOTE-SYNC, but requestableActionIds remains empty and the unchanged VCP wiring/prerequisite gates still apply. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
+This authority definition records PROD-03 through PROD-07, PROD-GF-13R reconciliation, and PROD-GF-13 activation as completed evidence. GF14 runtime cleanup restoration is real and healthy, but its authoritative completion is intentionally withheld because the restoration used a production container replacement/restart that was not included in the exact GF14 lifecycle authority, and the base ROLLBACK-12 contract is scoped only to existing-source PROD-14. The exact next action is PROD-GF-14R-RECONCILE-CLEANUP-RUNTIME-LIFECYCLE; it is read-only, requires separate explicit authorization, and may bind GF14 completion only to the Greenfield-specific cleanup rollback contract. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
 
 ## Remaining facts before later gates
 
 - Tencent Cloud security-group control-plane fact if a change is actually required;
+- exact GF14 runtime-lifecycle governance reconciliation and Greenfield rollback binding;
 - post-activation VCP/Kiosk wiring and their separately authorized real acceptance.
 
-No source migration, production data copy, additional public route change, additional container replacement/restart, VCP/Kiosk integration enablement, or other production mutation is authorized by this document. PROD-03 through PROD-07, PROD-GF-13R, PROD-GF-13 and PROD-GF-14 are completed evidence. Their completion grants no PROD-10 authority.
+No source migration, production data copy, additional public route change, additional container replacement/restart, VCP/Kiosk integration enablement, cleanup mutation, or other production mutation is authorized by this document. PROD-03 through PROD-07, PROD-GF-13R and PROD-GF-13 are completed evidence. GF14 is runtime-pass/governance-pending and is not in completedAcceptanceIds until the separately authorized GF14R read-only reconciliation succeeds.
 
 ## Codex review correction
 
@@ -1851,13 +1852,30 @@ preGf14RuntimeEnvBackup =
 /mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime.pre-gf14
 ```
 
-Rollback remains bound to:
+Execution-time evidence recorded the base rollback ID below, but final review correctly identified that the base contract is scoped only to existing-source PROD-14 and is not valid authority for PROD-GF-14:
 
 ```text
+rollbackActionAtExecution =
 ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP
+
+rollbackBindingStatus =
+BASE_ROLLBACK_NOT_APPLICABLE_TO_GF14
+```
+
+The Greenfield supplement now defines a separate rollback contract:
+
+```text
+pendingGreenfieldRollbackActionId =
+ROLLBACK-GF-12-DISABLE-RESTORED-ORPHAN-CLEANUP
+
+cleanupRollbackTargetBinding =
+PENDING_GF14R_RECONCILIATION
+
 controlRoot =
 /app/data/.orphan-cleanup-control/1ad8b65e5b8819bc9c7e4df213b9bb2ef3d0721a45e0a62d54c4e7f6c0bb1d27
 ```
+
+GF14R must bind the current cleanup-restored runtime to this Greenfield-specific rollback contract before GF14 can become authoritative completion.
 
 Low-disclosure evidence:
 
@@ -1871,22 +1889,23 @@ sha256:9f9651a35ee75e2359c840e6f497a0e03da7450c979b6a38eeec7e5a50acdd97
 secretValuesRecorded = false
 ```
 
-Current authority after GF14 promotion:
+Current authority after final-review correction:
 
 ```text
-completedAcceptanceIds includes PROD-GF-14-RESTORE-ORPHAN-CLEANUP
-authorization.status  = FROZEN_NOT_REQUESTED
-requestedActionIds    = []
-approvedActionIds     = []
-requestableActionIds  = []
-nextActionId          = PROD-10-ENABLE-VCP-REMOTE-SYNC
+PROD-GF-14 runtime status      = RUNTIME_PASS_GOVERNANCE_RECONCILIATION_REQUIRED
+PROD-GF-14 in completedAcceptanceIds = false
+authorization.status           = FROZEN_NOT_REQUESTED
+requestedActionIds             = []
+approvedActionIds              = []
+requestableActionIds           = []
+nextActionId                   = PROD-GF-14R-RECONCILE-CLEANUP-RUNTIME-LIFECYCLE
 ```
 
-PROD-10 is only the next candidate action. VCP remains disabled and its deployable wiring, external readiness and exact authorization gates remain independently required.
+`PROD-GF-14R-RECONCILE-CLEANUP-RUNTIME-LIFECYCLE` is read-only. It may only reconcile the current cleanup-restored container, cleanup controls, durable runtime bindings, restart proof, unchanged business baseline and integration-disabled state, and bind GF14 to the Greenfield-specific rollback contract. It must not restart, recreate, signal, remount, rebind, enable/disable cleanup, enable integrations or delete data.
 
-### PROD-GF-14 promotion exact-head validation
+### PROD-GF-14 promotion exact-head validation (historical, superseded)
 
-The implementation-bearing cleanup-restoration promotion head was independently validated by the production-authorization workflow:
+This is a historical branch snapshot retained for audit. It predates the final-review findings about the out-of-order GF14 lifecycle mutation and the invalid base rollback binding, and is not current authority. The implementation-bearing cleanup-restoration promotion head was independently validated by the production-authorization workflow:
 
 ```text
 implementationHead = 33c677553deff23da3e43adfc2b60685aadcd7ae
@@ -1908,4 +1927,30 @@ nextAction         = PROD-10-ENABLE-VCP-REMOTE-SYNC
 ```
 
 This validation performed no additional production mutation. The resulting docs-only final head is validated separately before merge eligibility.
+
+### GF14 lifecycle reconciliation and rollback boundary
+
+Final review identified two governance defects after the cleanup runtime itself had already been restored successfully:
+
+1. the GF14 authorization covered cleanup-control restoration but did not authorize the production container replacement/restart used to make the startup configuration durable;
+2. the base `ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP` contract is explicitly scoped to controls restored by existing-source `PROD-14`, not Greenfield `PROD-GF-14`.
+
+The supplement therefore does not retroactively rewrite either fact.
+
+It defines:
+
+```text
+nextActionId =
+PROD-GF-14R-RECONCILE-CLEANUP-RUNTIME-LIFECYCLE
+
+nextAction sideEffect = READ_ONLY
+nextAction requires explicit authorization = true
+
+Greenfield rollback =
+ROLLBACK-GF-12-DISABLE-RESTORED-ORPHAN-CLEANUP
+```
+
+The Greenfield rollback is scoped only to the four cleanup entry points restored by PROD-GF-14 on the exact Greenfield service and data volume. It blocks new cleanup admissions, cancels schedules, drains in-flight cleanup work, restores the captured pre-GF14 disabled runtime configuration, preserves write admission/database/volume identities and unrelated configuration, and does not claim to recover already deleted data.
+
+GF14R may bind authoritative GF14 completion to that rollback only after a fresh read-only reconciliation of the current cleanup-restored runtime. Until then, the current runtime cleanup state remains enabled and healthy, but GF14 is not authoritative completion and PROD-10 is not the next authority action.
 
