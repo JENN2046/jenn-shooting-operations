@@ -98,20 +98,19 @@ requestedActionIds             = []
 approvedActionIds              = []
 requestableActionIds           = []
 blanketApprovalAllowed         = false
-nextActionId                   = PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION
+nextActionId                   = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
 nextActionRequiresAuthorization = true
 ```
 
-This authority definition records PROD-03 through PROD-07 as completed evidence. PROD-GF-13 has runtime activation evidence, but its authoritative completion is intentionally withheld because the later durability replacement/restart occurred out of order relative to the exact-action authorization model. The exact next action is PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION; it requires separate explicit authorization and is read-only. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
+This authority definition records PROD-03 through PROD-07, PROD-GF-13R reconciliation, and PROD-GF-13 activation as completed evidence. The owner separately authorized the exact read-only reconciliation action, and fresh runtime facts matched the approved durable container, image, loopback bind, target volume, database file identity, restart proof, health/admission state, cleanup-disabled state and integration-disabled state. The exact next action is PROD-GF-14-RESTORE-ORPHAN-CLEANUP; it still requires separate explicit authorization. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
 
 ## Remaining facts before later gates
 
 - Tencent Cloud security-group control-plane fact if a change is actually required;
 - post-activation VCP/Kiosk wiring and their separately authorized real acceptance;
-- exact durable-activation governance reconciliation;
 - greenfield cleanup restoration evidence.
 
-No source migration, production data copy, additional public route change, additional container start, container restart, VCP/Kiosk integration enablement, or orphan-cleanup restoration is authorized by this document. PROD-03 through PROD-07 are completed production evidence. PROD-GF-13 runtime activation is evidenced but is not in completedAcceptanceIds until the separately authorized read-only reconciliation action closes the disclosed out-of-order durability remediation.
+No source migration, production data copy, additional public route change, additional container start, container restart, VCP/Kiosk integration enablement, or orphan-cleanup restoration is authorized by this document. PROD-03 through PROD-07, PROD-GF-13R and PROD-GF-13 are completed evidence. Their completion grants no PROD-GF-14 authority.
 
 ## Codex review correction
 
@@ -1640,16 +1639,92 @@ Current state:
 
 ```text
 PROD-GF-13 runtime activation status = PASS
-PROD-GF-13 governance status         = OUT_OF_ORDER_DURABILITY_REMEDIATION_REQUIRES_EXACT_RECONCILIATION
-PROD-GF-13 in completedAcceptanceIds = false
-nextActionId                         = PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION
-nextAction sideEffect                = READ_ONLY
+PROD-GF-13 governance status         = RECONCILED_EXACT_READ_ONLY
+PROD-GF-13R reconciliation status    = PASS
+PROD-GF-13 in completedAcceptanceIds = true
+PROD-GF-13R in completedAcceptanceIds = true
+nextActionId                         = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
 nextAction requires explicit auth    = true
 ```
 
-`PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION` is intentionally non-mutating. It may only re-read and bind the exact current durable container to the approved image, `127.0.0.1:3800` host bind, approved target volume name/source/destination/device-inode, exact database path `/app/data/shooting-operations.sqlite` and database device/inode `64784:1835048`, restart proof, health/write-admission state, database baseline, cleanup-disabled state and integration-disabled state. It must not recreate, restart, signal, remount, rebind, enable cleanup or enable integrations.
+`PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION` was separately authorized and executed read-only. It re-read and bound the exact current durable container to the approved image, `127.0.0.1:3800` host bind, approved target volume name/source/destination/device-inode, exact database path `/app/data/shooting-operations.sqlite` and database device/inode `64784:1835048`, restart proof, health/write-admission state, database baseline, cleanup-disabled state and integration-disabled state. It performed no recreate, restart, signal, remount, rebind, cleanup enablement or integration enablement.
 
-Only after that exact read-only action is separately authorized and passes may PROD-GF-13 be admitted into `completedAcceptanceIds` and the next action advance to `PROD-GF-14-RESTORE-ORPHAN-CLEANUP`.
+Earlier exact-head validation blocks in this document are retained as historical snapshots of the branch at those heads. Current authority is the reconciled state below.
 
-Earlier exact-head validation blocks in this document are retained as historical snapshots of the branch at those heads. Any older snapshot that shows PROD-GF-13 complete or PROD-GF-14 as next is superseded by this reconciliation boundary and is not current authority.
+### PROD-GF-13R read-only reconciliation evidence
+
+The owner explicitly authorized `PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION`. The action was executed as a read-only reconciliation against the merged authority. No production mutation occurred.
+
+Fresh production facts at `2026-09-28T03:09:43Z`:
+
+```text
+instanceId                    = ins-mi85f3my
+containerId                   = 1b2afb092d3ec1d834d12ff58fa86f4b1c05ec27913e8e80da278e9e9d0838cb
+imageId                       = sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545
+containerState                = running
+containerHealth               = healthy
+containerStartedAt            = 2026-09-27T23:29:33.784982222Z
+restartPolicy                 = unless-stopped
+readOnlyRootfs                = true
+
+loopbackBind                  = 127.0.0.1:3800 -> 3800/tcp
+
+volumeType                    = volume
+volumeName                    = jenn-shooting-operations_shooting_data
+volumeSource                  = /mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data
+volumeDestination             = /app/data
+volumeReadWrite               = true
+activeTargetVolumeMountCount  = 1
+dataDeviceInode               = 64784:1835042
+
+databasePath                  = /app/data/shooting-operations.sqlite
+databaseRuntimePath           = /app/data/shooting-operations.sqlite
+databaseDeviceInode           = 64784:1835048
+
+writeAdmissionEnvironment     = enabled
+orphanCleanupEnvironment      = disabled
+orphanCleanupDomain           = jenn-shooting-operations-primary
+
+loopbackHealthStatus          = 200
+loopbackWriteAdmission        = enabled
+routedHealthStatus            = 200
+routedWriteAdmission          = enabled
+unauthenticatedWriteStatus    = 401
+unauthenticatedWriteCode      = UNAUTHORIZED
+
+databaseRevision              = 0
+uploadRows                    = 0
+operationRows                 = 0
+auditRows                     = 0
+attachmentFiles               = 0
+
+orphanCleanupState            = disabled
+orphanCleanupMarkerValid      = true
+orphanCleanupActiveRuns       = 0
+integrationEnvCount           = 0
+
+nginxConfigSha256             = sha256:35ea9acd80ba600e88d8c594a3a2558ec4cb57dd078c61d6832f5798c2eabc33
+durableRuntimeEnvSha256       = sha256:98519e90c4ac40862af935e52d519ee5ba5b9f2f08b88be7e005253c30a5478c
+activationEvidenceSha256      = sha256:1af2e9dd6ca511631ac5d7efb949d0b96c306b1d2c551241a5910b7ba7b81cb2
+remediationScriptSha256       = sha256:eb34f41d56c9fd464ae3517c0aa5b38c6836a96695bc4cbffea5282e682e7fb4
+
+noProductionMutation          = true
+secretValuesRecorded          = false
+```
+
+Every current identity matched the durable-activation facts already bound by authority, including the file-level database identity that closes the final storage ambiguity. The reconciliation therefore closes the disclosed out-of-order durability remediation without rewriting its history as prior authorization.
+
+Current authoritative completion:
+
+```text
+completedAcceptanceIds includes PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION
+completedAcceptanceIds includes PROD-GF-13-ACTIVATE
+PROD-GF-13 status       = PASS
+governanceStatus        = RECONCILED_EXACT_READ_ONLY
+nextActionId            = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
+authorization.status    = FROZEN_NOT_REQUESTED
+requestableActionIds    = []
+```
+
+This promotion does not authorize PROD-GF-14, VCP, Kiosk, DingTalk, any restart, any signal, or any other production mutation.
 
