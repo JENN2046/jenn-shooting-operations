@@ -2018,3 +2018,28 @@ sha256:1bfa0d854c376260753fb4c1c4e4512b56ff7acecc7b6593f845136c0294a6d0
 
 The previous GF14R proposal is superseded by this safe rollback state and is not a current authority action.
 
+### GF14 fail-closed lifecycle-gate exact-head validation
+
+The implementation-bearing authority head after the fail-closed rollback and GF14L redesign was independently validated:
+
+```text
+implementationHead = 7681e3fca8387bb770c3336002cb860796c6f50b
+workflowRun        = 36379804653
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 766
+pass               = 765
+fail               = 0
+skip               = 1 expected external VCP adapter absence
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:01ddfe76473cd0a0a3beb5bc7795f1b6319f07a184687ea316ad5ecbe602000e
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE
+```
+
+This validation reflects the safe current state: GF14 is not complete, cleanup is disabled and drained, and no GF14L execution is authorized. Because this paragraph is docs-only, the resulting final head is validated once more before merge eligibility.
+
