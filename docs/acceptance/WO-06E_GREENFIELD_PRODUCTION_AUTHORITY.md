@@ -98,19 +98,18 @@ requestedActionIds             = []
 approvedActionIds              = []
 requestableActionIds           = []
 blanketApprovalAllowed         = false
-nextActionId                   = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
+nextActionId                   = PROD-10-ENABLE-VCP-REMOTE-SYNC
 nextActionRequiresAuthorization = true
 ```
 
-This authority definition records PROD-03 through PROD-07, PROD-GF-13R reconciliation, and PROD-GF-13 activation as completed evidence. The owner separately authorized the exact read-only reconciliation action, and fresh runtime facts matched the approved durable container, image, loopback bind, target volume, database file identity, restart proof, health/admission state, cleanup-disabled state and integration-disabled state. The exact next action is PROD-GF-14-RESTORE-ORPHAN-CLEANUP; it still requires separate explicit authorization. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
+This authority definition records PROD-03 through PROD-07, PROD-GF-13R reconciliation, PROD-GF-13 activation, and PROD-GF-14 cleanup restoration as completed evidence. GF14 restored startup, periodic, saveUpload-triggered and submitRequest-triggered orphan cleanup under an exact cleanup-control authorization and preserved write admission, storage identities, route bindings and business-data baselines. The exact next candidate action is PROD-10-ENABLE-VCP-REMOTE-SYNC, but requestableActionIds remains empty and the unchanged VCP wiring/prerequisite gates still apply. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
 
 ## Remaining facts before later gates
 
 - Tencent Cloud security-group control-plane fact if a change is actually required;
-- post-activation VCP/Kiosk wiring and their separately authorized real acceptance;
-- greenfield cleanup restoration evidence.
+- post-activation VCP/Kiosk wiring and their separately authorized real acceptance.
 
-No source migration, production data copy, additional public route change, additional container start, container restart, VCP/Kiosk integration enablement, or orphan-cleanup restoration is authorized by this document. PROD-03 through PROD-07, PROD-GF-13R and PROD-GF-13 are completed evidence. Their completion grants no PROD-GF-14 authority.
+No source migration, production data copy, additional public route change, additional container replacement/restart, VCP/Kiosk integration enablement, or other production mutation is authorized by this document. PROD-03 through PROD-07, PROD-GF-13R, PROD-GF-13 and PROD-GF-14 are completed evidence. Their completion grants no PROD-10 authority.
 
 ## Codex review correction
 
@@ -1752,4 +1751,136 @@ nextAction         = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
 ```
 
 This validation performed no production mutation. Because this paragraph changes only the acceptance document, the resulting final docs head is validated separately before merge eligibility.
+
+### PROD-GF-14 cleanup restoration evidence
+
+The owner explicitly authorized `PROD-GF-14-RESTORE-ORPHAN-CLEANUP`. Before enabling any cleanup entry point, the production service was revalidated against the reconciled activation authority.
+
+Pre-restore facts:
+
+```text
+preflightAtUtc                    = 2026-09-28T03:28:24Z
+containerId                       = 1b2afb092d3ec1d834d12ff58fa86f4b1c05ec27913e8e80da278e9e9d0838cb
+imageId                           = sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545
+writeAdmission                    = enabled
+cleanupState                      = disabled
+cleanupEpoch                      = 36d0854c-26c4-455c-a410-78ab64d9640e
+cleanupMarkerValid                = true
+cleanupActiveRuns                 = 0
+cleanupDisableCapabilityProof     = PASS
+
+revision                           = 0
+uploadRows                         = 0
+unclaimedUploadRows                = 0
+operationRows                      = 0
+auditRows                          = 0
+attachmentFiles                    = 0
+stagedCleanupFiles                 = 0
+oldOrphanCandidates                = 0
+
+candidateProbe                     = PASS
+candidateRuntimeEnvSha256          = sha256:cdfa4ebba78b413c608f12670b3c02bde9af1315333bae00c1d2de97ad4f081a
+deletionIrreversibilityAcknowledged = true
+```
+
+Because the candidate set was empty, restoration began with no orphan object eligible for irreversible deletion.
+
+GF14 used the repository's epoch-bound startup contract rather than removing the control marker out-of-band. The replacement runtime was created from the exact approved image, exact target volume and exact loopback bind with:
+
+```text
+WRITE_ADMISSION_MODE          = enabled
+ORPHAN_CLEANUP_MODE           = enabled
+ORPHAN_CLEANUP_ENABLE_EPOCH   = 36d0854c-26c4-455c-a410-78ab64d9640e
+ORPHAN_CLEANUP_DOMAIN         = jenn-shooting-operations-primary
+DATABASE_PATH                 = /app/data/shooting-operations.sqlite
+```
+
+The exact epoch matched the persisted disabled marker, so startup removed that marker and entered the enabled state. A mismatched epoch would have failed startup closed.
+
+Post-restore and restart verification:
+
+```text
+restoreStartedAtUtc               = 2026-09-28T03:32:51Z
+restartStartedAtUtc               = 2026-09-28T03:34:39.513157967Z
+finalizedAtUtc                    = 2026-09-28T03:35:20Z
+verifiedAtUtc                     = 2026-09-28T03:35:52Z
+
+containerId                       = b66f589647a72ff109158194605d765df46435e1db4babcaa675fc5e75dec0ac
+imageId                           = sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545
+loopbackBind                      = 127.0.0.1:3800 -> 3800/tcp
+dataVolume                        = jenn-shooting-operations_shooting_data
+dataDeviceInode                   = 64784:1835042
+databasePath                      = /app/data/shooting-operations.sqlite
+databaseDeviceInode               = 64784:1835048
+
+cleanupState                      = enabled
+cleanupMarkerValid                = true
+cleanupActiveRuns                 = 0
+startupOrphanCleanupRestored      = true
+periodicOrphanCleanupRestored     = true
+saveUploadTriggeredCleanupRestored = true
+submitRequestTriggeredCleanupRestored = true
+cleanupAdmissionProbe             = PASS
+restartProbe                      = PASS
+
+publicHealth                      = 200
+publicWriteAdmission              = enabled
+unauthenticatedWrite              = 401 UNAUTHORIZED
+
+revision                          = 0
+uploadRows                        = 0
+unclaimedUploadRows               = 0
+operationRows                     = 0
+auditRows                         = 0
+attachmentFiles                   = 0
+stagedCleanupFiles                = 0
+integrationEnvCount               = 0
+businessDataUnchanged             = true
+```
+
+The runtime configuration was promoted only after the real restart probe passed:
+
+```text
+currentRuntimeEnvSha256 =
+sha256:cdfa4ebba78b413c608f12670b3c02bde9af1315333bae00c1d2de97ad4f081a
+
+preGf14RuntimeEnvSha256 =
+sha256:98519e90c4ac40862af935e52d519ee5ba5b9f2f08b88be7e005253c30a5478c
+
+preGf14RuntimeEnvBackup =
+/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime.pre-gf14
+```
+
+Rollback remains bound to:
+
+```text
+ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP
+controlRoot =
+/app/data/.orphan-cleanup-control/1ad8b65e5b8819bc9c7e4df213b9bb2ef3d0721a45e0a62d54c4e7f6c0bb1d27
+```
+
+Low-disclosure evidence:
+
+```text
+evidencePath =
+/mnt/datadisk0/apps/jenn-shooting-operations/prod-gf14-cleanup-evidence.txt
+
+evidenceSha256 =
+sha256:9f9651a35ee75e2359c840e6f497a0e03da7450c979b6a38eeec7e5a50acdd97
+
+secretValuesRecorded = false
+```
+
+Current authority after GF14 promotion:
+
+```text
+completedAcceptanceIds includes PROD-GF-14-RESTORE-ORPHAN-CLEANUP
+authorization.status  = FROZEN_NOT_REQUESTED
+requestedActionIds    = []
+approvedActionIds     = []
+requestableActionIds  = []
+nextActionId          = PROD-10-ENABLE-VCP-REMOTE-SYNC
+```
+
+PROD-10 is only the next candidate action. VCP remains disabled and its deployable wiring, external readiness and exact authorization gates remain independently required.
 
