@@ -1593,6 +1593,9 @@ durableVolumeSource                     = /mnt/datadisk0/docker/volumes/jenn-sho
 durableVolumeDestination                = /app/data
 durableVolumeReadWrite                  = true
 durableDataDeviceInode                  = 64784:1835042
+durableDatabasePath                     = /app/data/shooting-operations.sqlite
+durableDatabaseDeviceInode              = 64784:1835048
+durableDatabaseIdentityVerified         = true
 durableLoopbackHostIp                   = 127.0.0.1
 durableLoopbackHostPort                 = 3800
 durableContainerPort                    = 3800/tcp
@@ -1644,7 +1647,7 @@ nextAction sideEffect                = READ_ONLY
 nextAction requires explicit auth    = true
 ```
 
-`PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION` is intentionally non-mutating. It may only re-read and bind the exact current durable container to the approved image, `127.0.0.1:3800` host bind, approved target volume name/source/destination/device-inode, restart proof, health/write-admission state, database baseline, cleanup-disabled state and integration-disabled state. It must not recreate, restart, signal, remount, rebind, enable cleanup or enable integrations.
+`PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION` is intentionally non-mutating. It may only re-read and bind the exact current durable container to the approved image, `127.0.0.1:3800` host bind, approved target volume name/source/destination/device-inode, exact database path `/app/data/shooting-operations.sqlite` and database device/inode `64784:1835048`, restart proof, health/write-admission state, database baseline, cleanup-disabled state and integration-disabled state. It must not recreate, restart, signal, remount, rebind, enable cleanup or enable integrations.
 
 Only after that exact read-only action is separately authorized and passes may PROD-GF-13 be admitted into `completedAcceptanceIds` and the next action advance to `PROD-GF-14-RESTORE-ORPHAN-CLEANUP`.
 
