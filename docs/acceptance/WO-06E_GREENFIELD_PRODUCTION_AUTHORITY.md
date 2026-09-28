@@ -107,7 +107,10 @@ This authority definition records PROD-03 through PROD-07, PROD-GF-13R, PROD-GF-
 ## Remaining facts before later gates
 
 - Tencent Cloud security-group control-plane fact if a change is actually required;
-- post-activation VCP/Kiosk wiring and their separately authorized real acceptance.
+- post-activation VCP/Kiosk wiring and their separately authorized real acceptance;
+- PROD-10 VCP implementation must conform to `docs/architecture/SHOOTING_OPERATIONS_VCP_INTEGRATION_ARCHITECTURE_R1.md`; that architecture freezes VCPToolBox as integration runtime owner, `JENN2046/VCPToolBox-JENN-Extensions` as the default Jenn-specific adapter source owner, and VCPChat as a non-owning optional consumer surface.
+
+The architecture reference above is non-authorizing. It does not install an adapter, bind a production credential or endpoint, make PROD-10 requestable, or change the exact-action authorization boundary.
 
 No source migration, production data copy, additional public route change, VCP/Kiosk integration enablement, or other production mutation is authorized by this document. PROD-03 through PROD-07, PROD-GF-13R, PROD-GF-13 and PROD-GF-14L are completed evidence. The earlier PROD-GF-14 attempt remains rolled back and is not in completedAcceptanceIds. GF14L completion grants no PROD-10 authority.
 
