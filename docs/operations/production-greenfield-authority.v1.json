@@ -180,7 +180,7 @@
       "rollbackActionId": "ROLLBACK-01-REMOVE-NEW-ROUTE"
     },
     "prodGf13": {
-      "status": "PASS",
+      "status": "RUNTIME_PASS_GOVERNANCE_RECONCILIATION_REQUIRED",
       "activatedAtUtc": "2026-09-27T23:11:00Z",
       "verifiedAtUtc": "2026-09-27T23:12:00Z",
       "route": "https://jso.skmt617.top",
@@ -266,7 +266,21 @@
       "auditRowsAfterRestart": 0,
       "activeTargetVolumeMountCountAfterRestart": 1,
       "priorContainerRemovedAfterVerification": true,
-      "durableActivationAcrossRestartVerified": true
+      "durableActivationAcrossRestartVerified": true,
+      "governanceStatus": "OUT_OF_ORDER_DURABILITY_REMEDIATION_REQUIRES_EXACT_RECONCILIATION",
+      "durableVolumeType": "volume",
+      "durableVolumeName": "jenn-shooting-operations_shooting_data",
+      "durableVolumeSource": "/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data",
+      "durableVolumeDestination": "/app/data",
+      "durableVolumeReadWrite": true,
+      "durableDataDeviceInode": "64784:1835042",
+      "durableLoopbackHostIp": "127.0.0.1",
+      "durableLoopbackHostPort": 3800,
+      "durableContainerPort": "3800/tcp",
+      "durableVolumeIdentityVerified": true,
+      "durableLoopbackBindVerified": true,
+      "governanceReconciliationRequired": true,
+      "governanceReconciliationCompleted": false
     }
   },
   "notApplicableBaseGateIds": [
@@ -291,8 +305,7 @@
     "PROD-04-BUILD-IMAGE",
     "PROD-05-START-ISOLATED-CONTAINER",
     "PROD-06-LOOPBACK-HEALTH-SMOKE",
-    "PROD-07-CONFIGURE-REVERSE-PROXY-TLS",
-    "PROD-GF-13-ACTIVATE"
+    "PROD-07-CONFIGURE-REVERSE-PROXY-TLS"
   ],
   "greenfieldContainerStartPrerequisites": [
     "PROD-02-CREATE-ISOLATED-APP-STORAGE",
@@ -402,7 +415,7 @@
     "requestedActionIds": [],
     "approvedActionIds": [],
     "requestableActionIds": [],
-    "nextActionId": "PROD-GF-14-RESTORE-ORPHAN-CLEANUP",
+    "nextActionId": "PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION",
     "nextActionRequiresExplicitAuthorization": true
   },
   "greenfieldConditionalActionIds": [
@@ -467,5 +480,45 @@
     "runtimeEnvironmentVariable": "WRITE_ADMISSION_MODE",
     "runtimeEnvironmentValue": "disabled",
     "activationTransition": "SIGUSR2_IN_PROCESS_WRITE_ADMISSION_ENABLE"
+  },
+  "greenfieldActivationReconciliationAction": {
+    "id": "PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION",
+    "title": "Reconcile out-of-order durable activation remediation",
+    "category": "GOVERNANCE",
+    "risk": "HIGH",
+    "sideEffect": "READ_ONLY",
+    "requiresExplicitAuthorization": true,
+    "authorityTarget": "Exact durable Jenn Shooting Operations production container, loopback bind, approved data volume and restart proof on ins-mi85f3my only",
+    "preconditions": [
+      "PROD_GF_13_RUNTIME_ACTIVATION_PASS",
+      "OUT_OF_ORDER_DURABILITY_REMEDIATION_DISCLOSED",
+      "PRODUCTION_TARGET_FACTS",
+      "TARGET_STORAGE_IDENTITIES",
+      "LOOPBACK_BACKEND_BINDING",
+      "PRODUCTION_DEPLOYMENT_GATE"
+    ],
+    "effects": [
+      "Acknowledge the owner-directed out-of-order durability remediation without representing it as prior exact-action authorization",
+      "Perform read-only reconciliation of the current durable production container against the approved image, route, loopback-only host bind, exact target volume name/source/destination/device-inode identity, restart durability proof, database baseline, orphan-cleanup disabled state and integration-disabled state",
+      "If and only if every bound fact matches, record reconciliation completion and then allow PROD-GF-13 activation completion to become authoritative; do not recreate, restart, signal, remount, rebind, enable cleanup or enable integrations as part of this reconciliation"
+    ],
+    "rollbackActionIds": [],
+    "evidenceRequired": [
+      "OUT_OF_ORDER_REMEDIATION_DISCLOSURE",
+      "DURABLE_CONTAINER_IDENTITY",
+      "DURABLE_IMAGE_IDENTITY",
+      "DURABLE_LOOPBACK_BIND_IDENTITY",
+      "DURABLE_TARGET_VOLUME_NAME",
+      "DURABLE_TARGET_VOLUME_SOURCE",
+      "DURABLE_TARGET_VOLUME_DESTINATION",
+      "DURABLE_TARGET_VOLUME_DEVICE_INODE",
+      "DURABLE_RESTART_PROOF",
+      "POST_RESTART_HEALTH_STATUS",
+      "POST_RESTART_WRITE_ADMISSION_STATUS",
+      "POST_RESTART_UNAUTHENTICATED_WRITE_DENIAL",
+      "POST_RESTART_DATABASE_BASELINE",
+      "POST_RESTART_ORPHAN_CLEANUP_DISABLED_PROOF",
+      "POST_RESTART_INTEGRATIONS_DISABLED_PROOF"
+    ]
   }
 }
