@@ -152,11 +152,14 @@ async function verifyDingTalkBoundary() {
 
 function verifyVcpBoundary() {
   const configuredPath = process.env.VCP_SHOOTING_OPERATIONS_ADAPTER_PATH || '';
+  const architectureOwner = 'VCPTOOLBOX_JENN_EXTENSIONS';
   if (!configuredPath) {
     return {
       sourceAdapterPresent: false,
+      sourceIdentityVerified: false,
+      architectureOwner,
+      verifiedAdapterOwner: null,
       externalAdapterPresent: false,
-      adapterOwner: 'VCPTOOLBOX_JENN_EXTENSIONS',
       sourceCompatibility: 'BLOCKED_ADAPTER_SOURCE',
       compatibility: 'BLOCKED_EXTERNAL_RUNTIME',
     };
@@ -167,9 +170,11 @@ function verifyVcpBoundary() {
   }
   return {
     sourceAdapterPresent: true,
+    sourceIdentityVerified: false,
+    architectureOwner,
+    verifiedAdapterOwner: null,
     externalAdapterPresent: false,
-    adapterOwner: 'VCPTOOLBOX_JENN_EXTENSIONS',
-    sourceCompatibility: 'ADAPTER_SOURCE_PRESENT_REQUIRES_COMPATIBILITY_RUN',
+    sourceCompatibility: 'ADAPTER_SOURCE_PRESENT_REQUIRES_IDENTITY_AND_COMPATIBILITY_RUN',
     compatibility: 'BLOCKED_EXTERNAL_RUNTIME',
   };
 }
