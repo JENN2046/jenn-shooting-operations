@@ -87,7 +87,7 @@ const EXPECTED_TOP_LEVEL_KEYS = Object.freeze([
   'greenfieldActivationAction',
   'greenfieldActivationReconciliationAction',
   'greenfieldCleanupAction',
-  'greenfieldCleanupReconciliationAction',
+  'greenfieldCleanupLifecycleAction',
   'greenfieldCleanupRollbackAction',
   'authorization',
 ]);
@@ -235,112 +235,120 @@ const EXPECTED_ACTIVATION_RECONCILIATION = Object.freeze({
 });
 
 const EXPECTED_CLEANUP = Object.freeze({
-  id: 'PROD-GF-14-RESTORE-ORPHAN-CLEANUP',
-  title: 'Restore orphan cleanup after greenfield activation',
-  category: 'RUNTIME',
-  risk: 'HIGH',
-  sideEffect: 'IRREVERSIBLE_OR_EXTERNAL',
-  requiresExplicitAuthorization: true,
-  authorityTarget:
-    'Exact orphan-upload cleanup controls of the greenfield Jenn Shooting Operations production service only',
-  preconditions: Object.freeze([
-    'GREENFIELD_ACTIVATION_COMPLETION',
-    'GREENFIELD_ATTACHMENT_BASELINE',
-    'RESTORED_CLEANUP_DISABLE_CAPABILITY',
-  ]),
-  effects: Object.freeze([
-    'After verified greenfield activation, verify the target attachment baseline and capture the exact disabled cleanup configuration before enabling any cleanup entry point',
-    'Restore only the approved startup, periodic, saveUpload-triggered and submitRequest-triggered cleanup controls; authoritative completion requires the separately authorized GF14 runtime-lifecycle reconciliation, and any later recovery derives only the Greenfield-specific cleanup disable-and-drain rollback contract',
-  ]),
-  rollbackActionIds: Object.freeze([
-    'ROLLBACK-GF-12-DISABLE-RESTORED-ORPHAN-CLEANUP',
-  ]),
-  evidenceRequired: Object.freeze([
-    'GREENFIELD_ACTIVATION_COMPLETION_PROOF',
-    'GREENFIELD_ATTACHMENT_BASELINE_PROOF',
-    'CLEANUP_DISABLE_CAPABILITY_PROOF',
-    'CLEANUP_PRE_RESTORE_DISABLED_STATE',
-    'STARTUP_ORPHAN_CLEANUP_RESTORED',
-    'PERIODIC_ORPHAN_CLEANUP_RESTORED',
-    'REQUEST_TRIGGERED_ORPHAN_CLEANUP_RESTORED',
-    'POST_RESTORE_HEALTH_STATUS',
-    'CLEANUP_ROLLBACK_TARGET_BINDING',
-    'DELETION_IRREVERSIBILITY_ACKNOWLEDGED',
-  ]),
+  "id": "PROD-GF-14-RESTORE-ORPHAN-CLEANUP",
+  "title": "Restore orphan cleanup after greenfield activation",
+  "category": "RUNTIME",
+  "risk": "HIGH",
+  "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+  "requiresExplicitAuthorization": true,
+  "authorityTarget": "Exact orphan-upload cleanup controls of the greenfield Jenn Shooting Operations production service only",
+  "preconditions": [
+    "GREENFIELD_ACTIVATION_COMPLETION",
+    "GREENFIELD_ATTACHMENT_BASELINE",
+    "RESTORED_CLEANUP_DISABLE_CAPABILITY"
+  ],
+  "effects": [
+    "After verified greenfield activation, verify the target attachment baseline and capture the exact disabled cleanup configuration before enabling any cleanup entry point",
+    "Restore only the approved startup, periodic, saveUpload-triggered and submitRequest-triggered cleanup controls; failure invokes only the PROD-GF-14-bound disable-and-drain recovery and never deletes or rewrites deployment data as rollback"
+  ],
+  "rollbackActionIds": [
+    "ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP"
+  ],
+  "evidenceRequired": [
+    "GREENFIELD_ACTIVATION_COMPLETION_PROOF",
+    "GREENFIELD_ATTACHMENT_BASELINE_PROOF",
+    "CLEANUP_DISABLE_CAPABILITY_PROOF",
+    "CLEANUP_PRE_RESTORE_DISABLED_STATE",
+    "STARTUP_ORPHAN_CLEANUP_RESTORED",
+    "PERIODIC_ORPHAN_CLEANUP_RESTORED",
+    "REQUEST_TRIGGERED_ORPHAN_CLEANUP_RESTORED",
+    "POST_RESTORE_HEALTH_STATUS",
+    "CLEANUP_ROLLBACK_TARGET_BINDING",
+    "DELETION_IRREVERSIBILITY_ACKNOWLEDGED"
+  ]
 });
 
-
-const EXPECTED_CLEANUP_RECONCILIATION = Object.freeze({
-  id: 'PROD-GF-14R-RECONCILE-CLEANUP-RUNTIME-LIFECYCLE',
-  title: 'Reconcile out-of-order GF14 cleanup runtime lifecycle',
-  category: 'GOVERNANCE',
-  risk: 'HIGH',
-  sideEffect: 'READ_ONLY',
-  requiresExplicitAuthorization: true,
-  authorityTarget:
-    'Exact current GF14 cleanup-restored Jenn Shooting Operations production container, cleanup controls and durable runtime bindings on ins-mi85f3my only',
-  preconditions: Object.freeze([
-    'PROD_GF_14_RUNTIME_CLEANUP_RESTORATION_PASS',
-    'OUT_OF_ORDER_GF14_RUNTIME_LIFECYCLE_DISCLOSED',
-    'GREENFIELD_ACTIVATION_COMPLETION',
-    'GF14_GREENFIELD_ROLLBACK_CONTRACT_DEFINED',
-    'PRODUCTION_TARGET_FACTS',
-    'PRODUCTION_DEPLOYMENT_GATE',
-  ]),
-  effects: Object.freeze([
-    'Acknowledge the GF14 container replacement and restart as out-of-order lifecycle mutations without representing them as prior exact-action authorization',
-    'Perform read-only reconciliation of the current cleanup-restored production container against the approved image, loopback bind, target volume, database identity, cleanup-enabled runtime configuration, cleanup control root, restart proof, health and authorization boundary, zero-change business baseline and integration-disabled state',
-    'Bind authoritative GF14 completion to the Greenfield-specific cleanup rollback contract only if every fact matches; do not recreate, restart, signal, remount, rebind, enable or disable cleanup, enable integrations, delete data or otherwise mutate production as part of reconciliation',
-  ]),
-  rollbackActionIds: Object.freeze([]),
-  evidenceRequired: Object.freeze([
-    'OUT_OF_ORDER_GF14_LIFECYCLE_DISCLOSURE',
-    'GF14_RUNTIME_CONTAINER_IDENTITY',
-    'GF14_RUNTIME_IMAGE_IDENTITY',
-    'GF14_LOOPBACK_BIND_IDENTITY',
-    'GF14_TARGET_VOLUME_IDENTITY',
-    'GF14_DATABASE_IDENTITY',
-    'GF14_RUNTIME_CONFIG_IDENTITY',
-    'GF14_CLEANUP_CONTROL_ROOT_IDENTITY',
-    'GF14_CLEANUP_ENABLED_STATUS',
-    'GF14_RESTART_PROOF',
-    'GF14_POST_RESTORE_HEALTH_STATUS',
-    'GF14_WRITE_ADMISSION_STATUS',
-    'GF14_BUSINESS_BASELINE_UNCHANGED_PROOF',
-    'GF14_INTEGRATIONS_DISABLED_PROOF',
-    'GF14_GREENFIELD_ROLLBACK_CONTRACT_BINDING',
-  ]),
+const EXPECTED_CLEANUP_LIFECYCLE = Object.freeze({
+  "id": "PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE",
+  "title": "Restore greenfield orphan cleanup with exact runtime lifecycle authority",
+  "category": "RUNTIME",
+  "risk": "HIGH",
+  "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+  "requiresExplicitAuthorization": true,
+  "authorityTarget": "Exact Jenn Shooting Operations orphan-cleanup controls plus only the production container recreate/restart operations required to persist cleanup restoration on the same approved image, loopback bind, data volume and database identity",
+  "preconditions": [
+    "GREENFIELD_ACTIVATION_COMPLETION",
+    "GREENFIELD_ATTACHMENT_BASELINE",
+    "GF14_FAIL_CLOSED_DISABLED_STATE",
+    "RESTORED_CLEANUP_DISABLE_CAPABILITY",
+    "GF14_EXACT_RUNTIME_IDENTITY",
+    "GF14_GREENFIELD_ROLLBACK_CONTRACT_DEFINED",
+    "PRODUCTION_TARGET_FACTS",
+    "PRODUCTION_DEPLOYMENT_GATE"
+  ],
+  "effects": [
+    "Revalidate the exact current container, approved image, loopback bind, data volume, database identity, disabled cleanup marker epoch, zero active cleanup runs, attachment baseline and write-admission state before mutation",
+    "Prepare a persistent cleanup-enabled runtime configuration bound to the exact disabled marker epoch and restore only startup, periodic, saveUpload-triggered and submitRequest-triggered orphan cleanup",
+    "If persistence requires process lifecycle alignment, recreate or restart only the exact production container name with the same approved image, loopback bind, data volume, database path and write-admission mode; no route, token, integration or business-data mutation is authorized",
+    "Verify cleanup enabled after first start and controlled restart, verify health and authorization boundaries, prove business/database/attachment baseline unchanged, and retain the Greenfield-specific rollback package",
+    "On any failure invoke only ROLLBACK-GF-12-DISABLE-RESTORED-ORPHAN-CLEANUP; do not delete or rewrite business data as rollback and acknowledge already-deleted orphan files would be irreversible"
+  ],
+  "rollbackActionIds": [
+    "ROLLBACK-GF-12-DISABLE-RESTORED-ORPHAN-CLEANUP"
+  ],
+  "evidenceRequired": [
+    "GF14_FAIL_CLOSED_DISABLED_STATE_PROOF",
+    "GREENFIELD_ACTIVATION_COMPLETION_PROOF",
+    "GREENFIELD_ATTACHMENT_BASELINE_PROOF",
+    "GF14_EXACT_CONTAINER_IDENTITY",
+    "GF14_EXACT_IMAGE_IDENTITY",
+    "GF14_EXACT_LOOPBACK_BIND_IDENTITY",
+    "GF14_EXACT_VOLUME_IDENTITY",
+    "GF14_EXACT_DATABASE_IDENTITY",
+    "GF14_DISABLED_MARKER_EPOCH",
+    "CLEANUP_DISABLE_CAPABILITY_PROOF",
+    "GF14_CLEANUP_ENABLED_RUNTIME_CONFIG",
+    "STARTUP_ORPHAN_CLEANUP_RESTORED",
+    "PERIODIC_ORPHAN_CLEANUP_RESTORED",
+    "REQUEST_TRIGGERED_ORPHAN_CLEANUP_RESTORED",
+    "CONTROLLED_RESTART_PROOF",
+    "POST_RESTORE_HEALTH_STATUS",
+    "WRITE_ADMISSION_UNCHANGED",
+    "BUSINESS_BASELINE_UNCHANGED_PROOF",
+    "GF14_GREENFIELD_ROLLBACK_CONTRACT_BINDING",
+    "DELETION_IRREVERSIBILITY_ACKNOWLEDGED"
+  ]
 });
 
 const EXPECTED_CLEANUP_ROLLBACK = Object.freeze({
-  id: 'ROLLBACK-GF-12-DISABLE-RESTORED-ORPHAN-CLEANUP',
-  title: 'Disable and drain cleanup restored by PROD-GF-14',
-  category: 'ROLLBACK',
-  risk: 'HIGH',
-  sideEffect: 'REVERSIBLE',
-  requiresExplicitAuthorization: false,
-  authorityTarget:
-    'Only the startup, periodic, saveUpload and submitRequest orphan-cleanup controls restored by PROD-GF-14 on the exact greenfield production service and data volume',
-  preconditions: Object.freeze([]),
-  effects: Object.freeze([
-    'Immediately block new orphan-cleanup admissions at all four entry points restored by the bound PROD-GF-14, cancel pending cleanup schedules, and drain in-flight cleanup work using the preverified recovery capability',
-    'Restore the captured pre-GF14 disabled cleanup runtime configuration and, if process lifecycle alignment is required, recreate or restart only the exact same approved image, loopback bind and data volume with write admission unchanged and cleanup disabled; verify disabled and drained state while preserving database, upload volume and unrelated configuration; do not claim to recover already deleted records or files',
-  ]),
-  rollbackActionIds: Object.freeze([]),
-  evidenceRequired: Object.freeze([
-    'GF14_ROLLBACK_SOURCE_BINDING',
-    'CLEANUP_ROLLBACK_TARGET_MATCH',
-    'ALL_RESTORED_CLEANUP_ENTRY_POINTS_DISABLED',
-    'CLEANUP_SCHEDULES_CANCELLED',
-    'CLEANUP_IN_FLIGHT_WORK_DRAINED',
-    'PRE_GF14_DISABLED_RUNTIME_CONFIG_RESTORED',
-    'POST_ROLLBACK_HEALTH_STATUS',
-    'WRITE_ADMISSION_UNCHANGED',
-    'DATA_VOLUME_PRESERVED',
-    'DATABASE_IDENTITY_PRESERVED',
-    'UNRELATED_CONFIGURATION_UNCHANGED',
-    'DELETIONS_NOT_REVERSED_ACKNOWLEDGED',
-  ]),
+  "id": "ROLLBACK-GF-12-DISABLE-RESTORED-ORPHAN-CLEANUP",
+  "title": "Disable and drain cleanup restored by PROD-GF-14L",
+  "category": "ROLLBACK",
+  "risk": "HIGH",
+  "sideEffect": "REVERSIBLE",
+  "requiresExplicitAuthorization": false,
+  "authorityTarget": "Only cleanup controls restored by PROD-GF-14L and only the exact production container lifecycle alignment required to persist disabled cleanup on the same approved image, loopback bind, data volume and database identity",
+  "preconditions": [],
+  "effects": [
+    "Immediately block new orphan-cleanup admissions, drain in-flight cleanup work and persist the captured disabled cleanup runtime configuration",
+    "If the running container embeds a cleanup-enabled startup configuration, recreate or restart only the exact same production container name using the same approved image, loopback bind, data volume, database identity and write-admission mode so disabled cleanup survives restart",
+    "Verify cleanup disabled and drained, service health, write admission unchanged, data volume and database identity preserved, unrelated configuration unchanged, and acknowledge already-deleted records or files are not recovered"
+  ],
+  "rollbackActionIds": [],
+  "evidenceRequired": [
+    "GF14L_ROLLBACK_SOURCE_BINDING",
+    "CLEANUP_ROLLBACK_TARGET_MATCH",
+    "ALL_RESTORED_CLEANUP_ENTRY_POINTS_DISABLED",
+    "CLEANUP_IN_FLIGHT_WORK_DRAINED",
+    "PRE_GF14_DISABLED_RUNTIME_CONFIG_RESTORED",
+    "EXACT_CONTAINER_LIFECYCLE_TARGET_BINDING",
+    "POST_ROLLBACK_HEALTH_STATUS",
+    "WRITE_ADMISSION_UNCHANGED",
+    "DATA_VOLUME_PRESERVED",
+    "DATABASE_IDENTITY_PRESERVED",
+    "UNRELATED_CONFIGURATION_UNCHANGED",
+    "DELETIONS_NOT_REVERSED_ACKNOWLEDGED"
+  ]
 });
 
 function stableJson(value) {
@@ -408,7 +416,7 @@ function validAuthorityShape(value) {
       || !plainObject(value.greenfieldActivationAction)
       || !plainObject(value.greenfieldActivationReconciliationAction)
       || !plainObject(value.greenfieldCleanupAction)
-      || !plainObject(value.greenfieldCleanupReconciliationAction)
+      || !plainObject(value.greenfieldCleanupLifecycleAction)
       || !plainObject(value.greenfieldCleanupRollbackAction)
       || !plainObject(value.authorization)) {
     return false;
@@ -432,7 +440,7 @@ function validAuthorityShape(value) {
     value.greenfieldActivationAction,
     value.greenfieldActivationReconciliationAction,
     value.greenfieldCleanupAction,
-    value.greenfieldCleanupReconciliationAction,
+    value.greenfieldCleanupLifecycleAction,
     value.greenfieldCleanupRollbackAction,
   ]) {
     for (const key of ['preconditions', 'effects', 'rollbackActionIds', 'evidenceRequired']) {
@@ -855,101 +863,107 @@ export function validateProductionGreenfieldAuthority(value, {
       secretValuesRecorded: false,
     },
     prodGf14: {
-      status: 'RUNTIME_PASS_GOVERNANCE_RECONCILIATION_REQUIRED',
-      governanceStatus:
-        'OUT_OF_ORDER_GF14_RUNTIME_LIFECYCLE_REQUIRES_EXACT_RECONCILIATION',
-      governanceReconciliationRequired: true,
-      governanceReconciliationCompleted: false,
-      runtimeCleanupRestorationPass: true,
-      authorizedActionId: 'PROD-GF-14-RESTORE-ORPHAN-CLEANUP',
-      preflightAtUtc: '2026-09-28T03:28:24Z',
-      restoreStartedAtUtc: '2026-09-28T03:32:51Z',
-      restoreRestartedAtUtc: '2026-09-28T03:34:39.513157967Z',
-      finalizedAtUtc: '2026-09-28T03:35:20Z',
-      verifiedAtUtc: '2026-09-28T03:35:52Z',
-      targetInstanceId: 'ins-mi85f3my',
-      containerName: 'jenn-shooting-operations-prod',
-      preContainerId:
-        '1b2afb092d3ec1d834d12ff58fa86f4b1c05ec27913e8e80da278e9e9d0838cb',
-      postContainerId:
-        'b66f589647a72ff109158194605d765df46435e1db4babcaa675fc5e75dec0ac',
-      imageId:
-        'sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545',
-      postContainerStartedAt: '2026-09-28T03:34:39.513157967Z',
-      restartPolicy: 'unless-stopped',
-      readOnlyRootfs: true,
-      loopbackBind: '127.0.0.1:3800 to 3800/tcp',
-      dataVolumeName: 'jenn-shooting-operations_shooting_data',
-      dataVolumeSource:
-        '/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data',
-      dataVolumeDestination: '/app/data',
-      dataDeviceInode: '64784:1835042',
-      databasePath: '/app/data/shooting-operations.sqlite',
-      databaseDeviceInode: '64784:1835048',
-      preWriteAdmission: 'enabled',
-      postWriteAdmission: 'enabled',
-      preCleanupMode: 'disabled',
-      preCleanupState: 'disabled',
-      preCleanupEpoch: '36d0854c-26c4-455c-a410-78ab64d9640e',
-      preCleanupMarkerValid: true,
-      preCleanupActiveRuns: 0,
-      cleanupDisableCapabilityProof: 'PASS',
-      preRevision: 0,
-      preUploadRows: 0,
-      preUnclaimedUploadRows: 0,
-      preOperationRows: 0,
-      preAuditRows: 0,
-      preAttachmentFiles: 0,
-      preStagedCleanupFiles: 0,
-      preOldOrphanCandidates: 0,
-      candidateProbe: 'PASS',
-      candidateRuntimeEnvSha256:
-        'sha256:cdfa4ebba78b413c608f12670b3c02bde9af1315333bae00c1d2de97ad4f081a',
-      postCleanupMode: 'enabled',
-      postCleanupState: 'enabled',
-      postCleanupMarkerValid: true,
-      postCleanupActiveRuns: 0,
-      cleanupControlRoot:
-        '/app/data/.orphan-cleanup-control/1ad8b65e5b8819bc9c7e4df213b9bb2ef3d0721a45e0a62d54c4e7f6c0bb1d27',
-      startupOrphanCleanupRestored: true,
-      periodicOrphanCleanupRestored: true,
-      saveUploadTriggeredCleanupRestored: true,
-      submitRequestTriggeredCleanupRestored: true,
-      cleanupAdmissionProbe: 'PASS',
-      restartProbe: 'PASS',
-      publicHealthPost: 200,
-      publicWriteAdmissionPost: 'enabled',
-      unauthenticatedWritePostStatus: 401,
-      unauthenticatedWritePostCode: 'UNAUTHORIZED',
-      postRevision: 0,
-      postUploadRows: 0,
-      postUnclaimedUploadRows: 0,
-      postOperationRows: 0,
-      postAuditRows: 0,
-      postAttachmentFiles: 0,
-      postStagedCleanupFiles: 0,
-      integrationEnvCountPost: 0,
-      runtimeConfigPromoted: true,
-      currentRuntimeEnvSha256:
-        'sha256:cdfa4ebba78b413c608f12670b3c02bde9af1315333bae00c1d2de97ad4f081a',
-      preGf14RuntimeEnvSha256:
-        'sha256:98519e90c4ac40862af935e52d519ee5ba5b9f2f08b88be7e005253c30a5478c',
-      preGf14RuntimeEnvBackup:
-        '/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime.pre-gf14',
-      rollbackActionAtExecution: 'ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP',
-      rollbackBindingStatus: 'BASE_ROLLBACK_NOT_APPLICABLE_TO_GF14',
-      pendingGreenfieldRollbackActionId:
-        'ROLLBACK-GF-12-DISABLE-RESTORED-ORPHAN-CLEANUP',
-      cleanupRollbackTargetBinding: 'PENDING_GF14R_RECONCILIATION',
-      rollbackControlRoot:
-        '/app/data/.orphan-cleanup-control/1ad8b65e5b8819bc9c7e4df213b9bb2ef3d0721a45e0a62d54c4e7f6c0bb1d27',
-      deletionIrreversibilityAcknowledged: true,
-      businessDataUnchanged: true,
-      secretValuesRecorded: false,
-      evidencePath:
-        '/mnt/datadisk0/apps/jenn-shooting-operations/prod-gf14-cleanup-evidence.txt',
-      evidenceSha256:
-        'sha256:9f9651a35ee75e2359c840e6f497a0e03da7450c979b6a38eeec7e5a50acdd97',
+      "status": "ROLLED_BACK_FAIL_CLOSED_LIFECYCLE_AUTHORITY_REQUIRED",
+      "authorizedActionId": "PROD-GF-14-RESTORE-ORPHAN-CLEANUP",
+      "preflightAtUtc": "2026-09-28T03:28:24Z",
+      "restoreStartedAtUtc": "2026-09-28T03:32:51Z",
+      "restoreRestartedAtUtc": "2026-09-28T03:34:39.513157967Z",
+      "finalizedAtUtc": "2026-09-28T03:35:20Z",
+      "verifiedAtUtc": "2026-09-28T03:35:52Z",
+      "targetInstanceId": "ins-mi85f3my",
+      "containerName": "jenn-shooting-operations-prod",
+      "preContainerId": "1b2afb092d3ec1d834d12ff58fa86f4b1c05ec27913e8e80da278e9e9d0838cb",
+      "postContainerId": "b66f589647a72ff109158194605d765df46435e1db4babcaa675fc5e75dec0ac",
+      "imageId": "sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545",
+      "postContainerStartedAt": "2026-09-28T03:34:39.513157967Z",
+      "restartPolicy": "unless-stopped",
+      "readOnlyRootfs": true,
+      "loopbackBind": "127.0.0.1:3800 to 3800/tcp",
+      "dataVolumeName": "jenn-shooting-operations_shooting_data",
+      "dataVolumeSource": "/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data",
+      "dataVolumeDestination": "/app/data",
+      "dataDeviceInode": "64784:1835042",
+      "databasePath": "/app/data/shooting-operations.sqlite",
+      "databaseDeviceInode": "64784:1835048",
+      "preWriteAdmission": "enabled",
+      "postWriteAdmission": "enabled",
+      "preCleanupMode": "disabled",
+      "preCleanupState": "disabled",
+      "preCleanupEpoch": "36d0854c-26c4-455c-a410-78ab64d9640e",
+      "preCleanupMarkerValid": true,
+      "preCleanupActiveRuns": 0,
+      "cleanupDisableCapabilityProof": "PASS",
+      "preRevision": 0,
+      "preUploadRows": 0,
+      "preUnclaimedUploadRows": 0,
+      "preOperationRows": 0,
+      "preAuditRows": 0,
+      "preAttachmentFiles": 0,
+      "preStagedCleanupFiles": 0,
+      "preOldOrphanCandidates": 0,
+      "candidateProbe": "PASS",
+      "candidateRuntimeEnvSha256": "sha256:cdfa4ebba78b413c608f12670b3c02bde9af1315333bae00c1d2de97ad4f081a",
+      "postCleanupMode": "enabled",
+      "postCleanupState": "enabled",
+      "postCleanupMarkerValid": true,
+      "postCleanupActiveRuns": 0,
+      "cleanupControlRoot": "/app/data/.orphan-cleanup-control/1ad8b65e5b8819bc9c7e4df213b9bb2ef3d0721a45e0a62d54c4e7f6c0bb1d27",
+      "startupOrphanCleanupRestored": true,
+      "periodicOrphanCleanupRestored": true,
+      "saveUploadTriggeredCleanupRestored": true,
+      "submitRequestTriggeredCleanupRestored": true,
+      "cleanupAdmissionProbe": "PASS",
+      "restartProbe": "PASS",
+      "publicHealthPost": 200,
+      "publicWriteAdmissionPost": "enabled",
+      "unauthenticatedWritePostStatus": 401,
+      "unauthenticatedWritePostCode": "UNAUTHORIZED",
+      "postRevision": 0,
+      "postUploadRows": 0,
+      "postUnclaimedUploadRows": 0,
+      "postOperationRows": 0,
+      "postAuditRows": 0,
+      "postAttachmentFiles": 0,
+      "postStagedCleanupFiles": 0,
+      "integrationEnvCountPost": 0,
+      "runtimeConfigPromoted": false,
+      "currentRuntimeEnvSha256": "sha256:98519e90c4ac40862af935e52d519ee5ba5b9f2f08b88be7e005253c30a5478c",
+      "preGf14RuntimeEnvSha256": "sha256:98519e90c4ac40862af935e52d519ee5ba5b9f2f08b88be7e005253c30a5478c",
+      "preGf14RuntimeEnvBackup": "/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime.pre-gf14",
+      "rollbackControlRoot": "/app/data/.orphan-cleanup-control/1ad8b65e5b8819bc9c7e4df213b9bb2ef3d0721a45e0a62d54c4e7f6c0bb1d27",
+      "deletionIrreversibilityAcknowledged": true,
+      "businessDataUnchanged": true,
+      "secretValuesRecorded": false,
+      "evidencePath": "/mnt/datadisk0/apps/jenn-shooting-operations/prod-gf14-cleanup-evidence.txt",
+      "evidenceSha256": "sha256:1bfa0d854c376260753fb4c1c4e4512b56ff7acecc7b6593f845136c0294a6d0",
+      "governanceStatus": "SAFE_DISABLED_PENDING_EXACT_GF14L_AUTHORIZATION",
+      "governanceReconciliationRequired": false,
+      "governanceReconciliationCompleted": false,
+      "runtimeCleanupRestorationPass": false,
+      "rollbackActionAtExecution": "ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP",
+      "rollbackBindingStatus": "SAFE_DISABLED_CONTROL_ROLLBACK_COMPLETED",
+      "cleanupRollbackTargetBinding": "DISABLED_DRAINED_SAFE_STATE",
+      "runtimeCleanupRestorationAttempted": true,
+      "rollbackAtUtc": "2026-09-28T04:48:40Z",
+      "rollbackCleanupState": "disabled",
+      "rollbackCleanupEnabled": false,
+      "rollbackCleanupEpoch": "71879def-55f0-40eb-a580-db45d133d70a",
+      "rollbackCleanupMarkerValid": true,
+      "rollbackCleanupActiveRuns": 0,
+      "rollbackDurableRuntimeEnvSha256": "sha256:98519e90c4ac40862af935e52d519ee5ba5b9f2f08b88be7e005253c30a5478c",
+      "rollbackContainerRestarted": false,
+      "rollbackContainerRecreated": false,
+      "rollbackServiceHealth": 200,
+      "rollbackWriteAdmission": "enabled",
+      "rollbackRevision": 0,
+      "rollbackUploadRows": 0,
+      "rollbackUnclaimedUploadRows": 0,
+      "rollbackOperationRows": 0,
+      "rollbackAuditRows": 0,
+      "rollbackAttachmentFiles": 0,
+      "rollbackStagedCleanupFiles": 0,
+      "rollbackIntegrationEnvCount": 0,
+      "nextExactActionRequired": "PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE"
     },
   };
   if (!sameObject(value.acceptance, expectedAcceptance)) {
@@ -1042,12 +1056,12 @@ export function validateProductionGreenfieldAuthority(value, {
     issues.push(issue('GREENFIELD_CLEANUP_ACTION_INVALID', '/greenfieldCleanupAction'));
   }
   if (!sameObject(
-    value.greenfieldCleanupReconciliationAction,
-    EXPECTED_CLEANUP_RECONCILIATION,
+    value.greenfieldCleanupLifecycleAction,
+    EXPECTED_CLEANUP_LIFECYCLE,
   )) {
     issues.push(issue(
-      'GREENFIELD_CLEANUP_RECONCILIATION_ACTION_INVALID',
-      '/greenfieldCleanupReconciliationAction',
+      'GREENFIELD_CLEANUP_LIFECYCLE_ACTION_INVALID',
+      '/greenfieldCleanupLifecycleAction',
     ));
   }
   if (!sameObject(value.greenfieldCleanupRollbackAction, EXPECTED_CLEANUP_ROLLBACK)) {
@@ -1076,7 +1090,7 @@ export function validateProductionGreenfieldAuthority(value, {
     requestedActionIds: [],
     approvedActionIds: [],
     requestableActionIds: [],
-    nextActionId: 'PROD-GF-14R-RECONCILE-CLEANUP-RUNTIME-LIFECYCLE',
+    nextActionId: 'PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE',
     nextActionRequiresExplicitAuthorization: true,
   };
   if (!sameObject(value.authorization, expectedAuthorization)) {
