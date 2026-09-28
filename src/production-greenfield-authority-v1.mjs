@@ -31,7 +31,6 @@ const EXPECTED_COMPLETED = Object.freeze([
   'PROD-07-CONFIGURE-REVERSE-PROXY-TLS',
   'PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION',
   'PROD-GF-13-ACTIVATE',
-  'PROD-GF-14-RESTORE-ORPHAN-CLEANUP',
 ]);
 
 const EXPECTED_CONTAINER_START = Object.freeze([
@@ -88,6 +87,8 @@ const EXPECTED_TOP_LEVEL_KEYS = Object.freeze([
   'greenfieldActivationAction',
   'greenfieldActivationReconciliationAction',
   'greenfieldCleanupAction',
+  'greenfieldCleanupReconciliationAction',
+  'greenfieldCleanupRollbackAction',
   'authorization',
 ]);
 
@@ -249,10 +250,10 @@ const EXPECTED_CLEANUP = Object.freeze({
   ]),
   effects: Object.freeze([
     'After verified greenfield activation, verify the target attachment baseline and capture the exact disabled cleanup configuration before enabling any cleanup entry point',
-    'Restore only the approved startup, periodic, saveUpload-triggered and submitRequest-triggered cleanup controls; failure invokes only the PROD-GF-14-bound disable-and-drain recovery and never deletes or rewrites deployment data as rollback',
+    'Restore only the approved startup, periodic, saveUpload-triggered and submitRequest-triggered cleanup controls; authoritative completion requires the separately authorized GF14 runtime-lifecycle reconciliation, and any later recovery derives only the Greenfield-specific cleanup disable-and-drain rollback contract',
   ]),
   rollbackActionIds: Object.freeze([
-    'ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP',
+    'ROLLBACK-GF-12-DISABLE-RESTORED-ORPHAN-CLEANUP',
   ]),
   evidenceRequired: Object.freeze([
     'GREENFIELD_ACTIVATION_COMPLETION_PROOF',
@@ -265,6 +266,80 @@ const EXPECTED_CLEANUP = Object.freeze({
     'POST_RESTORE_HEALTH_STATUS',
     'CLEANUP_ROLLBACK_TARGET_BINDING',
     'DELETION_IRREVERSIBILITY_ACKNOWLEDGED',
+  ]),
+});
+
+
+const EXPECTED_CLEANUP_RECONCILIATION = Object.freeze({
+  id: 'PROD-GF-14R-RECONCILE-CLEANUP-RUNTIME-LIFECYCLE',
+  title: 'Reconcile out-of-order GF14 cleanup runtime lifecycle',
+  category: 'GOVERNANCE',
+  risk: 'HIGH',
+  sideEffect: 'READ_ONLY',
+  requiresExplicitAuthorization: true,
+  authorityTarget:
+    'Exact current GF14 cleanup-restored Jenn Shooting Operations production container, cleanup controls and durable runtime bindings on ins-mi85f3my only',
+  preconditions: Object.freeze([
+    'PROD_GF_14_RUNTIME_CLEANUP_RESTORATION_PASS',
+    'OUT_OF_ORDER_GF14_RUNTIME_LIFECYCLE_DISCLOSED',
+    'GREENFIELD_ACTIVATION_COMPLETION',
+    'GF14_GREENFIELD_ROLLBACK_CONTRACT_DEFINED',
+    'PRODUCTION_TARGET_FACTS',
+    'PRODUCTION_DEPLOYMENT_GATE',
+  ]),
+  effects: Object.freeze([
+    'Acknowledge the GF14 container replacement and restart as out-of-order lifecycle mutations without representing them as prior exact-action authorization',
+    'Perform read-only reconciliation of the current cleanup-restored production container against the approved image, loopback bind, target volume, database identity, cleanup-enabled runtime configuration, cleanup control root, restart proof, health and authorization boundary, zero-change business baseline and integration-disabled state',
+    'Bind authoritative GF14 completion to the Greenfield-specific cleanup rollback contract only if every fact matches; do not recreate, restart, signal, remount, rebind, enable or disable cleanup, enable integrations, delete data or otherwise mutate production as part of reconciliation',
+  ]),
+  rollbackActionIds: Object.freeze([]),
+  evidenceRequired: Object.freeze([
+    'OUT_OF_ORDER_GF14_LIFECYCLE_DISCLOSURE',
+    'GF14_RUNTIME_CONTAINER_IDENTITY',
+    'GF14_RUNTIME_IMAGE_IDENTITY',
+    'GF14_LOOPBACK_BIND_IDENTITY',
+    'GF14_TARGET_VOLUME_IDENTITY',
+    'GF14_DATABASE_IDENTITY',
+    'GF14_RUNTIME_CONFIG_IDENTITY',
+    'GF14_CLEANUP_CONTROL_ROOT_IDENTITY',
+    'GF14_CLEANUP_ENABLED_STATUS',
+    'GF14_RESTART_PROOF',
+    'GF14_POST_RESTORE_HEALTH_STATUS',
+    'GF14_WRITE_ADMISSION_STATUS',
+    'GF14_BUSINESS_BASELINE_UNCHANGED_PROOF',
+    'GF14_INTEGRATIONS_DISABLED_PROOF',
+    'GF14_GREENFIELD_ROLLBACK_CONTRACT_BINDING',
+  ]),
+});
+
+const EXPECTED_CLEANUP_ROLLBACK = Object.freeze({
+  id: 'ROLLBACK-GF-12-DISABLE-RESTORED-ORPHAN-CLEANUP',
+  title: 'Disable and drain cleanup restored by PROD-GF-14',
+  category: 'ROLLBACK',
+  risk: 'HIGH',
+  sideEffect: 'REVERSIBLE',
+  requiresExplicitAuthorization: false,
+  authorityTarget:
+    'Only the startup, periodic, saveUpload and submitRequest orphan-cleanup controls restored by PROD-GF-14 on the exact greenfield production service and data volume',
+  preconditions: Object.freeze([]),
+  effects: Object.freeze([
+    'Immediately block new orphan-cleanup admissions at all four entry points restored by the bound PROD-GF-14, cancel pending cleanup schedules, and drain in-flight cleanup work using the preverified recovery capability',
+    'Restore the captured pre-GF14 disabled cleanup runtime configuration and, if process lifecycle alignment is required, recreate or restart only the exact same approved image, loopback bind and data volume with write admission unchanged and cleanup disabled; verify disabled and drained state while preserving database, upload volume and unrelated configuration; do not claim to recover already deleted records or files',
+  ]),
+  rollbackActionIds: Object.freeze([]),
+  evidenceRequired: Object.freeze([
+    'GF14_ROLLBACK_SOURCE_BINDING',
+    'CLEANUP_ROLLBACK_TARGET_MATCH',
+    'ALL_RESTORED_CLEANUP_ENTRY_POINTS_DISABLED',
+    'CLEANUP_SCHEDULES_CANCELLED',
+    'CLEANUP_IN_FLIGHT_WORK_DRAINED',
+    'PRE_GF14_DISABLED_RUNTIME_CONFIG_RESTORED',
+    'POST_ROLLBACK_HEALTH_STATUS',
+    'WRITE_ADMISSION_UNCHANGED',
+    'DATA_VOLUME_PRESERVED',
+    'DATABASE_IDENTITY_PRESERVED',
+    'UNRELATED_CONFIGURATION_UNCHANGED',
+    'DELETIONS_NOT_REVERSED_ACKNOWLEDGED',
   ]),
 });
 
@@ -333,6 +408,8 @@ function validAuthorityShape(value) {
       || !plainObject(value.greenfieldActivationAction)
       || !plainObject(value.greenfieldActivationReconciliationAction)
       || !plainObject(value.greenfieldCleanupAction)
+      || !plainObject(value.greenfieldCleanupReconciliationAction)
+      || !plainObject(value.greenfieldCleanupRollbackAction)
       || !plainObject(value.authorization)) {
     return false;
   }
@@ -355,6 +432,8 @@ function validAuthorityShape(value) {
     value.greenfieldActivationAction,
     value.greenfieldActivationReconciliationAction,
     value.greenfieldCleanupAction,
+    value.greenfieldCleanupReconciliationAction,
+    value.greenfieldCleanupRollbackAction,
   ]) {
     for (const key of ['preconditions', 'effects', 'rollbackActionIds', 'evidenceRequired']) {
       if (!stringArray(action[key])) return false;
@@ -953,6 +1032,21 @@ export function validateProductionGreenfieldAuthority(value, {
   if (!sameObject(value.greenfieldCleanupAction, EXPECTED_CLEANUP)) {
     issues.push(issue('GREENFIELD_CLEANUP_ACTION_INVALID', '/greenfieldCleanupAction'));
   }
+  if (!sameObject(
+    value.greenfieldCleanupReconciliationAction,
+    EXPECTED_CLEANUP_RECONCILIATION,
+  )) {
+    issues.push(issue(
+      'GREENFIELD_CLEANUP_RECONCILIATION_ACTION_INVALID',
+      '/greenfieldCleanupReconciliationAction',
+    ));
+  }
+  if (!sameObject(value.greenfieldCleanupRollbackAction, EXPECTED_CLEANUP_ROLLBACK)) {
+    issues.push(issue(
+      'GREENFIELD_CLEANUP_ROLLBACK_ACTION_INVALID',
+      '/greenfieldCleanupRollbackAction',
+    ));
+  }
 
   if (value.greenfieldContainerStartPrerequisites.includes('PROD-09-PRODUCTION-DATA-IMPORT')
       || value.greenfieldForwardChain.includes('PROD-09-PRODUCTION-DATA-IMPORT')
@@ -973,7 +1067,7 @@ export function validateProductionGreenfieldAuthority(value, {
     requestedActionIds: [],
     approvedActionIds: [],
     requestableActionIds: [],
-    nextActionId: 'PROD-10-ENABLE-VCP-REMOTE-SYNC',
+    nextActionId: 'PROD-GF-14R-RECONCILE-CLEANUP-RUNTIME-LIFECYCLE',
     nextActionRequiresExplicitAuthorization: true,
   };
   if (!sameObject(value.authorization, expectedAuthorization)) {
