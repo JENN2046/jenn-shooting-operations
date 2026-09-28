@@ -1,130 +1,86 @@
 # PROD-10 VCP Remote Sync Evidence
 
-Status: **COMPLETED / LIVE PRODUCTION EVIDENCE**
+Status: **RUNTIME ACTIVE / REAL WRITE EXECUTED / FORMAL ACCEPTANCE CLOSURE BLOCKED**
 
-Action ID:
-
-```text
-PROD-10-ENABLE-VCP-REMOTE-SYNC
-```
+Action ID: `PROD-10-ENABLE-VCP-REMOTE-SYNC`.
 
 Explicit human authorization was received for this exact action ID.
 
 ## Runtime identity
 
-```text
-VCPToolBox release = 12380d7d
-VCPToolBox commit  = 12380d7dbd47219c012d3bda029dafdfed4b0224
+- VCPToolBox release: `12380d7d`
+- VCPToolBox commit: `12380d7dbd47219c012d3bda029dafdfed4b0224`
+- Jenn extension release: `7ea5d49c`
+- Jenn extension commit: `7ea5d49ca000a2298e012b9ff54ec229ebb59e96`
+- Plugin: `JennShootingOperations`
+- JEV category: `shooting_operations`
+- Service: `https://jso.skmt617.top`
 
-Jenn extension release = 7ea5d49c
-Jenn extension commit  = 7ea5d49ca000a2298e012b9ff54ec229ebb59e96
+The live JEV planner expands `{拍摄运营}` to `JennShootingOperations`. The Agent-facing plugin remains READ / PROPOSE only.
 
-plugin       = JennShootingOperations
-JEV category = shooting_operations
-service      = https://jso.skmt617.top
-```
+## Actual authorized execution
 
-The external plugin was loaded through the exact VCP external-root and name+source allow policy. The live JEV planner expands `{拍摄运营}` to `JennShootingOperations`.
-## Secret and principal boundary
+Fresh pre-write public health and snapshot checks succeeded. The pre-write snapshot was revision 1 with zero products, tasks, and sessions.
 
-The production scheduler principal remained in restricted runtime secret storage.
-
-Low-disclosure evidence records only:
-
-```text
-credential source type = restricted env file
-credential key         = SCHEDULER_TOKEN
-principal scope        = scheduler bearer for revision-guarded V1 snapshot write
-```
-
-The credential value was not written to Git, logs, evidence, chat, VCP Memory, or agent arguments.
-
-The Agent-facing plugin remains READ / PROPOSE only. No standing Agent write capability was granted.
-
-## Authorized pull -> guarded push -> verification pull
-
-Fresh pre-write state:
-
-```text
-revision = 1
-products = 0
-tasks    = 0
-sessions = 0
-```
-
-Acceptance operation:
-
-```text
-operation id = prod10-enable-vcp-remote-sync-r1-0001
-expected revision = 1
-payload mode = NO_OP_BUSINESS_PAYLOAD
-real guarded push attempts = 1
-```
+One real guarded push was executed with operation ID `prod10-enable-vcp-remote-sync-r1-0001`. The business payload was unchanged.
 Result:
 
-```text
-push result revision = 2
-verification revision = 2
-credentialExposed = false
-```
+- expected revision: 1
+- push result revision: 2
+- verification revision: 2
+- products: 0 → 0
+- tasks: 0 → 0
+- sessions: 0 → 0
+- business payload unchanged: true
+- credential exposed: false
+- real guarded push attempts: 1
 
-Post-write state:
+The acceptance gate was immediately returned to disabled. Standing Agent write capability remains disabled.
 
-```text
-revision = 2
-products = 0
-tasks    = 0
-sessions = 0
-business payload unchanged = true
-```
+## Formal evidence gap
 
-This proves a real production guarded write without inventing a test task or changing production scheduling facts.
+The frozen PROD-10 readiness contract requires the exact current Jenn production target identity and health to be freshly revalidated before the real write.
 
+Before the guarded push, public health and snapshot were freshly read, but the exact container/target identity was **not** freshly attested. Exact container identity and health were checked only after the write.
+
+Post-write continuity evidence cannot retroactively satisfy a pre-write gate.
+
+Therefore:
+
+- runtime integration activation: PASS
+- real guarded push execution: PASS
+- verification pull: PASS
+- formal PROD-10 acceptance closure: **BLOCKED**
+- block code: `PREWRITE_EXACT_TARGET_IDENTITY_NOT_FRESHLY_ATTESTED`
 ## Post-action state
 
-```text
-integration enabled          = true
-read capability              = enabled
-proposal capability          = enabled
-standing Agent write         = disabled
-acceptance write gate        = disabled
-VCP Hot Memory binding       = resolved
-VCP Cold Memory binding      = resolved
-Kiosk                        = unchanged
-DingTalk                     = unchanged
-```
+- current JSO revision: 2
+- integration enabled: true
+- read capability: enabled
+- proposal capability: enabled
+- standing Agent write: disabled
+- acceptance write gate: disabled
+- VCP Hot Memory binding: resolved
+- VCP Cold Memory binding: resolved
+- Kiosk: unchanged
+- DingTalk: unchanged
 
-`ROLLBACK-09-DISABLE-VCP-CONFIG` remains configuration-only. It may disable the VCP integration but MUST NOT decrement or erase committed revision 2.
-## Deployment-chain evidence
+`ROLLBACK-09-DISABLE-VCP-CONFIG` remains configuration-only. It MUST NOT decrement or erase committed revision 2.
 
-```text
-Core release promotion         = PASS
-Jenn extension release         = PASS
-external plugin registration   = PASS
-JEV category activation        = PASS
-production endpoint binding    = PASS
-scheduler principal binding    = PASS
-real production pull           = PASS
-real guarded push              = PASS
-verification pull              = PASS
-```
+The corrected runtime receipt is:
 
-The live runtime receipt is:
+`policy/promotions/PROD10_ENABLE_VCP_REMOTE_SYNC_20260929.json`
 
-```text
-policy/promotions/PROD10_ENABLE_VCP_REMOTE_SYNC_20260929.json
-sha256 = 31274e2828452301c610f6579fbe039449811ac08c8ca72c3ba49feab8991b12
-```
+SHA-256: `fefe7af6534f9854d259b9e85fc644b56a277492bc4476ce28f3f4230baf9c7b`
 
-One public health probe timed out after the acceptance write. Immediate read-only reconciliation showed container health healthy, loopback health 200, loopback revision 2, and public health 200. No write was replayed.
+## Authority state
 
-## Current external state
+Because the pre-write exact-target evidence gate was not satisfied, machine authority MUST NOT add PROD-10 to `completedAcceptanceIds` and MUST NOT advance to PROD-11.
 
-```text
-VCP_SOURCE_COMPATIBILITY   = PASS
-VCP_EXTERNAL_COMPATIBILITY = PASS
-PROD-10-ENABLE-VCP-REMOTE-SYNC = COMPLETED
-next production action = PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE
-```
+Current fail-closed authority remains:
 
-The VCP-APP `vcp_tool_resolve` catalog surface currently reports `CATALOG_CONTRACT_INVALID`; this remains a separate resolver/state-authority compatibility issue. It did not affect JEV planning, live external registration, `/v1/human/tool`, the authorized guarded write, or the verification pull.
+- formal nextActionId: `PROD-10-ENABLE-VCP-REMOTE-SYNC`
+- authorization.status: `FROZEN_NOT_REQUESTED`
+- requestableActionIds: empty
+
+Any additional guarded push or re-acceptance requires a new explicit human authorization. This evidence record does not authorize a replay.

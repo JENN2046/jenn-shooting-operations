@@ -2180,17 +2180,15 @@ This validation performed no production mutation. Because this paragraph is docs
 
 ---
 
-## PROD-10 live integration closure
+## PROD-10 execution evidence and blocked formal closure
 
-`PROD-10-ENABLE-VCP-REMOTE-SYNC` completed under exact human authorization.
+A real `PROD-10-ENABLE-VCP-REMOTE-SYNC` guarded push was executed under exact human authorization.
 
 Evidence:
 
-```text
-docs/acceptance/PROD-10_VCP_REMOTE_SYNC_EVIDENCE.md
-```
+`docs/acceptance/PROD-10_VCP_REMOTE_SYNC_EVIDENCE.md`
 
-Result:
+Observed result:
 
 ```text
 VCPToolBox release       = 12380d7d
@@ -2203,12 +2201,16 @@ business payload changed = false
 standing Agent write     = false
 ```
 
-The Greenfield authorization packet remains fail-closed for the next action:
+Formal completion is **not** admitted into machine authority because the exact target/container identity was not freshly attested before the real write. Post-write identity continuity does not retroactively satisfy that frozen pre-write gate.
+
+The Greenfield authorization packet therefore remains fail-closed:
 
 ```text
 authorization.status  = FROZEN_NOT_REQUESTED
 requestedActionIds    = []
 approvedActionIds     = []
 requestableActionIds  = []
-nextActionId          = PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE
+nextActionId          = PROD-10-ENABLE-VCP-REMOTE-SYNC
 ```
+
+Any re-acceptance involving another guarded push requires a new explicit human authorization.
