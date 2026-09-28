@@ -1526,9 +1526,9 @@ nextActionId          = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
 
 VCP and Kiosk remain separate post-activation actions. Orphan cleanup remains disabled until a separately authorized `PROD-GF-14-RESTORE-ORPHAN-CLEANUP`. This promotion does not authorize any of them.
 
-### PROD-GF-13 promotion exact-head validation
+### PROD-GF-13 promotion exact-head validation (historical, superseded)
 
-The implementation-bearing activation promotion head was independently validated by the repository production-authorization workflow:
+This is a historical branch snapshot retained for audit. It predates the durability-governance P1 and is superseded by the current reconciliation boundary below. The implementation-bearing activation promotion head was independently validated by the repository production-authorization workflow:
 
 ```text
 implementationHead = f537ebadd8a45f430245e5b7456a17fdd4aa172b
@@ -1604,9 +1604,9 @@ durableActivationAcrossRestartVerified = true
 
 The remediation records no credential values.
 
-### Durability remediation exact-head validation
+### Durability remediation exact-head validation (historical, superseded)
 
-The implementation-bearing durability remediation head was validated after the restart proof and authority update:
+This is a historical branch snapshot retained for audit. It predates the later finding that the replacement/restart itself lacked an exact Action ID. It is not current authorization state. The implementation-bearing durability remediation head was validated after the restart proof and authority update:
 
 ```text
 implementationHead = d5c5d6acb9b98dd475ddc55664a9964923bbfee5
