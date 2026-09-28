@@ -377,3 +377,44 @@ PROD-10-ENABLE-VCP-REMOTE-SYNC = NOT_AUTHORIZED
 ```
 
 The historical VCPChat adapter-path assumption is no longer used by the integration test or the WO-06C VCP boundary harness. Historical WO-06C evidence remains unchanged as historical evidence.
+
+---
+
+## Live VCP external closure after PROD-10
+
+The earlier `BLOCKED_EXTERNAL_RUNTIME` sections above are retained as historical source-readiness checkpoints. They were superseded by the explicitly authorized live production activation recorded in:
+
+```text
+docs/acceptance/PROD-10_VCP_REMOTE_SYNC_EVIDENCE.md
+```
+
+Live closure now binds:
+
+```text
+VCPToolBox release = 12380d7d
+VCPToolBox commit  = 12380d7dbd47219c012d3bda029dafdfed4b0224
+Jenn extension     = 7ea5d49ca000a2298e012b9ff54ec229ebb59e96
+plugin             = JennShootingOperations
+endpoint           = https://jso.skmt617.top
+```
+
+The exact authorized acceptance sequence completed:
+
+```text
+pull revision 1
+→ one guarded no-op-business-payload push
+→ revision 2
+→ verification pull revision 2
+```
+
+No product, task, or session facts changed during the acceptance push.
+
+Canonical live state after the closure is:
+
+```text
+VCP_SOURCE_COMPATIBILITY = PASS
+VCP_EXTERNAL_COMPATIBILITY = PASS
+PROD-10-ENABLE-VCP-REMOTE-SYNC = COMPLETED
+standing Agent write capability = DISABLED
+nextActionId = PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE
+```

@@ -2177,3 +2177,38 @@ nextAction         = PROD-10-ENABLE-VCP-REMOTE-SYNC
 
 This validation performed no production mutation. Because this paragraph is docs-only, the resulting final head is validated once more before merge eligibility.
 
+
+---
+
+## PROD-10 live integration closure
+
+`PROD-10-ENABLE-VCP-REMOTE-SYNC` completed under exact human authorization.
+
+Evidence:
+
+```text
+docs/acceptance/PROD-10_VCP_REMOTE_SYNC_EVIDENCE.md
+```
+
+Result:
+
+```text
+VCPToolBox release       = 12380d7d
+Jenn extension release   = 7ea5d49c
+production endpoint      = https://jso.skmt617.top
+pull revision            = 1
+guarded push revision    = 2
+verification revision    = 2
+business payload changed = false
+standing Agent write     = false
+```
+
+The Greenfield authorization packet remains fail-closed for the next action:
+
+```text
+authorization.status  = FROZEN_NOT_REQUESTED
+requestedActionIds    = []
+approvedActionIds     = []
+requestableActionIds  = []
+nextActionId          = PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE
+```

@@ -32,6 +32,7 @@ const EXPECTED_COMPLETED = Object.freeze([
   'PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION',
   'PROD-GF-13-ACTIVATE',
   'PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE',
+  'PROD-10-ENABLE-VCP-REMOTE-SYNC',
 ]);
 
 const EXPECTED_CONTAINER_START = Object.freeze([
@@ -1040,6 +1041,43 @@ export function validateProductionGreenfieldAuthority(value, {
       "evidencePath": "/mnt/datadisk0/apps/jenn-shooting-operations/prod-gf14l-lifecycle-evidence.txt",
       "evidenceSha256": "sha256:dc5dba9d51be927755778b3058925f7c50f4cfb8d31bd6957a2cbd20b62d34c9"
     },
+    prod10: {
+      status: 'PASS',
+      recordedAtUtc: '2026-09-28T18:24:21.868Z',
+      actionId: 'PROD-10-ENABLE-VCP-REMOTE-SYNC',
+      vcpCoreRelease: '12380d7d',
+      vcpCoreCommit: '12380d7dbd47219c012d3bda029dafdfed4b0224',
+      extensionRelease: '7ea5d49c',
+      extensionCommit: '7ea5d49ca000a2298e012b9ff54ec229ebb59e96',
+      pluginName: 'JennShootingOperations',
+      jevCategory: 'shooting_operations',
+      serviceEndpoint: 'https://jso.skmt617.top',
+      principalScope: 'scheduler role for revision-guarded V1 snapshot write',
+      schedulerCredentialSource: 'RESTRICTED_RUNTIME_SECRET_REFERENCE',
+      secretValuesRecorded: false,
+      preRevision: 1,
+      postRevision: 2,
+      verifiedRevision: 2,
+      operationId: 'prod10-enable-vcp-remote-sync-r1-0001',
+      payloadMode: 'NO_OP_BUSINESS_PAYLOAD',
+      businessPayloadUnchanged: true,
+      productsBefore: 0,
+      productsAfter: 0,
+      tasksBefore: 0,
+      tasksAfter: 0,
+      sessionsBefore: 0,
+      sessionsAfter: 0,
+      realGuardedPushAttempts: 1,
+      standingAgentWriteCapability: false,
+      acceptanceWriteEnabledPost: false,
+      vcpAppHotMemoryBinding: 'resolved',
+      vcpAppColdMemoryBinding: 'resolved',
+      kioskChanged: false,
+      dingtalkChanged: false,
+      publicHealthStatus: 200,
+      rollbackActionId: 'ROLLBACK-09-DISABLE-VCP-CONFIG',
+      runtimeReceiptSha256: 'sha256:31274e2828452301c610f6579fbe039449811ac08c8ca72c3ba49feab8991b12',
+    },
   };
   if (!sameObject(value.acceptance, expectedAcceptance)) {
     issues.push(issue('GREENFIELD_ACCEPTANCE_INVALID', '/acceptance'));
@@ -1165,7 +1203,7 @@ export function validateProductionGreenfieldAuthority(value, {
     requestedActionIds: [],
     approvedActionIds: [],
     requestableActionIds: [],
-    nextActionId: 'PROD-10-ENABLE-VCP-REMOTE-SYNC',
+    nextActionId: 'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE',
     nextActionRequiresExplicitAuthorization: true,
   };
   if (!sameObject(value.authorization, expectedAuthorization)) {

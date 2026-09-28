@@ -31,13 +31,13 @@ test('greenfield authority binds the frozen parent and grants no production muta
   assert.deepEqual(authority.authorization.requestedActionIds, []);
   assert.deepEqual(authority.authorization.approvedActionIds, []);
   assert.deepEqual(authority.authorization.requestableActionIds, []);
-  assert.equal(authority.authorization.nextActionId, 'PROD-10-ENABLE-VCP-REMOTE-SYNC');
+  assert.equal(authority.authorization.nextActionId, 'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE');
   assert.equal(authority.authorization.nextActionRequiresExplicitAuthorization, true);
 });
 
 test('greenfield authority records GF14L completion while retaining rolled-back GF14 history', () => {
   assert.deepEqual(
-    authority.completedAcceptanceIds.slice(-8),
+    authority.completedAcceptanceIds.slice(-9),
     [
       'PROD-03-GENERATE-INSTALL-TOKENS',
       'PROD-04-BUILD-IMAGE',
@@ -47,6 +47,7 @@ test('greenfield authority records GF14L completion while retaining rolled-back 
       'PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION',
       'PROD-GF-13-ACTIVATE',
       'PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE',
+      'PROD-10-ENABLE-VCP-REMOTE-SYNC',
     ],
   );
   assert.equal(authority.completedAcceptanceIds.includes('PROD-GF-14-RESTORE-ORPHAN-CLEANUP'), false);
