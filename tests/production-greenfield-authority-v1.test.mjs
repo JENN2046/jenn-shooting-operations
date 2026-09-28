@@ -31,22 +31,22 @@ test('greenfield authority binds the frozen parent and grants no production muta
   assert.deepEqual(authority.authorization.requestedActionIds, []);
   assert.deepEqual(authority.authorization.approvedActionIds, []);
   assert.deepEqual(authority.authorization.requestableActionIds, []);
-  assert.equal(authority.authorization.nextActionId, 'PROD-GF-14-RESTORE-ORPHAN-CLEANUP');
+  assert.equal(authority.authorization.nextActionId, 'PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION');
   assert.equal(authority.authorization.nextActionRequiresExplicitAuthorization, true);
 });
 
-test('greenfield authority records activation evidence without secrets', () => {
+test('greenfield authority records runtime activation but withholds completion pending reconciliation', () => {
   assert.deepEqual(
-    authority.completedAcceptanceIds.slice(-6),
+    authority.completedAcceptanceIds.slice(-5),
     [
       'PROD-03-GENERATE-INSTALL-TOKENS',
       'PROD-04-BUILD-IMAGE',
       'PROD-05-START-ISOLATED-CONTAINER',
       'PROD-06-LOOPBACK-HEALTH-SMOKE',
       'PROD-07-CONFIGURE-REVERSE-PROXY-TLS',
-      'PROD-GF-13-ACTIVATE',
     ],
   );
+  assert.equal(authority.completedAcceptanceIds.includes('PROD-GF-13-ACTIVATE'), false);
   assert.deepEqual(authority.acceptance.prod03, {
     status: 'PASS',
     recordedAtUtc: '2026-09-27T16:34:04.678274744Z',
@@ -186,7 +186,8 @@ test('greenfield authority records activation evidence without secrets', () => {
     rollbackActionId: 'ROLLBACK-01-REMOVE-NEW-ROUTE',
   });
   assert.deepEqual(authority.acceptance.prodGf13, {
-    status: 'PASS',
+    status: 'RUNTIME_PASS_GOVERNANCE_RECONCILIATION_REQUIRED',
+    governanceStatus: 'OUT_OF_ORDER_DURABILITY_REMEDIATION_REQUIRES_EXACT_RECONCILIATION',
     activatedAtUtc: '2026-09-27T23:11:00Z',
     verifiedAtUtc: '2026-09-27T23:12:00Z',
     route: 'https://jso.skmt617.top',
@@ -269,6 +270,19 @@ test('greenfield authority records activation evidence without secrets', () => {
     activeTargetVolumeMountCountAfterRestart: 1,
     priorContainerRemovedAfterVerification: true,
     durableActivationAcrossRestartVerified: true,
+    durableVolumeType: 'volume',
+    durableVolumeName: 'jenn-shooting-operations_shooting_data',
+    durableVolumeSource: '/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data',
+    durableVolumeDestination: '/app/data',
+    durableVolumeReadWrite: true,
+    durableDataDeviceInode: '64784:1835042',
+    durableLoopbackHostIp: '127.0.0.1',
+    durableLoopbackHostPort: 3800,
+    durableContainerPort: '3800/tcp',
+    durableVolumeIdentityVerified: true,
+    durableLoopbackBindVerified: true,
+    governanceReconciliationRequired: true,
+    governanceReconciliationCompleted: false,
     secretValuesRecorded: false,
     evidencePath: '/mnt/datadisk0/apps/jenn-shooting-operations/prod-gf13-activation-evidence.txt',
     evidenceSha256: 'sha256:1af2e9dd6ca511631ac5d7efb949d0b96c306b1d2c551241a5910b7ba7b81cb2',
@@ -298,6 +312,15 @@ test('greenfield authority records activation evidence without secrets', () => {
   }, 'GREENFIELD_ACCEPTANCE_INVALID');
   rejected(value => {
     value.acceptance.prodGf13.restartProbeAdmission = 'disabled';
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf13.durableVolumeName = 'wrong-volume';
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf13.durableLoopbackHostIp = '0.0.0.0';
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf13.governanceReconciliationCompleted = true;
   }, 'GREENFIELD_ACCEPTANCE_INVALID');
 });
 
