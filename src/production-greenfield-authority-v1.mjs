@@ -855,7 +855,12 @@ export function validateProductionGreenfieldAuthority(value, {
       secretValuesRecorded: false,
     },
     prodGf14: {
-      status: 'PASS',
+      status: 'RUNTIME_PASS_GOVERNANCE_RECONCILIATION_REQUIRED',
+      governanceStatus:
+        'OUT_OF_ORDER_GF14_RUNTIME_LIFECYCLE_REQUIRES_EXACT_RECONCILIATION',
+      governanceReconciliationRequired: true,
+      governanceReconciliationCompleted: false,
+      runtimeCleanupRestorationPass: true,
       authorizedActionId: 'PROD-GF-14-RESTORE-ORPHAN-CLEANUP',
       preflightAtUtc: '2026-09-28T03:28:24Z',
       restoreStartedAtUtc: '2026-09-28T03:32:51Z',
@@ -931,7 +936,11 @@ export function validateProductionGreenfieldAuthority(value, {
         'sha256:98519e90c4ac40862af935e52d519ee5ba5b9f2f08b88be7e005253c30a5478c',
       preGf14RuntimeEnvBackup:
         '/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime.pre-gf14',
-      rollbackActionId: 'ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP',
+      rollbackActionAtExecution: 'ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP',
+      rollbackBindingStatus: 'BASE_ROLLBACK_NOT_APPLICABLE_TO_GF14',
+      pendingGreenfieldRollbackActionId:
+        'ROLLBACK-GF-12-DISABLE-RESTORED-ORPHAN-CLEANUP',
+      cleanupRollbackTargetBinding: 'PENDING_GF14R_RECONCILIATION',
       rollbackControlRoot:
         '/app/data/.orphan-cleanup-control/1ad8b65e5b8819bc9c7e4df213b9bb2ef3d0721a45e0a62d54c4e7f6c0bb1d27',
       deletionIrreversibilityAcknowledged: true,
