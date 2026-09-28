@@ -234,3 +234,100 @@ BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 ```
 
 The local repository boundary is ready. The external validation gate is intentionally still open.
+
+
+## PROD-10 adapter-owner R1 source compatibility checkpoint
+
+Architecture R1 now separates source compatibility from live runtime enablement.
+
+The identified Jenn-owned adapter source is:
+
+```text
+repository = JENN2046/VCPToolBox-JENN-Extensions
+path       = ShootingOperationsPackages/VcpSyncAdapter/index.cjs
+revision   = f996e2dc7b85279aa9ce4d8c1e83ceab4a30e8ca
+owner      = VCPTOOLBOX_JENN_EXTENSIONS
+```
+
+That source is deliberately runtime-disabled and non-authorizing:
+
+```text
+defaultEnabled                = false
+runtimeEnabled                = false
+runtimeEligible               = true
+activationState               = SOURCE_ONLY_RUNTIME_DISABLED
+networkAuthorized             = false
+realBackendAuthorized         = false
+realAuthAuthorized            = false
+businessWritesAuthorized      = false
+persistentEnablementAuthorized = false
+productionActionRequired      = PROD-10-ENABLE-VCP-REMOTE-SYNC
+rollbackActionId              = ROLLBACK-09-DISABLE-VCP-CONFIG
+```
+
+Fresh adapter-source validation at exact extension head `f996e2dc7b85279aa9ce4d8c1e83ceab4a30e8ca`:
+
+```text
+targeted adapter suite = 6 / 6 PASS
+full extension suite   = 1845 / 1845 PASS
+fail                   = 0
+skip                   = 0
+```
+
+Fresh isolated cross-repository compatibility proof used:
+
+```text
+Jenn Shooting Operations head = 972713b95c4ff5b938895c8edd6ebf1396c73a40
+Jenn extension adapter head    = f996e2dc7b85279aa9ce4d8c1e83ceab4a30e8ca
+runtime                         = approved JSO production image / Node 24.21.0
+network                         = Docker --network none
+production data volume          = not mounted
+production endpoint             = not used
+production scheduler credential = not used
+synthetic scheduler credential  = used only inside isolated loopback test
+```
+
+Result:
+
+```text
+tests/vcp-sync-integration.test.mjs
+1 pass
+0 fail
+0 skip
+
+flow:
+pull
+→ revision-guarded/idempotent push
+→ verification pull
+```
+
+The WO-06C local-boundary harness with that exact adapter source reports:
+
+```text
+externalAdapterPresent = true
+adapterOwner           = VCPTOOLBOX_JENN_EXTENSIONS
+compatibility          = EXTERNAL_ADAPTER_PRESENT_REQUIRES_COMPATIBILITY_RUN
+overallExternalClosure = PENDING
+```
+
+The normal repository workflow intentionally does not inject an external adapter path. Its local run therefore continues to classify VCP as externally blocked rather than fabricating live runtime evidence.
+
+This checkpoint establishes **source implementation compatibility only**. It does not establish:
+
+- installation or registration in the live VCPToolBox runtime;
+- exact live VCPToolBox release/package binding;
+- production endpoint binding;
+- scheduler-principal secret binding;
+- `ROLLBACK-09-DISABLE-VCP-CONFIG` live readiness;
+- real production pull / guarded push / verification pull;
+- PROD-10 authorization or completion.
+
+Therefore the canonical live external state remains:
+
+```text
+VCP_SOURCE_COMPATIBILITY = PASS
+VCP_EXTERNAL_COMPATIBILITY = BLOCKED_EXTERNAL_RUNTIME
+PROD-10-ENABLE-VCP-REMOTE-SYNC = NOT_AUTHORIZED
+```
+
+The historical VCPChat adapter-path assumption is no longer used by the integration test or the WO-06C VCP boundary harness. Historical WO-06C evidence remains unchanged as historical evidence.
