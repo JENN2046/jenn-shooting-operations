@@ -1728,3 +1728,28 @@ requestableActionIds    = []
 
 This promotion does not authorize PROD-GF-14, VCP, Kiosk, DingTalk, any restart, any signal, or any other production mutation.
 
+### PROD-GF-13R promotion exact-head validation
+
+The implementation-bearing reconciliation promotion head was independently validated by the production-authorization workflow:
+
+```text
+implementationHead = 6e634b3513ad6ab106617ba853ef6484e2e2590f
+workflowRun        = 36372927800
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 764
+pass               = 763
+fail               = 0
+skip               = 1 expected external VCP adapter absence
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:2a70f8458098cbc90bd059d2ee5bebb18813f9f9bc84ba7e516f0718628d9bef
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
+```
+
+This validation performed no production mutation. Because this paragraph changes only the acceptance document, the resulting final docs head is validated separately before merge eligibility.
+
