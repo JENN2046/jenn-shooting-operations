@@ -546,6 +546,33 @@ test('greenfield activation remains exact-target and explicitly authorized', () 
   }, 'GREENFIELD_ACTIVATION_ACTION_INVALID');
 });
 
+test('durable activation reconciliation is exact-target, read-only and explicitly authorized', () => {
+  const action = authority.greenfieldActivationReconciliationAction;
+  assert.equal(action.id, 'PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION');
+  assert.equal(action.sideEffect, 'READ_ONLY');
+  assert.equal(action.requiresExplicitAuthorization, true);
+  assert.equal(action.rollbackActionIds.length, 0);
+  assert.match(action.effects[0], /without representing it as prior exact-action authorization/u);
+  assert.match(action.effects[2], /do not recreate, restart, signal, remount, rebind/u);
+  for (const proof of [
+    'DURABLE_LOOPBACK_BIND_IDENTITY',
+    'DURABLE_TARGET_VOLUME_NAME',
+    'DURABLE_TARGET_VOLUME_SOURCE',
+    'DURABLE_TARGET_VOLUME_DESTINATION',
+    'DURABLE_TARGET_VOLUME_DEVICE_INODE',
+    'DURABLE_RESTART_PROOF',
+  ]) {
+    assert.equal(action.evidenceRequired.includes(proof), true, proof);
+  }
+  rejected(value => {
+    value.greenfieldActivationReconciliationAction.requiresExplicitAuthorization = false;
+  }, 'GREENFIELD_ACTIVATION_RECONCILIATION_ACTION_INVALID');
+  rejected(value => {
+    value.greenfieldActivationReconciliationAction.effects[2] =
+      'recreate the production container during reconciliation';
+  }, 'GREENFIELD_ACTIVATION_RECONCILIATION_ACTION_INVALID');
+});
+
 test('greenfield cleanup cannot bypass activation or disable-and-drain recovery', () => {
   rejected(value => {
     value.greenfieldCleanupAction.preconditions =
@@ -558,7 +585,7 @@ test('greenfield cleanup cannot bypass activation or disable-and-drain recovery'
 
 test('greenfield authority cannot self-authorize the next production action', () => {
   rejected(value => {
-    value.authorization.requestableActionIds = ['PROD-GF-14-RESTORE-ORPHAN-CLEANUP'];
+    value.authorization.requestableActionIds = ['PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION'];
   }, 'GREENFIELD_AUTHORIZATION_STATE_INVALID');
   rejected(value => {
     value.authorization.blanketApprovalAllowed = true;
