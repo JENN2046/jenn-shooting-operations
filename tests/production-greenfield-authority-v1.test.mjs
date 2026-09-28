@@ -412,7 +412,7 @@ test('greenfield authority records activation reconciliation and GF14 cleanup re
     postContainerStartedAt: '2026-09-28T03:34:39.513157967Z',
     restartPolicy: 'unless-stopped',
     readOnlyRootfs: true,
-    loopbackBind: '127.0.0.1:3800->3800/tcp',
+    loopbackBind: '127.0.0.1:3800 to 3800/tcp',
     dataVolumeName: 'jenn-shooting-operations_shooting_data',
     dataVolumeSource: '/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data',
     dataVolumeDestination: '/app/data',
