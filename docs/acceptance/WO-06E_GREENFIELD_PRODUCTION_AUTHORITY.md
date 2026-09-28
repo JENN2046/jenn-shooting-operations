@@ -98,19 +98,20 @@ requestedActionIds             = []
 approvedActionIds              = []
 requestableActionIds           = []
 blanketApprovalAllowed         = false
-nextActionId                   = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
+nextActionId                   = PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION
 nextActionRequiresAuthorization = true
 ```
 
-This authority definition records PROD-03 through PROD-07 plus PROD-GF-13 activation as completed evidence but does not grant PROD-GF-14 or any later production mutation. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
+This authority definition records PROD-03 through PROD-07 as completed evidence. PROD-GF-13 has runtime activation evidence, but its authoritative completion is intentionally withheld because the later durability replacement/restart occurred out of order relative to the exact-action authorization model. The exact next action is PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION; it requires separate explicit authorization and is read-only. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
 
 ## Remaining facts before later gates
 
 - Tencent Cloud security-group control-plane fact if a change is actually required;
 - post-activation VCP/Kiosk wiring and their separately authorized real acceptance;
+- exact durable-activation governance reconciliation;
 - greenfield cleanup restoration evidence.
 
-No source migration, production data copy, additional public route change, additional container start, VCP/Kiosk integration enablement, or orphan-cleanup restoration is authorized by this document. PROD-03 through PROD-07 and PROD-GF-13 activation are recorded as completed production evidence; their completion grants no PROD-GF-14 authority.
+No source migration, production data copy, additional public route change, additional container start, container restart, VCP/Kiosk integration enablement, or orphan-cleanup restoration is authorized by this document. PROD-03 through PROD-07 are completed production evidence. PROD-GF-13 runtime activation is evidenced but is not in completedAcceptanceIds until the separately authorized read-only reconciliation action closes the disclosed out-of-order durability remediation.
 
 ## Codex review correction
 
@@ -1560,6 +1561,8 @@ The remediation uses the existing startup contract rather than an unattended sig
 
 The production container was then replaced using the same image, route, port, target volume and security posture. The prior container was retained as rollback protection until first-start verification passed. A deliberate restart of the replacement container then proved that activation survives restart without another signal.
 
+This replacement/restart is now explicitly disclosed as an out-of-order remediation relative to the exact-action authorization model. It is not retroactively represented as having had an exact Action ID before execution, and it is not sufficient by itself to mint authoritative PROD-GF-13 completion. Current authority therefore requires the separate read-only reconciliation action `PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION` before activation completion can enter `completedAcceptanceIds`.
+
 ```text
 durabilityRemediationStatus            = PASS
 startedAtUtc                           = 2026-09-27T23:29:06Z
@@ -1584,6 +1587,17 @@ uploadRowsAfterRestart                 = 0
 operationRowsAfterRestart              = 0
 auditRowsAfterRestart                  = 0
 activeTargetVolumeMountCount           = 1
+durableVolumeType                       = volume
+durableVolumeName                       = jenn-shooting-operations_shooting_data
+durableVolumeSource                     = /mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data
+durableVolumeDestination                = /app/data
+durableVolumeReadWrite                  = true
+durableDataDeviceInode                  = 64784:1835042
+durableLoopbackHostIp                   = 127.0.0.1
+durableLoopbackHostPort                 = 3800
+durableContainerPort                    = 3800/tcp
+durableVolumeIdentityVerified           = true
+durableLoopbackBindVerified             = true
 priorContainerRemovedAfterVerification = true
 durableActivationAcrossRestartVerified = true
 ```
@@ -1614,4 +1628,25 @@ nextAction         = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
 ```
 
 This validation followed a real restart proof: the replacement production container started with write admission enabled, was deliberately restarted, and remained enabled afterward while cleanup stayed disabled and the database/attachment baseline remained unchanged. This paragraph is docs-only, so the resulting final head is validated once more before merge eligibility.
+
+### Governance reconciliation boundary
+
+The durability remediation evidence is real, but the container replacement and restart happened before an exact durability-remediation Action ID existed. The authority therefore does not retroactively rewrite that history.
+
+Current state:
+
+```text
+PROD-GF-13 runtime activation status = PASS
+PROD-GF-13 governance status         = OUT_OF_ORDER_DURABILITY_REMEDIATION_REQUIRES_EXACT_RECONCILIATION
+PROD-GF-13 in completedAcceptanceIds = false
+nextActionId                         = PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION
+nextAction sideEffect                = READ_ONLY
+nextAction requires explicit auth    = true
+```
+
+`PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION` is intentionally non-mutating. It may only re-read and bind the exact current durable container to the approved image, `127.0.0.1:3800` host bind, approved target volume name/source/destination/device-inode, restart proof, health/write-admission state, database baseline, cleanup-disabled state and integration-disabled state. It must not recreate, restart, signal, remount, rebind, enable cleanup or enable integrations.
+
+Only after that exact read-only action is separately authorized and passes may PROD-GF-13 be admitted into `completedAcceptanceIds` and the next action advance to `PROD-GF-14-RESTORE-ORPHAN-CLEANUP`.
+
+Earlier exact-head validation blocks in this document are retained as historical snapshots of the branch at those heads. Any older snapshot that shows PROD-GF-13 complete or PROD-GF-14 as next is superseded by this reconciliation boundary and is not current authority.
 
