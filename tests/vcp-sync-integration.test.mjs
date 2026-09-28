@@ -1,20 +1,43 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { once } from 'node:events';
-import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { createOperationsServer } from '../src/server.mjs';
+
+const EXPECTED_ADAPTER_OWNER = 'JENN2046/VCPToolBox-JENN-Extensions';
+const EXPECTED_ADAPTER_SOURCE_PATH = 'ShootingOperationsPackages/VcpSyncAdapter/index.cjs';
+const EXPECTED_ADAPTER_REVISION = '1d4ac43183296adccc570ac62598bc078d140317';
+const EXPECTED_ADAPTER_SHA256 = 'cef5a9c7f2b0f41dd5a9bd9faa5cd490be005fb31f16c28ede221a05883ef2d3';
 
 const require = createRequire(import.meta.url);
 const configuredAdapterPath = process.env.VCP_SHOOTING_OPERATIONS_ADAPTER_PATH || '';
 const syncAdapterPath = configuredAdapterPath ? resolve(configuredAdapterPath) : null;
 
-if (syncAdapterPath && !existsSync(syncAdapterPath)) {
-  throw new Error('configured VCP Shooting Operations adapter path does not exist');
+function verifyConfiguredAdapterIdentity() {
+  if (!syncAdapterPath) return false;
+  if (!existsSync(syncAdapterPath)) {
+    throw new Error('configured VCP Shooting Operations adapter path does not exist');
+  }
+  const owner = process.env.VCP_SHOOTING_OPERATIONS_ADAPTER_OWNER || '';
+  const sourcePath = process.env.VCP_SHOOTING_OPERATIONS_ADAPTER_SOURCE_PATH || '';
+  const revision = process.env.VCP_SHOOTING_OPERATIONS_ADAPTER_REVISION || '';
+  const declaredSha256 = process.env.VCP_SHOOTING_OPERATIONS_ADAPTER_SHA256 || '';
+  const actualSha256 = createHash('sha256').update(readFileSync(syncAdapterPath)).digest('hex');
+
+  if (owner !== EXPECTED_ADAPTER_OWNER
+      || sourcePath !== EXPECTED_ADAPTER_SOURCE_PATH
+      || revision !== EXPECTED_ADAPTER_REVISION
+      || declaredSha256 !== EXPECTED_ADAPTER_SHA256
+      || actualSha256 !== EXPECTED_ADAPTER_SHA256) {
+    throw new Error('configured VCP Shooting Operations adapter identity does not match the reviewed source');
+  }
+  return true;
 }
 
-const syncAdapterAvailable = Boolean(syncAdapterPath);
+const syncAdapterAvailable = verifyConfiguredAdapterIdentity();
 const ShootingOperationsSyncAdapter = syncAdapterAvailable
   ? require(syncAdapterPath).ShootingOperationsSyncAdapter
   : null;
@@ -49,10 +72,10 @@ after(async () => {
   await once(operations.server, 'close');
 });
 
-test('VCPToolBox Jenn adapter completes pull, guarded push, and verification pull', {
+test('identified VCPToolBox Jenn adapter completes pull, guarded push, and verification pull', {
   skip: syncAdapterAvailable
     ? false
-    : 'identified VCPToolBox/JENN-Extensions Shooting Operations adapter path was not supplied',
+    : 'identified VCPToolBox/JENN-Extensions Shooting Operations adapter identity was not supplied',
 }, async () => {
   const initial = await client.pull();
   assert.equal(initial.revision, 0);
