@@ -591,7 +591,9 @@ export function validateProductionGreenfieldAuthority(value, {
       rollbackActionId: 'ROLLBACK-01-REMOVE-NEW-ROUTE',
     },
     prodGf13: {
-      status: 'PASS',
+      status: 'RUNTIME_PASS_GOVERNANCE_RECONCILIATION_REQUIRED',
+      governanceStatus:
+        'OUT_OF_ORDER_DURABILITY_REMEDIATION_REQUIRES_EXACT_RECONCILIATION',
       activatedAtUtc: '2026-09-27T23:11:00Z',
       verifiedAtUtc: '2026-09-27T23:12:00Z',
       route: 'https://jso.skmt617.top',
@@ -684,6 +686,20 @@ export function validateProductionGreenfieldAuthority(value, {
       activeTargetVolumeMountCountAfterRestart: 1,
       priorContainerRemovedAfterVerification: true,
       durableActivationAcrossRestartVerified: true,
+      durableVolumeType: 'volume',
+      durableVolumeName: 'jenn-shooting-operations_shooting_data',
+      durableVolumeSource:
+        '/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data',
+      durableVolumeDestination: '/app/data',
+      durableVolumeReadWrite: true,
+      durableDataDeviceInode: '64784:1835042',
+      durableLoopbackHostIp: '127.0.0.1',
+      durableLoopbackHostPort: 3800,
+      durableContainerPort: '3800/tcp',
+      durableVolumeIdentityVerified: true,
+      durableLoopbackBindVerified: true,
+      governanceReconciliationRequired: true,
+      governanceReconciliationCompleted: false,
       secretValuesRecorded: false,
       evidencePath:
         '/mnt/datadisk0/apps/jenn-shooting-operations/prod-gf13-activation-evidence.txt',
