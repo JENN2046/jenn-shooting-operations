@@ -98,20 +98,20 @@ requestedActionIds             = []
 approvedActionIds              = []
 requestableActionIds           = []
 blanketApprovalAllowed         = false
-nextActionId                   = PROD-GF-13-ACTIVATE
+nextActionId                   = PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION
 nextActionRequiresAuthorization = true
 ```
 
-This authority definition records PROD-03 through PROD-07 as completed evidence but does not grant PROD-GF-13 or any later production mutation. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
+This authority definition records PROD-03 through PROD-07 as completed evidence. PROD-GF-13 has runtime activation evidence, but its authoritative completion is intentionally withheld because the later durability replacement/restart occurred out of order relative to the exact-action authorization model. The exact next action is PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION; it requires separate explicit authorization and is read-only. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
 
 ## Remaining facts before later gates
 
 - Tencent Cloud security-group control-plane fact if a change is actually required;
-- greenfield activation evidence;
 - post-activation VCP/Kiosk wiring and their separately authorized real acceptance;
+- exact durable-activation governance reconciliation;
 - greenfield cleanup restoration evidence.
 
-No source migration, production data copy, additional public route change, additional container start, integration enablement, or production activation is authorized by this document. PROD-03 through PROD-07 are recorded as completed production evidence only; their completion grants no PROD-GF-13 authority.
+No source migration, production data copy, additional public route change, additional container start, container restart, VCP/Kiosk integration enablement, or orphan-cleanup restoration is authorized by this document. PROD-03 through PROD-07 are completed production evidence. PROD-GF-13 runtime activation is evidenced but is not in completedAcceptanceIds until the separately authorized read-only reconciliation action closes the disclosed out-of-order durability remediation.
 
 ## Codex review correction
 
@@ -1434,4 +1434,222 @@ nextAction         = PROD-GF-13-ACTIVATE
 ```
 
 This validation performed no production mutation. Because this paragraph changes only the acceptance document, the resulting final docs head is validated separately before merge eligibility.
+
+## Production evidence promotion: PROD-GF-13
+
+The owner explicitly authorized `PROD-GF-13-ACTIVATE`. Activation was performed only after a fresh read-only pre-enable verification of the already-routed Greenfield service.
+
+Pre-enable verification established all of the following while the write fence was still disabled:
+
+```text
+instanceId                       = ins-mi85f3my
+route                            = https://jso.skmt617.top
+clientScope                      = HTTPS_ROUTE_ONLY_NO_VCP_NO_KIOSK
+containerId                      = 45ff5469cbd8874fbc3f5ac71260a57596b19f86a26b4131fa38d5d678162a99
+imageId                          = sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545
+hostPid                          = 747599
+containerStartedAt               = 2026-09-27T17:49:01.319828677Z
+targetVolumeContainerMountCount  = 1
+containerProcessCount            = 1
+preEnableWriteAdmission          = disabled
+preEnableMutatingMethodsDenied   = true
+preEnableOrphanCleanupState      = disabled
+preEnableOrphanCleanupActiveRuns = 0
+preEnableRevision                = 0
+preEnableUploadRows              = 0
+preEnableOperationRows           = 0
+preEnableAuditRows               = 0
+preEnableAttachmentFiles         = 0
+integrationEnvCount              = 0
+directStoreGuardCount            = 5
+```
+
+The route, container, image, process, target volume and database baseline were then fixed as the pre-enable identity set. Activation sent exactly one `SIGUSR2` to the existing container process. The process emitted:
+
+```text
+event           = WRITE_ADMISSION_ENABLED
+writeAdmission  = enabled
+transitionCount = 1
+```
+
+No container restart, image replacement, route change, Nginx change or volume remount occurred.
+
+Post-enable verification confirmed:
+
+```text
+activatedAtUtc                     = 2026-09-27T23:11:00Z
+verifiedAtUtc                      = 2026-09-27T23:12:00Z
+sameContainerPost                  = true
+sameHostPidPost                    = true
+sameStartedAtPost                  = true
+sameImagePost                      = true
+sameRouteConfigPost                = true
+sameDataVolumePost                 = true
+loopbackHealth                     = 200
+routedHealth                       = 200
+loopbackWriteAdmission             = enabled
+routedWriteAdmission               = enabled
+unauthenticatedWriteProbeStatus    = 401
+unauthenticatedWriteProbeCode      = UNAUTHORIZED
+orphanCleanupPost                  = disabled
+orphanCleanupActiveRunsPost        = 0
+postEnableRevision                 = 0
+postEnableUploadRows               = 0
+postEnableOperationRows            = 0
+postEnableAuditRows                = 0
+postEnableAttachmentFiles          = 0
+integrationsRemainDisabled         = true
+orphanCleanupRestorationDeferred   = true
+```
+
+The unauthenticated write probe changing from pre-activation `503 WRITE_ADMISSION_DISABLED` to post-activation `401 UNAUTHORIZED` proves the in-process admission fence was enabled while the normal authorization boundary remained effective. The probe caused no business mutation; revision and every database/attachment baseline remained zero.
+
+Low-disclosure production evidence:
+
+```text
+evidencePath   = /mnt/datadisk0/apps/jenn-shooting-operations/prod-gf13-activation-evidence.txt
+evidenceMode   = 0600
+evidenceSha256 = sha256:1af2e9dd6ca511631ac5d7efb949d0b96c306b1d2c551241a5910b7ba7b81cb2
+secretValuesRecorded = false
+```
+
+Authority state after this promotion:
+
+```text
+completedAcceptanceIds includes PROD-GF-13-ACTIVATE
+authorization.status  = FROZEN_NOT_REQUESTED
+requestedActionIds    = []
+approvedActionIds     = []
+requestableActionIds  = []
+nextActionId          = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
+```
+
+VCP and Kiosk remain separate post-activation actions. Orphan cleanup remains disabled until a separately authorized `PROD-GF-14-RESTORE-ORPHAN-CLEANUP`. This promotion does not authorize any of them.
+
+### PROD-GF-13 promotion exact-head validation (historical, superseded)
+
+This is a historical branch snapshot retained for audit. It predates the durability-governance P1 and is superseded by the current reconciliation boundary below. The implementation-bearing activation promotion head was independently validated by the repository production-authorization workflow:
+
+```text
+implementationHead = f537ebadd8a45f430245e5b7456a17fdd4aa172b
+workflowRun        = 36358069647
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 763
+pass               = 762
+fail               = 0
+skip               = 1 expected external VCP adapter absence
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:cbabd9756a465d0d616e09407a08e173601a24e4e3f99a283a0ac7dcd509793d
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
+```
+
+This validation performed no additional production mutation. Because this paragraph changes only the acceptance document, the resulting final docs head is validated separately before merge eligibility.
+
+
+
+### Activation durability remediation
+
+Review identified that the original one-time in-process activation would not survive a container restart because the original container startup mode remained disabled.
+
+The remediation uses the existing startup contract rather than an unattended signal watcher. A non-sensitive runtime configuration now starts the production service with write admission enabled while orphan cleanup remains disabled. The exact production image was first verified against an isolated disposable volume.
+
+The production container was then replaced using the same image, route, port, target volume and security posture. The prior container was retained as rollback protection until first-start verification passed. A deliberate restart of the replacement container then proved that activation survives restart without another signal.
+
+This replacement/restart is now explicitly disclosed as an out-of-order remediation relative to the exact-action authorization model. It is not retroactively represented as having had an exact Action ID before execution, and it is not sufficient by itself to mint authoritative PROD-GF-13 completion. Current authority therefore requires the separate read-only reconciliation action `PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION` before activation completion can enter `completedAcceptanceIds`.
+
+```text
+durabilityRemediationStatus            = PASS
+startedAtUtc                           = 2026-09-27T23:29:06Z
+verifiedAtUtc                          = 2026-09-27T23:29:42Z
+priorContainerId                       = 45ff5469cbd8874fbc3f5ac71260a57596b19f86a26b4131fa38d5d678162a99
+durableContainerId                     = 1b2afb092d3ec1d834d12ff58fa86f4b1c05ec27913e8e80da278e9e9d0838cb
+durableContainerStartedAt              = 2026-09-27T23:29:33.784982222Z
+durableContainerImageId                = sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545
+restartPolicy                          = unless-stopped
+readOnlyRootfs                         = true
+durableRuntimeEnvSha256                = sha256:98519e90c4ac40862af935e52d519ee5ba5b9f2f08b88be7e005253c30a5478c
+firstDurableStartAdmission             = enabled
+restartProbePerformed                  = true
+restartProbeAdmission                  = enabled
+publicHealthAfterRestart               = 200
+publicAdmissionAfterRestart            = enabled
+unauthenticatedWriteAfterRestart       = 401 UNAUTHORIZED
+orphanCleanupAfterRestart              = disabled
+orphanCleanupActiveRunsAfterRestart    = 0
+databaseRevisionAfterRestart           = 0
+uploadRowsAfterRestart                 = 0
+operationRowsAfterRestart              = 0
+auditRowsAfterRestart                  = 0
+activeTargetVolumeMountCount           = 1
+durableVolumeType                       = volume
+durableVolumeName                       = jenn-shooting-operations_shooting_data
+durableVolumeSource                     = /mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data
+durableVolumeDestination                = /app/data
+durableVolumeReadWrite                  = true
+durableDataDeviceInode                  = 64784:1835042
+durableDatabasePath                     = /app/data/shooting-operations.sqlite
+durableDatabaseDeviceInode              = 64784:1835048
+durableDatabaseIdentityVerified         = true
+durableLoopbackHostIp                   = 127.0.0.1
+durableLoopbackHostPort                 = 3800
+durableContainerPort                    = 3800/tcp
+durableVolumeIdentityVerified           = true
+durableLoopbackBindVerified             = true
+priorContainerRemovedAfterVerification = true
+durableActivationAcrossRestartVerified = true
+```
+
+The remediation records no credential values.
+
+### Durability remediation exact-head validation (historical, superseded)
+
+This is a historical branch snapshot retained for audit. It predates the later finding that the replacement/restart itself lacked an exact Action ID. It is not current authorization state. The implementation-bearing durability remediation head was validated after the restart proof and authority update:
+
+```text
+implementationHead = d5c5d6acb9b98dd475ddc55664a9964923bbfee5
+workflowRun        = 36359082926
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 763
+pass               = 762
+fail               = 0
+skip               = 1 expected external VCP adapter absence
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:b2fc967fc00e63d26dead398373eca886a59c6f32ac8cf6ad3fa77edaf235e4c
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-GF-14-RESTORE-ORPHAN-CLEANUP
+```
+
+This validation followed a real restart proof: the replacement production container started with write admission enabled, was deliberately restarted, and remained enabled afterward while cleanup stayed disabled and the database/attachment baseline remained unchanged. This paragraph is docs-only, so the resulting final head is validated once more before merge eligibility.
+
+### Governance reconciliation boundary
+
+The durability remediation evidence is real, but the container replacement and restart happened before an exact durability-remediation Action ID existed. The authority therefore does not retroactively rewrite that history.
+
+Current state:
+
+```text
+PROD-GF-13 runtime activation status = PASS
+PROD-GF-13 governance status         = OUT_OF_ORDER_DURABILITY_REMEDIATION_REQUIRES_EXACT_RECONCILIATION
+PROD-GF-13 in completedAcceptanceIds = false
+nextActionId                         = PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION
+nextAction sideEffect                = READ_ONLY
+nextAction requires explicit auth    = true
+```
+
+`PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION` is intentionally non-mutating. It may only re-read and bind the exact current durable container to the approved image, `127.0.0.1:3800` host bind, approved target volume name/source/destination/device-inode, exact database path `/app/data/shooting-operations.sqlite` and database device/inode `64784:1835048`, restart proof, health/write-admission state, database baseline, cleanup-disabled state and integration-disabled state. It must not recreate, restart, signal, remount, rebind, enable cleanup or enable integrations.
+
+Only after that exact read-only action is separately authorized and passes may PROD-GF-13 be admitted into `completedAcceptanceIds` and the next action advance to `PROD-GF-14-RESTORE-ORPHAN-CLEANUP`.
+
+Earlier exact-head validation blocks in this document are retained as historical snapshots of the branch at those heads. Any older snapshot that shows PROD-GF-13 complete or PROD-GF-14 as next is superseded by this reconciliation boundary and is not current authority.
 

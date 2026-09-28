@@ -31,11 +31,11 @@ test('greenfield authority binds the frozen parent and grants no production muta
   assert.deepEqual(authority.authorization.requestedActionIds, []);
   assert.deepEqual(authority.authorization.approvedActionIds, []);
   assert.deepEqual(authority.authorization.requestableActionIds, []);
-  assert.equal(authority.authorization.nextActionId, 'PROD-GF-13-ACTIVATE');
+  assert.equal(authority.authorization.nextActionId, 'PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION');
   assert.equal(authority.authorization.nextActionRequiresExplicitAuthorization, true);
 });
 
-test('greenfield authority records PROD-03 through PROD-07 production evidence without secrets', () => {
+test('greenfield authority records runtime activation but withholds completion pending reconciliation', () => {
   assert.deepEqual(
     authority.completedAcceptanceIds.slice(-5),
     [
@@ -46,6 +46,7 @@ test('greenfield authority records PROD-03 through PROD-07 production evidence w
       'PROD-07-CONFIGURE-REVERSE-PROXY-TLS',
     ],
   );
+  assert.equal(authority.completedAcceptanceIds.includes('PROD-GF-13-ACTIVATE'), false);
   assert.deepEqual(authority.acceptance.prod03, {
     status: 'PASS',
     recordedAtUtc: '2026-09-27T16:34:04.678274744Z',
@@ -184,6 +185,112 @@ test('greenfield authority records PROD-03 through PROD-07 production evidence w
     evidenceSha256: 'sha256:a49ecf5e5d358f1774f631af57dd930401a3bc9c6468d339322966d1e6329cc1',
     rollbackActionId: 'ROLLBACK-01-REMOVE-NEW-ROUTE',
   });
+  assert.deepEqual(authority.acceptance.prodGf13, {
+    status: 'RUNTIME_PASS_GOVERNANCE_RECONCILIATION_REQUIRED',
+    governanceStatus: 'OUT_OF_ORDER_DURABILITY_REMEDIATION_REQUIRES_EXACT_RECONCILIATION',
+    activatedAtUtc: '2026-09-27T23:11:00Z',
+    verifiedAtUtc: '2026-09-27T23:12:00Z',
+    route: 'https://jso.skmt617.top',
+    clientScope: 'HTTPS_ROUTE_ONLY_NO_VCP_NO_KIOSK',
+    containerName: 'jenn-shooting-operations-prod',
+    containerId: '45ff5469cbd8874fbc3f5ac71260a57596b19f86a26b4131fa38d5d678162a99',
+    imageId: 'sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545',
+    hostPid: 747599,
+    containerStartedAt: '2026-09-27T17:49:01.319828677Z',
+    dataVolumeName: 'jenn-shooting-operations_shooting_data',
+    dataVolumeDeviceInode: '64784:1835042',
+    databaseDeviceInode: '64784:1835048',
+    preEnableLoopbackHealth: 200,
+    preEnableRoutedHealth: 200,
+    preEnableWriteAdmission: 'disabled',
+    preEnableMutatingMethodsDenied: true,
+    preEnableOrphanCleanupState: 'disabled',
+    preEnableOrphanCleanupActiveRuns: 0,
+    preEnableRevision: 0,
+    preEnableUploadRows: 0,
+    preEnableOperationRows: 0,
+    preEnableAuditRows: 0,
+    preEnableAttachmentFiles: 0,
+    targetVolumeContainerMountCount: 1,
+    containerProcessCount: 1,
+    integrationEnvCount: 0,
+    directStoreGuardCount: 5,
+    nginxConfigSha256: 'sha256:35ea9acd80ba600e88d8c594a3a2558ec4cb57dd078c61d6832f5798c2eabc33',
+    transitionSignal: 'SIGUSR2',
+    writeAdmissionEvent: 'WRITE_ADMISSION_ENABLED',
+    writeAdmissionRuntimePost: 'enabled',
+    writeAdmissionTransitionCount: 1,
+    sameContainerPost: true,
+    sameHostPidPost: true,
+    sameStartedAtPost: true,
+    sameImagePost: true,
+    sameRouteConfigPost: true,
+    sameDataVolumePost: true,
+    postEnableLoopbackHealth: 200,
+    postEnableRoutedHealth: 200,
+    postEnableLoopbackWriteAdmission: 'enabled',
+    postEnableRoutedWriteAdmission: 'enabled',
+    unauthenticatedWriteProbeStatus: 401,
+    unauthenticatedWriteProbeCode: 'UNAUTHORIZED',
+    orphanCleanupPost: 'disabled',
+    orphanCleanupActiveRunsPost: 0,
+    postEnableRevision: 0,
+    postEnableUploadRows: 0,
+    postEnableOperationRows: 0,
+    postEnableAuditRows: 0,
+    postEnableAttachmentFiles: 0,
+    integrationsRemainDisabled: true,
+    orphanCleanupRestorationDeferred: true,
+    durabilityRemediationStatus: 'PASS',
+    durabilityRemediationStartedAtUtc: '2026-09-27T23:29:06Z',
+    durabilityRemediationVerifiedAtUtc: '2026-09-27T23:29:42Z',
+    priorContainerId: '45ff5469cbd8874fbc3f5ac71260a57596b19f86a26b4131fa38d5d678162a99',
+    durableContainerId: '1b2afb092d3ec1d834d12ff58fa86f4b1c05ec27913e8e80da278e9e9d0838cb',
+    durableContainerStartedAt: '2026-09-27T23:29:33.784982222Z',
+    durableContainerImageId: 'sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545',
+    durableContainerRestartPolicy: 'unless-stopped',
+    durableContainerReadOnlyRootfs: true,
+    durableRuntimeEnvPath: '/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime',
+    durableRuntimeEnvSha256: 'sha256:98519e90c4ac40862af935e52d519ee5ba5b9f2f08b88be7e005253c30a5478c',
+    durabilityRemediationScriptPath: '/mnt/datadisk0/apps/jenn-shooting-operations/prod-gf13-durability-remediation.sh',
+    durabilityRemediationScriptSha256: 'sha256:eb34f41d56c9fd464ae3517c0aa5b38c6836a96695bc4cbffea5282e682e7fb4',
+    firstDurableStartAdmission: 'enabled',
+    restartProbePerformed: true,
+    restartProbeAdmission: 'enabled',
+    publicHealthAfterRestart: 200,
+    publicAdmissionAfterRestart: 'enabled',
+    unauthenticatedWriteAfterRestartStatus: 401,
+    unauthenticatedWriteAfterRestartCode: 'UNAUTHORIZED',
+    orphanCleanupAfterRestart: 'disabled',
+    orphanCleanupActiveRunsAfterRestart: 0,
+    databaseRevisionAfterRestart: 0,
+    uploadRowsAfterRestart: 0,
+    operationRowsAfterRestart: 0,
+    auditRowsAfterRestart: 0,
+    activeTargetVolumeMountCountAfterRestart: 1,
+    priorContainerRemovedAfterVerification: true,
+    durableActivationAcrossRestartVerified: true,
+    durableVolumeType: 'volume',
+    durableVolumeName: 'jenn-shooting-operations_shooting_data',
+    durableVolumeSource: '/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data',
+    durableVolumeDestination: '/app/data',
+    durableVolumeReadWrite: true,
+    durableDataDeviceInode: '64784:1835042',
+    durableDatabasePath: '/app/data/shooting-operations.sqlite',
+    durableDatabaseDeviceInode: '64784:1835048',
+    durableDatabaseIdentityVerified: true,
+    durableLoopbackHostIp: '127.0.0.1',
+    durableLoopbackHostPort: 3800,
+    durableContainerPort: '3800/tcp',
+    durableVolumeIdentityVerified: true,
+    durableLoopbackBindVerified: true,
+    governanceReconciliationRequired: true,
+    governanceReconciliationCompleted: false,
+    secretValuesRecorded: false,
+    evidencePath: '/mnt/datadisk0/apps/jenn-shooting-operations/prod-gf13-activation-evidence.txt',
+    evidenceSha256: 'sha256:1af2e9dd6ca511631ac5d7efb949d0b96c306b1d2c551241a5910b7ba7b81cb2',
+    rollbackPreserveDataVolume: 'jenn-shooting-operations_shooting_data',
+  });
 
   rejected(value => {
     value.acceptance.prod03.uniqueRoleTokenCount = 3;
@@ -199,6 +306,30 @@ test('greenfield authority records PROD-03 through PROD-07 production evidence w
   }, 'GREENFIELD_ACCEPTANCE_INVALID');
   rejected(value => {
     value.acceptance.prod07.publicWritePostStatus = 200;
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf13.writeAdmissionTransitionCount = 2;
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf13.durableActivationAcrossRestartVerified = false;
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf13.restartProbeAdmission = 'disabled';
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf13.durableVolumeName = 'wrong-volume';
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf13.durableLoopbackHostIp = '0.0.0.0';
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf13.durableDatabasePath = '/app/data/alternate.sqlite';
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf13.durableDatabaseDeviceInode = '64784:9999999';
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf13.governanceReconciliationCompleted = true;
   }, 'GREENFIELD_ACCEPTANCE_INVALID');
 });
 
@@ -424,6 +555,35 @@ test('greenfield activation remains exact-target and explicitly authorized', () 
   }, 'GREENFIELD_ACTIVATION_ACTION_INVALID');
 });
 
+test('durable activation reconciliation is exact-target, read-only and explicitly authorized', () => {
+  const action = authority.greenfieldActivationReconciliationAction;
+  assert.equal(action.id, 'PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION');
+  assert.equal(action.sideEffect, 'READ_ONLY');
+  assert.equal(action.requiresExplicitAuthorization, true);
+  assert.equal(action.rollbackActionIds.length, 0);
+  assert.match(action.effects[0], /without representing it as prior exact-action authorization/u);
+  assert.match(action.effects[2], /do not recreate, restart, signal, remount, rebind/u);
+  for (const proof of [
+    'DURABLE_LOOPBACK_BIND_IDENTITY',
+    'DURABLE_TARGET_VOLUME_NAME',
+    'DURABLE_TARGET_VOLUME_SOURCE',
+    'DURABLE_TARGET_VOLUME_DESTINATION',
+    'DURABLE_TARGET_VOLUME_DEVICE_INODE',
+    'DURABLE_DATABASE_PATH',
+    'DURABLE_DATABASE_DEVICE_INODE',
+    'DURABLE_RESTART_PROOF',
+  ]) {
+    assert.equal(action.evidenceRequired.includes(proof), true, proof);
+  }
+  rejected(value => {
+    value.greenfieldActivationReconciliationAction.requiresExplicitAuthorization = false;
+  }, 'GREENFIELD_ACTIVATION_RECONCILIATION_ACTION_INVALID');
+  rejected(value => {
+    value.greenfieldActivationReconciliationAction.effects[2] =
+      'recreate the production container during reconciliation';
+  }, 'GREENFIELD_ACTIVATION_RECONCILIATION_ACTION_INVALID');
+});
+
 test('greenfield cleanup cannot bypass activation or disable-and-drain recovery', () => {
   rejected(value => {
     value.greenfieldCleanupAction.preconditions =
@@ -436,7 +596,7 @@ test('greenfield cleanup cannot bypass activation or disable-and-drain recovery'
 
 test('greenfield authority cannot self-authorize the next production action', () => {
   rejected(value => {
-    value.authorization.requestableActionIds = ['PROD-GF-13-ACTIVATE'];
+    value.authorization.requestableActionIds = ['PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION'];
   }, 'GREENFIELD_AUTHORIZATION_STATE_INVALID');
   rejected(value => {
     value.authorization.blanketApprovalAllowed = true;
