@@ -234,3 +234,146 @@ BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE
 ```
 
 The local repository boundary is ready. The external validation gate is intentionally still open.
+
+
+## PROD-10 adapter-owner R1 source compatibility checkpoint
+
+Architecture R1 separates reviewed adapter-source compatibility from live VCPToolBox runtime enablement.
+
+The identified Jenn-owned adapter package is content-bound as a complete two-file source package:
+
+```text
+repository = JENN2046/VCPToolBox-JENN-Extensions
+revision   = e4da9e65a442c7bba3c56ec267cdf69848ed09e5
+owner      = VCPTOOLBOX_JENN_EXTENSIONS
+
+index path =
+ShootingOperationsPackages/VcpSyncAdapter/index.cjs
+index sha256 =
+2c97bdeaba97affce3454feda4202816be6f483f224ff5319e43e4fe8d7fd973
+
+manifest path =
+ShootingOperationsPackages/VcpSyncAdapter/package-manifest.json
+manifest sha256 =
+f52d13cbd9b7c38422304916a88fbba16825e5f7ffbacc8644b624b3c6f72161
+
+exact package files =
+index.cjs
+package-manifest.json
+```
+
+The compatibility harness rejects an incomplete package, a package with extra sibling files, a mismatched owner/path/revision declaration, a mismatched source digest, or a package manifest that changes the frozen runtime-disabled / PROD-10 / rollback boundary.
+
+That package is deliberately runtime-disabled and non-authorizing:
+
+```text
+defaultEnabled                 = false
+runtimeEnabled                 = false
+runtimeEligible                = true
+activationState                = SOURCE_ONLY_RUNTIME_DISABLED
+networkAuthorized              = false
+realBackendAuthorized          = false
+realAuthAuthorized             = false
+businessWritesAuthorized       = false
+persistentEnablementAuthorized = false
+productionActionRequired       = PROD-10-ENABLE-VCP-REMOTE-SYNC
+rollbackActionId               = ROLLBACK-09-DISABLE-VCP-CONFIG
+```
+
+Fresh adapter-source validation at exact extension head `e4da9e65a442c7bba3c56ec267cdf69848ed09e5`:
+
+```text
+targeted adapter suite = 17 / 17 PASS
+full extension suite   = 1856 / 1856 PASS
+fail                   = 0
+skip                   = 0
+```
+
+The review-hardened adapter proves:
+
+- response bodies are capped while streaming rather than after full buffering;
+- write-side 5xx and transport failures are classified as uncertain and are not automatically retried;
+- verify-after-write uses structural equality that preserves array order without depending on object property insertion order;
+- the runtime source and package metadata are bound in `manifests/MANIFEST.sha256`;
+- `snapshot.revision` must exactly equal the guarded `expectedRevision` before any write request is emitted;
+- scheduler credentials require HTTPS except for explicit loopback HTTP used by isolated tests;
+- the scheduler credential remains private adapter state and is absent from public properties and JSON serialization;
+- the validated base URL and credential-bearing transport are immutable private state;
+- guarded-write revision and operation identity are captured once and reused for the wire headers and response-revision check.
+
+Fresh isolated cross-repository compatibility proof used:
+
+```text
+Jenn Shooting Operations head = cb40716d33e89a0bda87e7abcc7da4601cf5e966
+Jenn extension adapter head    = e4da9e65a442c7bba3c56ec267cdf69848ed09e5
+adapter owner                  = JENN2046/VCPToolBox-JENN-Extensions
+adapter index sha256           = 2c97bdeaba97affce3454feda4202816be6f483f224ff5319e43e4fe8d7fd973
+adapter manifest sha256        = f52d13cbd9b7c38422304916a88fbba16825e5f7ffbacc8644b624b3c6f72161
+runtime                        = approved JSO production image / Node 24.21.0
+network                        = Docker --network none
+production data volume         = not mounted
+production endpoint            = not used
+production scheduler credential = not used
+synthetic scheduler credential = used only inside isolated loopback test
+```
+
+Result:
+
+```text
+tests/vcp-sync-integration.test.mjs
+1 pass
+0 fail
+0 skip
+
+adapter flow:
+pull
+→ revision-guarded/idempotent push
+→ verification pull
+
+independent JSO observation:
+stored revision = 1
+stored task id  = TASK-INTEGRATION
+request trace   =
+GET /api/v1/snapshot
+PUT /api/v1/snapshot
+GET /api/v1/snapshot
+```
+
+The persisted store observation and HTTP request trace are independent of the adapter's returned `write` / `verifiedSnapshot` object, so the compatibility proof cannot pass merely by synthesizing a success result.
+
+The WO-06C local-boundary harness with that source package reports source state separately from live external state:
+
+```text
+sourceAdapterPresent = true
+sourceIdentityVerified = false
+architectureOwner = VCPTOOLBOX_JENN_EXTENSIONS
+verifiedAdapterOwner = null
+externalAdapterPresent = false
+sourceCompatibility = ADAPTER_SOURCE_PRESENT_REQUIRES_IDENTITY_AND_COMPATIBILITY_RUN
+compatibility = BLOCKED_EXTERNAL_RUNTIME
+overallExternalClosure = PENDING
+```
+
+The separate package-bound compatibility test above supplies the source compatibility PASS and verifies the exact Jenn extension owner/revision/digests before module load. The local-boundary harness intentionally treats a configured filesystem path as unverified source presence only; it does not assign a verified owner from path existence. It also continues to report live VCP compatibility as `BLOCKED_EXTERNAL_RUNTIME` because source compatibility does not prove installation, registration, endpoint binding, secret binding, or rollback readiness in the live VCPToolBox runtime.
+
+The normal repository workflow intentionally does not inject an external adapter package identity. Its local run therefore continues to classify VCP as externally blocked rather than fabricating live runtime evidence.
+
+This checkpoint establishes **source implementation compatibility only**. It does not establish:
+
+- installation or registration in the live VCPToolBox runtime;
+- exact live VCPToolBox release/package binding;
+- production endpoint binding;
+- scheduler-principal secret binding;
+- `ROLLBACK-09-DISABLE-VCP-CONFIG` live readiness;
+- real production pull / guarded push / verification pull;
+- PROD-10 authorization or completion.
+
+Therefore the canonical live external state remains:
+
+```text
+VCP_SOURCE_COMPATIBILITY = PASS
+VCP_EXTERNAL_COMPATIBILITY = BLOCKED_EXTERNAL_RUNTIME
+PROD-10-ENABLE-VCP-REMOTE-SYNC = NOT_AUTHORIZED
+```
+
+The historical VCPChat adapter-path assumption is no longer used by the integration test or the WO-06C VCP boundary harness. Historical WO-06C evidence remains unchanged as historical evidence.
