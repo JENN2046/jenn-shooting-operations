@@ -98,19 +98,18 @@ requestedActionIds             = []
 approvedActionIds              = []
 requestableActionIds           = []
 blanketApprovalAllowed         = false
-nextActionId                   = PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE
+nextActionId                   = PROD-10-ENABLE-VCP-REMOTE-SYNC
 nextActionRequiresAuthorization = true
 ```
 
-This authority definition records PROD-03 through PROD-07, PROD-GF-13R reconciliation, and PROD-GF-13 activation as completed evidence. The authorized GF14 attempt restored cleanup at runtime but was subsequently returned to a fail-closed disabled-and-drained state after review found that container lifecycle authority and Greenfield rollback lifecycle authority were not bound. GF14 is not completed. The exact next action is PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE; it requires separate explicit authorization and from the outset binds cleanup restoration, only the exact required production-container lifecycle alignment, and the Greenfield-specific rollback. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
+This authority definition records PROD-03 through PROD-07, PROD-GF-13R, PROD-GF-13, and PROD-GF-14L as completed evidence. The earlier PROD-GF-14 attempt remains a rolled-back historical record and is not retroactively marked complete. PROD-GF-14L was separately authorized with exact cleanup plus lifecycle scope and a Greenfield-specific rollback, and its first-start and controlled-restart verification passed with unchanged business data. The exact next action is PROD-10-ENABLE-VCP-REMOTE-SYNC; it still requires separate explicit authorization. Every external or production mutation still requires Trusted Client + Explicit Human Intent + Exact Pending Authority Target.
 
 ## Remaining facts before later gates
 
 - Tencent Cloud security-group control-plane fact if a change is actually required;
-- exact GF14L lifecycle-aware cleanup restoration and Greenfield rollback binding;
 - post-activation VCP/Kiosk wiring and their separately authorized real acceptance.
 
-No source migration, production data copy, additional public route change, container replacement/restart, VCP/Kiosk integration enablement, cleanup mutation, or other production mutation is authorized by this document. PROD-03 through PROD-07, PROD-GF-13R and PROD-GF-13 are completed evidence. The GF14 attempt is rolled back fail-closed and is not in completedAcceptanceIds. No further cleanup or lifecycle mutation is authorized until separately authorized GF14L.
+No source migration, production data copy, additional public route change, VCP/Kiosk integration enablement, or other production mutation is authorized by this document. PROD-03 through PROD-07, PROD-GF-13R, PROD-GF-13 and PROD-GF-14L are completed evidence. The earlier PROD-GF-14 attempt remains rolled back and is not in completedAcceptanceIds. GF14L completion grants no PROD-10 authority.
 
 ## Codex review correction
 
@@ -2042,4 +2041,136 @@ nextAction         = PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE
 ```
 
 This validation reflects the safe current state: GF14 is not complete, cleanup is disabled and drained, and no GF14L execution is authorized. Because this paragraph is docs-only, the resulting final head is validated once more before merge eligibility.
+
+### PROD-GF-14L exact lifecycle cleanup restoration evidence
+
+The owner explicitly authorized `PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE`. This action executed only after the fail-closed GF14 state and the Greenfield rollback contract were already frozen in authority.
+
+Pre-mutation facts:
+
+```text
+preflightAtUtc                   = 2026-09-28T05:12:03Z
+preContainerId                   = b66f589647a72ff109158194605d765df46435e1db4babcaa675fc5e75dec0ac
+imageId                          = sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545
+loopbackBind                     = 127.0.0.1:3800 -> 3800/tcp
+dataVolume                       = jenn-shooting-operations_shooting_data
+dataDeviceInode                  = 64784:1835042
+databasePath                     = /app/data/shooting-operations.sqlite
+databaseDeviceInode              = 64784:1835048
+writeAdmission                   = enabled
+cleanupState                     = disabled
+cleanupEnabled                   = false
+cleanupEpoch                     = 71879def-55f0-40eb-a580-db45d133d70a
+cleanupMarkerValid               = true
+cleanupActiveRuns                = 0
+revision                         = 0
+uploadRows                       = 0
+unclaimedRows                    = 0
+oldOrphanCandidates              = 0
+operationRows                    = 0
+auditRows                        = 0
+attachmentFiles                  = 0
+stagedCleanupFiles               = 0
+integrationEnvCount              = 0
+```
+
+The persistent cleanup-enabled runtime configuration was bound to that exact disabled marker epoch:
+
+```text
+persistentRuntimeEnvSha256 =
+sha256:432b585fbaeee3795631c8e5c064422b3c6f1ae3a122a1eedecd52f138184ba4
+
+rollbackDisabledRuntimeSha256 =
+sha256:98519e90c4ac40862af935e52d519ee5ba5b9f2f08b88be7e005253c30a5478c
+
+rollbackActionId =
+ROLLBACK-GF-12-DISABLE-RESTORED-ORPHAN-CLEANUP
+
+rollbackScriptSha256 =
+sha256:1561c117eca43d894c9ba34545509501990a041a38804313c3d8d307376c7de3
+```
+
+GF14L recreated only the exact production container name using the same approved image, loopback bind, data volume, database identity and write-admission mode. The first start consumed the exact disabled marker epoch and entered cleanup-enabled state. Startup, periodic, saveUpload-triggered and submitRequest-triggered cleanup entry points were verified from the same approved image, and the control admission probe completed a beginRun/endRun cycle with zero active runs.
+
+A separately controlled restart then proved durable lifecycle alignment:
+
+```text
+postContainerId                  = b29798598ac043794420599c23f735c19038744a76f1b490b3e8c5a58e28e6be
+firstStartAtUtc                  = 2026-09-28T05:13:58.471829315Z
+controlledRestartAtUtc           = 2026-09-28T05:15:44.792470451Z
+verifiedAtUtc                    = 2026-09-28T05:16:16Z
+cleanupState                     = enabled
+cleanupMarkerValid               = true
+cleanupActiveRuns                = 0
+startupCleanupRestored           = true
+periodicCleanupRestored          = true
+saveUploadCleanupRestored        = true
+submitRequestCleanupRestored     = true
+cleanupAdmissionProbe            = PASS
+controlledRestartProof           = PASS
+publicHealth                     = 200
+publicWriteAdmission             = enabled
+unauthenticatedWrite             = 401 UNAUTHORIZED
+revision                         = 0
+uploadRows                       = 0
+unclaimedRows                    = 0
+operationRows                    = 0
+auditRows                        = 0
+attachmentFiles                  = 0
+stagedCleanupFiles               = 0
+integrationEnvCount              = 0
+activeTargetVolumeMountCount     = 1
+businessDataMutationObserved     = false
+```
+
+The stopped transition backup container was removed only after the controlled restart and all post-restart checks passed. The disabled runtime artifact and Greenfield rollback script remain retained as the rollback package.
+
+Low-disclosure evidence:
+
+```text
+evidencePath =
+/mnt/datadisk0/apps/jenn-shooting-operations/prod-gf14l-lifecycle-evidence.txt
+
+evidenceSha256 =
+sha256:dc5dba9d51be927755778b3058925f7c50f4cfb8d31bd6957a2cbd20b62d34c9
+
+secretValuesRecorded = false
+```
+
+Current authority after this promotion:
+
+```text
+completedAcceptanceIds includes PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE
+completedAcceptanceIds does not include PROD-GF-14-RESTORE-ORPHAN-CLEANUP
+authorization.status  = FROZEN_NOT_REQUESTED
+requestableActionIds  = []
+nextActionId          = PROD-10-ENABLE-VCP-REMOTE-SYNC
+```
+
+This promotion does not authorize PROD-10, PROD-11, DingTalk, any additional container lifecycle change, or any other production mutation.
+
+### PROD-GF-14L promotion exact-head validation
+
+The implementation-bearing GF14L promotion head was independently validated by the production-authorization workflow:
+
+```text
+implementationHead = 758bdedfcf76d0876a6683422627b5519d14301c
+workflowRun        = 36381548887
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 766
+pass               = 765
+fail               = 0
+skip               = 1 expected external VCP adapter absence
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:502faf54c9179b47e7643a5f60e4b54b9b90bb2f10e0ad7862ddf0631490a123
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-10-ENABLE-VCP-REMOTE-SYNC
+```
+
+This validation performed no production mutation. Because this paragraph is docs-only, the resulting final head is validated once more before merge eligibility.
 
