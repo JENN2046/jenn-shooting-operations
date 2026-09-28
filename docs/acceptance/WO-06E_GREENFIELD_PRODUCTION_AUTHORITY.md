@@ -1884,3 +1884,28 @@ nextActionId          = PROD-10-ENABLE-VCP-REMOTE-SYNC
 
 PROD-10 is only the next candidate action. VCP remains disabled and its deployable wiring, external readiness and exact authorization gates remain independently required.
 
+### PROD-GF-14 promotion exact-head validation
+
+The implementation-bearing cleanup-restoration promotion head was independently validated by the production-authorization workflow:
+
+```text
+implementationHead = 33c677553deff23da3e43adfc2b60685aadcd7ae
+workflowRun        = 36374832282
+result             = SUCCESS
+runtime            = Node 24.21.0
+fullTests          = 764
+pass               = 763
+fail               = 0
+skip               = 1 expected external VCP adapter absence
+manifestTargeted   = 112 / 112 PASS
+baseManifest       = WO_06D_MANIFEST_VALID
+baseDigest         = sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b
+greenfieldVerdict  = WO_06D_GREENFIELD_AUTHORITY_VALID
+greenfieldDigest   = sha256:d8a464dc77783a60eab23bf10c5edd6c482f40b9f3c1ebae60022b8f50dc7df6
+authorization      = FROZEN_NOT_REQUESTED
+requestableActions = []
+nextAction         = PROD-10-ENABLE-VCP-REMOTE-SYNC
+```
+
+This validation performed no additional production mutation. The resulting docs-only final head is validated separately before merge eligibility.
+
