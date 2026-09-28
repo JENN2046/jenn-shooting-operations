@@ -280,7 +280,10 @@
       "durableVolumeIdentityVerified": true,
       "durableLoopbackBindVerified": true,
       "governanceReconciliationRequired": true,
-      "governanceReconciliationCompleted": false
+      "governanceReconciliationCompleted": false,
+      "durableDatabasePath": "/app/data/shooting-operations.sqlite",
+      "durableDatabaseDeviceInode": "64784:1835048",
+      "durableDatabaseIdentityVerified": true
     }
   },
   "notApplicableBaseGateIds": [
@@ -499,7 +502,7 @@
     ],
     "effects": [
       "Acknowledge the owner-directed out-of-order durability remediation without representing it as prior exact-action authorization",
-      "Perform read-only reconciliation of the current durable production container against the approved image, route, loopback-only host bind, exact target volume name/source/destination/device-inode identity, restart durability proof, database baseline, orphan-cleanup disabled state and integration-disabled state",
+      "Perform read-only reconciliation of the current durable production container against the approved image, route, loopback-only host bind, exact target volume name/source/destination/device-inode identity, exact database path/device-inode identity, restart durability proof, database baseline, orphan-cleanup disabled state and integration-disabled state",
       "If and only if every bound fact matches, record reconciliation completion and then allow PROD-GF-13 activation completion to become authoritative; do not recreate, restart, signal, remount, rebind, enable cleanup or enable integrations as part of this reconciliation"
     ],
     "rollbackActionIds": [],
@@ -512,6 +515,8 @@
       "DURABLE_TARGET_VOLUME_SOURCE",
       "DURABLE_TARGET_VOLUME_DESTINATION",
       "DURABLE_TARGET_VOLUME_DEVICE_INODE",
+      "DURABLE_DATABASE_PATH",
+      "DURABLE_DATABASE_DEVICE_INODE",
       "DURABLE_RESTART_PROOF",
       "POST_RESTART_HEALTH_STATUS",
       "POST_RESTART_WRITE_ADMISSION_STATUS",
