@@ -29,6 +29,8 @@ const EXPECTED_COMPLETED = Object.freeze([
   'PROD-05-START-ISOLATED-CONTAINER',
   'PROD-06-LOOPBACK-HEALTH-SMOKE',
   'PROD-07-CONFIGURE-REVERSE-PROXY-TLS',
+  'PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION',
+  'PROD-GF-13-ACTIVATE',
 ]);
 
 const EXPECTED_CONTAINER_START = Object.freeze([
@@ -593,9 +595,8 @@ export function validateProductionGreenfieldAuthority(value, {
       rollbackActionId: 'ROLLBACK-01-REMOVE-NEW-ROUTE',
     },
     prodGf13: {
-      status: 'RUNTIME_PASS_GOVERNANCE_RECONCILIATION_REQUIRED',
-      governanceStatus:
-        'OUT_OF_ORDER_DURABILITY_REMEDIATION_REQUIRES_EXACT_RECONCILIATION',
+      status: 'PASS',
+      governanceStatus: 'RECONCILED_EXACT_READ_ONLY',
       activatedAtUtc: '2026-09-27T23:11:00Z',
       verifiedAtUtc: '2026-09-27T23:12:00Z',
       route: 'https://jso.skmt617.top',
@@ -703,14 +704,75 @@ export function validateProductionGreenfieldAuthority(value, {
       durableContainerPort: '3800/tcp',
       durableVolumeIdentityVerified: true,
       durableLoopbackBindVerified: true,
-      governanceReconciliationRequired: true,
-      governanceReconciliationCompleted: false,
+      governanceReconciliationRequired: false,
+      governanceReconciliationCompleted: true,
+      governanceReconciliationActionId: 'PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION',
+      governanceReconciledAtUtc: '2026-09-28T03:09:43Z',
       secretValuesRecorded: false,
       evidencePath:
         '/mnt/datadisk0/apps/jenn-shooting-operations/prod-gf13-activation-evidence.txt',
       evidenceSha256:
         'sha256:1af2e9dd6ca511631ac5d7efb949d0b96c306b1d2c551241a5910b7ba7b81cb2',
       rollbackPreserveDataVolume: 'jenn-shooting-operations_shooting_data',
+    },
+    prodGf13r: {
+      status: 'PASS',
+      recordedAtUtc: '2026-09-28T03:09:43Z',
+      actionId: 'PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION',
+      sideEffect: 'READ_ONLY',
+      targetInstanceId: 'ins-mi85f3my',
+      containerName: 'jenn-shooting-operations-prod',
+      containerId:
+        '1b2afb092d3ec1d834d12ff58fa86f4b1c05ec27913e8e80da278e9e9d0838cb',
+      imageId:
+        'sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545',
+      containerState: 'running',
+      containerHealth: 'healthy',
+      containerStartedAt: '2026-09-27T23:29:33.784982222Z',
+      restartPolicy: 'unless-stopped',
+      readOnlyRootfs: true,
+      loopbackHostIp: '127.0.0.1',
+      loopbackHostPort: 3800,
+      containerPort: '3800/tcp',
+      volumeType: 'volume',
+      volumeName: 'jenn-shooting-operations_shooting_data',
+      volumeSource:
+        '/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data',
+      volumeDestination: '/app/data',
+      volumeReadWrite: true,
+      activeTargetVolumeMountCount: 1,
+      dataDeviceInode: '64784:1835042',
+      databasePath: '/app/data/shooting-operations.sqlite',
+      databaseDeviceInode: '64784:1835048',
+      databaseRuntimePath: '/app/data/shooting-operations.sqlite',
+      writeAdmissionEnvironment: 'enabled',
+      orphanCleanupEnvironment: 'disabled',
+      orphanCleanupDomain: 'jenn-shooting-operations-primary',
+      loopbackHealthStatus: 200,
+      loopbackWriteAdmission: 'enabled',
+      routedHealthStatus: 200,
+      routedWriteAdmission: 'enabled',
+      unauthenticatedWriteStatus: 401,
+      unauthenticatedWriteCode: 'UNAUTHORIZED',
+      databaseRevision: 0,
+      uploadRows: 0,
+      operationRows: 0,
+      auditRows: 0,
+      attachmentFiles: 0,
+      orphanCleanupState: 'disabled',
+      orphanCleanupMarkerValid: true,
+      orphanCleanupActiveRuns: 0,
+      integrationEnvCount: 0,
+      nginxConfigSha256:
+        'sha256:35ea9acd80ba600e88d8c594a3a2558ec4cb57dd078c61d6832f5798c2eabc33',
+      durableRuntimeEnvSha256:
+        'sha256:98519e90c4ac40862af935e52d519ee5ba5b9f2f08b88be7e005253c30a5478c',
+      activationEvidenceSha256:
+        'sha256:1af2e9dd6ca511631ac5d7efb949d0b96c306b1d2c551241a5910b7ba7b81cb2',
+      remediationScriptSha256:
+        'sha256:eb34f41d56c9fd464ae3517c0aa5b38c6836a96695bc4cbffea5282e682e7fb4',
+      noProductionMutation: true,
+      secretValuesRecorded: false,
     },
   };
   if (!sameObject(value.acceptance, expectedAcceptance)) {
@@ -822,7 +884,7 @@ export function validateProductionGreenfieldAuthority(value, {
     requestedActionIds: [],
     approvedActionIds: [],
     requestableActionIds: [],
-    nextActionId: 'PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION',
+    nextActionId: 'PROD-GF-14-RESTORE-ORPHAN-CLEANUP',
     nextActionRequiresExplicitAuthorization: true,
   };
   if (!sameObject(value.authorization, expectedAuthorization)) {
