@@ -3,26 +3,32 @@ import { after, before, test } from 'node:test';
 import { once } from 'node:events';
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { createOperationsServer } from '../src/server.mjs';
 
 const require = createRequire(import.meta.url);
-const syncServicePath = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  '../../../runtime/VCPChat/modules/services/shootingPlannerSyncService.js',
-);
-const syncServiceAvailable = existsSync(syncServicePath);
-const ShootingPlannerSyncService = syncServiceAvailable
-  ? require(syncServicePath).ShootingPlannerSyncService
+const configuredAdapterPath = process.env.VCP_SHOOTING_OPERATIONS_ADAPTER_PATH || '';
+const syncAdapterPath = configuredAdapterPath ? resolve(configuredAdapterPath) : null;
+
+if (syncAdapterPath && !existsSync(syncAdapterPath)) {
+  throw new Error('configured VCP Shooting Operations adapter path does not exist');
+}
+
+const syncAdapterAvailable = Boolean(syncAdapterPath);
+const ShootingOperationsSyncAdapter = syncAdapterAvailable
+  ? require(syncAdapterPath).ShootingOperationsSyncAdapter
   : null;
+
+if (syncAdapterAvailable && typeof ShootingOperationsSyncAdapter !== 'function') {
+  throw new TypeError('configured VCP Shooting Operations adapter does not expose ShootingOperationsSyncAdapter');
+}
 
 const schedulerToken = 'scheduler-token-integration-0001';
 let operations;
 let client;
 
 before(async () => {
-  if (!syncServiceAvailable) return;
+  if (!syncAdapterAvailable) return;
   operations = createOperationsServer({
     databasePath: ':memory:',
     tokens: { scheduler: schedulerToken },
@@ -31,9 +37,9 @@ before(async () => {
   operations.server.listen(0, '127.0.0.1');
   await once(operations.server, 'listening');
   const address = operations.server.address();
-  client = new ShootingPlannerSyncService({
+  client = new ShootingOperationsSyncAdapter({
     baseUrl: `http://127.0.0.1:${address.port}`,
-    schedulerToken,
+    schedulerCredential: schedulerToken,
   });
 });
 
@@ -43,8 +49,10 @@ after(async () => {
   await once(operations.server, 'close');
 });
 
-test('VCP sync client completes pull, guarded push, and verification pull', {
-  skip: syncServiceAvailable ? false : 'external VCP sync adapter is not present in this workspace',
+test('VCPToolBox Jenn adapter completes pull, guarded push, and verification pull', {
+  skip: syncAdapterAvailable
+    ? false
+    : 'identified VCPToolBox/JENN-Extensions Shooting Operations adapter path was not supplied',
 }, async () => {
   const initial = await client.pull();
   assert.equal(initial.revision, 0);
@@ -61,13 +69,13 @@ test('VCP sync client completes pull, guarded push, and verification pull', {
       kind: '模特',
     }],
   };
-  const pushed = await client.push(snapshot, {
+
+  const result = await client.guardedPushAndVerify(snapshot, {
     expectedRevision: initial.revision,
     operationId: 'integration-push-0001',
   });
-  assert.equal(pushed.revision, 1);
 
-  const verified = await client.pull();
-  assert.equal(verified.revision, 1);
-  assert.equal(verified.tasks[0].id, 'TASK-INTEGRATION');
+  assert.equal(result.write.revision, 1);
+  assert.equal(result.verifiedSnapshot.revision, 1);
+  assert.equal(result.verifiedSnapshot.tasks[0].id, 'TASK-INTEGRATION');
 });
