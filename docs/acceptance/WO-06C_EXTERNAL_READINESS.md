@@ -238,31 +238,32 @@ The local repository boundary is ready. The external validation gate is intentio
 
 ## PROD-10 adapter-owner R1 source compatibility checkpoint
 
-Architecture R1 now separates source compatibility from live runtime enablement.
+Architecture R1 separates reviewed adapter-source compatibility from live VCPToolBox runtime enablement.
 
-The identified Jenn-owned adapter source is:
+The identified Jenn-owned adapter source is bound by repository, source path, revision, and source digest:
 
 ```text
 repository = JENN2046/VCPToolBox-JENN-Extensions
 path       = ShootingOperationsPackages/VcpSyncAdapter/index.cjs
 revision   = 1d4ac43183296adccc570ac62598bc078d140317
+sha256     = cef5a9c7f2b0f41dd5a9bd9faa5cd490be005fb31f16c28ede221a05883ef2d3
 owner      = VCPTOOLBOX_JENN_EXTENSIONS
 ```
 
 That source is deliberately runtime-disabled and non-authorizing:
 
 ```text
-defaultEnabled                = false
-runtimeEnabled                = false
-runtimeEligible               = true
-activationState               = SOURCE_ONLY_RUNTIME_DISABLED
-networkAuthorized             = false
-realBackendAuthorized         = false
-realAuthAuthorized            = false
-businessWritesAuthorized      = false
+defaultEnabled                 = false
+runtimeEnabled                 = false
+runtimeEligible                = true
+activationState                = SOURCE_ONLY_RUNTIME_DISABLED
+networkAuthorized              = false
+realBackendAuthorized          = false
+realAuthAuthorized             = false
+businessWritesAuthorized       = false
 persistentEnablementAuthorized = false
-productionActionRequired      = PROD-10-ENABLE-VCP-REMOTE-SYNC
-rollbackActionId              = ROLLBACK-09-DISABLE-VCP-CONFIG
+productionActionRequired       = PROD-10-ENABLE-VCP-REMOTE-SYNC
+rollbackActionId               = ROLLBACK-09-DISABLE-VCP-CONFIG
 ```
 
 Fresh adapter-source validation at exact extension head `1d4ac43183296adccc570ac62598bc078d140317`:
@@ -274,18 +275,30 @@ fail                   = 0
 skip                   = 0
 ```
 
+The review-hardened adapter additionally proves:
+
+- response bodies are capped while streaming rather than after full buffering;
+- write-side 5xx and transport failures are classified as uncertain and are not automatically retried;
+- verify-after-write uses structural equality that preserves array order without depending on object property insertion order;
+- the runtime source and package metadata are bound in `manifests/MANIFEST.sha256`.
+
 Fresh isolated cross-repository compatibility proof used:
 
 ```text
-Jenn Shooting Operations head = 8e9585b0f4505c3dbdd93be593d1360d3a84b0f0
+Jenn Shooting Operations head = f6013711dc041c240066a83e6c1c3082a53a6c38
 Jenn extension adapter head    = 1d4ac43183296adccc570ac62598bc078d140317
-runtime                         = approved JSO production image / Node 24.21.0
-network                         = Docker --network none
-production data volume          = not mounted
-production endpoint             = not used
+adapter owner                  = JENN2046/VCPToolBox-JENN-Extensions
+adapter source path            = ShootingOperationsPackages/VcpSyncAdapter/index.cjs
+adapter source sha256          = cef5a9c7f2b0f41dd5a9bd9faa5cd490be005fb31f16c28ede221a05883ef2d3
+runtime                        = approved JSO production image / Node 24.21.0
+network                        = Docker --network none
+production data volume         = not mounted
+production endpoint            = not used
 production scheduler credential = not used
-synthetic scheduler credential  = used only inside isolated loopback test
+synthetic scheduler credential = used only inside isolated loopback test
 ```
+
+The compatibility test verifies all four adapter identity fields before loading the module. A stale checkout, VCPChat shim, or arbitrary compatible CommonJS module cannot satisfy the recorded proof.
 
 Result:
 
@@ -301,18 +314,22 @@ pull
 → verification pull
 ```
 
-The WO-06C local-boundary harness with that exact adapter source reports:
+The WO-06C local-boundary harness with that source path reports source state separately from live external state:
 
 ```text
-externalAdapterPresent = true
-adapterOwner           = VCPTOOLBOX_JENN_EXTENSIONS
-compatibility          = EXTERNAL_ADAPTER_PRESENT_REQUIRES_COMPATIBILITY_RUN
+sourceAdapterPresent = true
+externalAdapterPresent = false
+adapterOwner = VCPTOOLBOX_JENN_EXTENSIONS
+sourceCompatibility = ADAPTER_SOURCE_PRESENT_REQUIRES_COMPATIBILITY_RUN
+compatibility = BLOCKED_EXTERNAL_RUNTIME
 overallExternalClosure = PENDING
 ```
 
-The normal repository workflow intentionally does not inject an external adapter path. Its local run therefore continues to classify VCP as externally blocked rather than fabricating live runtime evidence.
+The separate compatibility test above supplies the exact identity and passes, establishing the reviewed **source compatibility** evidence. The harness intentionally continues to report live VCP compatibility as `BLOCKED_EXTERNAL_RUNTIME` because source presence does not prove installation, registration, endpoint binding, secret binding, or rollback readiness in the live VCPToolBox runtime.
 
-The adapter review correction additionally proves streaming response caps, write-side 5xx uncertainty, property-order-independent verification, and checksum-manifest binding. This checkpoint establishes **source implementation compatibility only**. It does not establish:
+The normal repository workflow intentionally does not inject an external adapter identity. Its local run therefore continues to classify VCP as externally blocked rather than fabricating live runtime evidence.
+
+This checkpoint establishes **source implementation compatibility only**. It does not establish:
 
 - installation or registration in the live VCPToolBox runtime;
 - exact live VCPToolBox release/package binding;
