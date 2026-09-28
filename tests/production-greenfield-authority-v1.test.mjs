@@ -276,6 +276,9 @@ test('greenfield authority records runtime activation but withholds completion p
     durableVolumeDestination: '/app/data',
     durableVolumeReadWrite: true,
     durableDataDeviceInode: '64784:1835042',
+    durableDatabasePath: '/app/data/shooting-operations.sqlite',
+    durableDatabaseDeviceInode: '64784:1835048',
+    durableDatabaseIdentityVerified: true,
     durableLoopbackHostIp: '127.0.0.1',
     durableLoopbackHostPort: 3800,
     durableContainerPort: '3800/tcp',
@@ -318,6 +321,12 @@ test('greenfield authority records runtime activation but withholds completion p
   }, 'GREENFIELD_ACCEPTANCE_INVALID');
   rejected(value => {
     value.acceptance.prodGf13.durableLoopbackHostIp = '0.0.0.0';
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf13.durableDatabasePath = '/app/data/alternate.sqlite';
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf13.durableDatabaseDeviceInode = '64784:9999999';
   }, 'GREENFIELD_ACCEPTANCE_INVALID');
   rejected(value => {
     value.acceptance.prodGf13.governanceReconciliationCompleted = true;
@@ -560,6 +569,8 @@ test('durable activation reconciliation is exact-target, read-only and explicitl
     'DURABLE_TARGET_VOLUME_SOURCE',
     'DURABLE_TARGET_VOLUME_DESTINATION',
     'DURABLE_TARGET_VOLUME_DEVICE_INODE',
+    'DURABLE_DATABASE_PATH',
+    'DURABLE_DATABASE_DEVICE_INODE',
     'DURABLE_RESTART_PROOF',
   ]) {
     assert.equal(action.evidenceRequired.includes(proof), true, proof);
