@@ -31,13 +31,13 @@ test('greenfield authority binds the frozen parent and grants no production muta
   assert.deepEqual(authority.authorization.requestedActionIds, []);
   assert.deepEqual(authority.authorization.approvedActionIds, []);
   assert.deepEqual(authority.authorization.requestableActionIds, []);
-  assert.equal(authority.authorization.nextActionId, 'PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE');
+  assert.equal(authority.authorization.nextActionId, 'PROD-10-ENABLE-VCP-REMOTE-SYNC');
   assert.equal(authority.authorization.nextActionRequiresExplicitAuthorization, true);
 });
 
-test('greenfield authority records GF14 runtime pass but withholds completion pending lifecycle reconciliation', () => {
+test('greenfield authority records GF14L completion while retaining rolled-back GF14 history', () => {
   assert.deepEqual(
-    authority.completedAcceptanceIds.slice(-7),
+    authority.completedAcceptanceIds.slice(-8),
     [
       'PROD-03-GENERATE-INSTALL-TOKENS',
       'PROD-04-BUILD-IMAGE',
@@ -46,9 +46,11 @@ test('greenfield authority records GF14 runtime pass but withholds completion pe
       'PROD-07-CONFIGURE-REVERSE-PROXY-TLS',
       'PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION',
       'PROD-GF-13-ACTIVATE',
+      'PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE',
     ],
   );
   assert.equal(authority.completedAcceptanceIds.includes('PROD-GF-14-RESTORE-ORPHAN-CLEANUP'), false);
+  assert.equal(authority.completedAcceptanceIds.includes('PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE'), true);
   assert.equal(authority.completedAcceptanceIds.includes('PROD-GF-13-ACTIVATE'), true);
   assert.deepEqual(authority.acceptance.prod03, {
     status: 'PASS',
@@ -498,7 +500,92 @@ test('greenfield authority records GF14 runtime pass but withholds completion pe
     "rollbackStagedCleanupFiles": 0,
     "rollbackIntegrationEnvCount": 0,
     "nextExactActionRequired": "PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE"
-  });;
+  });
+
+  assert.deepEqual(authority.acceptance.prodGf14l, {
+    "status": "PASS",
+    "actionId": "PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE",
+    "authorized": true,
+    "preflightAtUtc": "2026-09-28T05:12:03Z",
+    "firstStartAtUtc": "2026-09-28T05:13:58.471829315Z",
+    "controlledRestartAtUtc": "2026-09-28T05:15:44.792470451Z",
+    "verifiedAtUtc": "2026-09-28T05:16:16Z",
+    "targetInstanceId": "ins-mi85f3my",
+    "containerName": "jenn-shooting-operations-prod",
+    "preContainerId": "b66f589647a72ff109158194605d765df46435e1db4babcaa675fc5e75dec0ac",
+    "postContainerId": "b29798598ac043794420599c23f735c19038744a76f1b490b3e8c5a58e28e6be",
+    "imageId": "sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545",
+    "restartPolicy": "unless-stopped",
+    "readOnlyRootfs": true,
+    "loopbackBind": "127.0.0.1:3800 to 3800/tcp",
+    "dataVolumeName": "jenn-shooting-operations_shooting_data",
+    "dataVolumeSource": "/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data",
+    "dataVolumeDestination": "/app/data",
+    "dataDeviceInode": "64784:1835042",
+    "databasePath": "/app/data/shooting-operations.sqlite",
+    "databaseDeviceInode": "64784:1835048",
+    "writeAdmissionPre": "enabled",
+    "writeAdmissionPost": "enabled",
+    "cleanupPreState": "disabled",
+    "cleanupPreEnabled": false,
+    "cleanupPreEpoch": "71879def-55f0-40eb-a580-db45d133d70a",
+    "cleanupPreMarkerValid": true,
+    "cleanupPreActiveRuns": 0,
+    "cleanupPostMode": "enabled",
+    "cleanupPostState": "enabled",
+    "cleanupPostEnabled": true,
+    "cleanupPostMarkerValid": true,
+    "cleanupPostActiveRuns": 0,
+    "startupOrphanCleanupRestored": true,
+    "periodicOrphanCleanupRestored": true,
+    "saveUploadTriggeredCleanupRestored": true,
+    "submitRequestTriggeredCleanupRestored": true,
+    "cleanupAdmissionProbe": "PASS",
+    "controlledRestartProof": "PASS",
+    "preRevision": 0,
+    "preUploadRows": 0,
+    "preUnclaimedRows": 0,
+    "preOldOrphanCandidates": 0,
+    "preOperationRows": 0,
+    "preAuditRows": 0,
+    "preAttachmentFiles": 0,
+    "preStagedCleanupFiles": 0,
+    "postRevision": 0,
+    "postUploadRows": 0,
+    "postUnclaimedRows": 0,
+    "postOperationRows": 0,
+    "postAuditRows": 0,
+    "postAttachmentFiles": 0,
+    "postStagedCleanupFiles": 0,
+    "integrationEnvCountPost": 0,
+    "publicHealthStatus": 200,
+    "publicWriteAdmission": "enabled",
+    "unauthenticatedWriteStatus": 401,
+    "unauthenticatedWriteCode": "UNAUTHORIZED",
+    "persistentRuntimeEnvSha256": "sha256:432b585fbaeee3795631c8e5c064422b3c6f1ae3a122a1eedecd52f138184ba4",
+    "rollbackActionId": "ROLLBACK-GF-12-DISABLE-RESTORED-ORPHAN-CLEANUP",
+    "rollbackDisabledRuntimePath": "/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime.pre-gf14",
+    "rollbackDisabledRuntimeSha256": "sha256:98519e90c4ac40862af935e52d519ee5ba5b9f2f08b88be7e005253c30a5478c",
+    "rollbackScriptPath": "/mnt/datadisk0/apps/jenn-shooting-operations/prod-gf14l-rollback-gf12.sh",
+    "rollbackScriptSha256": "sha256:1561c117eca43d894c9ba34545509501990a041a38804313c3d8d307376c7de3",
+    "backupContainerRemoved": true,
+    "activeTargetVolumeMountCount": 1,
+    "noBusinessDataMutationObserved": true,
+    "deletionIrreversibilityAcknowledged": true,
+    "secretValuesRecorded": false,
+    "evidencePath": "/mnt/datadisk0/apps/jenn-shooting-operations/prod-gf14l-lifecycle-evidence.txt",
+    "evidenceSha256": "sha256:dc5dba9d51be927755778b3058925f7c50f4cfb8d31bd6957a2cbd20b62d34c9"
+  });
+
+  rejected(value => {
+    value.acceptance.prodGf14l.cleanupPostState = 'disabled';
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf14l.databaseDeviceInode = '64784:9999999';
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf14l.rollbackActionId = 'ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP';
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
 
   rejected(value => {
     value.acceptance.prodGf14.status = 'PASS';
@@ -832,7 +919,7 @@ test('greenfield cleanup cannot bypass activation or disable-and-drain recovery'
 
 test('greenfield authority cannot self-authorize the next production action', () => {
   rejected(value => {
-    value.authorization.requestableActionIds = ['PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE'];
+    value.authorization.requestableActionIds = ['PROD-10-ENABLE-VCP-REMOTE-SYNC'];
   }, 'GREENFIELD_AUTHORIZATION_STATE_INVALID');
   rejected(value => {
     value.authorization.blanketApprovalAllowed = true;
