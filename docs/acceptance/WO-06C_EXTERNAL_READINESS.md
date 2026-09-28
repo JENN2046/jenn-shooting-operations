@@ -302,7 +302,7 @@ The review-hardened adapter proves:
 Fresh isolated cross-repository compatibility proof used:
 
 ```text
-Jenn Shooting Operations head = 34de422fd6c5c21e4be045f66053084cb0203dc1
+Jenn Shooting Operations head = 89cf1866879dd1aa056331ab14b4e5f6c932dfbe
 Jenn extension adapter head    = e184e15b80b4480cc34bf7940266ca293a0973b1
 adapter owner                  = JENN2046/VCPToolBox-JENN-Extensions
 adapter index sha256           = e7d438e4833d0eed8d260f87479cb00d2adea86ae4f2c63461ad4fe80dd55b81
