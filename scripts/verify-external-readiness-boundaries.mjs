@@ -2,8 +2,7 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, resolve } from 'node:path';
 
 import { createTrustedPrincipal } from '../src/authorization-v2.mjs';
 import { buildProductionRunCompletedCardV1 } from '../src/dingtalk-card-builders-v1.mjs';
@@ -152,16 +151,22 @@ async function verifyDingTalkBoundary() {
 }
 
 function verifyVcpBoundary() {
-  const adapterPath = resolve(
-    dirname(fileURLToPath(import.meta.url)),
-    '../../../runtime/VCPChat/modules/services/shootingPlannerSyncService.js',
-  );
-  const present = existsSync(adapterPath);
+  const configuredPath = process.env.VCP_SHOOTING_OPERATIONS_ADAPTER_PATH || '';
+  if (!configuredPath) {
+    return {
+      externalAdapterPresent: false,
+      adapterOwner: 'VCPTOOLBOX_JENN_EXTENSIONS',
+      compatibility: 'BLOCKED_EXTERNAL_RUNTIME',
+    };
+  }
+  const adapterPath = resolve(configuredPath);
+  if (!existsSync(adapterPath)) {
+    throw new Error('configured VCP Shooting Operations adapter path does not exist');
+  }
   return {
-    externalAdapterPresent: present,
-    compatibility: present
-      ? 'EXTERNAL_ADAPTER_PRESENT_REQUIRES_COMPATIBILITY_RUN'
-      : 'BLOCKED_EXTERNAL_RUNTIME',
+    externalAdapterPresent: true,
+    adapterOwner: 'VCPTOOLBOX_JENN_EXTENSIONS',
+    compatibility: 'EXTERNAL_ADAPTER_PRESENT_REQUIRES_COMPATIBILITY_RUN',
   };
 }
 
