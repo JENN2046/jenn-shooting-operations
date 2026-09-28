@@ -15,8 +15,8 @@ import { createOperationsServer } from '../src/server.mjs';
 const EXPECTED_ADAPTER_OWNER = 'JENN2046/VCPToolBox-JENN-Extensions';
 const EXPECTED_ADAPTER_SOURCE_PATH = 'ShootingOperationsPackages/VcpSyncAdapter/index.cjs';
 const EXPECTED_ADAPTER_MANIFEST_SOURCE_PATH = 'ShootingOperationsPackages/VcpSyncAdapter/package-manifest.json';
-const EXPECTED_ADAPTER_REVISION = 'e184e15b80b4480cc34bf7940266ca293a0973b1';
-const EXPECTED_ADAPTER_SHA256 = 'e7d438e4833d0eed8d260f87479cb00d2adea86ae4f2c63461ad4fe80dd55b81';
+const EXPECTED_ADAPTER_REVISION = 'e4da9e65a442c7bba3c56ec267cdf69848ed09e5';
+const EXPECTED_ADAPTER_SHA256 = '2c97bdeaba97affce3454feda4202816be6f483f224ff5319e43e4fe8d7fd973';
 const EXPECTED_ADAPTER_MANIFEST_SHA256 = 'f52d13cbd9b7c38422304916a88fbba16825e5f7ffbacc8644b624b3c6f72161';
 const EXPECTED_PACKAGE_FILES = Object.freeze(['index.cjs', 'package-manifest.json']);
 
