@@ -31,13 +31,13 @@ test('greenfield authority binds the frozen parent and grants no production muta
   assert.deepEqual(authority.authorization.requestedActionIds, []);
   assert.deepEqual(authority.authorization.approvedActionIds, []);
   assert.deepEqual(authority.authorization.requestableActionIds, []);
-  assert.equal(authority.authorization.nextActionId, 'PROD-10-ENABLE-VCP-REMOTE-SYNC');
+  assert.equal(authority.authorization.nextActionId, 'PROD-GF-14R-RECONCILE-CLEANUP-RUNTIME-LIFECYCLE');
   assert.equal(authority.authorization.nextActionRequiresExplicitAuthorization, true);
 });
 
-test('greenfield authority records activation reconciliation and GF14 cleanup restoration', () => {
+test('greenfield authority records GF14 runtime pass but withholds completion pending lifecycle reconciliation', () => {
   assert.deepEqual(
-    authority.completedAcceptanceIds.slice(-8),
+    authority.completedAcceptanceIds.slice(-7),
     [
       'PROD-03-GENERATE-INSTALL-TOKENS',
       'PROD-04-BUILD-IMAGE',
@@ -46,9 +46,9 @@ test('greenfield authority records activation reconciliation and GF14 cleanup re
       'PROD-07-CONFIGURE-REVERSE-PROXY-TLS',
       'PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION',
       'PROD-GF-13-ACTIVATE',
-      'PROD-GF-14-RESTORE-ORPHAN-CLEANUP',
     ],
   );
+  assert.equal(authority.completedAcceptanceIds.includes('PROD-GF-14-RESTORE-ORPHAN-CLEANUP'), false);
   assert.equal(authority.completedAcceptanceIds.includes('PROD-GF-13-ACTIVATE'), true);
   assert.deepEqual(authority.acceptance.prod03, {
     status: 'PASS',
@@ -397,7 +397,11 @@ test('greenfield authority records activation reconciliation and GF14 cleanup re
   }, 'GREENFIELD_ACCEPTANCE_INVALID');
 
   assert.deepEqual(authority.acceptance.prodGf14, {
-    status: 'PASS',
+    status: 'RUNTIME_PASS_GOVERNANCE_RECONCILIATION_REQUIRED',
+    governanceStatus: 'OUT_OF_ORDER_GF14_RUNTIME_LIFECYCLE_REQUIRES_EXACT_RECONCILIATION',
+    governanceReconciliationRequired: true,
+    governanceReconciliationCompleted: false,
+    runtimeCleanupRestorationPass: true,
     authorizedActionId: 'PROD-GF-14-RESTORE-ORPHAN-CLEANUP',
     preflightAtUtc: '2026-09-28T03:28:24Z',
     restoreStartedAtUtc: '2026-09-28T03:32:51Z',
@@ -464,7 +468,10 @@ test('greenfield authority records activation reconciliation and GF14 cleanup re
     currentRuntimeEnvSha256: 'sha256:cdfa4ebba78b413c608f12670b3c02bde9af1315333bae00c1d2de97ad4f081a',
     preGf14RuntimeEnvSha256: 'sha256:98519e90c4ac40862af935e52d519ee5ba5b9f2f08b88be7e005253c30a5478c',
     preGf14RuntimeEnvBackup: '/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime.pre-gf14',
-    rollbackActionId: 'ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP',
+    rollbackActionAtExecution: 'ROLLBACK-12-DISABLE-RESTORED-ORPHAN-CLEANUP',
+    rollbackBindingStatus: 'BASE_ROLLBACK_NOT_APPLICABLE_TO_GF14',
+    pendingGreenfieldRollbackActionId: 'ROLLBACK-GF-12-DISABLE-RESTORED-ORPHAN-CLEANUP',
+    cleanupRollbackTargetBinding: 'PENDING_GF14R_RECONCILIATION',
     rollbackControlRoot: '/app/data/.orphan-cleanup-control/1ad8b65e5b8819bc9c7e4df213b9bb2ef3d0721a45e0a62d54c4e7f6c0bb1d27',
     deletionIrreversibilityAcknowledged: true,
     businessDataUnchanged: true,
@@ -475,6 +482,12 @@ test('greenfield authority records activation reconciliation and GF14 cleanup re
 
   rejected(value => {
     value.acceptance.prodGf14.postCleanupMode = 'disabled';
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf14.governanceReconciliationCompleted = true;
+  }, 'GREENFIELD_ACCEPTANCE_INVALID');
+  rejected(value => {
+    value.acceptance.prodGf14.rollbackBindingStatus = 'BOUND';
   }, 'GREENFIELD_ACCEPTANCE_INVALID');
   rejected(value => {
     value.acceptance.prodGf14.startupOrphanCleanupRestored = false;
@@ -735,6 +748,36 @@ test('durable activation reconciliation is exact-target, read-only and explicitl
   }, 'GREENFIELD_ACTIVATION_RECONCILIATION_ACTION_INVALID');
 });
 
+test('GF14 lifecycle reconciliation is read-only and binds the Greenfield rollback contract', () => {
+  const action = authority.greenfieldCleanupReconciliationAction;
+  assert.equal(action.id, 'PROD-GF-14R-RECONCILE-CLEANUP-RUNTIME-LIFECYCLE');
+  assert.equal(action.sideEffect, 'READ_ONLY');
+  assert.equal(action.requiresExplicitAuthorization, true);
+  assert.equal(action.rollbackActionIds.length, 0);
+  assert.match(action.effects[0], /out-of-order lifecycle mutations/u);
+  assert.match(action.effects[2], /do not recreate, restart, signal, remount, rebind/u);
+  assert.equal(
+    action.evidenceRequired.includes('GF14_GREENFIELD_ROLLBACK_CONTRACT_BINDING'),
+    true,
+  );
+  rejected(value => {
+    value.greenfieldCleanupReconciliationAction.requiresExplicitAuthorization = false;
+  }, 'GREENFIELD_CLEANUP_RECONCILIATION_ACTION_INVALID');
+});
+
+test('Greenfield cleanup rollback is scoped only to PROD-GF-14 restored controls', () => {
+  const rollback = authority.greenfieldCleanupRollbackAction;
+  assert.equal(rollback.id, 'ROLLBACK-GF-12-DISABLE-RESTORED-ORPHAN-CLEANUP');
+  assert.equal(rollback.requiresExplicitAuthorization, false);
+  assert.match(rollback.authorityTarget, /PROD-GF-14/u);
+  assert.match(rollback.effects[1], /pre-GF14 disabled cleanup runtime configuration/u);
+  assert.equal(rollback.evidenceRequired.includes('GF14_ROLLBACK_SOURCE_BINDING'), true);
+  rejected(value => {
+    value.greenfieldCleanupRollbackAction.authorityTarget =
+      'controls restored by PROD-14';
+  }, 'GREENFIELD_CLEANUP_ROLLBACK_ACTION_INVALID');
+});
+
 test('greenfield cleanup cannot bypass activation or disable-and-drain recovery', () => {
   rejected(value => {
     value.greenfieldCleanupAction.preconditions =
@@ -747,7 +790,7 @@ test('greenfield cleanup cannot bypass activation or disable-and-drain recovery'
 
 test('greenfield authority cannot self-authorize the next production action', () => {
   rejected(value => {
-    value.authorization.requestableActionIds = ['PROD-10-ENABLE-VCP-REMOTE-SYNC'];
+    value.authorization.requestableActionIds = ['PROD-GF-14R-RECONCILE-CLEANUP-RUNTIME-LIFECYCLE'];
   }, 'GREENFIELD_AUTHORIZATION_STATE_INVALID');
   rejected(value => {
     value.authorization.blanketApprovalAllowed = true;
