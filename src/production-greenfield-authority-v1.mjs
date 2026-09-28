@@ -29,7 +29,6 @@ const EXPECTED_COMPLETED = Object.freeze([
   'PROD-05-START-ISOLATED-CONTAINER',
   'PROD-06-LOOPBACK-HEALTH-SMOKE',
   'PROD-07-CONFIGURE-REVERSE-PROXY-TLS',
-  'PROD-GF-13-ACTIVATE',
 ]);
 
 const EXPECTED_CONTAINER_START = Object.freeze([
@@ -84,6 +83,7 @@ const EXPECTED_TOP_LEVEL_KEYS = Object.freeze([
   'greenfieldIntegrationPrerequisites',
   'greenfieldPreActivationWriteFence',
   'greenfieldActivationAction',
+  'greenfieldActivationReconciliationAction',
   'greenfieldCleanupAction',
   'authorization',
 ]);
@@ -186,6 +186,48 @@ const EXPECTED_ACTIVATION = Object.freeze({
   ]),
 });
 
+const EXPECTED_ACTIVATION_RECONCILIATION = Object.freeze({
+  id: 'PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION',
+  title: 'Reconcile out-of-order durable activation remediation',
+  category: 'GOVERNANCE',
+  risk: 'HIGH',
+  sideEffect: 'READ_ONLY',
+  requiresExplicitAuthorization: true,
+  authorityTarget:
+    'Exact durable Jenn Shooting Operations production container, loopback bind, approved data volume and restart proof on ins-mi85f3my only',
+  preconditions: Object.freeze([
+    'PROD_GF_13_RUNTIME_ACTIVATION_PASS',
+    'OUT_OF_ORDER_DURABILITY_REMEDIATION_DISCLOSED',
+    'PRODUCTION_TARGET_FACTS',
+    'TARGET_STORAGE_IDENTITIES',
+    'LOOPBACK_BACKEND_BINDING',
+    'PRODUCTION_DEPLOYMENT_GATE',
+  ]),
+  effects: Object.freeze([
+    'Acknowledge the owner-directed out-of-order durability remediation without representing it as prior exact-action authorization',
+    'Perform read-only reconciliation of the current durable production container against the approved image, route, loopback-only host bind, exact target volume name/source/destination/device-inode identity, restart durability proof, database baseline, orphan-cleanup disabled state and integration-disabled state',
+    'If and only if every bound fact matches, record reconciliation completion and then allow PROD-GF-13 activation completion to become authoritative; do not recreate, restart, signal, remount, rebind, enable cleanup or enable integrations as part of this reconciliation',
+  ]),
+  rollbackActionIds: Object.freeze([]),
+  evidenceRequired: Object.freeze([
+    'OUT_OF_ORDER_REMEDIATION_DISCLOSURE',
+    'DURABLE_CONTAINER_IDENTITY',
+    'DURABLE_IMAGE_IDENTITY',
+    'DURABLE_LOOPBACK_BIND_IDENTITY',
+    'DURABLE_TARGET_VOLUME_NAME',
+    'DURABLE_TARGET_VOLUME_SOURCE',
+    'DURABLE_TARGET_VOLUME_DESTINATION',
+    'DURABLE_TARGET_VOLUME_DEVICE_INODE',
+    'DURABLE_RESTART_PROOF',
+    'POST_RESTART_HEALTH_STATUS',
+    'POST_RESTART_WRITE_ADMISSION_STATUS',
+    'POST_RESTART_UNAUTHENTICATED_WRITE_DENIAL',
+    'POST_RESTART_DATABASE_BASELINE',
+    'POST_RESTART_ORPHAN_CLEANUP_DISABLED_PROOF',
+    'POST_RESTART_INTEGRATIONS_DISABLED_PROOF',
+  ]),
+});
+
 const EXPECTED_CLEANUP = Object.freeze({
   id: 'PROD-GF-14-RESTORE-ORPHAN-CLEANUP',
   title: 'Restore orphan cleanup after greenfield activation',
@@ -284,6 +326,7 @@ function validAuthorityShape(value) {
       || !plainObject(value.acceptance)
       || !plainObject(value.greenfieldPreActivationWriteFence)
       || !plainObject(value.greenfieldActivationAction)
+      || !plainObject(value.greenfieldActivationReconciliationAction)
       || !plainObject(value.greenfieldCleanupAction)
       || !plainObject(value.authorization)) {
     return false;
@@ -303,7 +346,11 @@ function validAuthorityShape(value) {
   for (const key of ['blockedHttpMethods', 'coveredWriterClasses', 'requirements', 'evidenceRequired']) {
     if (!stringArray(value.greenfieldPreActivationWriteFence[key])) return false;
   }
-  for (const action of [value.greenfieldActivationAction, value.greenfieldCleanupAction]) {
+  for (const action of [
+    value.greenfieldActivationAction,
+    value.greenfieldActivationReconciliationAction,
+    value.greenfieldCleanupAction,
+  ]) {
     for (const key of ['preconditions', 'effects', 'rollbackActionIds', 'evidenceRequired']) {
       if (!stringArray(action[key])) return false;
     }
@@ -722,6 +769,15 @@ export function validateProductionGreenfieldAuthority(value, {
   if (!sameObject(value.greenfieldActivationAction, EXPECTED_ACTIVATION)) {
     issues.push(issue('GREENFIELD_ACTIVATION_ACTION_INVALID', '/greenfieldActivationAction'));
   }
+  if (!sameObject(
+    value.greenfieldActivationReconciliationAction,
+    EXPECTED_ACTIVATION_RECONCILIATION,
+  )) {
+    issues.push(issue(
+      'GREENFIELD_ACTIVATION_RECONCILIATION_ACTION_INVALID',
+      '/greenfieldActivationReconciliationAction',
+    ));
+  }
   if (!sameObject(value.greenfieldCleanupAction, EXPECTED_CLEANUP)) {
     issues.push(issue('GREENFIELD_CLEANUP_ACTION_INVALID', '/greenfieldCleanupAction'));
   }
@@ -745,7 +801,7 @@ export function validateProductionGreenfieldAuthority(value, {
     requestedActionIds: [],
     approvedActionIds: [],
     requestableActionIds: [],
-    nextActionId: 'PROD-GF-14-RESTORE-ORPHAN-CLEANUP',
+    nextActionId: 'PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION',
     nextActionRequiresExplicitAuthorization: true,
   };
   if (!sameObject(value.authorization, expectedAuthorization)) {
