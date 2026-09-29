@@ -621,11 +621,13 @@ The frozen payload template is:
 
 The three `null` values are **materialization placeholders only** and must never be written as the final file:
 
-- `/allowedBriefHosts` receives the exact authorization-bound reviewed hostname array produced by the final fresh whole-database `requests_v2.brief_url` scan; it may be `[]` only when that final scan finds zero non-empty brief URLs;
+Pre-request processing freezes only the final reviewed `allowedBriefHosts` array/digest in the authorization packet. The final JSON is **not** materialized before authorization because the credential values do not exist yet.
+
+- `/allowedBriefHosts` receives, **after explicit PROD-11 authorization**, the exact reviewed hostname array already frozen in the authorization packet by the final fresh whole-database `requests_v2.brief_url` scan; it may be `[]` only when that final scan found zero non-empty brief URLs;
 - `/credential/saltBase64` receives canonical Base64 for exactly 16 execution-generated random bytes;
 - `/credential/hashBase64` receives canonical Base64 for exactly 32 scrypt-v1 output bytes derived from the dedicated execution-generated Kiosk password and that salt.
 
-Before atomic installation, the fully materialized file must pass `loadKioskRuntimeAuthV1` with the four existing role credential values supplied only as forbidden comparison inputs. `allowedBriefHosts` must be a lowercase unique hostname-only array with no wildcards or unobserved extras. The final JSON must contain no deployment metadata or extra keys.
+Only after explicit PROD-11 authorization generates the dedicated Kiosk credential may the complete config be materialized. Before atomic installation, the fully materialized file must pass `loadKioskRuntimeAuthV1` with the four existing role credential values supplied only as forbidden comparison inputs. `allowedBriefHosts` must exactly equal the pre-request authorization-bound reviewed lowercase unique hostname-only array, with no wildcards or unobserved extras. The final JSON must contain no deployment metadata or extra keys.
 
 ## Database-wide brief-host compatibility
 
@@ -651,14 +653,16 @@ The final gate must:
 3. explicitly review every observed hostname;
 4. reject wildcards and any unobserved extra hostname;
 5. freeze the exact final `allowedBriefHosts` array and its canonical digest in the one-time PROD-11 authorization packet;
-6. materialize that exact array into `/allowedBriefHosts` in `kiosk-auth.v1.json`;
+6. **do not** materialize `kiosk-auth.v1.json` or generate credentials before authorization;
 7. prove every non-empty `brief_url` hostname is covered by the final array.
 
 An empty final array is permitted **only when the final fresh scan still observes zero non-empty brief URLs**.
 
-Any `requests_v2` insertion/update/delete or `brief_url` change after the final scan invalidates the proof and requires a fresh scan, review, allowlist binding and config materialization before request or execution.
+Any `requests_v2` insertion/update/delete or `brief_url` change after the final scan invalidates the proof. Before authorization, re-scan/review/rebind. After authorization, stop execution and require a new authorization packet; do not silently change the bound allowlist.
 
 A scheduled-only scan is forbidden.
+
+After explicit PROD-11 authorization, credential generation may proceed. Only then is the final `kiosk-auth.v1.json` materialized by combining the already-bound `allowedBriefHosts` array with the newly generated salt/hash, followed by loader validation and atomic installation.
 
 ## Frozen credential generation
 
@@ -955,7 +959,7 @@ The atomic production-context capability is a hard **pre-request** gate for the 
 
 Immediately before the PROD-11 authorization request, fresh revalidate all seven manifest-bound checks: target host identity, disk/port conflicts, built image digest, secret storage, Kiosk auth runtime configuration, external readiness gates, and rollback targets.
 
-Also immediately before the authorization request, and only after all pre-request `requests_v2` preparation writes are complete, close `DATABASE_WIDE_BRIEF_HOST_FINAL_SCAN_AND_ALLOWLIST_BINDING_PENDING` by performing the final whole-database scan and binding the exact reviewed `allowedBriefHosts` array into both the authorization packet and the materialized Kiosk auth config. Any later request mutation makes that proof stale.
+Also immediately before the authorization request, and only after all pre-request `requests_v2` preparation writes are complete, close `DATABASE_WIDE_BRIEF_HOST_FINAL_SCAN_AND_ALLOWLIST_BINDING_PENDING` by performing the final whole-database scan and binding the exact reviewed `allowedBriefHosts` array plus digest into the **authorization packet only**. The materialized Kiosk auth config is intentionally deferred until after explicit authorization generates the credential. Any later request mutation makes the bound proof stale; after authorization it requires a new authorization packet.
 
 Before the PROD-11 authorization request, the following preparation gates must already be closed:
 
