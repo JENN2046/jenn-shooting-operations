@@ -255,7 +255,16 @@ export function createKioskRuntimeOptionsFromEnv(env = process.env) {
     : '';
   if (configPath === '') return Object.freeze({});
   if (!isAbsolute(configPath)) throw new Error('KIOSK_AUTH_CONFIG_PATH_NOT_ABSOLUTE');
-  const runtime = loadKioskRuntimeAuthV1({ configPath });
+  const forbiddenCredentialValues = [
+    env.VIEWER_TOKEN,
+    env.SUBMITTER_TOKEN,
+    env.SCHEDULER_TOKEN,
+    env.ADMIN_TOKEN,
+  ].filter(value => typeof value === 'string' && value.length > 0);
+  const runtime = loadKioskRuntimeAuthV1({
+    configPath,
+    forbiddenCredentialValues,
+  });
   return Object.freeze({
     kioskAuthenticate: runtime.authenticate,
     kioskAuthenticationChallenge: runtime.authenticationChallenge,

@@ -43,7 +43,7 @@ existing `AUTH_NOT_CONFIGURED` behavior.
 
 When configured, the path must be absolute and the referenced config must:
 
-- be a regular file rather than a symlink;
+- be opened with no-follow semantics and validated/read through the same descriptor;
 - be owned by the running process UID;
 - expose no group/other permissions and no owner execute bit;
 - contain an exact schema with no extra keys;
@@ -53,7 +53,7 @@ When configured, the path must be absolute and the referenced config must:
 - contain a non-empty explicit resource scope;
 - store only scrypt salt/hash material, never a cleartext password.
 
-The runtime object does not serialize the credential hash or password.
+The runtime object does not serialize the credential hash or password. Startup also rejects any Kiosk credential that collides with the configured viewer, submitter, scheduler, or administrator token.
 
 ## Browser/device identity
 
@@ -73,7 +73,7 @@ Rules:
 - an existing mismatched local identity fails closed;
 - an already provisioned browser may queue offline while identity verification is
   temporarily unavailable;
-- reconnect re-verifies identity against the server;
+- every online synchronize attempt re-verifies identity before refresh or replay;
 - run-event submission is denied if the command `deviceId` does not match the
   authenticated runtime device binding.
 
@@ -108,7 +108,7 @@ production volume = not mounted
 Targeted Kiosk auth/device/runtime tests:
 
 ```text
-76 / 76 PASS
+85 / 85 PASS
 0 fail
 0 skip
 ```
@@ -116,8 +116,8 @@ Targeted Kiosk auth/device/runtime tests:
 A full repository check in that image reported:
 
 ```text
-779 tests
-776 pass
+781 tests
+778 pass
 2 fail
 1 expected VCP skip
 ```
@@ -174,6 +174,7 @@ reviews, receipts, audit facts, or revision history.
 PROD-10-ENABLE-VCP-REMOTE-SYNC = COMPLETED
 nextActionId = PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE
 
+KIOSK_DEPLOYABLE_AUTH_WIRING = SATISFIED
 KIOSK_AUTH_RUNTIME_SOURCE = IMPLEMENTED
 KIOSK_AUTH_RUNTIME_LIVE = NOT_DEPLOYED
 KIOSK_REAL_DEVICE = NOT_VERIFIED

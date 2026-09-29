@@ -17,8 +17,8 @@ import { createKioskRuntimeOptionsFromEnv } from '../src/server.mjs';
 const PASSWORD = 'kiosk-test-secret-0001';
 const SALT = Buffer.from('0123456789abcdef', 'utf8');
 
-function configFor(overrides = {}) {
-  const hash = scryptSync(PASSWORD, SALT, 32);
+function configFor(overrides = {}, password = PASSWORD) {
+  const hash = scryptSync(password, SALT, 32);
   return {
     schemaVersion: 1,
     authMode: 'basic-v1',
@@ -157,6 +157,25 @@ test('runtime auth fails closed on unsafe paths, permissions, links, and invalid
       assert.throws(
         () => loadKioskRuntimeAuthV1({ configPath: f.path }),
         /KIOSK_AUTH_CONFIG_INVALID/u,
+      );
+    } finally {
+      f.close();
+    }
+  }
+});
+
+test('production entrypoint rejects Kiosk credential reuse across every existing role token', () => {
+  const shared = 'shared-role-secret-0001';
+  for (const key of ['VIEWER_TOKEN', 'SUBMITTER_TOKEN', 'SCHEDULER_TOKEN', 'ADMIN_TOKEN']) {
+    const f = fixture(configFor({}, shared));
+    try {
+      assert.throws(
+        () => createKioskRuntimeOptionsFromEnv({
+          KIOSK_AUTH_CONFIG_PATH: f.path,
+          [key]: shared,
+        }),
+        /KIOSK_AUTH_CREDENTIAL_COLLISION/u,
+        key,
       );
     } finally {
       f.close();

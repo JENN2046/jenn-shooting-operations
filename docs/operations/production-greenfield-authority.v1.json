@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "authorityId": "WO-06D-GREENFIELD-PRODUCTION-AUTHORITY-R1",
-  "baseManifestDigest": "sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b",
+  "baseManifestDigest": "sha256:e84bc05f9351773316e2f4c33eab77b67743d44c39689276aea67412294d514a",
   "deploymentMode": "GREENFIELD_NO_EXISTING_SOURCE",
   "target": {
     "provider": "TENCENT_CLOUD_CVM",

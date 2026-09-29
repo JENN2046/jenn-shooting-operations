@@ -1,4 +1,4 @@
-import { lstatSync, readFileSync } from 'node:fs';
+import { closeSync, constants, fstatSync, openSync, readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { scryptSync, timingSafeEqual } from 'node:crypto';
 import { createTrustedPrincipal, validateTrustedPrincipal } from './authorization-v2.mjs';
@@ -116,11 +116,8 @@ function parseBasicAuthorization(value) {
   };
 }
 
-function verifyCredential(config, username, password) {
-  if (username !== config.username
-      || typeof password !== 'string'
-      || password.length === 0
-      || password.length > 256) {
+function credentialMatches(config, password) {
+  if (typeof password !== 'string' || password.length === 0 || password.length > 256) {
     return false;
   }
   let candidate;
@@ -131,26 +128,58 @@ function verifyCredential(config, username, password) {
   }
   return candidate.length === config.hash.length && timingSafeEqual(candidate, config.hash);
 }
-export function loadKioskRuntimeAuthV1({ configPath } = {}) {
+
+function verifyCredential(config, username, password) {
+  return username === config.username && credentialMatches(config, password);
+}
+
+export function loadKioskRuntimeAuthV1({
+  configPath,
+  forbiddenCredentialValues = [],
+} = {}) {
   if (typeof configPath !== 'string' || configPath.length === 0) {
     throw new TypeError('Kiosk auth config path is required');
   }
   if (!isAbsolute(configPath)) {
     throw new Error('KIOSK_AUTH_CONFIG_PATH_NOT_ABSOLUTE');
   }
-  const info = lstatSync(configPath);
-  const wrongOwner = typeof process.getuid === 'function' && info.uid !== process.getuid();
-  if (!info.isFile() || info.isSymbolicLink() || wrongOwner || (info.mode & 0o177) !== 0) {
+  if (!Array.isArray(forbiddenCredentialValues)
+      || forbiddenCredentialValues.some(value => typeof value !== 'string')) {
+    throw new TypeError('Kiosk forbidden credential values must be strings');
+  }
+  if (!Number.isInteger(constants.O_NOFOLLOW)) {
+    throw new Error('KIOSK_AUTH_CONFIG_NOFOLLOW_UNAVAILABLE');
+  }
+
+  let descriptor;
+  try {
+    descriptor = openSync(configPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch {
     throw new Error('KIOSK_AUTH_CONFIG_PERMISSIONS_UNSAFE');
+  }
+
+  let body;
+  try {
+    const info = fstatSync(descriptor);
+    const wrongOwner = typeof process.getuid === 'function' && info.uid !== process.getuid();
+    if (!info.isFile() || wrongOwner || (info.mode & 0o177) !== 0) {
+      throw new Error('KIOSK_AUTH_CONFIG_PERMISSIONS_UNSAFE');
+    }
+    body = readFileSync(descriptor, 'utf8');
+  } finally {
+    closeSync(descriptor);
   }
 
   let parsed;
   try {
-    parsed = JSON.parse(readFileSync(configPath, 'utf8'));
+    parsed = JSON.parse(body);
   } catch {
     throw new Error('KIOSK_AUTH_CONFIG_INVALID');
   }
   const config = validateConfig(parsed);
+  if (forbiddenCredentialValues.some(value => credentialMatches(config, value))) {
+    throw new Error('KIOSK_AUTH_CREDENTIAL_COLLISION');
+  }
   const challenge = `Basic realm="${config.realm}", charset="UTF-8"`;
 
   return Object.freeze({

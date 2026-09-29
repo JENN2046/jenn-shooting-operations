@@ -125,6 +125,7 @@ function createKioskUi() {
   let serverModel = null;
   let busy = false;
   let controlling = false;
+  let identityBound = false;
   let lastServerFresh = false;
 
   function render() {
@@ -143,7 +144,7 @@ function createKioskUi() {
     const action = deriveKioskActionState({
       serverItem: serverModel?.current ?? null,
       pendingItems,
-      controlling,
+      controlling: controlling && identityBound,
       busy: busy || ['conflict', 'reviewRequired'].includes(syncStatus),
     });
     byId('confirmed-state').textContent = `服务端：${labels[serverModel?.current?.runState] ?? '—'}`;
@@ -163,6 +164,22 @@ function createKioskUi() {
     busy = true;
     render();
     try {
+      const identity = await deviceProvisioner.provision();
+      if (!identity.ok) {
+        identityBound = false;
+        lastServerFresh = false;
+        setMessage('设备身份与服务端绑定不一致，现场控制保持关闭。', 'error');
+        render();
+        return false;
+      }
+      identityBound = true;
+      if (!identity.verified) {
+        lastServerFresh = false;
+        setMessage('设备身份暂未重新校验；离线事件仅保存在本机。', 'info');
+        render();
+        return false;
+      }
+
       if (serverModel === null || !controlling) {
         const refreshed = await transport.refreshCurrent({
           resourceId,
@@ -302,10 +319,12 @@ function createKioskUi() {
   async function start() {
     const identity = await deviceProvisioner.provision();
     if (!identity.ok) {
+      identityBound = false;
       setMessage('设备身份未完成可信绑定，现场控制保持关闭。', 'error');
       render();
       return false;
     }
+    identityBound = true;
     if (!identity.verified) {
       setMessage('设备当前离线；沿用已绑定身份，联网后由服务端重新校验。', 'info');
     }

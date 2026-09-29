@@ -281,6 +281,22 @@ test('HTML provides semantic controls, live status, labels, all-task lists, and 
   assert.match(html, /id="complete-confirm"/u);
 });
 
+test('browser revalidates the server-bound device identity before refresh or replay', () => {
+  const source = script;
+  const syncStart = source.indexOf('async function synchronize()');
+  const nextFunction = source.indexOf('function enqueue(', syncStart);
+  const syncSource = source.slice(syncStart, nextFunction);
+  const identityCheck = syncSource.indexOf('await deviceProvisioner.provision()');
+  const refresh = syncSource.indexOf('transport.refreshCurrent(');
+  const replay = syncSource.indexOf('queue.replay(');
+  assert.equal(syncStart >= 0, true);
+  assert.equal(identityCheck >= 0, true);
+  assert.equal(refresh > identityCheck, true);
+  assert.equal(replay > identityCheck, true);
+  assert.match(syncSource, /identityBound = false/u);
+  assert.match(source, /controlling: controlling && identityBound/u);
+});
+
 test('browser source uses the frozen queue surface, second confirmation, and contains no V1 write or credential material', () => {
   assert.match(script, /from '\/kiosk-offline-queue-v2\.js'/u);
   assert.match(script, /from '\/kiosk-device-identity-v1\.js'/u);

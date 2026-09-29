@@ -53,7 +53,6 @@ test('production change manifest validates with deployment request blocked and n
     [...base.authorizationPacket.deploymentBlockingGateIds].sort(),
     [
       'VCP_DEPLOYABLE_ADAPTER_WIRING',
-      'KIOSK_DEPLOYABLE_AUTH_WIRING',
       'PRODUCTION_TARGET_FACTS',
       'PRODUCTION_DATA_MIGRATION',
       'PRODUCTION_DEPLOYMENT_GATE',
@@ -515,8 +514,8 @@ test('VCP guarded push is irreversible even though adapter configuration can be 
 test('Kiosk deployable auth wiring precedes post-enable real-device acceptance', () => {
   const gate = base.gates.find(candidate => candidate.id === 'KIOSK_DEPLOYABLE_AUTH_WIRING');
   assert.ok(gate);
-  assert.equal(gate.status, 'BLOCKED');
-  assert.equal(gate.evidence, 'PRODUCTION_ENTRYPOINT_AUTH_INJECTION_NOT_IMPLEMENTED');
+  assert.equal(gate.status, 'SATISFIED');
+  assert.equal(gate.evidence, 'PROD11_KIOSK_AUTH_RUNTIME_WIRING_R1_SOURCE_PASS');
 
   const kiosk = action(base, 'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE');
   assert.equal(kiosk.preconditions.includes('KIOSK_DEPLOYABLE_AUTH_WIRING'), true);
@@ -535,7 +534,7 @@ test('Kiosk deployable auth wiring precedes post-enable real-device acceptance',
   assert.equal(base.authorizationPacket.deploymentBlockingGateIds.includes('WO06C_KIOSK_DEVICE'), false);
   assert.equal(
     base.authorizationPacket.deploymentBlockingGateIds.includes('KIOSK_DEPLOYABLE_AUTH_WIRING'),
-    true,
+    false,
   );
 
   const oldCycle = structuredClone(base);
@@ -555,8 +554,8 @@ test('Kiosk deployable auth wiring precedes post-enable real-device acceptance',
   );
 
   const forged = structuredClone(base);
-  forged.gates.find(candidate => candidate.id === 'KIOSK_DEPLOYABLE_AUTH_WIRING').status = 'SATISFIED';
-  expectRejected(forged, 'GATE_STATUS_INVALID', 'Kiosk auth wiring cannot self-promote');
+  forged.gates.find(candidate => candidate.id === 'KIOSK_DEPLOYABLE_AUTH_WIRING').status = 'BLOCKED';
+  expectRejected(forged, 'GATE_STATUS_INVALID', 'Kiosk auth wiring cannot regress after source proof');
 });
 
 
