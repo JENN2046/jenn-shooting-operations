@@ -29,7 +29,7 @@
       "currentBaselineImageId": "sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72",
       "currentBaselineTag": "jenn-shooting-operations:prod-d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
       "currentBaselineSourceRevision": "d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
-      "requiredCapability": "KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY",
+      "requiredCapability": "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
       "finalImmutableImageId": "UNRESOLVED_AFTER_ATOMIC_CAPABILITY_IMPLEMENTATION",
       "finalSourceRevision": "UNRESOLVED_AFTER_ATOMIC_CAPABILITY_IMPLEMENTATION",
       "deploymentReferenceRule": "PROD-11 must not be requested until a replacement image containing the atomic capability has passed exact-head tests and its immutable image ID and source revision are frozen; at execution revalidate BUILT_IMAGE_DIGEST and create by the frozen immutable image ID, never by mutable tag",
@@ -46,7 +46,7 @@
       "requestRule": "before PROD-11 can become requestable, all seven frozen action-specific revalidation checks must be fresh PASS against the exact target and replacement image; BUILT_IMAGE_DIGEST is necessary but not sufficient"
     },
     "role": "VERIFIED_BASELINE_NOT_PROD11_EXECUTION_ELIGIBLE",
-    "prod11ExecutionEligibility": "BLOCKED_MISSING_KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY",
+    "prod11ExecutionEligibility": "BLOCKED_MISSING_KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
     "replacementImageRequired": true
   },
   "identityBinding": {
@@ -401,7 +401,7 @@
       "mustHaveNoProductionRunsAtAuthorizationRequest": true,
       "authorizationPacketRule": "before PROD-11 may be requested, bind an exact planned acceptanceRunStart and acceptanceRunEnd and fresh-prove the same derived schedule item is confirmed, unused, bound only to the exact canonical V2 acceptance request, and covers the whole planned run window with planned_start <= acceptanceRunStart < acceptanceRunEnd <= planned_end",
       "authorizationExpiryRule": "if current time reaches or passes planned_end before PROD-11 execution starts, or the item becomes used, cancelled, rebound, changed or no longer covers the bound acceptance run window, the authorization packet is stale and PROD-11 must not execute from it",
-      "executionTimeRecheck": "after PROD-11 authorization, isolated WO-03 PASS, exact production Kiosk activation, and only on a replacement frozen runtime that implements KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY, immediately before the first production smoke run event fresh-read the same schedule item, schedule_item_tasks binding and production_runs state and require confirmed status, exact STUDIO-PROD-01, exactly one binding to the frozen V2 acceptance request, zero prior runs, planned_start <= current time < planned_end, and planned_end still covers the bound acceptanceRunEnd",
+      "executionTimeRecheck": "after PROD-11 authorization, isolated WO-03 PASS, exact production Kiosk activation, and only on a replacement frozen runtime that implements KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY, immediately before the first production smoke run event fresh-read the same schedule item, schedule_item_tasks binding and production_runs state and require confirmed status, exact STUDIO-PROD-01, exactly one binding to the frozen V2 acceptance request, zero prior runs, planned_start <= current time < planned_end, and planned_end still covers the bound acceptanceRunEnd",
       "failureRule": "on any execution-time item, binding, run-state or resource-wide current-selection mismatch stop before the Kiosk run event; PROD-11 does not authorize creating or moving a replacement schedule item. Return to a separately authorized scheduling preparation. If Kiosk runtime configuration has already changed, use the bound configuration rollback without erasing production facts.",
       "resourceWideSelectionRecheck": "after isolated WO-03 PASS and exact production Kiosk activation, authenticated GET /api/v2/kiosk/current?resourceId=STUDIO-PROD-01 may be used as device-facing evidence only; it is non-authoritative for the write. The replacement runtime must atomically re-evaluate both current-item uniqueness and active Scheduling businessTimeZone equals Asia/Shanghai inside the subsequent event transaction",
       "selectionConflictRule": "any MULTIPLE_CURRENT_CANDIDATES result, any other current scheduleItemId, any other active run exposed as current, a null current item, authentication or identity failure, or any non-success current-read result blocks the run event and forces fail-closed recovery",
@@ -427,7 +427,7 @@
       "exact confirmed unused production acceptance item is the current STUDIO-PROD-01 item immediately before any separately bounded production smoke run event",
       "any production smoke run event is integration evidence only and cannot satisfy WO-03 REAL_DEVICE_ACCEPTANCE or OFFLINE_REPLAY_RESULT"
     ],
-    "productionSmokeSeparationRule": "the separately authorized production scheduling preparation supports only a later bounded production integration smoke. Before PROD-11 production Kiosk activation, the complete isolated WO-03 REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT gates must pass. Before PROD-11 may even be requested, a replacement immutable image implementing KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY must be built, tested and frozen."
+    "productionSmokeSeparationRule": "the separately authorized production scheduling preparation supports only a later bounded production integration smoke. Before PROD-11 production Kiosk activation, the complete isolated WO-03 REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT gates must pass. Before PROD-11 may even be requested, a replacement immutable image implementing KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY must be built, tested and frozen."
   },
   "rollbackContract": {
     "actionId": "ROLLBACK-10-DISABLE-KIOSK-CONFIG",
@@ -493,7 +493,7 @@
     "executionImageGate": {
       "required": true,
       "status": "BLOCKED_REPLACEMENT_IMAGE_UNRESOLVED",
-      "requiredCapability": "KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY",
+      "requiredCapability": "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
       "currentBaselineImageId": "sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72",
       "currentBaselineEligibleForProd11": false,
       "finalImmutableImageId": "UNRESOLVED",
