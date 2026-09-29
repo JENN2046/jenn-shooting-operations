@@ -70,9 +70,10 @@
       "finalDiagnosticTagDerivationRule": "jenn-shooting-operations:prod-<finalSourceRevision>",
       "additionalRequiredCapabilities": [
         "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
-        "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY"
+        "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY",
+        "KIOSK_TRUSTED_SERVICE_CONTEXT_SIGNAL_CAPABILITY"
       ],
-      "prod11ExecutionEligibility": "BLOCKED_MISSING_ATOMIC_CONTEXT_SMOKE_WRITE_ADMISSION_AND_SMOKE_OUTBOX_ISOLATION_CAPABILITIES",
+      "prod11ExecutionEligibility": "BLOCKED_MISSING_ATOMIC_CONTEXT_SMOKE_WRITE_ADMISSION_SMOKE_OUTBOX_ISOLATION_AND_TRUSTED_SERVICE_CONTEXT_CAPABILITIES",
       "smokeAcceptanceRunWindowBinding": {
         "status": "BLOCKED_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
         "scope": "PROD11_BOUNDED_PRODUCTION_SMOKE_ONLY",
@@ -99,37 +100,37 @@
       "requiredCapabilities": [
         "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
         "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
-        "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY"
+        "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY",
+        "KIOSK_TRUSTED_SERVICE_CONTEXT_SIGNAL_CAPABILITY"
       ],
-      "smokeModeActivationSignal": {
+      "trustedServiceContextSignal": {
         "status": "PRE_REQUEST_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
-        "signal": "successful load of KIOSK_AUTH_CONFIG_PATH on the production service",
-        "exactConfigPath": "/app/kiosk-auth.v1.json",
-        "exactIdentityPredicates": {
-          "deviceId": "KIOSK-PROD-01",
-          "username": "jso-kiosk-prod-01",
-          "principalSubjectId": "KIOSK-PROD-01",
-          "principalRole": "operator",
-          "principalResourceIds": [
-            "STUDIO-PROD-01"
-          ],
-          "businessTimeZone": "Asia/Shanghai"
-        },
-        "activationRule": "on the PROD-11 replacement runtime, KIOSK_AUTH_CONFIG_PATH absent means Kiosk disabled. If KIOSK_AUTH_CONFIG_PATH is present, the runtime must load and validate the exact frozen production Kiosk config; successful production config load unconditionally selects PROD11_SMOKE_ONLY authority mode until a separately frozen post-smoke normal-operation transition contract exists",
-        "missingSmokeBindingsRule": "when PROD11_SMOKE_ONLY is selected, startup must fail closed before listen unless KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID, KIOSK_SMOKE_ACCEPTANCE_RUN_START and KIOSK_SMOKE_ACCEPTANCE_RUN_END are all present, valid and equal the authorization-frozen values",
-        "capabilityRule": "when PROD11_SMOKE_ONLY is selected, KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY, KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY and KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY are mandatory write-path gates; no ordinary Kiosk write-admission fallback exists",
-        "nonExactConfigRule": "on the production service under PROD-11 authority, any present KIOSK_AUTH_CONFIG_PATH whose loaded identity does not exactly match the frozen production Kiosk identity is startup-fatal; do not downgrade to a weaker Kiosk mode",
-        "noIndependentModeEnv": true,
-        "normalOperationFallbackForbidden": true
+        "capabilityId": "KIOSK_TRUSTED_SERVICE_CONTEXT_SIGNAL_CAPABILITY",
+        "environmentVariable": "KIOSK_SERVICE_CONTEXT",
+        "requiredAtStartup": true,
+        "noDefault": true,
+        "noConfigDerivedFallback": true,
+        "noSmokeVariableDerivedFallback": true,
+        "immutableForContainerLifetime": true,
+        "allowedValues": [
+          "PROD11_PRODUCTION",
+          "WO03_ISOLATED_ACCEPTANCE"
+        ],
+        "productionServiceRule": "the separately authorized replacement-image deployment must start the live production service with KIOSK_SERVICE_CONTEXT=PROD11_PRODUCTION while KIOSK_AUTH_CONFIG_PATH is absent; Kiosk is disabled and all Kiosk writes are denied",
+        "prod11ActivationRule": "during the bounded same-image PROD-11 config-only recreate, KIOSK_SERVICE_CONTEXT must remain PROD11_PRODUCTION; once KIOSK_AUTH_CONFIG_PATH is present, the runtime must load the exact frozen production identity and select PROD11_SMOKE_ONLY with every frozen smoke binding/capability mandatory before listen",
+        "isolatedWo03Rule": "the isolated WO-03 environment must use KIOSK_SERVICE_CONTEXT=WO03_ISOLATED_ACCEPTANCE; production Kiosk identity/credential, production data volume, production smoke authority and production provider delivery are forbidden in that context",
+        "crossContextFailureRule": "missing, unknown, changed, or config-derived context is startup-fatal; a production service can never downgrade to isolated/ordinary admission because of Kiosk config contents, and an isolated WO-03 instance can never gain production authority from a production-looking config",
+        "sameImageRule": "the exact same replacement image may support both trusted contexts; context is supplied only by the separately authorized environment/container binding, never inferred from the Kiosk auth JSON or smoke env values"
       }
     },
     "role": "VERIFIED_BASELINE_NOT_PROD11_EXECUTION_ELIGIBLE",
-    "prod11ExecutionEligibility": "BLOCKED_MISSING_ATOMIC_CONTEXT_SMOKE_WRITE_ADMISSION_AND_SMOKE_OUTBOX_ISOLATION_CAPABILITIES",
+    "prod11ExecutionEligibility": "BLOCKED_MISSING_ATOMIC_CONTEXT_SMOKE_WRITE_ADMISSION_SMOKE_OUTBOX_ISOLATION_AND_TRUSTED_SERVICE_CONTEXT_CAPABILITIES",
     "replacementImageRequired": true,
     "missingProd11ExecutionCapabilities": [
       "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
       "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
-      "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY"
+      "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY",
+      "KIOSK_TRUSTED_SERVICE_CONTEXT_SIGNAL_CAPABILITY"
     ]
   },
   "identityBinding": {
@@ -277,7 +278,8 @@
           "EXACT_ON_SITE_IPAD_OR_TABLET",
           "EXACT_SAFARI_BROWSER_TARGET",
           "EXACT_MOBILE_VIEWPORT_EXECUTION_TARGET",
-          "EXACT_ACCESSIBILITY_ASSISTIVE_TECH_ENVIRONMENT"
+          "EXACT_ACCESSIBILITY_ASSISTIVE_TECH_ENVIRONMENT",
+          "KIOSK_SERVICE_CONTEXT=WO03_ISOLATED_ACCEPTANCE"
         ],
         "requiredAuthority": "SEPARATELY_FROZEN_WO03_ISOLATED_ENVIRONMENT_PREPARATION_AUTHORITY",
         "setupWritesMustCompleteBeforeRequest": true,
@@ -285,7 +287,15 @@
         "noImplicitPostAuthorizationSetup": true
       },
       "preparationPhase": "PRE_PROD11_REQUEST",
-      "authorityStatus": "BLOCKED_PREPARATION_AUTHORITY_AND_EXACT_TARGET_UNRESOLVED"
+      "authorityStatus": "BLOCKED_PREPARATION_AUTHORITY_AND_EXACT_TARGET_UNRESOLVED",
+      "trustedServiceContext": {
+        "environmentVariable": "KIOSK_SERVICE_CONTEXT",
+        "exactValue": "WO03_ISOLATED_ACCEPTANCE",
+        "requiredBeforeExecution": true,
+        "source": "separately authorized isolated-environment setup binding",
+        "productionContextForbidden": true,
+        "productionIdentityForbidden": true
+      }
     },
     "productionSmokeWriteGate": {
       "status": "BLOCKED_PRE_REQUEST_ATOMIC_WRITE_ADMISSION_OUTBOX_CAPABILITIES_AND_PRE_ACTIVATION_WO03",
@@ -368,18 +378,15 @@
           "scope": "PROD11_BOUNDED_PRODUCTION_SMOKE_ONLY"
         }
       },
-      "smokeModeActivationSignal": {
-        "source": "KIOSK_AUTH_CONFIG_PATH plus exact loaded production Kiosk identity",
-        "exactConfigPath": "/app/kiosk-auth.v1.json",
-        "selectedMode": "PROD11_SMOKE_ONLY",
-        "absentPathMeans": "KIOSK_DISABLED",
-        "requiredBindings": [
-          "KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID",
-          "KIOSK_SMOKE_ACCEPTANCE_RUN_START",
-          "KIOSK_SMOKE_ACCEPTANCE_RUN_END"
-        ],
-        "noIndependentOptionalModeFlag": true,
-        "failureRule": "if KIOSK_AUTH_CONFIG_PATH is present, no listener may start unless exact production identity validation and every smoke binding/capability startup requirement pass"
+      "trustedServiceContextSignal": {
+        "environmentVariable": "KIOSK_SERVICE_CONTEXT",
+        "required": true,
+        "productionValue": "PROD11_PRODUCTION",
+        "isolatedWo03Value": "WO03_ISOLATED_ACCEPTANCE",
+        "source": "separately authorized container/environment binding; independent of Kiosk auth config contents and all smoke variables",
+        "immutableForContainerLifetime": true,
+        "noDefault": true,
+        "failureRule": "missing or unknown value is startup-fatal; config contents may not select, weaken, or change service context"
       }
     },
     "filePayloadContract": {
@@ -493,16 +500,17 @@
       "requiredEffects": [
         "replace or recreate the live application service on the exact frozen replacement immutable image ID while Kiosk authentication/configuration remains disabled",
         "preserve the existing production data volume, loopback port, read-only rootfs, tmpfs, security options, restart policy, VCP configuration and DingTalk-disabled state",
-        "fresh-pass loopback/public health, production storage identity, VCP continuity and exact immutable image/revision verification before declaring the replacement deployment complete"
+        "fresh-pass loopback/public health, production storage identity, VCP continuity and exact immutable image/revision verification before declaring the replacement deployment complete",
+        "bind KIOSK_SERVICE_CONTEXT=PROD11_PRODUCTION as the mandatory trusted production-service context while keeping KIOSK_AUTH_CONFIG_PATH absent and all Kiosk writes disabled"
       ],
       "requiredRollback": "the separate deployment Action must bind its own image/container rollback restoring the exact pre-replacement immutable runtime without deleting production data; ROLLBACK-10 is not image/container rollback authority",
-      "completionRule": "the separate deployment Action must complete and fresh-prove the live service is already running the exact replacement immutable image/revision with Kiosk still disabled before PROD-11 may be requested"
+      "completionRule": "the separate deployment Action must complete and fresh-prove the live service is already running the exact replacement immutable image/revision with Kiosk still disabled before PROD-11 may be requested; fresh-prove KIOSK_SERVICE_CONTEXT=PROD11_PRODUCTION is present and immutable on the live service"
     },
     "prod11ConfigOnlyRecreation": {
       "status": "FROZEN_BOUNDED_SAME_IMAGE_RECREATE_ONLY",
       "allowedUnderProd11": true,
       "purpose": "apply/remove Kiosk startup-only configuration bindings after the exact replacement image has already been separately deployed",
-      "immutableImageRule": "the recreated production container must use exactly the same immutable image ID and source revision already running from the separately authorized replacement-image deployment; any image ID/revision/tag-authority change is forbidden",
+      "immutableImageRule": "the recreated production container must use exactly the same immutable image ID and source revision already running from the separately authorized replacement-image deployment; any image ID/revision/tag-authority change is forbidden; KIOSK_SERVICE_CONTEXT must remain exactly PROD11_PRODUCTION",
       "allowedChanges": [
         "add/remove the exact read-only Kiosk auth config bind",
         "add/remove KIOSK_AUTH_CONFIG_PATH; presence of this exact production config is the mandatory smoke-mode activation signal",
@@ -520,10 +528,11 @@
         "role-token configuration",
         "VCP configuration",
         "DingTalk-disabled state",
-        "all non-Kiosk runtime environment and mounts"
+        "all non-Kiosk runtime environment and mounts",
+        "KIOSK_SERVICE_CONTEXT=PROD11_PRODUCTION"
       ],
-      "preCreateProof": "fresh inspect the live service and prove its immutable image ID/source revision equal the separately deployed frozen replacement authority before the config-only recreate",
-      "postCreateProof": "fresh inspect the recreated service and prove immutable image ID/source revision and every preserved topology field are unchanged; if KIOSK_AUTH_CONFIG_PATH is present, prove the exact frozen production identity was loaded, PROD11_SMOKE_ONLY was selected, and every required smoke binding passed startup validation before the listener became healthy"
+      "preCreateProof": "fresh inspect the live service and prove its immutable image ID/source revision equal the separately deployed frozen replacement authority before the config-only recreate and prove KIOSK_SERVICE_CONTEXT=PROD11_PRODUCTION",
+      "postCreateProof": "fresh inspect the recreated service and prove immutable image ID/source revision and every preserved topology field are unchanged, KIOSK_SERVICE_CONTEXT=PROD11_PRODUCTION, and only the frozen Kiosk bindings differ; if KIOSK_AUTH_CONFIG_PATH is present, prove the exact frozen production identity was loaded, PROD11_SMOKE_ONLY was selected, and every required smoke binding passed startup validation before the listener became healthy"
     }
   },
   "preAuthorizationAttestation": {
@@ -827,7 +836,7 @@
       "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
       "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
       "SEPARATE_PROD11_REPLACEMENT_IMAGE_DEPLOYMENT_AUTHORITY_UNRESOLVED",
-      "KIOSK_PRODUCTION_CONFIG_DERIVED_SMOKE_MODE_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE"
+      "KIOSK_TRUSTED_SERVICE_CONTEXT_SIGNAL_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE"
     ],
     "credentialGenerationIsExecutionNotRequestPrerequisite": true,
     "dedicatedBrowserProfileCreationIsExecutionNotRequestPrerequisite": true,
@@ -854,7 +863,7 @@
       "currentBaselineEligibleForProd11": false,
       "finalImmutableImageId": "UNRESOLVED",
       "finalSourceRevision": "UNRESOLVED",
-      "rule": "before PROD-11 may be requested, freeze and exact-head validate the replacement image with all three required Kiosk smoke capabilities plus mandatory config-derived smoke-mode activation: absence of KIOSK_AUTH_CONFIG_PATH means Kiosk disabled, while successful load of the exact frozen production Kiosk config unconditionally selects PROD11_SMOKE_ONLY and requires KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID plus KIOSK_SMOKE_ACCEPTANCE_RUN_START/END before listen. Then use a separate explicit production deployment Action to deploy that exact immutable image with Kiosk disabled and complete health/storage/VCP/image-rollback verification. PROD-11 may later perform only the bounded same-image config-only recreation; if it enables KIOSK_AUTH_CONFIG_PATH, there is no ordinary Kiosk write-mode fallback.",
+      "rule": "before PROD-11 may be requested, freeze and exact-head validate the replacement image with KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY, KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY, KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY, KIOSK_TRUSTED_SERVICE_CONTEXT_SIGNAL_CAPABILITY plus required immutable smoke-item/window bindings. The image must require the independent trusted KIOSK_SERVICE_CONTEXT signal: PROD11_PRODUCTION for the live production service and WO03_ISOLATED_ACCEPTANCE for the isolated WO-03 environment, with no config-derived/default fallback. Then use a separate explicit production deployment Action to deploy that exact immutable image with KIOSK_SERVICE_CONTEXT=PROD11_PRODUCTION and Kiosk disabled. PROD-11 may later perform only the bounded same-image config-only recreate, preserving KIOSK_SERVICE_CONTEXT=PROD11_PRODUCTION; if KIOSK_AUTH_CONFIG_PATH is enabled, there is no ordinary write-mode fallback.",
       "requiredActionSpecificRevalidation": [
         "TARGET_HOST_IDENTITY",
         "DISK_PORT_ROUTE_CONFLICTS",
@@ -873,7 +882,8 @@
       "requiredCapabilities": [
         "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
         "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
-        "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY"
+        "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY",
+        "KIOSK_TRUSTED_SERVICE_CONTEXT_SIGNAL_CAPABILITY"
       ]
     },
     "atomicCapabilityPreRequestGate": {
@@ -898,7 +908,7 @@
         "normalProductionAuthority": false
       }
     },
-    "productionActivationGate": "after explicit PROD-11 authorization, execute and close isolated WO-03 first; only REAL_DEVICE_ACCEPTANCE=PASS and OFFLINE_REPLAY_RESULT=PASS permit the bounded same-image config-only recreation that enables the exact production Kiosk config. Presence of KIOSK_AUTH_CONFIG_PATH must unconditionally select PROD11_SMOKE_ONLY and require every frozen smoke binding/capability before listen. Normal post-smoke production operation remains separately blocked by KIOSK_POST_SMOKE_NORMAL_OPERATION_TRANSITION_CONTRACT.",
+    "productionActivationGate": "after explicit PROD-11 authorization, execute and close isolated WO-03 on the same frozen image under KIOSK_SERVICE_CONTEXT=WO03_ISOLATED_ACCEPTANCE; only REAL_DEVICE_ACCEPTANCE=PASS and OFFLINE_REPLAY_RESULT=PASS permit the bounded same-image config-only recreation that enables the exact production Kiosk config on the live service, where KIOSK_SERVICE_CONTEXT must already and still equal PROD11_PRODUCTION. Presence of KIOSK_AUTH_CONFIG_PATH in production context unconditionally selects PROD11_SMOKE_ONLY and requires every frozen smoke binding/capability before listen.",
     "preRequestRevalidationChecklist": {
       "source": "production-change-manifest.v1 PROD-11 actionSpecificRevalidation",
       "requiredChecks": [
@@ -986,14 +996,14 @@
       "occurredAtRule": "both authorized smoke phases must satisfy the immutable authorization-frozen acceptance window inside KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY before commit",
       "trustedServerTimeGate": "required: each START/COMPLETE transaction must capture trusted server time after entering the write boundary and prove it is inside the authorization-frozen acceptanceRunStart/acceptanceRunEnd window; command.occurredAt alone is never sufficient",
       "clientClockSkewCannotExpandAuthority": true,
-      "modeActivationRule": "the exact production Kiosk config is the independent mandatory signal: once KIOSK_AUTH_CONFIG_PATH is present and the frozen KIOSK-PROD-01 identity loads, runtime authority is PROD11_SMOKE_ONLY and all smoke bindings/capabilities are mandatory; missing smoke env cannot downgrade to ordinary write admission"
+      "modeActivationRule": "trusted KIOSK_SERVICE_CONTEXT=PROD11_PRODUCTION is mandatory on the live production service and independent of Kiosk config contents. With that production context, KIOSK_AUTH_CONFIG_PATH absent means Kiosk disabled; once the exact frozen production config is present and valid, authority becomes PROD11_SMOKE_ONLY and all smoke bindings/capabilities are mandatory. WO03_ISOLATED_ACCEPTANCE is valid only for the separately bounded isolated WO-03 environment and never grants production authority."
     },
     "replacementImageDeploymentAuthorityGate": {
       "status": "BLOCKED_UNRESOLVED",
       "requiredBeforeRequest": true,
       "blockerId": "SEPARATE_PROD11_REPLACEMENT_IMAGE_DEPLOYMENT_AUTHORITY_UNRESOLVED",
       "prod11ImageSwapForbidden": true,
-      "rule": "PROD-11 does not authorize changing the live application image ID/source revision. Before PROD-11 may be requested, a separate explicit production deployment Action must deploy the exact frozen replacement immutable image with Kiosk disabled and complete its own rollback/health/VCP/storage verification. After that, PROD-11 may only recreate the container on that same immutable image for Kiosk startup configuration activation.",
+      "rule": "PROD-11 does not authorize changing the live application image ID/source revision. Before PROD-11 may be requested, a separate explicit production deployment Action must deploy the exact frozen replacement immutable image with KIOSK_SERVICE_CONTEXT=PROD11_PRODUCTION, Kiosk config absent/disabled, and complete its own rollback/health/VCP/storage verification. After that, PROD-11 may only recreate the container on that same immutable image while preserving KIOSK_SERVICE_CONTEXT=PROD11_PRODUCTION to apply Kiosk startup configuration.",
       "completionEvidence": [
         "exact separately authorized deployment Action ID and authority target",
         "pre-replacement live immutable image/container identity",
