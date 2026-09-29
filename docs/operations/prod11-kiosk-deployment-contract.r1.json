@@ -150,7 +150,34 @@
       "profileUserDataDir": "%LOCALAPPDATA%\\JennShootingOperations\\Chrome-Kiosk-PROD-01",
       "profileDirectory": "Default",
       "profileStatusAtFreeze": "NOT_YET_CREATED_BY_DESIGN",
-      "existingDefaultProfileReuse": false
+      "existingDefaultProfileReuse": false,
+      "productionLaunch": {
+        "status": "FROZEN_EXACT_PRODUCTION_LAUNCH",
+        "origin": "https://jso.skmt617.top",
+        "path": "/kiosk",
+        "queryPairs": [
+          {
+            "key": "resourceId",
+            "value": "STUDIO-PROD-01"
+          }
+        ],
+        "exactUrl": "https://jso.skmt617.top/kiosk?resourceId=STUDIO-PROD-01",
+        "fragment": null,
+        "queryContract": "exactly one query pair is allowed: resourceId=STUDIO-PROD-01; no additional query keys, duplicate resourceId entries, empty value, fragment, alternate path, or root-page launch is accepted as the production Kiosk target",
+        "clientContractSource": "public/kiosk.js createKioskUi requires query.length === 1 and query[0][0] === 'resourceId'",
+        "launchMechanism": {
+          "type": "EXACT_CHROME_COMMAND_LINE",
+          "executable": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+          "arguments": [
+            "--user-data-dir=%LOCALAPPDATA%\\JennShootingOperations\\Chrome-Kiosk-PROD-01",
+            "--profile-directory=Default",
+            "https://jso.skmt617.top/kiosk?resourceId=STUDIO-PROD-01"
+          ],
+          "shellExpansionRule": "%LOCALAPPDATA% is resolved by the selected Windows user at provisioning/launch; the resulting user-data directory must equal the frozen dedicated profile root and must not resolve to an existing ordinary Chrome profile",
+          "shortcutOrWrapperRule": "if a Windows shortcut or wrapper is later materialized, its resolved executable and argument vector must be exactly equivalent to this frozen command line; no different URL or extra Chrome URL argument is permitted"
+        },
+        "acceptanceRule": "before any production Kiosk identity acceptance, fresh-read the launched browser URL and prove exact origin/path/query equality plus dedicated user-data-dir/profile isolation"
+      }
     },
     "selectionStatus": "PRIMARY_PRODUCTION_KIOSK_TARGET_FROZEN_WO03_MATRIX_INCOMPLETE",
     "bindingSemantics": "server-authoritative logical device identity; physical hardware/browser identity is acceptance evidence, not cryptographic hardware attestation",
@@ -162,7 +189,8 @@
     "primaryProductionTarget": {
       "deviceLabel": "QLL-6",
       "browser": "Google Chrome 153.0.8010.53",
-      "profileIsolation": "DEDICATED_USER_DATA_DIR"
+      "profileIsolation": "DEDICATED_USER_DATA_DIR",
+      "productionLaunchUrl": "https://jso.skmt617.top/kiosk?resourceId=STUDIO-PROD-01"
     },
     "requiredViewportEvidence": [
       "Desktop 1440x900 keyboard operation, focus order, dialog focus return, long task wrapping",
@@ -334,10 +362,17 @@
       },
       "smokeBoundaryReference": "schedulableAcceptanceReadiness.acceptanceItemExecutionWindowContract.productionSmokeBoundary"
     },
-    "preRequestBlockingScope": "EXACT_ISOLATED_ENVIRONMENT_TARGET_BINDING_AND_SETUP_AUTHORITY_ONLY",
+    "preRequestBlockingScope": "EXACT_ISOLATED_ENVIRONMENT_TARGET_BINDING_SETUP_AUTHORITY_SETUP_COMPLETION_AND_REPLACEMENT_IMAGE_RUNTIME_BINDING",
     "matrixExecutionPreRequestBlocking": false,
     "matrixExecutionPhase": "POST_PROD11_AUTHORIZATION_PRE_PRODUCTION_KIOSK_ACTIVATION",
-    "targetBindingRule": "the exact on-site tablet/iPad, Safari, mobile viewport, accessibility environment, isolated endpoint/database/test-identity scope and fixture digests must be frozen before the PROD-11 authorization request; the WO-03 acceptance executions themselves remain post-authorization and pre-production-activation"
+    "targetBindingRule": "before the PROD-11 authorization request, freeze the exact on-site tablet/iPad, Safari, mobile viewport, accessibility environment, isolated endpoint/database/test-identity scope and fixture digests; complete all separately authorized isolated-environment setup writes; bind the prepared isolated runtime to the exact frozen replacement immutable image ID/source revision and KIOSK_SERVICE_CONTEXT=WO03_ISOLATED_ACCEPTANCE. The WO-03 acceptance executions themselves remain post-authorization and pre-production-activation.",
+    "preRequestScopeIncludes": [
+      "exact isolated endpoint/database/test-identity/device-browser-accessibility/fixture target bindings frozen",
+      "separately bounded isolated-environment setup authority frozen",
+      "all authorized isolated-environment setup writes completed",
+      "isolated runtime bound to the exact frozen replacement immutable image ID and source revision",
+      "KIOSK_SERVICE_CONTEXT=WO03_ISOLATED_ACCEPTANCE bound and immutable for the isolated runtime"
+    ]
   },
   "runtimeAuthConfig": {
     "deployment": {
