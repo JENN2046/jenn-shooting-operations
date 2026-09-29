@@ -2,7 +2,6 @@
   "schemaVersion": 1,
   "contractId": "PROD11_KIOSK_DEPLOYMENT_CONTRACT_R1",
   "status": "BLOCKED_PRE_REQUEST_ATOMIC_CAPABILITY_REPLACEMENT_IMAGE_AND_SCHEDULING_PREPARATION",
-  "runtimeSourceAuthorityCommit": "d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
   "candidateImage": {
     "tag": "jenn-shooting-operations:prod-d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
     "imageId": "sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72",
@@ -649,6 +648,22 @@
       "matrixExecutionBeforeRequest": false,
       "matrixExecutionPhase": "POST_AUTHORIZATION_PRE_PRODUCTION_KIOSK_ACTIVATION",
       "rule": "the exact isolated WO-03 environment and separately bounded setup authority must exist before the PROD-11 request; only the acceptance execution itself remains post-authorization"
+    }
+  },
+  "runtimeAuthorityBinding": {
+    "baselineEvidence": {
+      "sourceRevision": "d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
+      "role": "VERIFIED_BASELINE_NOT_PROD11_EXECUTION_ELIGIBLE",
+      "imageId": "sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72"
+    },
+    "prod11ExecutionAuthority": {
+      "status": "UNRESOLVED_UNTIL_REPLACEMENT_IMAGE_FROZEN",
+      "sourceRevision": "UNRESOLVED",
+      "immutableImageId": "UNRESOLVED",
+      "authoritativeSource": "requestability.executionImageGate.finalSourceRevision",
+      "authoritativeImage": "requestability.executionImageGate.finalImmutableImageId",
+      "consistencyRule": "once the replacement image is frozen, this binding, candidateImage.executionBinding final values, requestability.executionImageGate final values, isolated WO-03 runtime binding, and the eventual production container create reference must all identify the same immutable image and source revision; any disagreement is fail closed",
+      "baselineMayNotSubstitute": true
     }
   }
 }
