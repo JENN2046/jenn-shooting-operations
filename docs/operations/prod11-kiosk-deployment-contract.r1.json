@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "contractId": "PROD11_KIOSK_DEPLOYMENT_CONTRACT_R1",
-  "status": "BLOCKED_SCHEDULABLE_PREAUTH_WO03_EXECUTION_GATES_PENDING",
+  "status": "BLOCKED_SCHEDULABLE_PREAUTH_AND_WO03_ISOLATED_EXECUTION_GATES_PENDING",
   "runtimeSourceAuthorityCommit": "d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
   "candidateImage": {
     "tag": "jenn-shooting-operations:prod-d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
@@ -82,36 +82,65 @@
       "EXACT_MOBILE_VIEWPORT_EXECUTION_TARGET",
       "EXACT_ACCESSIBILITY_ASSISTIVE_TECH_ENVIRONMENT"
     ],
-    "closureRule": "REAL_DEVICE_ACCEPTANCE and PROD-11 formal completion must not be marked complete until every frozen WO-03 viewport and on-site device item is recorded; QLL-6 Chrome evidence is necessary but not sufficient. These items are execution and closure evidence and do not block requesting explicit PROD-11 authorization once true preconditions are satisfied.",
+    "closureRule": "REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT are post-authorization closure evidence and must be produced from the separately bounded isolated WO-03 acceptance environment with test identity and isolated test data. QLL-6 Chrome remains the primary production Kiosk identity target and may supply separate production integration smoke evidence, but no production request schedule run review receipt audit or notification fact may substitute for the frozen WO-03 matrix.",
     "preRequestBlocking": false,
     "prod11ExecutionRequired": true,
     "closureBlocking": true,
     "requiredBefore": "PROD11_FORMAL_COMPLETION_AND_PRODUCTION_READY",
-    "unresolvedAdditionalTargetsPhase": "PROD11_EXECUTION_ACCEPTANCE",
-    "groupedSessionEvidencePlan": {
+    "unresolvedAdditionalTargetsPhase": "PROD11_ISOLATED_ACCEPTANCE_CLOSURE",
+    "isolatedAcceptanceEnvironmentPlan": {
       "status": "BLOCKED_EXACT_ISOLATED_ENVIRONMENT_NOT_YET_BOUND",
-      "evidencePurpose": "satisfy only the mandatory WO-03 grouped-session browser/device presentation check without creating grouped production scheduling facts",
+      "scope": "FULL_WO03_VIEWPORT_AND_ON_SITE_MATRIX",
+      "evidencePurpose": "execute the complete frozen WO-03 browser viewport and on-site device matrix with test identity and isolated test data; this environment is the source of REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT closure evidence",
       "executionPhase": "PROD11_POST_AUTHORIZATION_ACCEPTANCE_CLOSURE",
       "preRequestBlocking": false,
       "closureBlocking": true,
-      "environmentAuthority": "SEPARATELY_BOUNDED_ISOLATED_TEST_ENVIRONMENT_REQUIRED",
-      "mustUseRealAcceptanceDeviceOrBrowser": true,
+      "exactEnvironmentBindingRequiredBeforeExecution": true,
+      "identityContract": {
+        "testIdentityRequired": true,
+        "productionKioskCredentialForbidden": true,
+        "identityExpiryAndDeviceHandoffMustBeTestable": true
+      },
       "dataContract": {
-        "allocationMode": "grouped_unallocated",
-        "minimumTaskBindings": 2,
-        "allRequestsAreTestOnly": true,
-        "currentWindowRequiredAtExecution": true,
-        "groupedNoticeRequired": true
+        "isolatedTestDataRequired": true,
+        "productionSchedulingFactsForbidden": true,
+        "singleItemFixtureRequired": true,
+        "groupedItemFixtureRequired": true,
+        "groupedAllocationMode": "grouped_unallocated",
+        "groupedMinimumTaskBindings": 2,
+        "allBoundRequestsTestOnly": true,
+        "currentWindowRequiredAtExecution": true
+      },
+      "coverageRule": "every requiredViewportEvidence item and every requiredOnSiteDeviceEvidence item must be executed or observed against the exact bounded isolated environment whenever it depends on authentication, queue state, run state, contention, replay, cache, grouped data, accessibility interaction or device handoff; no production scheduling/run fact may be counted as WO-03 closure evidence",
+      "evidenceMapping": {
+        "REAL_DEVICE_ACCEPTANCE": "must be backed by the exact isolated WO-03 environment plus the recorded real device/browser targets",
+        "OFFLINE_REPLAY_RESULT": "must be produced from the isolated test-data replay path, not production run facts",
+        "PRODUCTION_SMOKE": "separate integration evidence only; cannot satisfy or replace WO-03 REAL_DEVICE_ACCEPTANCE or OFFLINE_REPLAY_RESULT"
       },
       "isolationContract": [
-        "must not mount or copy the production data volume",
+        "must not mount copy or mutate the production data volume",
         "must not use production Kiosk or role credentials",
         "must not dispatch real DingTalk or other provider notifications",
-        "must not mutate production scheduling facts",
-        "must bind an exact test endpoint environment database identity device/browser and fixture digest before execution"
+        "must not mutate production requests scheduling runs reviews receipts audit facts or revisions",
+        "must bind an exact test endpoint environment database identity test credential scope device/browser targets and fixture digests before execution"
       ],
-      "existingRepositoryProof": "repository already has a grouped-run file-backed fixture exercised through ScheduleStore and createKioskV2Application; that implementation proof does not replace the required real browser/device run",
-      "failureRule": "absence or drift of the exact isolated grouped fixture environment blocks WO-03 REAL_DEVICE_ACCEPTANCE closure but does not block requesting PROD-11 authorization"
+      "fixtureRequirements": {
+        "singleItem": "one exact test-only single schedule item with one bound test request for normal run/offline/conflict/review flows",
+        "groupedItem": "one exact test-only grouped_unallocated item with at least two bound test requests for grouped-session presentation",
+        "serverFacts": "all test fixtures must be reproducible and disposable without sharing production storage"
+      },
+      "unresolvedTargets": [
+        "EXACT_ISOLATED_TEST_ENDPOINT",
+        "EXACT_ISOLATED_DATABASE_IDENTITY",
+        "EXACT_TEST_IDENTITY_SCOPE",
+        "EXACT_SINGLE_FIXTURE_DIGEST",
+        "EXACT_GROUPED_FIXTURE_DIGEST",
+        "EXACT_ON_SITE_IPAD_OR_TABLET",
+        "EXACT_SAFARI_BROWSER_TARGET",
+        "EXACT_MOBILE_VIEWPORT_EXECUTION_TARGET",
+        "EXACT_ACCESSIBILITY_ASSISTIVE_TECH_ENVIRONMENT"
+      ],
+      "failureRule": "if the exact isolated environment or any required device/browser/accessibility target is absent or drifts, WO-03 REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT remain open; do not substitute production smoke writes"
     }
   },
   "runtimeAuthConfig": {
@@ -271,15 +300,6 @@
     "studioProd01ResourceCount": 0,
     "activeSchedulingConfigCount": 0,
     "scheduleItemCount": 0,
-    "requiredRealDeviceEvidence": [
-      "full WO-03 browser viewport plan",
-      "full WO-03 on-site device checklist",
-      "concurrent start and 409 conflict",
-      "202 reviewRequired visibility",
-      "offline start-block-resume-complete replay",
-      "blocked cannot complete",
-      "browser-cache clearing does not change server facts"
-    ],
     "requiredBeforeProd11Request": "a separately authorized production scheduling preparation must create or fresh-confirm one exact canonical requests_v2 acceptance request, STUDIO-PROD-01, an active acceptance scheduling configuration whose businessTimeZone is exactly Asia/Shanghai, one canonical proposal acceptance that derives the acceptance schedule item, and the resulting schedule_item_tasks binding from that item to the exact V2 request",
     "mustNotBeSmuggledIntoProd11": true,
     "preparatoryActionId": "UNRESOLVED_SEPARATE_AUTHORITY_REQUIRED",
@@ -311,7 +331,13 @@
       "failureRule": "on any execution-time item, binding, run-state or resource-wide current-selection mismatch stop before the Kiosk run event; PROD-11 does not authorize creating or moving a replacement schedule item. Return to a separately authorized scheduling preparation. If Kiosk runtime configuration has already changed, use the bound configuration rollback without erasing production facts.",
       "resourceWideSelectionRecheck": "after PROD-11 has enabled the exact Kiosk auth configuration and the device identity has been verified, but immediately before the first run event, perform an authenticated GET /api/v2/kiosk/current?resourceId=STUDIO-PROD-01 and require a successful response whose current.scheduleItemId equals the frozen derived acceptance scheduleItemId exactly",
       "selectionConflictRule": "any MULTIPLE_CURRENT_CANDIDATES result, any other current scheduleItemId, any other active run exposed as current, a null current item, authentication or identity failure, or any non-success current-read result blocks the run event and forces fail-closed recovery"
-    }
+    },
+    "requiredProductionSmokeEvidence": [
+      "exact production Kiosk identity binding and authenticated current-read path",
+      "exact confirmed unused production acceptance item is the current STUDIO-PROD-01 item immediately before any separately bounded production smoke run event",
+      "any production smoke run event is integration evidence only and cannot satisfy WO-03 REAL_DEVICE_ACCEPTANCE or OFFLINE_REPLAY_RESULT"
+    ],
+    "productionSmokeSeparationRule": "the separately authorized production scheduling preparation exists only to make an exact bounded production integration smoke possible after PROD-11 enablement; the full WO-03 viewport/on-site/offline/grouped/accessibility/handoff matrix executes against isolated test identity and isolated test data instead"
   },
   "rollbackContract": {
     "actionId": "ROLLBACK-10-DISABLE-KIOSK-CONFIG",
@@ -360,12 +386,14 @@
     "postAuthorizationExecutionClosureGates": [
       "KIOSK_ACCEPTANCE_ITEM_EXECUTION_TIME_RECHECK",
       "KIOSK_CURRENT_SELECTION_EQUALS_FROZEN_ACCEPTANCE_ITEM",
-      "WO03_FULL_DEVICE_BROWSER_MATRIX",
-      "WO03_GROUPED_SESSION_ISOLATED_FIXTURE_EVIDENCE",
+      "PROD11_PRODUCTION_SMOKE_SEPARATE_FROM_WO03",
+      "WO03_EXACT_ISOLATED_ACCEPTANCE_ENVIRONMENT_BOUND",
+      "WO03_FULL_ISOLATED_VIEWPORT_AND_ON_SITE_MATRIX",
       "REAL_DEVICE_ACCEPTANCE",
       "OFFLINE_REPLAY_RESULT",
       "IDENTITY_EXPIRY_AND_DEVICE_HANDOFF",
       "ACCESSIBILITY_AND_ON_SITE_ENVIRONMENT_ACCEPTANCE"
-    ]
+    ],
+    "wo03EvidenceSourceRule": "REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT must come from the exact isolated WO-03 acceptance environment; production smoke evidence is separate and non-substitutable"
   }
 }
