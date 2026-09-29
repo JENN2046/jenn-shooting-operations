@@ -43,7 +43,25 @@
         "EXTERNAL_READINESS_GATES",
         "ROLLBACK_TARGETS"
       ],
-      "requestRule": "before PROD-11 can become requestable, all seven frozen action-specific revalidation checks must be fresh PASS against the exact target and replacement image; BUILT_IMAGE_DIGEST is necessary but not sufficient"
+      "requestRule": "before PROD-11 can become requestable, all seven frozen action-specific revalidation checks must be fresh PASS against the exact target and replacement image; BUILT_IMAGE_DIGEST is necessary but not sufficient",
+      "expectedScheduleItemRuntimeBinding": {
+        "status": "BLOCKED_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
+        "environmentVariable": "KIOSK_EXPECTED_SCHEDULE_ITEM_ID",
+        "valueAtFreeze": null,
+        "valueSource": "exact derived acceptance scheduleItemId frozen in the one-time PROD-11 authorization packet after separate scheduling preparation completes",
+        "materializationTiming": "after the exact acceptance scheduleItemId is derived and before the PROD-11 production container is created",
+        "startupValidation": [
+          "environment variable is required for PROD-11 execution mode",
+          "value must satisfy the canonical scheduling identifier contract",
+          "no default or fallback value is allowed",
+          "value is immutable for the production container lifetime",
+          "runtime must fail closed before listen if the binding is missing or invalid"
+        ],
+        "transactionBindingRule": "inside the same transaction/write-serialization boundary as the Kiosk production event commit, require the event schedule target, the uniquely selected current STUDIO-PROD-01 item, KIOSK_EXPECTED_SCHEDULE_ITEM_ID, and the authorization-frozen derived acceptance scheduleItemId to identify the same schedule item",
+        "noHotReload": true,
+        "noDatabaseDerivedFallback": true,
+        "noCurrentItemAsAuthority": true
+      }
     },
     "role": "VERIFIED_BASELINE_NOT_PROD11_EXECUTION_ELIGIBLE",
     "prod11ExecutionEligibility": "BLOCKED_MISSING_KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
@@ -227,7 +245,18 @@
       },
       "hostOwnerUid": 1000,
       "hostOwnerGid": 1000,
-      "hostMode": "0600"
+      "hostMode": "0600",
+      "executionBindings": {
+        "expectedScheduleItemId": {
+          "environmentVariable": "KIOSK_EXPECTED_SCHEDULE_ITEM_ID",
+          "value": null,
+          "source": "authorization packet exact derived acceptance scheduleItemId",
+          "separateFromAuthJson": true,
+          "immutableForContainerLifetime": true,
+          "finalValueRequiredBeforeContainerCreate": true,
+          "finalValueMayNotBeInferredFromCurrentDatabaseState": true
+        }
+      }
     },
     "filePayloadContract": {
       "exactTopLevelKeys": [
@@ -412,15 +441,21 @@
         "requiredBeforeProductionEventWrite": true,
         "transactionBoundary": "same transaction as Kiosk production event commit, after acquiring the same write serialization used by the event mutation",
         "exactResourceId": "STUDIO-PROD-01",
-        "failureRule": "absence, race, ambiguity, current-item mismatch, active-config absence, time-zone mismatch, or inability to evaluate either predicate aborts before event receipt, run/review facts, projection revision, audit, or notification outbox can commit",
+        "failureRule": "missing or invalid expected-item runtime binding, event-target mismatch, authorization-binding mismatch, absence, race, ambiguity, current-item mismatch, active-config absence, time-zone mismatch, or inability to evaluate any predicate aborts before event receipt, run/review facts, projection revision, audit, or notification outbox can commit",
         "preRequestBlocking": true,
         "replacementImageRequired": true,
         "exactSchedulingTimeZone": "Asia/Shanghai",
         "requiredPredicates": [
-          "unique current item equals frozen derived acceptance scheduleItemId and no competing active run or current candidate exists",
+          "KIOSK_EXPECTED_SCHEDULE_ITEM_ID equals the authorization-frozen derived acceptance scheduleItemId and the submitted event targets that same item",
+          "unique current item for STUDIO-PROD-01 equals KIOSK_EXPECTED_SCHEDULE_ITEM_ID and no competing active run or current candidate exists",
           "active Scheduling config businessTimeZone equals Asia/Shanghai exactly"
-        ]
-      }
+        ],
+        "runtimeBindingEnvironmentVariable": "KIOSK_EXPECTED_SCHEDULE_ITEM_ID",
+        "runtimeBindingRequiredAtStartup": true,
+        "runtimeBindingImmutableForContainerLifetime": true,
+        "runtimeBindingDatabaseFallbackForbidden": true
+      },
+      "expectedScheduleItemRuntimeBindingRule": "before PROD-11 becomes requestable, the replacement image contract must support KIOSK_EXPECTED_SCHEDULE_ITEM_ID as a required immutable container-lifetime binding whose final value is the exact authorization-frozen derived acceptance scheduleItemId; the value is supplied at container creation after scheduling preparation and must never be inferred from whichever database item happens to be current"
     },
     "requiredProductionSmokeEvidence": [
       "exact production Kiosk identity binding and authenticated current-read path",
@@ -470,7 +505,8 @@
       "SEPARATE_SCHEDULING_PREPARATION_AUTHORITY_UNRESOLVED",
       "KIOSK_ACCEPTANCE_EXECUTION_WINDOW_NOT_YET_BOUND_AND_FRESH",
       "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
-      "PROD11_REPLACEMENT_IMMUTABLE_IMAGE_NOT_YET_BUILT_TESTED_AND_FROZEN"
+      "PROD11_REPLACEMENT_IMMUTABLE_IMAGE_NOT_YET_BUILT_TESTED_AND_FROZEN",
+      "KIOSK_EXPECTED_SCHEDULE_ITEM_RUNTIME_BINDING_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE"
     ],
     "credentialGenerationIsExecutionNotRequestPrerequisite": true,
     "dedicatedBrowserProfileCreationIsExecutionNotRequestPrerequisite": true,
@@ -489,7 +525,7 @@
       "PROD11_PRODUCTION_SMOKE_SEPARATE_FROM_WO03"
     ],
     "wo03EvidenceSourceRule": "REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT must come from the exact isolated WO-03 acceptance environment; production smoke evidence is separate and non-substitutable",
-    "productionEventWriteGate": "after isolated WO-03 PASS and production activation, no production Kiosk run-event write may commit unless KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY atomically proves both the exact frozen current item is uniquely selected and the active Scheduling config businessTimeZone equals Asia/Shanghai inside the same event transaction",
+    "productionEventWriteGate": "after isolated WO-03 PASS and production activation, no production Kiosk run-event write may commit unless KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY atomically proves the event target, the immutable KIOSK_EXPECTED_SCHEDULE_ITEM_ID binding, the authorization-frozen derived scheduleItemId and the unique current STUDIO-PROD-01 item are the same item, and the active Scheduling config businessTimeZone equals Asia/Shanghai, inside the same event transaction",
     "executionImageGate": {
       "required": true,
       "status": "BLOCKED_REPLACEMENT_IMAGE_UNRESOLVED",
@@ -498,7 +534,7 @@
       "currentBaselineEligibleForProd11": false,
       "finalImmutableImageId": "UNRESOLVED",
       "finalSourceRevision": "UNRESOLVED",
-      "rule": "before PROD-11 may be requested, freeze a replacement image containing KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY and fresh-pass the complete seven-item PROD-11 action-specific revalidation checklist. At execution, revalidate the frozen immutable image identity again and create by that immutable ID; mutable tags are never execution authority.",
+      "rule": "before PROD-11 may be requested, freeze a replacement image containing KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY plus required immutable KIOSK_EXPECTED_SCHEDULE_ITEM_ID startup/runtime binding support, and fresh-pass the complete seven-item PROD-11 action-specific revalidation checklist. After separate scheduling preparation derives the exact scheduleItemId, bind that exact authorization value at container creation. At execution, revalidate the frozen immutable image identity again and create by that immutable ID; mutable tags are never execution authority.",
       "requiredActionSpecificRevalidation": [
         "TARGET_HOST_IDENTITY",
         "DISK_PORT_ROUTE_CONFLICTS",
@@ -515,12 +551,19 @@
       "currentBaselineImageId": "sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72",
       "currentBaselineContainsCapability": false,
       "requiredBeforeRequest": true,
-      "requiredResolution": "implement both atomic predicates in the Kiosk event transaction, exact-head test them including scheduling races and time-zone activation races, build a replacement production image, record immutable image ID/source revision, and update the PROD-11 deployment binding before requesting authorization",
+      "requiredResolution": "implement all atomic production-context predicates in the Kiosk event transaction, including immutable KIOSK_EXPECTED_SCHEDULE_ITEM_ID startup binding and equality with the authorization-frozen scheduleItemId, exact-head test scheduling selection/time-zone/binding races, build a replacement production image, record immutable image ID/source revision, and update the PROD-11 deployment binding before requesting authorization",
       "noPostAuthorizationImageSwap": "PROD-11 authorization may not rely on adding the capability after authorization or swapping to an unreviewed image",
       "requiredAtomicPredicates": [
-        "exact current-item uniqueness for STUDIO-PROD-01",
+        "event schedule target equals immutable KIOSK_EXPECTED_SCHEDULE_ITEM_ID and the authorization-frozen derived acceptance scheduleItemId",
+        "exact current-item uniqueness for STUDIO-PROD-01 equals KIOSK_EXPECTED_SCHEDULE_ITEM_ID",
         "active Scheduling config businessTimeZone equals Asia/Shanghai"
-      ]
+      ],
+      "requiredRuntimeBinding": {
+        "environmentVariable": "KIOSK_EXPECTED_SCHEDULE_ITEM_ID",
+        "startupRequired": true,
+        "immutableForContainerLifetime": true,
+        "databaseDerivedFallbackForbidden": true
+      }
     },
     "productionActivationGate": "after explicit PROD-11 authorization, execute and close isolated WO-03 first; only REAL_DEVICE_ACCEPTANCE=PASS and OFFLINE_REPLAY_RESULT=PASS permit production Kiosk config/credential/profile/identity activation",
     "preRequestRevalidationChecklist": {
