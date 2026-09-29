@@ -304,7 +304,8 @@ If Web Crypto secure randomness is unavailable, the client fails closed.
    eventId = client-generated secureId('EVENT')
    expectedRunRevision = 0
    localSequence = 0
-   occurredAt = must satisfy KIOSK_SMOKE_ACCEPTANCE_RUN_START <= occurredAt <= KIOSK_SMOKE_ACCEPTANCE_RUN_END inside the same write-admission transaction
+   occurredAt = must satisfy KIOSK_SMOKE_ACCEPTANCE_RUN_START <= occurredAt <= KIOSK_SMOKE_ACCEPTANCE_RUN_END
+   trustedServerTime = capture from the server clock only after entering the same write transaction; must independently satisfy KIOSK_SMOKE_ACCEPTANCE_RUN_START <= trustedServerTime <= KIOSK_SMOKE_ACCEPTANCE_RUN_END
    required result = RUN_EVENT_APPLIED / shooting / runRevision 1
    binding = accepted immutable start receipt locks exact runId + start eventId
 
@@ -313,7 +314,8 @@ If Web Crypto secure randomness is unavailable, the client fails closed.
    eventId = new client-generated secureId('EVENT')
    expectedRunRevision = 1
    localSequence = 1
-   occurredAt = must satisfy KIOSK_SMOKE_ACCEPTANCE_RUN_START <= occurredAt <= KIOSK_SMOKE_ACCEPTANCE_RUN_END inside the same write-admission transaction
+   occurredAt = must satisfy KIOSK_SMOKE_ACCEPTANCE_RUN_START <= occurredAt <= KIOSK_SMOKE_ACCEPTANCE_RUN_END
+   trustedServerTime = capture from the server clock only after entering the same write transaction; must independently satisfy KIOSK_SMOKE_ACCEPTANCE_RUN_START <= trustedServerTime <= KIOSK_SMOKE_ACCEPTANCE_RUN_END
    required result = RUN_EVENT_APPLIED / completed / runRevision 2
    binding = accepted immutable complete receipt locks exact complete eventId
 ```
@@ -322,9 +324,18 @@ Web Crypto provenance is established by exact-head client implementation/tests. 
 
 Both events must target `KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID`, which equals the authorization-frozen derived acceptance schedule item.
 
-Both events must also be checked against the immutable authorization-frozen smoke window **inside the same `KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY` transaction**. A prior clock check, `/current` read, or database schedule-window read is evidence only and cannot authorize the commit.
+Both events must also be checked against the immutable authorization-frozen smoke window **inside the same `KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY` transaction**.
 
-The normal event-time policy still applies in addition to this stricter bounded smoke window.
+Two independent time predicates are mandatory:
+
+```text
+1. command.occurredAt is inside the frozen acceptanceRunStart / acceptanceRunEnd window
+2. trustedServerTime, captured from the server runtime clock only after entering the same write transaction / serialization boundary, is inside that same frozen window
+```
+
+The second predicate is the authorization-time gate. Client clock skew must never open the smoke window early or keep it open late. A prior clock sample, `/current` read, database schedule-window read, or client `occurredAt` alone is evidence only and cannot authorize the commit.
+
+The accepted smoke receipt/audit timestamps must use that same trusted in-transaction server time. The normal event-time policy still applies in addition to both stricter bounded-smoke predicates.
 
 Forbidden under this authority:
 
@@ -342,7 +353,7 @@ widening a conflict or reviewRequired outcome into an improvised retry sequence
 
 Exact idempotent replay of one already-persisted phase command is allowed only when the run ID, event ID, and command digest match the corresponding immutable receipt and no new production fact is written.
 
-Any conflict, reviewRequired, normal time-policy failure, `occurredAt` before `KIOSK_SMOKE_ACCEPTANCE_RUN_START` or after `KIOSK_SMOKE_ACCEPTANCE_RUN_END`, binding/current-item/time-zone mismatch, invalid secure-ID structure, START localSequence other than 0, COMPLETE localSequence other than 1, COMPLETE runId mismatch, unexpected pre-existing smoke fact, or non-success for a not-yet-persisted phase is a hard stop. No later smoke mutation is authorized without a newly frozen recovery/smoke authority.
+Any conflict, reviewRequired, normal time-policy failure, `occurredAt` outside the frozen smoke window, trusted server transaction time outside the frozen smoke window, trusted server time sampled before entering the smoke event transaction, binding/current-item/time-zone mismatch, invalid secure-ID structure, START localSequence other than 0, COMPLETE localSequence other than 1, COMPLETE runId mismatch, unexpected pre-existing smoke fact, or non-success for a not-yet-persisted phase is a hard stop. No later smoke mutation is authorized without a newly frozen recovery/smoke authority.
 
 The smoke terminal condition is machine-evaluable:
 
@@ -373,7 +384,7 @@ KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY
 
 The outbox isolation mechanism must preserve the acceptance audit/outbox fact while permanently preventing real DingTalk or other provider delivery, without mutating unrelated outbox facts.
 
-`KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY` must also consume the immutable `KIOSK_SMOKE_ACCEPTANCE_RUN_START` / `KIOSK_SMOKE_ACCEPTANCE_RUN_END` bindings and reject either smoke phase before commit when its `occurredAt` falls outside that exact frozen window.
+`KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY` must also consume the immutable `KIOSK_SMOKE_ACCEPTANCE_RUN_START` / `KIOSK_SMOKE_ACCEPTANCE_RUN_END` bindings and, for each smoke phase, capture trusted server time only after entering the same write transaction. Before commit it must reject unless **both** the untrusted client `occurredAt` and that trusted in-transaction server time fall inside the exact frozen window. The accepted receipt/audit time must be that same trusted server value.
 
 Before any **bounded PROD-11 production-smoke** run-event write is allowed, the replacement frozen runtime must implement:
 
@@ -677,6 +688,8 @@ KIOSK_SMOKE_ACCEPTANCE_RUN_END   = exact authorization-frozen acceptanceRunEnd
 ```
 
 Both values are canonical RFC3339 UTC instants, required before listen in PROD-11 smoke mode, immutable for the container lifetime, and have no default, database-derived fallback, or hot-reload path. The container values must exactly equal the one-time authorization packet.
+
+For START and COMPLETE, the replacement runtime must capture the trusted server clock **after entering the same event transaction/write-serialization boundary** and require that server time to be within these two immutable instants. This server-time predicate is additional to the command `occurredAt` predicate and the normal event-time policy.
 
 Only **after** isolated WO-03 has closed `REAL_DEVICE_ACCEPTANCE` and `OFFLINE_REPLAY_RESULT`, a replacement atomic-capable image has been frozen, and the exact production Kiosk configuration has then been enabled, immediately before the first bounded production smoke run event the executor must fresh-read the same schedule item, task binding and run state and prove again:
 
