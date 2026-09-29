@@ -72,7 +72,7 @@
       "blocked state cannot complete directly",
       "conflict or reviewRequired stays at queue head without automatic rebase or skip",
       "browser-cache clearing removes only local delivery state and does not change server facts",
-      "grouped sessions display all tasks without presenting them as one-task labor time",
+      "grouped-session presentation must be executed on the real acceptance device/browser against the exact separately bounded isolated grouped fixture environment; it must display all bound tasks without presenting them as one-task labor time",
       "real screen reader, external keyboard, touch target and studio-lighting contrast checks",
       "operator logout, identity expiry and device handoff flow"
     ],
@@ -87,7 +87,32 @@
     "prod11ExecutionRequired": true,
     "closureBlocking": true,
     "requiredBefore": "PROD11_FORMAL_COMPLETION_AND_PRODUCTION_READY",
-    "unresolvedAdditionalTargetsPhase": "PROD11_EXECUTION_ACCEPTANCE"
+    "unresolvedAdditionalTargetsPhase": "PROD11_EXECUTION_ACCEPTANCE",
+    "groupedSessionEvidencePlan": {
+      "status": "BLOCKED_EXACT_ISOLATED_ENVIRONMENT_NOT_YET_BOUND",
+      "evidencePurpose": "satisfy only the mandatory WO-03 grouped-session browser/device presentation check without creating grouped production scheduling facts",
+      "executionPhase": "PROD11_POST_AUTHORIZATION_ACCEPTANCE_CLOSURE",
+      "preRequestBlocking": false,
+      "closureBlocking": true,
+      "environmentAuthority": "SEPARATELY_BOUNDED_ISOLATED_TEST_ENVIRONMENT_REQUIRED",
+      "mustUseRealAcceptanceDeviceOrBrowser": true,
+      "dataContract": {
+        "allocationMode": "grouped_unallocated",
+        "minimumTaskBindings": 2,
+        "allRequestsAreTestOnly": true,
+        "currentWindowRequiredAtExecution": true,
+        "groupedNoticeRequired": true
+      },
+      "isolationContract": [
+        "must not mount or copy the production data volume",
+        "must not use production Kiosk or role credentials",
+        "must not dispatch real DingTalk or other provider notifications",
+        "must not mutate production scheduling facts",
+        "must bind an exact test endpoint environment database identity device/browser and fixture digest before execution"
+      ],
+      "existingRepositoryProof": "repository already has a grouped-run file-backed fixture exercised through ScheduleStore and createKioskV2Application; that implementation proof does not replace the required real browser/device run",
+      "failureRule": "absence or drift of the exact isolated grouped fixture environment blocks WO-03 REAL_DEVICE_ACCEPTANCE closure but does not block requesting PROD-11 authorization"
+    }
   },
   "runtimeAuthConfig": {
     "deployment": {
@@ -336,6 +361,7 @@
       "KIOSK_ACCEPTANCE_ITEM_EXECUTION_TIME_RECHECK",
       "KIOSK_CURRENT_SELECTION_EQUALS_FROZEN_ACCEPTANCE_ITEM",
       "WO03_FULL_DEVICE_BROWSER_MATRIX",
+      "WO03_GROUPED_SESSION_ISOLATED_FIXTURE_EVIDENCE",
       "REAL_DEVICE_ACCEPTANCE",
       "OFFLINE_REPLAY_RESULT",
       "IDENTITY_EXPIRY_AND_DEVICE_HANDOFF",

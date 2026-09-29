@@ -89,7 +89,7 @@ Before `REAL_DEVICE_ACCEPTANCE` can close, evidence must still cover all of the 
 - blocked state cannot directly complete;
 - conflict/reviewRequired stays at queue head without automatic rebase or skip;
 - browser-cache clearing removes only local delivery state and does not change server facts;
-- grouped sessions display all tasks without pretending they are one-task labor time;
+- grouped sessions display all tasks without pretending they are one-task labor time, using the exact isolated grouped-session environment defined below;
 - real screen reader, external keyboard, touch-target and studio-lighting contrast checks;
 - operator logout, identity expiry and device handoff flow.
 
@@ -105,6 +105,36 @@ EXACT_ACCESSIBILITY_ASSISTIVE_TECH_ENVIRONMENT
 They are **not** pre-request authorization blockers, because identity-expiry, offline replay and other items require the Kiosk configuration enabled by PROD-11. They remain hard gates before `REAL_DEVICE_ACCEPTANCE`, PROD-11 formal completion, or any production-ready claim.
 
 No Windows-Chrome-only evidence set may be used to mark `REAL_DEVICE_ACCEPTANCE` complete.
+
+### Grouped-session evidence uses isolated test data
+
+The production acceptance-preparation contract intentionally creates one canonical `single` schedule item with one V2 request binding. It therefore cannot satisfy WO-03's grouped-session presentation check.
+
+WO-03 itself requires the photography-studio checks to run with test identity and isolated test data. The grouped-session item is therefore frozen as a separate **post-authorization acceptance/closure fixture**, not as another production scheduling write.
+
+The exact grouped environment must be separately bounded before that check runs and must contain:
+
+```text
+allocation_mode = grouped_unallocated
+task binding count >= 2
+all bound requests = test-only
+grouped item = current during the browser/device run
+grouped notice = present
+```
+
+Isolation requirements:
+
+```text
+no production data-volume mount or copy
+no production Kiosk/role credentials
+no real DingTalk/provider delivery
+no production scheduling mutation
+exact test endpoint + database identity + device/browser + fixture digest bound before execution
+```
+
+The repository already has a grouped-run fixture exercised through file-backed `ScheduleStore` and `createKioskV2Application`; that proves the implementation path exists, but it does not substitute for the mandatory real browser/device presentation run.
+
+This isolated grouped fixture is **not a pre-request blocker for PROD-11**. It is a hard gate before `REAL_DEVICE_ACCEPTANCE` and PROD-11 formal closure.
 
 ## Frozen runtime auth config
 
@@ -397,6 +427,7 @@ Mandatory after authorization, before PROD-11 can close:
 KIOSK_ACCEPTANCE_ITEM_EXECUTION_TIME_RECHECK
 KIOSK_CURRENT_SELECTION_EQUALS_FROZEN_ACCEPTANCE_ITEM
 WO03_FULL_DEVICE_BROWSER_MATRIX
+WO03_GROUPED_SESSION_ISOLATED_FIXTURE_EVIDENCE
 REAL_DEVICE_ACCEPTANCE
 OFFLINE_REPLAY_RESULT
 IDENTITY_EXPIRY_AND_DEVICE_HANDOFF
