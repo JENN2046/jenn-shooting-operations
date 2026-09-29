@@ -46,7 +46,7 @@
       "requestRule": "before PROD-11 can become requestable, all seven frozen action-specific revalidation checks must be fresh PASS against the exact target and replacement image; BUILT_IMAGE_DIGEST is necessary but not sufficient",
       "expectedScheduleItemRuntimeBinding": {
         "status": "BLOCKED_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
-        "environmentVariable": "KIOSK_EXPECTED_SCHEDULE_ITEM_ID",
+        "environmentVariable": "KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID",
         "valueAtFreeze": null,
         "valueSource": "exact derived acceptance scheduleItemId frozen in the one-time PROD-11 authorization packet after separate scheduling preparation completes",
         "materializationTiming": "after the exact acceptance scheduleItemId is derived and before the PROD-11 production container is created",
@@ -57,10 +57,15 @@
           "value is immutable for the production container lifetime",
           "runtime must fail closed before listen if the binding is missing or invalid"
         ],
-        "transactionBindingRule": "inside the same transaction/write-serialization boundary as the Kiosk production event commit, require the event schedule target, the uniquely selected current STUDIO-PROD-01 item, KIOSK_EXPECTED_SCHEDULE_ITEM_ID, and the authorization-frozen derived acceptance scheduleItemId to identify the same schedule item",
+        "transactionBindingRule": "inside the same transaction/write-serialization boundary as the Kiosk production event commit, require the event schedule target, the uniquely selected current STUDIO-PROD-01 item, KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID, and the authorization-frozen derived acceptance scheduleItemId to identify the same schedule item",
         "noHotReload": true,
         "noDatabaseDerivedFallback": true,
-        "noCurrentItemAsAuthority": true
+        "noCurrentItemAsAuthority": true,
+        "scope": "PROD11_BOUNDED_PRODUCTION_SMOKE_ONLY",
+        "containerRole": "PROD11_ACCEPTANCE_SMOKE_CONTAINER",
+        "normalProductionAuthority": false,
+        "otherScheduleItemsDuringSmoke": "DENY",
+        "postSmokeRule": "after the bounded PROD-11 smoke reaches its frozen terminal evidence point, this smoke-gated container grants no authority for other production schedule items; normal Kiosk operation remains blocked until a separately frozen post-smoke normal-operation transition contract exists"
       }
     },
     "role": "VERIFIED_BASELINE_NOT_PROD11_EXECUTION_ELIGIBLE",
@@ -248,13 +253,15 @@
       "hostMode": "0600",
       "executionBindings": {
         "expectedScheduleItemId": {
-          "environmentVariable": "KIOSK_EXPECTED_SCHEDULE_ITEM_ID",
+          "environmentVariable": "KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID",
           "value": null,
           "source": "authorization packet exact derived acceptance scheduleItemId",
           "separateFromAuthJson": true,
           "immutableForContainerLifetime": true,
           "finalValueRequiredBeforeContainerCreate": true,
-          "finalValueMayNotBeInferredFromCurrentDatabaseState": true
+          "finalValueMayNotBeInferredFromCurrentDatabaseState": true,
+          "scope": "PROD11_BOUNDED_PRODUCTION_SMOKE_ONLY",
+          "normalProductionAuthority": false
         }
       }
     },
@@ -446,16 +453,21 @@
         "replacementImageRequired": true,
         "exactSchedulingTimeZone": "Asia/Shanghai",
         "requiredPredicates": [
-          "KIOSK_EXPECTED_SCHEDULE_ITEM_ID equals the authorization-frozen derived acceptance scheduleItemId and the submitted event targets that same item",
-          "unique current item for STUDIO-PROD-01 equals KIOSK_EXPECTED_SCHEDULE_ITEM_ID and no competing active run or current candidate exists",
+          "KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID equals the authorization-frozen derived acceptance scheduleItemId and the submitted event targets that same item",
+          "unique current item for STUDIO-PROD-01 equals KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID and no competing active run or current candidate exists",
           "active Scheduling config businessTimeZone equals Asia/Shanghai exactly"
         ],
-        "runtimeBindingEnvironmentVariable": "KIOSK_EXPECTED_SCHEDULE_ITEM_ID",
+        "runtimeBindingEnvironmentVariable": "KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID",
         "runtimeBindingRequiredAtStartup": true,
         "runtimeBindingImmutableForContainerLifetime": true,
-        "runtimeBindingDatabaseFallbackForbidden": true
+        "runtimeBindingDatabaseFallbackForbidden": true,
+        "scope": "PROD11_BOUNDED_PRODUCTION_SMOKE_ONLY",
+        "otherItemsDeniedWhileBound": true,
+        "normalOperationAuthority": false
       },
-      "expectedScheduleItemRuntimeBindingRule": "before PROD-11 becomes requestable, the replacement image contract must support KIOSK_EXPECTED_SCHEDULE_ITEM_ID as a required immutable container-lifetime binding whose final value is the exact authorization-frozen derived acceptance scheduleItemId; the value is supplied at container creation after scheduling preparation and must never be inferred from whichever database item happens to be current"
+      "expectedScheduleItemRuntimeBindingRule": "before PROD-11 becomes requestable, the replacement image contract must support KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID as a required immutable smoke-container binding whose final value is the exact authorization-frozen derived acceptance scheduleItemId; while that binding is present all Kiosk production run-event writes for any other schedule item are denied, and the binding is not normal-operation authority",
+      "productionSmokeScopeRule": "the immutable expected-item equality gate applies only to the bounded PROD-11 production smoke. Completing the smoke does not authorize the same container to process later unrelated production schedule items",
+      "postSmokeRule": "after the bounded smoke evidence is complete, no further production Kiosk run-event write is authorized by this contract until a separately frozen normal-operation transition/lifecycle contract removes or replaces the smoke gate under explicit authority"
     },
     "requiredProductionSmokeEvidence": [
       "exact production Kiosk identity binding and authenticated current-read path",
@@ -506,7 +518,8 @@
       "KIOSK_ACCEPTANCE_EXECUTION_WINDOW_NOT_YET_BOUND_AND_FRESH",
       "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
       "PROD11_REPLACEMENT_IMMUTABLE_IMAGE_NOT_YET_BUILT_TESTED_AND_FROZEN",
-      "KIOSK_EXPECTED_SCHEDULE_ITEM_RUNTIME_BINDING_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE"
+      "KIOSK_EXPECTED_SCHEDULE_ITEM_RUNTIME_BINDING_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
+      "KIOSK_POST_SMOKE_NORMAL_OPERATION_TRANSITION_CONTRACT_UNRESOLVED"
     ],
     "credentialGenerationIsExecutionNotRequestPrerequisite": true,
     "dedicatedBrowserProfileCreationIsExecutionNotRequestPrerequisite": true,
@@ -525,7 +538,7 @@
       "PROD11_PRODUCTION_SMOKE_SEPARATE_FROM_WO03"
     ],
     "wo03EvidenceSourceRule": "REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT must come from the exact isolated WO-03 acceptance environment; production smoke evidence is separate and non-substitutable",
-    "productionEventWriteGate": "after isolated WO-03 PASS and production activation, no production Kiosk run-event write may commit unless KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY atomically proves the event target, the immutable KIOSK_EXPECTED_SCHEDULE_ITEM_ID binding, the authorization-frozen derived scheduleItemId and the unique current STUDIO-PROD-01 item are the same item, and the active Scheduling config businessTimeZone equals Asia/Shanghai, inside the same event transaction",
+    "productionEventWriteGate": "during the bounded PROD-11 production smoke only, no Kiosk run-event write may commit unless KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY atomically proves the event target, immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID binding, authorization-frozen derived scheduleItemId and unique current STUDIO-PROD-01 item are the same item, and the active Scheduling config businessTimeZone equals Asia/Shanghai inside the same event transaction. This smoke gate grants no authority for later unrelated production schedule items.",
     "executionImageGate": {
       "required": true,
       "status": "BLOCKED_REPLACEMENT_IMAGE_UNRESOLVED",
@@ -534,7 +547,7 @@
       "currentBaselineEligibleForProd11": false,
       "finalImmutableImageId": "UNRESOLVED",
       "finalSourceRevision": "UNRESOLVED",
-      "rule": "before PROD-11 may be requested, freeze a replacement image containing KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY plus required immutable KIOSK_EXPECTED_SCHEDULE_ITEM_ID startup/runtime binding support, and fresh-pass the complete seven-item PROD-11 action-specific revalidation checklist. After separate scheduling preparation derives the exact scheduleItemId, bind that exact authorization value at container creation. At execution, revalidate the frozen immutable image identity again and create by that immutable ID; mutable tags are never execution authority.",
+      "rule": "before PROD-11 may be requested, freeze a replacement image containing KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY plus required immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID startup/runtime binding support, and fresh-pass the complete seven-item PROD-11 action-specific revalidation checklist. After separate scheduling preparation derives the exact scheduleItemId, bind that exact authorization value at container creation. At execution, revalidate the frozen immutable image identity again and create by that immutable ID; mutable tags are never execution authority.",
       "requiredActionSpecificRevalidation": [
         "TARGET_HOST_IDENTITY",
         "DISK_PORT_ROUTE_CONFLICTS",
@@ -551,21 +564,23 @@
       "currentBaselineImageId": "sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72",
       "currentBaselineContainsCapability": false,
       "requiredBeforeRequest": true,
-      "requiredResolution": "implement all atomic production-context predicates in the Kiosk event transaction, including immutable KIOSK_EXPECTED_SCHEDULE_ITEM_ID startup binding and equality with the authorization-frozen scheduleItemId, exact-head test scheduling selection/time-zone/binding races, build a replacement production image, record immutable image ID/source revision, and update the PROD-11 deployment binding before requesting authorization",
+      "requiredResolution": "implement all atomic production-context predicates in the Kiosk event transaction, including immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID startup binding and equality with the authorization-frozen scheduleItemId, exact-head test scheduling selection/time-zone/binding races, build a replacement production image, record immutable image ID/source revision, and update the PROD-11 deployment binding before requesting authorization",
       "noPostAuthorizationImageSwap": "PROD-11 authorization may not rely on adding the capability after authorization or swapping to an unreviewed image",
       "requiredAtomicPredicates": [
-        "event schedule target equals immutable KIOSK_EXPECTED_SCHEDULE_ITEM_ID and the authorization-frozen derived acceptance scheduleItemId",
-        "exact current-item uniqueness for STUDIO-PROD-01 equals KIOSK_EXPECTED_SCHEDULE_ITEM_ID",
+        "event schedule target equals immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID and the authorization-frozen derived acceptance scheduleItemId",
+        "exact current-item uniqueness for STUDIO-PROD-01 equals KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID",
         "active Scheduling config businessTimeZone equals Asia/Shanghai"
       ],
       "requiredRuntimeBinding": {
-        "environmentVariable": "KIOSK_EXPECTED_SCHEDULE_ITEM_ID",
+        "environmentVariable": "KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID",
         "startupRequired": true,
         "immutableForContainerLifetime": true,
-        "databaseDerivedFallbackForbidden": true
+        "databaseDerivedFallbackForbidden": true,
+        "scope": "PROD11_BOUNDED_PRODUCTION_SMOKE_ONLY",
+        "normalProductionAuthority": false
       }
     },
-    "productionActivationGate": "after explicit PROD-11 authorization, execute and close isolated WO-03 first; only REAL_DEVICE_ACCEPTANCE=PASS and OFFLINE_REPLAY_RESULT=PASS permit production Kiosk config/credential/profile/identity activation",
+    "productionActivationGate": "after explicit PROD-11 authorization, execute and close isolated WO-03 first; only REAL_DEVICE_ACCEPTANCE=PASS and OFFLINE_REPLAY_RESULT=PASS permit activation of the bounded acceptance-smoke production Kiosk configuration. Normal post-smoke production operation remains separately blocked by KIOSK_POST_SMOKE_NORMAL_OPERATION_TRANSITION_CONTRACT.",
     "preRequestRevalidationChecklist": {
       "source": "production-change-manifest.v1 PROD-11 actionSpecificRevalidation",
       "requiredChecks": [
@@ -579,6 +594,20 @@
       ],
       "allRequired": true,
       "freshnessRule": "re-run the complete seven-check set immediately before PROD-11 authorization is requested; any missing, stale, changed or failed check leaves requestability blocked"
-    }
+    },
+    "postSmokeNormalOperationTransition": {
+      "status": "BLOCKED_UNRESOLVED",
+      "preRequestBlocking": true,
+      "authorityGapId": "KIOSK_POST_SMOKE_NORMAL_OPERATION_TRANSITION_CONTRACT",
+      "currentContractAuthority": "NONE",
+      "rule": "PROD-11 must not be requested until a separate authority contract defines how the acceptance-smoke-only container transitions to normal Kiosk production authority without reusing KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID as a permanent item lock and without creating an unreviewed mutable per-item authority channel",
+      "forbiddenShortcuts": [
+        "do not hot-reload or rotate KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID",
+        "do not infer normal-operation authority from current database schedule items",
+        "do not treat successful PROD-11 smoke completion as blanket authority for later schedule items",
+        "do not silently recreate a normal-operation container without separately frozen authority"
+      ]
+    },
+    "productionReadyClaimRule": "neither successful isolated WO-03 nor successful bounded production smoke authorizes or proves normal ongoing Kiosk production operation; no production-ready or normal-operation claim is allowed until the separate post-smoke normal-operation transition authority is frozen and completed"
   }
 }
