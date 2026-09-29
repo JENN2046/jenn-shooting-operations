@@ -1,6 +1,7 @@
 const MAX_IDENTIFIER_LENGTH = 160;
 const IDENTIFIER = /^\S(?:[\s\S]*\S)?$/u;
 const RESPONSE_KEYS = new Set(['schemaVersion', 'deviceId']);
+const DEFAULT_IDENTITY_REQUEST_TIMEOUT_MS = 5000;
 
 function exactKeys(value, expected) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -35,6 +36,10 @@ export function createKioskDeviceProvisioner({
   blockedKey = storageKey + '.blocked-v2',
   healedKey = blockedKey + '.healed-v1',
   createRevocationToken = defaultRevocationToken,
+  requestTimeoutMs = DEFAULT_IDENTITY_REQUEST_TIMEOUT_MS,
+  createAbortController = () => new AbortController(),
+  setTimer = globalThis.setTimeout,
+  clearTimer = globalThis.clearTimeout,
 } = {}) {
   if (!storage
       || typeof storage.getItem !== 'function'
@@ -62,6 +67,16 @@ export function createKioskDeviceProvisioner({
   }
   if (typeof createRevocationToken !== 'function') {
     throw new TypeError('Kiosk revocation token factory is required');
+  }
+
+  if (!Number.isInteger(requestTimeoutMs) || requestTimeoutMs < 1 || requestTimeoutMs > 30000) {
+    throw new TypeError('Kiosk identity request timeout must be an integer between 1 and 30000 ms');
+  }
+  if (typeof createAbortController !== 'function') {
+    throw new TypeError('Kiosk identity abort-controller factory is required');
+  }
+  if (typeof setTimer !== 'function' || typeof clearTimer !== 'function') {
+    throw new TypeError('Kiosk identity timer functions are required');
   }
 
   let blockedInMemory = false;
@@ -114,11 +129,33 @@ export function createKioskDeviceProvisioner({
       }
 
       let response;
+      let timeoutHandle;
+      let controller;
       try {
-        response = await fetchImpl(identityUrl, {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
+        controller = createAbortController();
+        if (!controller
+            || typeof controller.abort !== 'function'
+            || !controller.signal) {
+          throw new Error('DEVICE_IDENTITY_ABORT_CONTROLLER_INVALID');
+        }
+        const timeout = new Promise((_, reject) => {
+          timeoutHandle = setTimer(() => {
+            try {
+              controller.abort();
+            } catch {
+              // The Promise.race timeout remains authoritative even if abort fails.
+            }
+            reject(new Error('DEVICE_IDENTITY_REQUEST_TIMEOUT'));
+          }, requestTimeoutMs);
         });
+        response = await Promise.race([
+          fetchImpl(identityUrl, {
+            method: 'GET',
+            headers: { Accept: 'application/json' },
+            signal: controller.signal,
+          }),
+          timeout,
+        ]);
       } catch {
         if (isBlocked()) {
           return Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_BLOCKED' });
@@ -126,6 +163,8 @@ export function createKioskDeviceProvisioner({
         return existing === null
           ? Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_UNAVAILABLE' })
           : Object.freeze({ ok: true, deviceId: existing, verified: false });
+      } finally {
+        if (timeoutHandle !== undefined) clearTimer(timeoutHandle);
       }
 
       if (!response || !Number.isInteger(response.status)) {

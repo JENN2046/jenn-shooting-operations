@@ -58,10 +58,48 @@ test('device provisioning writes the server-bound device identity exactly once',
   assert.equal(provisioner.current(), 'DEVICE-KIOSK-PROD-01');
   assert.equal(calls.length, 1);
   assert.equal(calls[0][0], '/api/v2/kiosk/identity');
-  assert.deepEqual(calls[0][1], {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
+  assert.equal(calls[0][1].method, 'GET');
+  assert.deepEqual(calls[0][1].headers, { Accept: 'application/json' });
+  assert.equal(Boolean(calls[0][1].signal), true);
+});
+
+test('stalled identity fetch is bounded and returns unavailable so recovery polling can continue', async () => {
+  const target = storage();
+  let timeoutCallback;
+  let aborted = false;
+  let cleared = false;
+  const controller = {
+    signal: Object.freeze({ type: 'test-signal' }),
+    abort() { aborted = true; },
+  };
+  const provisioner = createKioskDeviceProvisioner({
+    storage: target,
+    fetchImpl: async () => new Promise(() => {}),
+    requestTimeoutMs: 17,
+    createAbortController: () => controller,
+    setTimer(callback, delay) {
+      assert.equal(delay, 17);
+      timeoutCallback = callback;
+      return 73;
+    },
+    clearTimer(handle) {
+      assert.equal(handle, 73);
+      cleared = true;
+    },
   });
+
+  const pending = provisioner.provision();
+  await Promise.resolve();
+  assert.equal(typeof timeoutCallback, 'function');
+  timeoutCallback();
+
+  assert.deepEqual(await pending, {
+    ok: false,
+    code: 'DEVICE_IDENTITY_UNAVAILABLE',
+  });
+  assert.equal(aborted, true);
+  assert.equal(cleared, true);
+  assert.equal(target.snapshot(), null);
 });
 
 test('device provisioning fails closed on an existing mismatched browser identity', async () => {
