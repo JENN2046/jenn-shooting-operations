@@ -42,7 +42,17 @@ runtimeAuthorityBinding.prod11ExecutionAuthority.immutableImageId
 = requestability.executionImageGate.finalImmutableImageId
 ```
 
-Those values intentionally remain unresolved until the atomic-capable replacement image is exact-head tested, built, and frozen. Once resolved, every execution-bearing image/revision reference, the isolated WO-03 runtime, and the production container create reference must agree exactly. The `d1fe85...` baseline may never substitute.
+Those values intentionally remain unresolved until the atomic-capable replacement image is exact-head tested, built, and frozen.
+
+The replacement diagnostic tag is frozen by derivation at the same time:
+
+```text
+finalDiagnosticTag = jenn-shooting-operations:prod-<finalSourceRevision>
+```
+
+The tag is diagnostic only, not execution authority. Immediately before container creation it must resolve to the frozen replacement immutable image ID, and that image's OCI revision label must equal the frozen replacement source revision. The container is still created by immutable image ID.
+
+Once resolved, every execution-bearing image/revision/tag reference, the isolated WO-03 runtime, and the production container create reference must agree exactly. The `d1fe85...` baseline may never substitute.
 
 Therefore PROD-11 remains pre-request blocked until:
 
