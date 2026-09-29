@@ -50,9 +50,9 @@ The replacement diagnostic tag is frozen by derivation at the same time:
 finalDiagnosticTag = jenn-shooting-operations:prod-<finalSourceRevision>
 ```
 
-The tag is diagnostic only, not execution authority. Immediately before container creation it must resolve to the frozen replacement immutable image ID, and that image's OCI revision label must equal the frozen replacement source revision. The container is still created by immutable image ID.
+The tag is diagnostic only, not execution authority. A **separate explicitly authorized production deployment Action**, distinct from PROD-11, must verify that tag resolves to the frozen replacement immutable image ID and that the image's OCI revision label equals the frozen replacement source revision immediately before it creates/replaces the live application service by immutable image ID. PROD-11 itself does not create, replace, remove, or restore the application container/image.
 
-Once resolved, every execution-bearing image/revision/tag reference, the isolated WO-03 runtime, and the production container create reference must agree exactly. The `d1fe85...` baseline may never substitute.
+Once resolved and separately deployed, every execution-bearing image/revision/tag reference, the isolated WO-03 runtime, and the live production service image/container identity produced by that separate deployment Action must agree exactly. The `d1fe85...` baseline may never substitute.
 
 Therefore PROD-11 remains pre-request blocked until the replacement image contains **all three** required smoke capabilities:
 
@@ -71,7 +71,10 @@ KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY
 → exact-head tests PASS for all three capabilities
 → replacement production image built
 → replacement diagnostic tag / immutable image ID / source revision frozen consistently
-→ PROD-11 deployment binding updated to that replacement authority
+→ separate replacement-image deployment Action explicitly authorized
+→ exact replacement image deployed to the live service while Kiosk remains disabled
+→ live health / storage identity / VCP continuity / image rollback evidence PASS
+→ only then may PROD-11 requestability continue
 ```
 
 The final immutable image ID is currently unresolved by design.
@@ -90,7 +93,7 @@ ROLLBACK_TARGETS
 
 `BUILT_IMAGE_DIGEST` is necessary but not sufficient. Any stale, missing, changed, or failed item leaves PROD-11 non-requestable.
 
-At eventual execution, immediately before production container create/replacement, the executor must revalidate `BUILT_IMAGE_DIGEST`: the frozen diagnostic tag must resolve to the frozen replacement immutable image ID, the OCI revision label must equal the frozen replacement source revision, and the container must be created by immutable image ID rather than mutable tag. Any mismatch is a hard stop.
+The production application image/container replacement is **not** a PROD-11 effect. Before PROD-11 may be requested, a separate explicit deployment Action must have already deployed the frozen immutable replacement image to the live service with Kiosk still disabled, after revalidating `BUILT_IMAGE_DIGEST`, diagnostic-tag resolution, OCI revision, production storage identity, health, VCP continuity and its own image/container rollback. PROD-11 execution then operates only on Kiosk configuration/device/browser/identity mapping; it must not replace or recreate the application service.
 
 ## Frozen logical identity
 
@@ -731,19 +734,27 @@ The exact preparatory Action ID is not yet frozen and remains an authority gap.
 
 ## Rollback contract
 
-`ROLLBACK-10-DISABLE-KIOSK-CONFIG` is configuration-only.
+`ROLLBACK-10-DISABLE-KIOSK-CONFIG` is **Kiosk-configuration-only**.
 
-Before any accepted/review-required Kiosk business fact exists, a failed swap/health/identity acceptance may restore the exact pre-PROD11 container.
+It may disable/remove only the Kiosk configuration, production credential/profile provisioning, approved device/browser binding, and trusted identity mapping introduced by PROD-11. It does not authorize:
 
-After any accepted or review-required Kiosk submission:
+```text
+application image swap
+container recreate/remove/restore
+replacement-image rollback
+production data deletion or rewrite
+```
 
-1. keep all production runs/reviews/receipts/audit/revision facts;
-2. restore the pre-PROD11 runtime env without `KIOSK_AUTH_CONFIG_PATH`;
-3. remove the Kiosk read-only bind;
-4. recreate the service on the PROD-11 image with the same volume, port, rootfs, tmpfs, security and restart policy;
-5. verify VCP remains unchanged and DingTalk remains disabled/unmodified.
+If PROD-11 fails before or after any accepted/review-required Kiosk submission:
 
-Fresh inspection shows the live database already has the continuous migration prefix 1 through 6, and both old and new runtimes recognize migration v6. The rollback therefore does not depend on a schema downgrade.
+1. preserve all production runs/reviews/receipts/audit/revision facts;
+2. disable/remove only the exact Kiosk configuration/device/identity bindings introduced by PROD-11;
+3. keep the already-deployed application image/container unchanged;
+4. verify VCP remains unchanged and DingTalk remains disabled/unmodified.
+
+Any rollback of the replacement application image/container belongs exclusively to the **separately authorized replacement-image deployment Action and its own bound rollback**. If that separate deployment cannot pass its health/storage/VCP/rollback verification, it must be rolled back before PROD-11 may be requested.
+
+Fresh inspection shows the live database already has the continuous migration prefix 1 through 6, and both old and replacement runtimes must recognize migration v6. No PROD-11 rollback depends on a schema downgrade.
 
 ## Current Greenfield authority gate
 
@@ -805,6 +816,7 @@ FULL_PROD11_ACTION_SPECIFIC_REVALIDATION_NOT_YET_FRESH_PASS
 CURRENT_GREENFIELD_AUTHORITY_PROD11_REQUESTABILITY_NOT_YET_FRESH_PASS
 KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE
 KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE
+SEPARATE_PROD11_REPLACEMENT_IMAGE_DEPLOYMENT_AUTHORITY_UNRESOLVED
 ```
 
 The atomic production-context capability is a hard **pre-request** gate for the bounded production smoke. It must cover immutable authorization-frozen smoke schedule-item binding, current-item uniqueness, and active Scheduling time-zone equality inside the same event transaction. It is not normal-operation authority. It may not be implemented after authorization or introduced by swapping to an unreviewed image.
@@ -862,7 +874,7 @@ formal authorization state
 = FROZEN_NOT_REQUESTED
 ```
 
-Credential generation, production profile activation, production config materialization, live container replacement, production identity enrollment, and any production run-event submission remain prohibited until their respective gates above close.
+Credential generation, production profile activation, production config materialization, production identity enrollment, and any production run-event submission remain prohibited until their respective gates above close. Live application image/container replacement is outside PROD-11 authority entirely and requires the separate deployment Action described above.
 
 Machine-readable contract:
 
