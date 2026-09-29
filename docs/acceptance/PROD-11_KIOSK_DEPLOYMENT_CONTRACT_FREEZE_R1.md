@@ -1,6 +1,6 @@
 # PROD-11 Kiosk Deployment Contract Freeze R1
 
-Status: **DEVICE / BROWSER FROZEN / BLOCKED ON SCHEDULABLE ACCEPTANCE TARGET**
+Status: **DEVICE / BROWSER FROZEN / BLOCKED ON SCHEDULABLE PREAUTH + ISOLATED WO-03 EXECUTION GATES**
 
 This document freezes the deployment mechanics and exact device/browser target for `PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE`.
 It does **not** authorize PROD-11, replace the live container, generate a real credential, create the dedicated browser profile, enroll the device, prepare production scheduling data, or submit a production run event.
@@ -106,35 +106,64 @@ They are **not** pre-request authorization blockers, because identity-expiry, of
 
 No Windows-Chrome-only evidence set may be used to mark `REAL_DEVICE_ACCEPTANCE` complete.
 
-### Grouped-session evidence uses isolated test data
+### Full WO-03 acceptance uses a separately bounded isolated environment
 
-The production acceptance-preparation contract intentionally creates one canonical `single` schedule item with one V2 request binding. It therefore cannot satisfy WO-03's grouped-session presentation check.
+The entire WO-03 browser/device matrix, not only grouped-session presentation, must run with **test identity and isolated test data**.
 
-WO-03 itself requires the photography-studio checks to run with test identity and isolated test data. The grouped-session item is therefore frozen as a separate **post-authorization acceptance/closure fixture**, not as another production scheduling write.
+This applies to the full viewport and on-site checklist whenever the evidence depends on authentication, queue state, run state, contention, replay, cache behavior, grouped data, accessibility interaction, identity expiry, or device handoff.
 
-The exact grouped environment must be separately bounded before that check runs and must contain:
+The exact isolated environment remains a post-authorization execution/closure target and must be bound before those checks run:
 
 ```text
-allocation_mode = grouped_unallocated
-task binding count >= 2
-all bound requests = test-only
-grouped item = current during the browser/device run
-grouped notice = present
+exact isolated test endpoint
+exact isolated database identity
+exact test identity / authorization scope
+exact single-item fixture digest
+exact grouped-item fixture digest
+exact device/browser/accessibility targets
+```
+
+Its data plane must contain both:
+
+```text
+single fixture:
+  one test-only single schedule item
+  exactly one bound test request
+  usable for normal run/offline/conflict/review flows
+
+grouped fixture:
+  allocation_mode = grouped_unallocated
+  task binding count >= 2
+  all bound requests = test-only
+  grouped item = current during the grouped browser/device run
 ```
 
 Isolation requirements:
 
 ```text
-no production data-volume mount or copy
-no production Kiosk/role credentials
+no production data-volume mount, copy, or mutation
+no production Kiosk or role credentials
 no real DingTalk/provider delivery
-no production scheduling mutation
-exact test endpoint + database identity + device/browser + fixture digest bound before execution
+no production request/schedule/run/review/receipt/audit/revision mutation
+exact environment + fixture digests bound before execution
 ```
 
-The repository already has a grouped-run fixture exercised through file-backed `ScheduleStore` and `createKioskV2Application`; that proves the implementation path exists, but it does not substitute for the mandatory real browser/device presentation run.
+The evidence mapping is explicit:
 
-This isolated grouped fixture is **not a pre-request blocker for PROD-11**. It is a hard gate before `REAL_DEVICE_ACCEPTANCE` and PROD-11 formal closure.
+```text
+REAL_DEVICE_ACCEPTANCE
+= isolated WO-03 environment + exact real device/browser evidence
+
+OFFLINE_REPLAY_RESULT
+= isolated test-data replay evidence
+
+production Kiosk smoke
+= separate integration evidence only
+```
+
+A production smoke event, if later authorized and executed, **cannot** satisfy or replace WO-03 `REAL_DEVICE_ACCEPTANCE` or `OFFLINE_REPLAY_RESULT`.
+
+QLL-6 + its dedicated Chrome profile remains the primary production Kiosk identity target. It is not permission to run the WO-03 stateful matrix against production scheduling facts.
 
 ## Frozen runtime auth config
 
@@ -307,11 +336,11 @@ non-empty requests_v2.brief_url       = 0
 
 This blocks PROD-11 requestability.
 
-Those checks require an exact canonical V2 request, production resource, active scheduling config, canonical proposal acceptance, derived schedule item and exact task binding. They cannot be truthfully closed against an empty scheduling domain.
+The production integration-smoke path requires an exact canonical V2 request, production resource, active scheduling config, canonical proposal acceptance, derived schedule item and exact task binding. Those production facts are **not** the WO-03 acceptance dataset. The full WO-03 stateful matrix runs against the separately bounded isolated environment described above.
 
 The supported Scheduling path requires `schedule_item_tasks.task_id` to reference `requests_v2`, and a single schedule item must bind exactly one request. A V1 snapshot-only request is insufficient.
 
-Preparing that schedulable acceptance target is a **separate production scheduling write** and must not be smuggled into PROD-11's frozen effects.
+Preparing that schedulable production-smoke target is a **separate production scheduling write** and must not be smuggled into PROD-11's frozen effects. It exists only to support an exact bounded production wiring smoke after enablement; it cannot be cited as WO-03 acceptance evidence.
 
 Before PROD-11 can be requested, a separately authorized preparation must create or fresh-confirm:
 
@@ -426,13 +455,16 @@ Mandatory after authorization, before PROD-11 can close:
 ```text
 KIOSK_ACCEPTANCE_ITEM_EXECUTION_TIME_RECHECK
 KIOSK_CURRENT_SELECTION_EQUALS_FROZEN_ACCEPTANCE_ITEM
-WO03_FULL_DEVICE_BROWSER_MATRIX
-WO03_GROUPED_SESSION_ISOLATED_FIXTURE_EVIDENCE
+PROD11_PRODUCTION_SMOKE_SEPARATE_FROM_WO03
+WO03_EXACT_ISOLATED_ACCEPTANCE_ENVIRONMENT_BOUND
+WO03_FULL_ISOLATED_VIEWPORT_AND_ON_SITE_MATRIX
 REAL_DEVICE_ACCEPTANCE
 OFFLINE_REPLAY_RESULT
 IDENTITY_EXPIRY_AND_DEVICE_HANDOFF
 ACCESSIBILITY_AND_ON_SITE_ENVIRONMENT_ACCEPTANCE
 ```
+
+`REAL_DEVICE_ACCEPTANCE` and `OFFLINE_REPLAY_RESULT` must come from the exact isolated WO-03 environment. Production smoke evidence is separate and non-substitutable.
 
 Therefore:
 
