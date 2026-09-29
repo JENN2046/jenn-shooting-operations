@@ -378,36 +378,49 @@ PROD-10-ENABLE-VCP-REMOTE-SYNC = NOT_AUTHORIZED
 
 The historical VCPChat adapter-path assumption is no longer used by the integration test or the WO-06C VCP boundary harness. Historical WO-06C evidence remains unchanged as historical evidence.
 
-
 ---
 
-## Live VCP runtime activation after authorized PROD-10 execution
+## Live VCP external closure after PROD-10 re-acceptance
 
-The earlier `BLOCKED_EXTERNAL_RUNTIME` sections above remain historical source-readiness checkpoints.
+The earlier source-only and first-execution blocked checkpoints above are retained as historical evidence.
 
-Live runtime wiring now exists:
+A second explicitly authorized PROD-10 acceptance run first completed fresh exact-target attestation while the write gate was disabled, then performed one bounded guarded write and verification pull.
 
-- VCPToolBox release: `12380d7d`
-- Jenn extension: `7ea5d49ca000a2298e012b9ff54ec229ebb59e96`
-- Plugin: `JennShootingOperations`
-- Endpoint: `https://jso.skmt617.top`
-- JEV `{拍摄运营}` routing: active
-
-A real authorized guarded push executed revision 1 → 2 and a verification pull observed revision 2 with unchanged products/tasks/sessions.
-
-However, formal PROD-10 acceptance closure remains blocked because the exact target/container identity was not freshly attested before the real write. Fresh public health and snapshot were checked pre-write, but exact container identity was checked only after the write.
-
-Canonical state is therefore:
+Canonical evidence:
 
 ```text
-VCP_RUNTIME_WIRING = PASS
-VCP_REAL_GUARDED_PUSH = PASS
-VCP_VERIFICATION_PULL = PASS
-PROD-10_FORMAL_ACCEPTANCE = BLOCKED_PREWRITE_EXACT_TARGET_IDENTITY_EVIDENCE
+VCPToolBox release = 12380d7d
+Jenn extension release = 7ea5d49c
+plugin = JennShootingOperations
+endpoint = https://jso.skmt617.top
+
+pre-write exact target attestation = PASS
+running-image strict validator = PASS
+pull revision = 2
+guarded push revision = 3
+verification revision = 3
+
+created task = TASK-PROD10-REACCEPT-R2
+created SKU = PROD10-ACCEPT-R2
 standing Agent write capability = DISABLED
-nextActionId = PROD-10-ENABLE-VCP-REMOTE-SYNC
+acceptance write gate = DISABLED
+```
+
+Pre-write final attestation SHA-256:
+
+`ab276166e3cdcc601fc397b95a9abe83c73b927ceba14e40e1403501c1a9fcbd`
+
+Post-write continuity SHA-256:
+
+`9ffbbae81dfe8d969fa073556f33f6e6e83d5368d1c69bf0d0e175583b3aef45`
+
+Canonical live state:
+
+```text
+VCP_SOURCE_COMPATIBILITY = PASS
+VCP_EXTERNAL_COMPATIBILITY = PASS
+PROD-10-ENABLE-VCP-REMOTE-SYNC = COMPLETED
+nextActionId = PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE
 ```
 
 See `docs/acceptance/PROD-10_VCP_REMOTE_SYNC_EVIDENCE.md`.
-
-Any additional guarded push requires new explicit human authorization.

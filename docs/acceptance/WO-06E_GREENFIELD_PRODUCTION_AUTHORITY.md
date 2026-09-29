@@ -2177,40 +2177,40 @@ nextAction         = PROD-10-ENABLE-VCP-REMOTE-SYNC
 
 This validation performed no production mutation. Because this paragraph is docs-only, the resulting final head is validated once more before merge eligibility.
 
-
 ---
 
-## PROD-10 execution evidence and blocked formal closure
+## PROD-10 live integration closure
 
-A real `PROD-10-ENABLE-VCP-REMOTE-SYNC` guarded push was executed under exact human authorization.
+`PROD-10-ENABLE-VCP-REMOTE-SYNC` is formally complete after a second explicitly authorized re-acceptance.
+
+The re-acceptance first bound fresh pre-write evidence to the exact Tencent instance, container ID, image digest, persistent volume/database identities, Nginx route hash, backend health, public health, current revision and disabled acceptance gate.
+
+It then performed exactly one bounded guarded write:
+
+```text
+revision 2
+→ create PROD10-ACCEPT-R2 / TASK-PROD10-REACCEPT-R2
+→ guarded push
+→ revision 3
+→ verification pull revision 3
+```
+
+Post-write exact target continuity passed and the acceptance write gate was closed.
 
 Evidence:
 
 `docs/acceptance/PROD-10_VCP_REMOTE_SYNC_EVIDENCE.md`
 
-Observed result:
+Machine authority now records:
 
 ```text
-VCPToolBox release       = 12380d7d
-Jenn extension release   = 7ea5d49c
-production endpoint      = https://jso.skmt617.top
-pull revision            = 1
-guarded push revision    = 2
-verification revision    = 2
-business payload changed = false
-standing Agent write     = false
-```
+completedAcceptanceIds += PROD-10-ENABLE-VCP-REMOTE-SYNC
 
-Formal completion is **not** admitted into machine authority because the exact target/container identity was not freshly attested before the real write. Post-write identity continuity does not retroactively satisfy that frozen pre-write gate.
-
-The Greenfield authorization packet therefore remains fail-closed:
-
-```text
 authorization.status  = FROZEN_NOT_REQUESTED
 requestedActionIds    = []
 approvedActionIds     = []
 requestableActionIds  = []
-nextActionId          = PROD-10-ENABLE-VCP-REMOTE-SYNC
+nextActionId          = PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE
 ```
 
-Any re-acceptance involving another guarded push requires a new explicit human authorization.
+No standing Agent write authority was granted. Kiosk and DingTalk remain unchanged.
