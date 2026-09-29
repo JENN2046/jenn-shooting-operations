@@ -57,12 +57,14 @@ Once resolved, every execution-bearing image/revision/tag reference, the isolate
 Therefore PROD-11 remains pre-request blocked until:
 
 ```text
-atomic current-selection capability implemented
+KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY implemented with all three predicates:
+  1. smoke event target = immutable authorization-frozen smoke item binding
+  2. unique current STUDIO-PROD-01 item = that same binding, with no competing run/candidate
+  3. active Scheduling businessTimeZone = Asia/Shanghai
 → exact-head tests PASS
 → replacement production image built
-→ replacement immutable image ID recorded
-→ replacement source revision recorded
-→ PROD-11 deployment binding updated to that immutable image
+→ replacement diagnostic tag / immutable image ID / source revision frozen consistently
+→ PROD-11 deployment binding updated to that replacement authority
 ```
 
 The final immutable image ID is currently unresolved by design.
@@ -262,14 +264,14 @@ The mandatory ordering is:
 
 ```text
 PROD-11 explicit authorization
-→ bind and execute exact isolated WO-03 environment
+→ fresh-revalidate the already-bound exact isolated WO-03 environment and execute the matrix
 → REAL_DEVICE_ACCEPTANCE = PASS
 → OFFLINE_REPLAY_RESULT = PASS
 → fresh replacement immutable image-ID / revision revalidation
 → only then enable exact production Kiosk config / credential / dedicated profile / identity mapping
 → revalidate the frozen production smoke item
 → authenticated production current-read evidence
-→ atomic current-selection predicate inside the same event transaction
+→ KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY passes all three predicates inside the same event transaction
 → only then may the first bounded production Kiosk run event commit
 ```
 
