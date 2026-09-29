@@ -129,12 +129,12 @@
       "EXACT_MOBILE_VIEWPORT_EXECUTION_TARGET",
       "EXACT_ACCESSIBILITY_ASSISTIVE_TECH_ENVIRONMENT"
     ],
-    "closureRule": "After PROD-11 explicit authorization but before any production Kiosk configuration, credential, profile, or identity mapping is enabled, execute the complete frozen WO-03 matrix against the separately bounded isolated acceptance environment with test identity and isolated test data. REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT must be PASS before production Kiosk activation. QLL-6 Chrome remains the primary production target but production credentials/configuration stay absent until this gate closes.",
-    "preRequestBlocking": false,
+    "closureRule": "the exact WO-03 environment and all device/browser/accessibility target bindings are pre-request blockers, but REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT are post-authorization closure evidence produced by executing the matrix against that already-frozen isolated environment. QLL-6 Chrome remains the primary production Kiosk identity target and may supply separate production integration smoke evidence, but no production request schedule run review receipt audit or notification fact may substitute for the frozen WO-03 matrix.",
+    "preRequestBlocking": true,
     "prod11ExecutionRequired": true,
     "closureBlocking": true,
     "requiredBefore": "PRODUCTION_KIOSK_CONFIG_ENABLEMENT",
-    "unresolvedAdditionalTargetsPhase": "PROD11_ISOLATED_ACCEPTANCE_CLOSURE",
+    "unresolvedAdditionalTargetsPhase": "PRE_PROD11_REQUEST_TARGET_BINDING",
     "isolatedAcceptanceEnvironmentPlan": {
       "status": "BLOCKED_EXACT_ISOLATED_ENVIRONMENT_NOT_YET_BOUND",
       "scope": "FULL_WO03_VIEWPORT_AND_ON_SITE_MATRIX",
@@ -259,7 +259,11 @@
           "inside that same event transaction, read the active Scheduling config and require businessTimeZone exactly Asia/Shanghai, matching the frozen Kiosk runtime businessTimeZone"
         ]
       }
-    }
+    },
+    "preRequestBlockingScope": "EXACT_ISOLATED_ENVIRONMENT_TARGET_BINDING_AND_SETUP_AUTHORITY_ONLY",
+    "matrixExecutionPreRequestBlocking": false,
+    "matrixExecutionPhase": "POST_PROD11_AUTHORIZATION_PRE_PRODUCTION_KIOSK_ACTIVATION",
+    "targetBindingRule": "the exact on-site tablet/iPad, Safari, mobile viewport, accessibility environment, isolated endpoint/database/test-identity scope and fixture digests must be frozen before the PROD-11 authorization request; the WO-03 acceptance executions themselves remain post-authorization and pre-production-activation"
   },
   "runtimeAuthConfig": {
     "deployment": {
@@ -545,7 +549,8 @@
       "KIOSK_EXPECTED_SCHEDULE_ITEM_RUNTIME_BINDING_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
       "KIOSK_POST_SMOKE_NORMAL_OPERATION_TRANSITION_CONTRACT_UNRESOLVED",
       "WO03_ISOLATED_ENVIRONMENT_PREPARATION_AUTHORITY_UNRESOLVED",
-      "WO03_ISOLATED_ENVIRONMENT_EXACT_TARGET_NOT_FROZEN"
+      "WO03_ISOLATED_ENVIRONMENT_EXACT_TARGET_NOT_FROZEN",
+      "FULL_PROD11_ACTION_SPECIFIC_REVALIDATION_NOT_YET_FRESH_PASS"
     ],
     "credentialGenerationIsExecutionNotRequestPrerequisite": true,
     "dedicatedBrowserProfileCreationIsExecutionNotRequestPrerequisite": true,
