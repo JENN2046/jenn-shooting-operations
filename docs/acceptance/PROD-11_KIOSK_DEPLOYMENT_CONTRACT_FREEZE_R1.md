@@ -163,6 +163,28 @@ production Kiosk smoke
 
 A production smoke event, if later authorized and executed, **cannot** satisfy or replace WO-03 `REAL_DEVICE_ACCEPTANCE` or `OFFLINE_REPLAY_RESULT`.
 
+### WO-03 must close before the first production run-event write
+
+PROD-11 authorization may enable the exact production Kiosk configuration and server-authoritative identity so the isolated post-authorization acceptance can proceed.
+
+That does **not** authorize an immediate production run event.
+
+The mandatory ordering is:
+
+```text
+PROD-11 explicit authorization
+→ enable exact production Kiosk config / identity
+→ bind and execute the isolated WO-03 environment
+→ REAL_DEVICE_ACCEPTANCE = PASS
+→ OFFLINE_REPLAY_RESULT = PASS
+→ only then revalidate the frozen production smoke item
+→ only then may the first bounded production Kiosk run event be submitted
+```
+
+Until the isolated WO-03 gate passes, production `start`, `block`, `resume`, `complete`, review-required submissions, and all other Kiosk run-event writes must remain at **zero**.
+
+If isolated WO-03 acceptance fails or remains incomplete, do not use the prepared production schedule item. Keep production event facts unchanged and use only the bound Kiosk configuration rollback if the production runtime configuration must be disabled.
+
 QLL-6 + its dedicated Chrome profile remains the primary production Kiosk identity target. It is not permission to run the WO-03 stateful matrix against production scheduling facts.
 
 ## Frozen runtime auth config
@@ -381,7 +403,7 @@ planned_start <= acceptanceRunStart < acceptanceRunEnd <= planned_end
 
 The authorization packet becomes stale if the item is used, cancelled, rebound, changed, no longer covers the bound acceptance run, or `planned_end` passes before execution starts.
 
-Immediately before the first real-device Kiosk acceptance run event, the executor must fresh-read the same schedule item, task binding and run state and prove again:
+Only **after** the isolated WO-03 environment has closed `REAL_DEVICE_ACCEPTANCE` and `OFFLINE_REPLAY_RESULT`, immediately before the first bounded production smoke run event, the executor must fresh-read the same schedule item, task binding and run state and prove again:
 
 ```text
 confirmed
@@ -391,7 +413,7 @@ planned_start <= current time < planned_end
 planned_end still covers acceptanceRunEnd
 ```
 
-That row-level check is necessary but not sufficient. After the exact PROD-11 Kiosk auth configuration is enabled and server-authoritative device identity is verified, the executor must perform an authenticated:
+That row-level check is necessary but not sufficient. After the exact PROD-11 Kiosk auth configuration is enabled, the isolated WO-03 write gate has passed, and server-authoritative device identity is verified, the executor must perform an authenticated:
 
 ```text
 GET /api/v2/kiosk/current?resourceId=STUDIO-PROD-01
@@ -453,18 +475,19 @@ KIOSK_ACCEPTANCE_EXECUTION_WINDOW_NOT_YET_BOUND_AND_FRESH
 Mandatory after authorization, before PROD-11 can close:
 
 ```text
-KIOSK_ACCEPTANCE_ITEM_EXECUTION_TIME_RECHECK
-KIOSK_CURRENT_SELECTION_EQUALS_FROZEN_ACCEPTANCE_ITEM
-PROD11_PRODUCTION_SMOKE_SEPARATE_FROM_WO03
 WO03_EXACT_ISOLATED_ACCEPTANCE_ENVIRONMENT_BOUND
 WO03_FULL_ISOLATED_VIEWPORT_AND_ON_SITE_MATRIX
 REAL_DEVICE_ACCEPTANCE
 OFFLINE_REPLAY_RESULT
 IDENTITY_EXPIRY_AND_DEVICE_HANDOFF
 ACCESSIBILITY_AND_ON_SITE_ENVIRONMENT_ACCEPTANCE
+WO03_ISOLATED_ACCEPTANCE_BEFORE_PRODUCTION_EVENT_WRITE
+KIOSK_ACCEPTANCE_ITEM_EXECUTION_TIME_RECHECK
+KIOSK_CURRENT_SELECTION_EQUALS_FROZEN_ACCEPTANCE_ITEM
+PROD11_PRODUCTION_SMOKE_SEPARATE_FROM_WO03
 ```
 
-`REAL_DEVICE_ACCEPTANCE` and `OFFLINE_REPLAY_RESULT` must come from the exact isolated WO-03 environment. Production smoke evidence is separate and non-substitutable.
+`REAL_DEVICE_ACCEPTANCE` and `OFFLINE_REPLAY_RESULT` must come from the exact isolated WO-03 environment. They are mandatory **before** the first production Kiosk run-event write. Production smoke evidence is separate and non-substitutable.
 
 Therefore:
 
