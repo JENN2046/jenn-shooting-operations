@@ -18,25 +18,32 @@ full repository = 801 tests / 798 pass / 2 known migration-userland failures / 1
 
 The two full-suite failures remain the previously reproduced Alpine `touch @<nanosecond timestamp>` limitation and are not Kiosk regressions.
 
-### Immutable image execution binding
+### Replacement immutable image required before PROD-11 request
 
-The candidate tag is diagnostic only. PROD-11 execution must deploy by the immutable image ID:
-
-```text
-immutable image ID = sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72
-diagnostic tag     = jenn-shooting-operations:prod-d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7
-source revision    = d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7
-```
-
-Immediately before production container create/replacement, the executor must revalidate `BUILT_IMAGE_DIGEST`:
+The already-built candidate remains a verified baseline:
 
 ```text
-docker image inspect diagnostic tag -> Id == immutable image ID
-org.opencontainers.image.revision    == exact source revision
-container create image reference     == immutable image ID
+baseline image ID = sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72
+baseline tag      = jenn-shooting-operations:prod-d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7
+baseline revision = d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7
 ```
 
-A tag mismatch, missing image, revision-label mismatch, or attempt to create the production container by mutable tag is a hard stop.
+That image is **not eligible for PROD-11 execution** because it does not implement the newly required `KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY`.
+
+Therefore PROD-11 remains pre-request blocked until:
+
+```text
+atomic current-selection capability implemented
+→ exact-head tests PASS
+→ replacement production image built
+→ replacement immutable image ID recorded
+→ replacement source revision recorded
+→ PROD-11 deployment binding updated to that immutable image
+```
+
+The final immutable image ID is currently unresolved by design.
+
+At eventual execution, immediately before production container create/replacement, the executor must revalidate `BUILT_IMAGE_DIGEST`: the frozen diagnostic tag must resolve to the frozen replacement immutable image ID, the OCI revision label must equal the frozen replacement source revision, and the container must be created by immutable image ID rather than mutable tag. Any mismatch is a hard stop.
 
 ## Frozen logical identity
 
@@ -183,39 +190,40 @@ production Kiosk smoke
 
 A production smoke event, if later authorized and executed, **cannot** satisfy or replace WO-03 `REAL_DEVICE_ACCEPTANCE` or `OFFLINE_REPLAY_RESULT`.
 
-### WO-03 must close before the first production run-event write
+### WO-03 must close before production Kiosk activation
 
-PROD-11 authorization may enable the exact production Kiosk configuration and server-authoritative identity so the isolated post-authorization acceptance can proceed.
-
-That does **not** authorize an immediate production run event.
+Because WO-03 now has its own isolated endpoint, test identity, isolated database and disposable fixtures, there is no reason to expose production Kiosk credentials before the matrix passes.
 
 The mandatory ordering is:
 
 ```text
 PROD-11 explicit authorization
-→ fresh immutable image-ID / revision revalidation
-→ enable exact production Kiosk config / identity
-→ bind and execute the isolated WO-03 environment
+→ bind and execute exact isolated WO-03 environment
 → REAL_DEVICE_ACCEPTANCE = PASS
 → OFFLINE_REPLAY_RESULT = PASS
+→ fresh replacement immutable image-ID / revision revalidation
+→ only then enable exact production Kiosk config / credential / dedicated profile / identity mapping
 → revalidate the frozen production smoke item
-→ KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY = PASS
-→ only then may the first bounded production Kiosk run event be submitted
+→ authenticated production current-read evidence
+→ atomic current-selection predicate inside the same event transaction
+→ only then may the first bounded production Kiosk run event commit
 ```
 
-Until the isolated WO-03 gate passes, production `start`, `block`, `resume`, `complete`, review-required submissions, and all other Kiosk run-event writes must remain at **zero**.
+Until isolated WO-03 passes, the production Kiosk config file must not be mounted, the production credential must not be provisioned to QLL-6, the dedicated production profile must not be activated for production identity, and production Kiosk run-event writes must remain at zero.
 
-Even after WO-03 passes, the authenticated `GET /api/v2/kiosk/current` is **not** sufficient write authority. It and the event POST are separate requests, so scheduling state can race between them.
+If isolated WO-03 fails or remains incomplete, PROD-11 must not cross the production activation boundary.
 
-Before any production smoke event is allowed, the runtime must provide:
+Even after production activation, `GET /api/v2/kiosk/current` is diagnostic/device-facing evidence only. It and the event POST are separate requests.
+
+Before any production run-event write is allowed, the replacement frozen runtime must implement:
 
 ```text
 KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY
 ```
 
-Inside the **same transaction that commits the Kiosk event**, it must re-evaluate `STUDIO-PROD-01` resource-wide current selection and require the exact frozen acceptance schedule item to be the unique current item with no competing current candidate or active run. If that capability is absent or the predicate fails, the transaction must abort before any run/review/receipt/revision/audit/outbox fact commits.
+Inside the **same transaction that commits the Kiosk event**, it must re-evaluate `STUDIO-PROD-01` resource-wide current selection and require the exact frozen acceptance schedule item to be the unique current item with no competing current candidate or active run. If that predicate cannot be evaluated or does not match, the transaction aborts before any run/review/receipt/revision/audit/outbox fact commits.
 
-If isolated WO-03 acceptance fails or remains incomplete, do not use the prepared production schedule item. Keep production event facts unchanged and use only the bound Kiosk configuration rollback if the production runtime configuration must be disabled.
+`KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY` is **not implemented in the current baseline image**, so this is a PROD-11 **pre-request blocker**, not something that may be added after authorization.
 
 QLL-6 + its dedicated Chrome profile remains the primary production Kiosk identity target. It is not permission to run the WO-03 stateful matrix against production scheduling facts.
 
@@ -394,7 +402,7 @@ The production integration-smoke path requires an exact canonical V2 request, pr
 
 The supported Scheduling path requires `schedule_item_tasks.task_id` to reference `requests_v2`, and a single schedule item must bind exactly one request. A V1 snapshot-only request is insufficient.
 
-Preparing that schedulable production-smoke target is a **separate production scheduling write** and must not be smuggled into PROD-11's frozen effects. It exists only to support an exact bounded production wiring smoke after enablement; it cannot be cited as WO-03 acceptance evidence.
+Preparing that schedulable production-smoke target is a **separate production scheduling write** and must not be smuggled into PROD-11's frozen effects. It exists only to support an exact bounded production wiring smoke **after isolated WO-03 has passed and production Kiosk activation is allowed**; it cannot be cited as WO-03 acceptance evidence.
 
 Before PROD-11 can be requested, a separately authorized preparation must create or fresh-confirm:
 
@@ -435,7 +443,7 @@ planned_start <= acceptanceRunStart < acceptanceRunEnd <= planned_end
 
 The authorization packet becomes stale if the item is used, cancelled, rebound, changed, no longer covers the bound acceptance run, or `planned_end` passes before execution starts.
 
-Only **after** the isolated WO-03 environment has closed `REAL_DEVICE_ACCEPTANCE` and `OFFLINE_REPLAY_RESULT`, immediately before the first bounded production smoke run event, the executor must fresh-read the same schedule item, task binding and run state and prove again:
+Only **after** isolated WO-03 has closed `REAL_DEVICE_ACCEPTANCE` and `OFFLINE_REPLAY_RESULT`, a replacement atomic-capable image has been frozen, and the exact production Kiosk configuration has then been enabled, immediately before the first bounded production smoke run event the executor must fresh-read the same schedule item, task binding and run state and prove again:
 
 ```text
 confirmed
@@ -445,7 +453,7 @@ planned_start <= current time < planned_end
 planned_end still covers acceptanceRunEnd
 ```
 
-That row-level check is necessary but not sufficient. After the exact PROD-11 Kiosk auth configuration is enabled, the isolated WO-03 write gate has passed, and server-authoritative device identity is verified, the executor performs an authenticated:
+That row-level check is necessary but not sufficient. After isolated WO-03 has passed, the replacement immutable image has been revalidated, the exact PROD-11 Kiosk auth configuration is enabled, and server-authoritative device identity is verified, the executor performs an authenticated:
 
 ```text
 GET /api/v2/kiosk/current?resourceId=STUDIO-PROD-01
@@ -502,9 +510,13 @@ KIOSK_ACCEPTANCE_SCHEDULE_ITEM_ABSENT
 KIOSK_ACCEPTANCE_TASK_BINDING_ABSENT
 SEPARATE_SCHEDULING_PREPARATION_AUTHORITY_UNRESOLVED
 KIOSK_ACCEPTANCE_EXECUTION_WINDOW_NOT_YET_BOUND_AND_FRESH
+KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE
+PROD11_REPLACEMENT_IMMUTABLE_IMAGE_NOT_YET_BUILT_TESTED_AND_FROZEN
 ```
 
-Mandatory after authorization, before PROD-11 can close:
+The atomic current-selection capability is a hard **pre-request** gate. It may not be implemented after authorization or introduced by swapping to an unreviewed image.
+
+After explicit authorization, but **before production Kiosk activation**, the following isolated gates must close:
 
 ```text
 WO03_EXACT_ISOLATED_ACCEPTANCE_ENVIRONMENT_BOUND
@@ -513,14 +525,20 @@ REAL_DEVICE_ACCEPTANCE
 OFFLINE_REPLAY_RESULT
 IDENTITY_EXPIRY_AND_DEVICE_HANDOFF
 ACCESSIBILITY_AND_ON_SITE_ENVIRONMENT_ACCEPTANCE
-WO03_ISOLATED_ACCEPTANCE_BEFORE_PRODUCTION_EVENT_WRITE
-KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY
+```
+
+Only after those PASS may the frozen replacement image be revalidated and the production Kiosk config/credential/profile/identity mapping be enabled.
+
+After production activation, before the first production smoke event:
+
+```text
 KIOSK_ACCEPTANCE_ITEM_EXECUTION_TIME_RECHECK
 KIOSK_CURRENT_SELECTION_EQUALS_FROZEN_ACCEPTANCE_ITEM
+KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY = PASS inside same event transaction
 PROD11_PRODUCTION_SMOKE_SEPARATE_FROM_WO03
 ```
 
-`REAL_DEVICE_ACCEPTANCE` and `OFFLINE_REPLAY_RESULT` must come from the exact isolated WO-03 environment. They are mandatory **before** the first production Kiosk run-event write. Production smoke evidence is separate and non-substitutable.
+`REAL_DEVICE_ACCEPTANCE` and `OFFLINE_REPLAY_RESULT` come only from the isolated WO-03 environment. Production smoke evidence is separate and non-substitutable.
 
 Therefore:
 
@@ -532,7 +550,7 @@ formal authorization state
 = FROZEN_NOT_REQUESTED
 ```
 
-Credential generation, dedicated Chrome profile creation, config materialization, live container replacement, identity enrollment, real-device acceptance, offline replay and any run-event submission remain inside the later explicitly authorized PROD-11 execution.
+Credential generation, production profile activation, production config materialization, live container replacement, production identity enrollment, and any production run-event submission remain prohibited until their respective gates above close.
 
 Machine-readable contract:
 
