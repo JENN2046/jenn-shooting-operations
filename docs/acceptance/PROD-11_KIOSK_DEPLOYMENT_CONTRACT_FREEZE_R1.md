@@ -278,7 +278,10 @@ PROD-11 explicit authorization
 → REAL_DEVICE_ACCEPTANCE = PASS
 → OFFLINE_REPLAY_RESULT = PASS
 → fresh replacement immutable image-ID / revision revalidation
-→ only then enable exact production Kiosk config / credential / dedicated profile / identity mapping
+→ only then perform the same-image config-only recreation
+→ enable exact production KIOSK_AUTH_CONFIG_PATH / credential / dedicated profile / identity mapping
+→ exact production config load forces PROD11_SMOKE_ONLY
+→ startup validates all smoke bindings before listen
 → revalidate the frozen production smoke item
 → authenticated production current-read evidence
 → KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY passes all three predicates inside the same event transaction
@@ -466,6 +469,42 @@ host mode      = 0600
 
 None of those deployment fields may appear inside `kiosk-auth.v1.json`.
 
+### Non-optional PROD-11 smoke-mode activation signal
+
+Smoke mode is **not** selected by the smoke environment variables themselves and there is no optional `KIOSK_MODE` switch.
+
+The independent production authority signal is the Kiosk configuration:
+
+```text
+KIOSK_AUTH_CONFIG_PATH absent
+→ Kiosk disabled
+
+KIOSK_AUTH_CONFIG_PATH present
++ exact /app/kiosk-auth.v1.json loaded
++ deviceId = KIOSK-PROD-01
++ username = jso-kiosk-prod-01
++ principal.subjectId = KIOSK-PROD-01
++ principal.role = operator
++ principal.resourceIds = [STUDIO-PROD-01]
++ businessTimeZone = Asia/Shanghai
+→ authority mode = PROD11_SMOKE_ONLY
+```
+
+Once that exact production config is enabled, the runtime must fail closed **before listen** unless all of the following also pass:
+
+```text
+KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID present + valid + authorization-equal
+KIOSK_SMOKE_ACCEPTANCE_RUN_START present + valid + authorization-equal
+KIOSK_SMOKE_ACCEPTANCE_RUN_END present + valid + authorization-equal
+KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY available
+KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY available
+KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY available
+```
+
+If `KIOSK_AUTH_CONFIG_PATH` is present but the loaded production identity differs from the frozen values, startup fails closed. Missing smoke bindings may never downgrade the process to ordinary Kiosk write admission.
+
+Until a separately frozen post-smoke normal-operation transition contract exists, **every enabled production Kiosk config on this replacement runtime is smoke-only authority**.
+
 ### Authorization-frozen schedule-item runtime binding
 
 The authorization-frozen schedule item is not added to `kiosk-auth.v1.json`; that file keeps its exact loader-defined schema.
@@ -592,7 +631,7 @@ runtime env       = /mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime
 pre-PROD11 backup = /mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime.pre-prod11
 ```
 
-During the PROD-11 config-only recreate:
+During the PROD-11 config-only recreate, `KIOSK_AUTH_CONFIG_PATH` is the non-optional activation signal. If it is added, the exact production identity must load and `PROD11_SMOKE_ONLY` must be selected before the listener is allowed to become healthy:
 
 ```text
 image ID / source revision = EXACTLY UNCHANGED
@@ -839,6 +878,7 @@ CURRENT_GREENFIELD_AUTHORITY_PROD11_REQUESTABILITY_NOT_YET_FRESH_PASS
 KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE
 KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE
 SEPARATE_PROD11_REPLACEMENT_IMAGE_DEPLOYMENT_AUTHORITY_UNRESOLVED
+KIOSK_PRODUCTION_CONFIG_DERIVED_SMOKE_MODE_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE
 ```
 
 The atomic production-context capability is a hard **pre-request** gate for the bounded production smoke. It must cover immutable authorization-frozen smoke schedule-item binding, current-item uniqueness, and active Scheduling time-zone equality inside the same event transaction. It is not normal-operation authority. It may not be implemented after authorization or introduced by swapping to an unreviewed image.
