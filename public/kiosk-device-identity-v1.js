@@ -46,9 +46,20 @@ export function createKioskDeviceProvisioner({
     throw new TypeError('Kiosk device identity blocked key is required');
   }
 
-  const isBlocked = () => storage.getItem(blockedKey) === '1';
-  const block = () => storage.setItem(blockedKey, '1');
-  const unblock = () => storage.removeItem(blockedKey);
+  let blockedInMemory = false;
+  const isBlocked = () => blockedInMemory || storage.getItem(blockedKey) === '1';
+  const block = () => {
+    blockedInMemory = true;
+    try {
+      storage.setItem(blockedKey, '1');
+    } catch {
+      // The in-memory latch is authoritative for this page even if persistence fails.
+    }
+  };
+  const unblock = () => {
+    storage.removeItem(blockedKey);
+    blockedInMemory = false;
+  };
 
   return Object.freeze({
     current() {

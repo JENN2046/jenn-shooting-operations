@@ -6,12 +6,17 @@ import {
   validateKioskDeviceIdentityResponse,
 } from '../public/kiosk-device-identity-v1.js';
 
-function storage(initial = null) {
+function storage(initial = null, { failBlockedWrite = false } = {}) {
   const values = new Map();
   if (initial !== null) values.set('jenn.kiosk.device-id.v2', initial);
   return {
     getItem(key) { return values.get(key) ?? null; },
-    setItem(key, value) { values.set(key, value); },
+    setItem(key, value) {
+      if (failBlockedWrite && key === 'jenn.kiosk.device-id.v2.blocked-v1') {
+        throw new Error('storage write denied');
+      }
+      values.set(key, value);
+    },
     removeItem(key) { values.delete(key); },
     snapshot() { return values.get('jenn.kiosk.device-id.v2') ?? null; },
     blocked() { return values.get('jenn.kiosk.device-id.v2.blocked-v1') === '1'; },
@@ -98,6 +103,30 @@ test('identity mismatch stays latched across a following outage until a matching
   });
   assert.equal(target.blocked(), false);
   assert.equal(provisioner.current(), 'DEVICE-OTHER');
+});
+
+test('authoritative mismatch remains fail-closed in memory when blocked-latch persistence fails', async () => {
+  const target = storage('DEVICE-OTHER', { failBlockedWrite: true });
+  let online = true;
+  const provisioner = createKioskDeviceProvisioner({
+    storage: target,
+    fetchImpl: async () => {
+      if (!online) throw new Error('offline');
+      return response('DEVICE-KIOSK-PROD-01');
+    },
+  });
+
+  assert.deepEqual(await provisioner.provision(), {
+    ok: false,
+    code: 'DEVICE_IDENTITY_MISMATCH',
+  });
+  assert.equal(provisioner.current(), null);
+
+  online = false;
+  assert.deepEqual(await provisioner.provision(), {
+    ok: false,
+    code: 'DEVICE_IDENTITY_BLOCKED',
+  });
 });
 
 test('HTTP auth rejection latches identity while 5xx remains transient for a clean cached identity', async () => {
