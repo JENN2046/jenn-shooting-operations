@@ -18,6 +18,26 @@ full repository = 801 tests / 798 pass / 2 known migration-userland failures / 1
 
 The two full-suite failures remain the previously reproduced Alpine `touch @<nanosecond timestamp>` limitation and are not Kiosk regressions.
 
+### Immutable image execution binding
+
+The candidate tag is diagnostic only. PROD-11 execution must deploy by the immutable image ID:
+
+```text
+immutable image ID = sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72
+diagnostic tag     = jenn-shooting-operations:prod-d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7
+source revision    = d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7
+```
+
+Immediately before production container create/replacement, the executor must revalidate `BUILT_IMAGE_DIGEST`:
+
+```text
+docker image inspect diagnostic tag -> Id == immutable image ID
+org.opencontainers.image.revision    == exact source revision
+container create image reference     == immutable image ID
+```
+
+A tag mismatch, missing image, revision-label mismatch, or attempt to create the production container by mutable tag is a hard stop.
+
 ## Frozen logical identity
 
 ```text
@@ -173,15 +193,27 @@ The mandatory ordering is:
 
 ```text
 PROD-11 explicit authorization
+→ fresh immutable image-ID / revision revalidation
 → enable exact production Kiosk config / identity
 → bind and execute the isolated WO-03 environment
 → REAL_DEVICE_ACCEPTANCE = PASS
 → OFFLINE_REPLAY_RESULT = PASS
-→ only then revalidate the frozen production smoke item
+→ revalidate the frozen production smoke item
+→ KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY = PASS
 → only then may the first bounded production Kiosk run event be submitted
 ```
 
 Until the isolated WO-03 gate passes, production `start`, `block`, `resume`, `complete`, review-required submissions, and all other Kiosk run-event writes must remain at **zero**.
+
+Even after WO-03 passes, the authenticated `GET /api/v2/kiosk/current` is **not** sufficient write authority. It and the event POST are separate requests, so scheduling state can race between them.
+
+Before any production smoke event is allowed, the runtime must provide:
+
+```text
+KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY
+```
+
+Inside the **same transaction that commits the Kiosk event**, it must re-evaluate `STUDIO-PROD-01` resource-wide current selection and require the exact frozen acceptance schedule item to be the unique current item with no competing current candidate or active run. If that capability is absent or the predicate fails, the transaction must abort before any run/review/receipt/revision/audit/outbox fact commits.
 
 If isolated WO-03 acceptance fails or remains incomplete, do not use the prepared production schedule item. Keep production event facts unchanged and use only the bound Kiosk configuration rollback if the production runtime configuration must be disabled.
 
@@ -413,7 +445,7 @@ planned_start <= current time < planned_end
 planned_end still covers acceptanceRunEnd
 ```
 
-That row-level check is necessary but not sufficient. After the exact PROD-11 Kiosk auth configuration is enabled, the isolated WO-03 write gate has passed, and server-authoritative device identity is verified, the executor must perform an authenticated:
+That row-level check is necessary but not sufficient. After the exact PROD-11 Kiosk auth configuration is enabled, the isolated WO-03 write gate has passed, and server-authoritative device identity is verified, the executor performs an authenticated:
 
 ```text
 GET /api/v2/kiosk/current?resourceId=STUDIO-PROD-01
@@ -426,7 +458,7 @@ HTTP/current-read success
 current.scheduleItemId = exact frozen derived acceptance scheduleItemId
 ```
 
-This resource-wide selection proof closes the case where another confirmed item overlaps the same instant or another item already owns an active run. Any `MULTIPLE_CURRENT_CANDIDATES`, other current item, other active run, null current item, authentication/identity failure, or other non-success result is a hard stop.
+This resource-wide GET is device-facing evidence only. Any `MULTIPLE_CURRENT_CANDIDATES`, other current item, other active run, null current item, authentication/identity failure, or other non-success result is an immediate hard stop. A successful GET still does **not** authorize the event write: the same exact current-item predicate must be re-evaluated atomically inside the Kiosk event transaction by `KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY`.
 
 If either the row-level recheck or the resource-wide current-selection recheck fails, no Kiosk run event may be submitted. PROD-11 does not authorize creating, moving or replacing the schedule item. The flow returns to a separately authorized scheduling preparation; if Kiosk runtime configuration has already changed, only the bound configuration rollback may be used.
 
@@ -482,6 +514,7 @@ OFFLINE_REPLAY_RESULT
 IDENTITY_EXPIRY_AND_DEVICE_HANDOFF
 ACCESSIBILITY_AND_ON_SITE_ENVIRONMENT_ACCEPTANCE
 WO03_ISOLATED_ACCEPTANCE_BEFORE_PRODUCTION_EVENT_WRITE
+KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY
 KIOSK_ACCEPTANCE_ITEM_EXECUTION_TIME_RECHECK
 KIOSK_CURRENT_SELECTION_EQUALS_FROZEN_ACCEPTANCE_ITEM
 PROD11_PRODUCTION_SMOKE_SEPARATE_FROM_WO03
