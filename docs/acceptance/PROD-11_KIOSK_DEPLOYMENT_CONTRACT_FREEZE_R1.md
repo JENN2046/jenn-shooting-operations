@@ -622,6 +622,33 @@ After any accepted or review-required Kiosk submission:
 
 Fresh inspection shows the live database already has the continuous migration prefix 1 through 6, and both old and new runtimes recognize migration v6. The rollback therefore does not depend on a schema downgrade.
 
+## Current Greenfield authority gate
+
+The static `production-change-manifest.v1.json` remains the frozen parent contract, not the current requestability source. Its historical `BLOCKED_PREREQUISITE` values must not be mistaken for live Greenfield state; in particular, `INTEGRATION_DEPLOYMENT_READINESS` is explicitly superseded by the Greenfield authority.
+
+Conversely, this PROD-11 deployment contract **cannot make itself requestable**.
+
+Immediately before any PROD-11 authorization request, the current `production-greenfield-authority.v1.json` must fresh-pass its validator and prove:
+
+```text
+authorization.nextActionId = PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE
+completed: PROD-GF-13-ACTIVATE
+completed: PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE
+completed: PROD-10-ENABLE-VCP-REMOTE-SYNC
+
+GREENFIELD_ACTIVATION_COMPLETION = PASS
+GREENFIELD_FORWARD_CHAIN = PASS
+PRODUCTION_TARGET_FACTS = PASS
+PRODUCTION_DEPLOYMENT_GATE = PASS
+
+base INTEGRATION_DEPLOYMENT_READINESS
+= handled only through the frozen Greenfield supersession contract
+
+requestableActionIds includes exactly the intended PROD-11 action
+```
+
+If current Greenfield authority does not explicitly admit PROD-11 after all fresh prerequisite evidence is present, the authorization request is prohibited. #33 supplies no independent self-authorization path.
+
 ## Requestability decision
 
 Closed:
@@ -651,6 +678,7 @@ KIOSK_POST_SMOKE_NORMAL_OPERATION_TRANSITION_CONTRACT_UNRESOLVED
 WO03_ISOLATED_ENVIRONMENT_PREPARATION_AUTHORITY_UNRESOLVED
 WO03_ISOLATED_ENVIRONMENT_EXACT_TARGET_NOT_FROZEN
 FULL_PROD11_ACTION_SPECIFIC_REVALIDATION_NOT_YET_FRESH_PASS
+CURRENT_GREENFIELD_AUTHORITY_PROD11_REQUESTABILITY_NOT_YET_FRESH_PASS
 ```
 
 The atomic production-context capability is a hard **pre-request** gate for the bounded production smoke. It must cover immutable authorization-frozen smoke schedule-item binding, current-item uniqueness, and active Scheduling time-zone equality inside the same event transaction. It is not normal-operation authority. It may not be implemented after authorization or introduced by swapping to an unreviewed image.
