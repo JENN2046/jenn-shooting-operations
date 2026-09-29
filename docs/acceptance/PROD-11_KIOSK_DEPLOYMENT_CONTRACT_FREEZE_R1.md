@@ -8,7 +8,7 @@ It does **not** authorize PROD-11, replace the live container, generate a real c
 ## Runtime image
 
 ```text
-runtime source authority = d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7
+baseline source revision = d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7
 image tag = jenn-shooting-operations:prod-d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7
 image id = sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72
 Node = 24.21.0
@@ -29,6 +29,20 @@ baseline revision = d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7
 ```
 
 That image is **not eligible for PROD-11 execution** because it does not implement the newly required `KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY`.
+
+The baseline revision above is evidence only and is **not** the PROD-11 execution source authority.
+
+The sole eventual PROD-11 runtime authority is the exact replacement binding:
+
+```text
+runtimeAuthorityBinding.prod11ExecutionAuthority.sourceRevision
+= requestability.executionImageGate.finalSourceRevision
+
+runtimeAuthorityBinding.prod11ExecutionAuthority.immutableImageId
+= requestability.executionImageGate.finalImmutableImageId
+```
+
+Those values intentionally remain unresolved until the atomic-capable replacement image is exact-head tested, built, and frozen. Once resolved, every execution-bearing image/revision reference, the isolated WO-03 runtime, and the production container create reference must agree exactly. The `d1fe85...` baseline may never substitute.
 
 Therefore PROD-11 remains pre-request blocked until:
 
