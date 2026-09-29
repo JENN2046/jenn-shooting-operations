@@ -299,6 +299,41 @@ The active acceptance Scheduling config must use `businessTimeZone = Asia/Shangh
 
 The schedule item and task binding must come from the canonical proposal-acceptance path. Direct SQL insertion is forbidden.
 
+### Acceptance item execution-window binding
+
+Existence of a schedule item is not enough. Before PROD-11 may be requested, the authorization packet must bind:
+
+```text
+exact acceptanceRunStart
+exact acceptanceRunEnd
+exact derived acceptance scheduleItemId
+exact canonical V2 acceptance requestId
+```
+
+A fresh read must prove the same item is:
+
+```text
+schedule_status = confirmed
+resourceId = STUDIO-PROD-01
+exactly one schedule_item_tasks binding to the frozen V2 acceptance request
+zero prior production runs
+planned_start <= acceptanceRunStart < acceptanceRunEnd <= planned_end
+```
+
+The authorization packet becomes stale if the item is used, cancelled, rebound, changed, no longer covers the bound acceptance run, or `planned_end` passes before execution starts.
+
+Immediately before the first real-device Kiosk acceptance run event, the executor must fresh-read the same schedule item, task binding and run state and prove again:
+
+```text
+confirmed
+unused
+exact resource / exact V2 request binding
+planned_start <= current time < planned_end
+planned_end still covers acceptanceRunEnd
+```
+
+If this execution-time check fails, no Kiosk run event may be submitted. PROD-11 does not authorize creating, moving or replacing the schedule item. The flow returns to a separately authorized scheduling preparation; if Kiosk runtime configuration has already changed, only the bound configuration rollback may be used.
+
 The exact preparatory Action ID is not yet frozen and remains an authority gap.
 
 ## Rollback contract
@@ -338,11 +373,13 @@ ACTIVE_ACCEPTANCE_CONFIG_TIME_ZONE_NOT_YET_BOUND
 KIOSK_ACCEPTANCE_SCHEDULE_ITEM_ABSENT
 KIOSK_ACCEPTANCE_TASK_BINDING_ABSENT
 SEPARATE_SCHEDULING_PREPARATION_AUTHORITY_UNRESOLVED
+KIOSK_ACCEPTANCE_EXECUTION_WINDOW_NOT_YET_BOUND_AND_FRESH
 ```
 
 Mandatory after authorization, before PROD-11 can close:
 
 ```text
+KIOSK_ACCEPTANCE_ITEM_EXECUTION_TIME_RECHECK
 WO03_FULL_DEVICE_BROWSER_MATRIX
 REAL_DEVICE_ACCEPTANCE
 OFFLINE_REPLAY_RESULT
