@@ -30,7 +30,7 @@
       "currentBaselineSourceRevision": "d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
       "finalImmutableImageId": "UNRESOLVED_AFTER_ATOMIC_CAPABILITY_IMPLEMENTATION",
       "finalSourceRevision": "UNRESOLVED_AFTER_ATOMIC_CAPABILITY_IMPLEMENTATION",
-      "deploymentReferenceRule": "PROD-11 must not be requested until a replacement image containing KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY, KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY, and KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY has passed exact-head tests and its immutable image ID, source revision, and derived diagnostic tag are frozen; at execution the diagnostic tag must resolve to that frozen immutable image ID, the OCI revision label must equal the frozen source revision, and the container must be created by immutable image ID, never by mutable tag",
+      "deploymentReferenceRule": "PROD-11 must not be requested until a replacement image containing all required smoke capabilities has passed exact-head tests, its immutable image ID/source revision/diagnostic tag are frozen, and a separate explicit deployment Action has already deployed that exact immutable image to the live service with Kiosk disabled. During PROD-11, a bounded config-only container recreate is allowed only on that exact same immutable image ID/source revision to add the frozen Kiosk startup bindings; any image change is forbidden.",
       "immediatePreCreateRevalidationRequired": true,
       "requiredActionSpecificRevalidation": [
         "TARGET_HOST_IDENTITY",
@@ -462,6 +462,33 @@
       ],
       "requiredRollback": "the separate deployment Action must bind its own image/container rollback restoring the exact pre-replacement immutable runtime without deleting production data; ROLLBACK-10 is not image/container rollback authority",
       "completionRule": "the separate deployment Action must complete and fresh-prove the live service is already running the exact replacement immutable image/revision with Kiosk still disabled before PROD-11 may be requested"
+    },
+    "prod11ConfigOnlyRecreation": {
+      "status": "FROZEN_BOUNDED_SAME_IMAGE_RECREATE_ONLY",
+      "allowedUnderProd11": true,
+      "purpose": "apply/remove Kiosk startup-only configuration bindings after the exact replacement image has already been separately deployed",
+      "immutableImageRule": "the recreated production container must use exactly the same immutable image ID and source revision already running from the separately authorized replacement-image deployment; any image ID/revision/tag-authority change is forbidden",
+      "allowedChanges": [
+        "add/remove the exact read-only Kiosk auth config bind",
+        "add/remove KIOSK_AUTH_CONFIG_PATH",
+        "add/remove KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID",
+        "add/remove KIOSK_SMOKE_ACCEPTANCE_RUN_START",
+        "add/remove KIOSK_SMOKE_ACCEPTANCE_RUN_END"
+      ],
+      "preservedExactly": [
+        "production data volume identity and mount mode",
+        "loopback port binding",
+        "read-only rootfs",
+        "tmpfs",
+        "security options",
+        "restart policy",
+        "role-token configuration",
+        "VCP configuration",
+        "DingTalk-disabled state",
+        "all non-Kiosk runtime environment and mounts"
+      ],
+      "preCreateProof": "fresh inspect the live service and prove its immutable image ID/source revision equal the separately deployed frozen replacement authority before the config-only recreate",
+      "postCreateProof": "fresh inspect the recreated service and prove immutable image ID/source revision and every preserved topology field are unchanged while only the frozen Kiosk bindings differ"
     }
   },
   "preAuthorizationAttestation": {
@@ -714,10 +741,11 @@
     "scope": "KIOSK_CONFIGURATION_ONLY",
     "productionVolumeNeverDeleted": true,
     "vcpAndDingTalkUnchanged": true,
-    "imageOrContainerRollbackAuthorized": false,
-    "rule": "ROLLBACK-10 disables only the Kiosk configuration/device/trusted-identity mapping introduced by PROD-11. It never swaps, recreates, removes or restores the application image/container and never deletes or rewrites production facts.",
-    "afterAnyProd11FailureOrSubmission": "remove/disable the exact Kiosk auth configuration, credential/profile provisioning and trusted device/identity mapping introduced by PROD-11 as applicable; preserve all accepted/review-required runs, reviews, receipts, audit and revision facts; keep the already-deployed application image/container unchanged",
-    "separateDeploymentRollbackRule": "any rollback of the replacement application image/container belongs exclusively to the separately authorized replacement-image deployment Action and its own bound rollback; that rollback must be completed before PROD-11 is requested if the replacement deployment does not pass",
+    "imageChangeAuthorized": false,
+    "sameImageConfigOnlyRecreationAuthorized": true,
+    "rule": "ROLLBACK-10 may disable the Kiosk configuration/device/trusted-identity mapping introduced by PROD-11 and may recreate the application container only on the exact same immutable image ID/source revision when required to remove startup-only Kiosk bind/env configuration. It never authorizes an image change and never deletes or rewrites production facts.",
+    "afterAnyProd11FailureOrSubmission": "preserve all accepted/review-required runs, reviews, receipts, audit and revision facts; remove/disable only the exact Kiosk auth configuration, credential/profile provisioning and trusted device/identity mapping introduced by PROD-11; if startup-only bindings require restart, recreate on the same immutable image while preserving all non-Kiosk topology/configuration exactly",
+    "separateDeploymentRollbackRule": "any change or rollback of the replacement application image ID/source revision belongs exclusively to the separately authorized replacement-image deployment Action and its own bound rollback; ROLLBACK-10 cannot select another image",
     "schemaCompatibility": {
       "liveDatabaseMigrationPrefix": [
         1,
@@ -790,7 +818,7 @@
       "currentBaselineEligibleForProd11": false,
       "finalImmutableImageId": "UNRESOLVED",
       "finalSourceRevision": "UNRESOLVED",
-      "rule": "before PROD-11 may be requested, freeze a replacement image containing KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY, KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY, KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY, required immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID support, and immutable KIOSK_SMOKE_ACCEPTANCE_RUN_START/KIOSK_SMOKE_ACCEPTANCE_RUN_END startup and transactional validation support. Freeze its immutable image ID, source revision, and exact derived diagnostic tag, then fresh-pass the complete seven-item PROD-11 action-specific revalidation checklist. A separate explicit production deployment Action, not PROD-11, must then deploy that exact immutable image to the live service while Kiosk remains disabled and complete its own health/storage/VCP/rollback verification. Only after the live service is already running that exact replacement image may PROD-11 be requested. PROD-11 execution itself may enable only the frozen Kiosk config/device/browser/identity mapping and must not replace or recreate the application container/image.",
+      "rule": "before PROD-11 may be requested, freeze and exact-head validate the replacement image with all required Kiosk smoke capabilities and runtime bindings, then use a separate explicit production deployment Action to deploy that exact immutable image to the live service with Kiosk disabled and complete health/storage/VCP/image-rollback verification. PROD-11 itself may not change the application image ID or source revision, but may perform one bounded same-image config-only container recreation required to apply KIOSK_AUTH_CONFIG_PATH, KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID, KIOSK_SMOKE_ACCEPTANCE_RUN_START and KIOSK_SMOKE_ACCEPTANCE_RUN_END while preserving all non-Kiosk topology/configuration exactly.",
       "requiredActionSpecificRevalidation": [
         "TARGET_HOST_IDENTITY",
         "DISK_PORT_ROUTE_CONFLICTS",
@@ -819,7 +847,7 @@
       "currentBaselineContainsCapability": false,
       "requiredBeforeRequest": true,
       "requiredResolution": "implement all atomic production-context predicates in the Kiosk event transaction, including immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID startup binding and equality with the authorization-frozen scheduleItemId, exact-head test scheduling selection/time-zone/binding races, build a replacement production image, record immutable image ID/source revision, and update the PROD-11 deployment binding before requesting authorization",
-      "noPostAuthorizationImageSwap": "PROD-11 authorization may not rely on adding capabilities after authorization and may not replace/recreate the live application image/container. The separately authorized replacement-image deployment must already be complete before the PROD-11 authorization request.",
+      "noPostAuthorizationImageSwap": "PROD-11 authorization may not add capabilities after authorization and may not change the live application image ID/source revision. The separately authorized replacement-image deployment must already be complete before the PROD-11 request. PROD-11 may only perform the separately frozen same-image config-only container recreation needed to activate Kiosk startup bindings.",
       "requiredAtomicPredicates": [
         "event schedule target equals immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID and the authorization-frozen derived acceptance scheduleItemId",
         "exact current-item uniqueness for STUDIO-PROD-01 equals KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID",
@@ -928,7 +956,7 @@
       "requiredBeforeRequest": true,
       "blockerId": "SEPARATE_PROD11_REPLACEMENT_IMAGE_DEPLOYMENT_AUTHORITY_UNRESOLVED",
       "prod11ImageSwapForbidden": true,
-      "rule": "PROD-11 authorizes only the exact Kiosk device/browser and trusted identity mapping. It does not authorize replacing or recreating the live application container/image. Before PROD-11 may be requested, a separate explicit production deployment Action must deploy the exact frozen replacement immutable image to the live service with Kiosk still disabled and must complete its own rollback/health/VCP/storage verification evidence.",
+      "rule": "PROD-11 does not authorize changing the live application image ID/source revision. Before PROD-11 may be requested, a separate explicit production deployment Action must deploy the exact frozen replacement immutable image with Kiosk disabled and complete its own rollback/health/VCP/storage verification. After that, PROD-11 may only recreate the container on that same immutable image for Kiosk startup configuration activation.",
       "completionEvidence": [
         "exact separately authorized deployment Action ID and authority target",
         "pre-replacement live immutable image/container identity",
