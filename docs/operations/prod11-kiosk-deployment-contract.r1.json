@@ -298,18 +298,19 @@
       }
     },
     "productionSmokeWriteGate": {
-      "status": "BLOCKED_PRE_REQUEST_ATOMIC_WRITE_ADMISSION_OUTBOX_CAPABILITIES_AND_PRE_ACTIVATION_WO03",
+      "status": "BLOCKED_PRE_REQUEST_TRUSTED_CONTEXT_ATOMIC_WRITE_ADMISSION_OUTBOX_CAPABILITIES_AND_PRE_ACTIVATION_WO03",
       "authorizationPhase": "POST_PROD11_AUTHORIZATION_AFTER_ISOLATED_WO03_AND_PRODUCTION_ACTIVATION",
       "prerequisites": [
         "WO03_EXACT_ISOLATED_ACCEPTANCE_ENVIRONMENT_BOUND",
         "WO03_FULL_ISOLATED_VIEWPORT_AND_ON_SITE_MATRIX",
         "REAL_DEVICE_ACCEPTANCE",
         "OFFLINE_REPLAY_RESULT",
+        "KIOSK_TRUSTED_SERVICE_CONTEXT_SIGNAL_CAPABILITY",
         "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
         "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
         "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY"
       ],
-      "rule": "after isolated WO-03 PASS and production activation, the only production run-event mutations authorized by PROD-11 are the exact two-phase start then complete sequence frozen in productionSmokeBoundary, and only when KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY, KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY, and KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY all PASS. Each phase must satisfy the atomic production-context predicates inside the same event transaction. No block/resume/third event, provider delivery, or improvised retry is authorized.",
+      "rule": "after isolated WO-03 PASS and production activation, the only production run-event mutations authorized by PROD-11 are the exact two-phase start then complete sequence frozen in productionSmokeBoundary, and only when KIOSK_TRUSTED_SERVICE_CONTEXT_SIGNAL_CAPABILITY proves immutable KIOSK_SERVICE_CONTEXT=PROD11_PRODUCTION and KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY, KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY, and KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY all PASS. No isolated/ordinary-context fallback, block/resume/third event, provider delivery, or improvised retry is authorized.",
       "forbiddenBeforePass": [
         "production start event",
         "production block event",
@@ -317,7 +318,7 @@
         "production complete event",
         "any production review-required Kiosk submission"
       ],
-      "failureRule": "if any prerequisite capability or isolated WO-03 acceptance gate is incomplete or fails, keep production event writes at zero; do not dispatch acceptance smoke notifications to a real provider; use only the bound Kiosk configuration rollback if production runtime configuration must be disabled",
+      "failureRule": "if trusted production context, any other prerequisite capability, or isolated WO-03 acceptance gate is incomplete or fails, keep production event writes at zero; do not dispatch acceptance smoke notifications to a real provider; use only the bound Kiosk configuration rollback if production runtime configuration must be disabled",
       "atomicSelectionRequirement": {
         "status": "PRE_REQUEST_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
         "capabilityId": "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
@@ -855,7 +856,7 @@
       "PROD11_PRODUCTION_SMOKE_SEPARATE_FROM_WO03"
     ],
     "wo03EvidenceSourceRule": "REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT must come from the exact isolated WO-03 acceptance environment whose target and setup authority were frozen and completed before the PROD-11 request; the matrix executes only after authorization and before production Kiosk activation. Production smoke evidence remains separate and non-substitutable.",
-    "productionEventWriteGate": "during the bounded PROD-11 production smoke only, no Kiosk run-event write may commit unless KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY, KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY, and KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY all PASS. The atomic context capability must prove the event target, immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID binding, authorization-frozen derived scheduleItemId and unique current STUDIO-PROD-01 item are the same item and the active Scheduling config businessTimeZone equals Asia/Shanghai inside the same event transaction. The bounded write-admission capability must enforce the exact two-phase mutation budget, secure client IDs, zero-based local sequences, immutable smoke window and receipt-exact replay. The outbox isolation capability must prevent real provider delivery of the smoke completion intent. This smoke gate grants no authority for later unrelated production schedule items.",
+    "productionEventWriteGate": "during the bounded PROD-11 production smoke only, no Kiosk run-event write may commit unless KIOSK_TRUSTED_SERVICE_CONTEXT_SIGNAL_CAPABILITY, KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY, KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY, and KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY all PASS. The trusted context capability must prove immutable KIOSK_SERVICE_CONTEXT=PROD11_PRODUCTION for the live service with no config/default fallback. The atomic context capability must prove the event target, immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID binding, authorization-frozen derived scheduleItemId and unique current STUDIO-PROD-01 item are the same item and the active Scheduling config businessTimeZone equals Asia/Shanghai inside the same event transaction. The bounded write-admission capability must enforce the exact two-phase mutation budget, secure client IDs, zero-based local sequences, immutable smoke window and receipt-exact replay. The outbox isolation capability must prevent real provider delivery of the smoke completion intent. This smoke gate grants no authority for later unrelated production schedule items.",
     "executionImageGate": {
       "required": true,
       "status": "BLOCKED_REPLACEMENT_IMAGE_UNRESOLVED",
@@ -970,6 +971,8 @@
       "requiredBeforeRequest": true,
       "source": "schedulableAcceptanceReadiness.acceptanceItemExecutionWindowContract.productionSmokeBoundary",
       "requiredCapabilities": [
+        "KIOSK_TRUSTED_SERVICE_CONTEXT_SIGNAL_CAPABILITY",
+        "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
         "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
         "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY"
       ],
@@ -996,7 +999,8 @@
       "occurredAtRule": "both authorized smoke phases must satisfy the immutable authorization-frozen acceptance window inside KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY before commit",
       "trustedServerTimeGate": "required: each START/COMPLETE transaction must capture trusted server time after entering the write boundary and prove it is inside the authorization-frozen acceptanceRunStart/acceptanceRunEnd window; command.occurredAt alone is never sufficient",
       "clientClockSkewCannotExpandAuthority": true,
-      "modeActivationRule": "trusted KIOSK_SERVICE_CONTEXT=PROD11_PRODUCTION is mandatory on the live production service and independent of Kiosk config contents. With that production context, KIOSK_AUTH_CONFIG_PATH absent means Kiosk disabled; once the exact frozen production config is present and valid, authority becomes PROD11_SMOKE_ONLY and all smoke bindings/capabilities are mandatory. WO03_ISOLATED_ACCEPTANCE is valid only for the separately bounded isolated WO-03 environment and never grants production authority."
+      "modeActivationRule": "KIOSK_TRUSTED_SERVICE_CONTEXT_SIGNAL_CAPABILITY must prove immutable KIOSK_SERVICE_CONTEXT=PROD11_PRODUCTION on the live service, independent of Kiosk config contents and smoke variables. With that production context, KIOSK_AUTH_CONFIG_PATH absent means Kiosk disabled; once the exact frozen production config is present and valid, authority becomes PROD11_SMOKE_ONLY and every other required smoke capability/binding remains mandatory. WO03_ISOLATED_ACCEPTANCE is valid only for the separately bounded isolated environment and never grants production write authority.",
+      "contextCapabilityRequiredForEveryCommit": true
     },
     "replacementImageDeploymentAuthorityGate": {
       "status": "BLOCKED_UNRESOLVED",
