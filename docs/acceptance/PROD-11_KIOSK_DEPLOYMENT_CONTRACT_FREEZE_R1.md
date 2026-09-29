@@ -153,9 +153,23 @@ The entire WO-03 browser/device matrix, not only grouped-session presentation, m
 
 This applies to the full viewport and on-site checklist whenever the evidence depends on authentication, queue state, run state, contention, replay, cache behavior, grouped data, accessibility interaction, identity expiry, or device handoff.
 
-The exact isolated environment remains a post-authorization, pre-production-activation target and must be bound before those checks run.
+The isolated WO-03 environment has two distinct phases:
 
-Critically, it must run **the same replacement immutable image ID and source revision frozen for eventual production activation**. WO-03 evidence from the current baseline image, a different image, a different revision, or an unverified rebuild is invalid.
+```text
+before PROD-11 request:
+  freeze the exact isolated endpoint / database / test identity / fixture digests / device targets
+  freeze and complete the separately bounded authority for any setup writes
+  bind the environment to the exact replacement immutable image/revision
+
+after PROD-11 authorization, before production Kiosk activation:
+  execute the full isolated WO-03 matrix
+```
+
+The environment setup/binding is therefore a **pre-request gate**, while the actual WO-03 acceptance execution remains post-authorization.
+
+Critically, before the PROD-11 request the prepared isolated environment must already be bound to **the same replacement immutable image ID and source revision frozen for eventual production activation**.
+
+Immediately before post-authorization WO-03 execution, that binding is freshly revalidated. Evidence from the current baseline image, a different image, a different revision, or an unverified rebuild is invalid.
 
 Immediately before isolated WO-03 execution, fresh prove:
 
@@ -237,7 +251,9 @@ PROD-11 explicit authorization
 
 Until isolated WO-03 passes, the production Kiosk config file must not be mounted, the production credential must not be provisioned to QLL-6, the dedicated production profile must not be activated for production identity, and production Kiosk run-event writes must remain at zero.
 
-If isolated WO-03 fails or remains incomplete, PROD-11 must not cross the production activation boundary.
+If the exact isolated environment target or its setup authority is unresolved, PROD-11 must not even be requested.
+
+If the environment was prepared correctly but isolated WO-03 later fails or remains incomplete, PROD-11 must not cross the production activation boundary.
 
 Even after production activation, `GET /api/v2/kiosk/current` is diagnostic/device-facing evidence only. It and the event POST are separate requests.
 
@@ -611,7 +627,17 @@ The atomic production-context capability is a hard **pre-request** gate for the 
 
 Immediately before the PROD-11 authorization request, fresh revalidate all seven manifest-bound checks: target host identity, disk/port conflicts, built image digest, secret storage, Kiosk auth runtime configuration, external readiness gates, and rollback targets.
 
-After explicit authorization, but **before production Kiosk activation**, the following isolated gates must close:
+Before the PROD-11 authorization request, the following preparation gates must already be closed:
+
+```text
+WO03_ISOLATED_ENVIRONMENT_PREPARATION_AUTHORITY
+WO03_EXACT_ISOLATED_ACCEPTANCE_ENVIRONMENT_BOUND
+WO03_ISOLATED_ENVIRONMENT_SETUP_COMPLETE
+```
+
+These preparation gates do **not** execute the WO-03 matrix.
+
+After explicit authorization, but **before production Kiosk activation**, the following isolated execution gates must close:
 
 ```text
 WO03_EXACT_ISOLATED_ACCEPTANCE_ENVIRONMENT_BOUND
@@ -622,7 +648,7 @@ IDENTITY_EXPIRY_AND_DEVICE_HANDOFF
 ACCESSIBILITY_AND_ON_SITE_ENVIRONMENT_ACCEPTANCE
 ```
 
-Only after those PASS may the frozen replacement image be revalidated and the bounded **acceptance-smoke** production Kiosk config/credential/profile/identity mapping be enabled.
+Only after the pre-request isolated-environment preparation gates and the post-authorization WO-03 execution gates both PASS may the frozen replacement image be revalidated and the bounded **acceptance-smoke** production Kiosk config/credential/profile/identity mapping be enabled.
 
 Normal ongoing production use remains blocked by `KIOSK_POST_SMOKE_NORMAL_OPERATION_TRANSITION_CONTRACT_UNRESOLVED`; successful smoke evidence must not be interpreted as blanket authority for later production items.
 
