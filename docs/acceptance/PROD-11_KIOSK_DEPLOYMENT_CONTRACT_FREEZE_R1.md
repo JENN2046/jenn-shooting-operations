@@ -179,7 +179,7 @@ isolated runtime revision = frozen replacement production source revision
 replacement image exact-head validation = PASS
 ```
 
-Then bind the remaining isolated environment facts:
+Then fresh-revalidate the already-bound isolated environment facts (all of these exact targets were frozen before the PROD-11 request):
 
 ```text
 exact isolated test endpoint
@@ -574,9 +574,9 @@ HTTP/current-read success
 current.scheduleItemId = exact frozen derived acceptance scheduleItemId
 ```
 
-This resource-wide GET is device-facing evidence only. Any `MULTIPLE_CURRENT_CANDIDATES`, other current item, other active run, null current item, authentication/identity failure, or other non-success result is an immediate hard stop. A successful GET still does **not** authorize the event write: inside the Kiosk event transaction `KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY` must atomically re-evaluate both the exact current-item predicate and active Scheduling `businessTimeZone = Asia/Shanghai`.
+This resource-wide GET is device-facing evidence only. Any `MULTIPLE_CURRENT_CANDIDATES`, other current item, other active run, null current item, authentication/identity failure, or other non-success result is an immediate hard stop. A successful GET still does **not** authorize the event write: inside the Kiosk event transaction `KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY` must atomically re-evaluate all three predicates: (1) the submitted smoke event target equals `KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID` and the authorization-frozen derived scheduleItemId, (2) the unique current `STUDIO-PROD-01` item equals that immutable binding with no competing run/candidate, and (3) the active Scheduling `businessTimeZone` equals `Asia/Shanghai`.
 
-If either the row-level recheck or the resource-wide current-selection recheck fails, no Kiosk run event may be submitted. PROD-11 does not authorize creating, moving or replacing the schedule item. The flow returns to a separately authorized scheduling preparation; if Kiosk runtime configuration has already changed, only the bound configuration rollback may be used.
+If the immutable authorization-binding check, row-level recheck, resource-wide current-selection check, or active time-zone check fails, no Kiosk run event may be submitted. PROD-11 does not authorize creating, moving or replacing the schedule item. The flow returns to a separately authorized scheduling preparation; if Kiosk runtime configuration has already changed, only the bound configuration rollback may be used.
 
 The exact preparatory Action ID is not yet frozen and remains an authority gap.
 
@@ -656,8 +656,9 @@ After production activation, before the first production smoke event:
 
 ```text
 KIOSK_ACCEPTANCE_ITEM_EXECUTION_TIME_RECHECK
+KIOSK_SMOKE_AUTHORIZATION_BINDING_EQUALS_EVENT_TARGET
 KIOSK_CURRENT_SELECTION_EQUALS_FROZEN_ACCEPTANCE_ITEM
-KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY = PASS inside same event transaction
+KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY = PASS for all three predicates inside same event transaction
 PROD11_PRODUCTION_SMOKE_SEPARATE_FROM_WO03
 ```
 
