@@ -163,6 +163,25 @@ test('HTTP auth rejection latches identity while 5xx remains transient for a cle
   assert.equal(transient.blocked(), false);
 });
 
+test('blocked marker from another provisioner revokes the shared cached identity immediately', async () => {
+  const target = storage('DEVICE-KIOSK-PROD-01');
+  const controllingTab = createKioskDeviceProvisioner({
+    storage: target,
+    fetchImpl: async () => response('DEVICE-KIOSK-PROD-01'),
+  });
+  const rejectingTab = createKioskDeviceProvisioner({
+    storage: target,
+    fetchImpl: async () => response('DEVICE-OTHER'),
+  });
+
+  assert.equal(controllingTab.current(), 'DEVICE-KIOSK-PROD-01');
+  assert.deepEqual(await rejectingTab.provision(), {
+    ok: false,
+    code: 'DEVICE_IDENTITY_MISMATCH',
+  });
+  assert.equal(controllingTab.current(), null);
+});
+
 test('previously provisioned identity can queue offline but remains unverified until server recovery', async () => {
   const target = storage('DEVICE-KIOSK-PROD-01');
   const provisioner = createKioskDeviceProvisioner({

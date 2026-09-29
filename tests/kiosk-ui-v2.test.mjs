@@ -281,6 +281,25 @@ test('HTML provides semantic controls, live status, labels, all-task lists, and 
   assert.match(html, /id="complete-confirm"/u);
 });
 
+test('render and storage events revoke cross-tab identity trust before any enqueue', () => {
+  const source = script;
+  const renderIndex = source.indexOf('function render()');
+  const syncIndex = source.indexOf('async function synchronize()', renderIndex);
+  const renderSource = source.slice(renderIndex, syncIndex);
+  const trustCheck = renderSource.indexOf('refreshIdentityTrustFromStorage();');
+  const actionDerive = renderSource.indexOf('deriveKioskActionState({');
+  assert.equal(trustCheck >= 0, true);
+  assert.equal(actionDerive > trustCheck, true);
+
+  const enqueueIndex = source.indexOf('function enqueue(');
+  const nextHandler = source.indexOf("byId('action-start')", enqueueIndex);
+  const enqueueSource = source.slice(enqueueIndex, nextHandler);
+  assert.match(enqueueSource, /const \{ action, stored \} = render\(\);/u);
+
+  assert.match(source, /window\.addEventListener\('storage', identityStorageChanged\)/u);
+  assert.match(source, /window\.removeEventListener\('storage', identityStorageChanged\)/u);
+});
+
 test('initial identity failure starts recovery polling without enabling controls and recovered identity starts the lock', () => {
   const source = script;
   const startIndex = source.indexOf('async function start()');

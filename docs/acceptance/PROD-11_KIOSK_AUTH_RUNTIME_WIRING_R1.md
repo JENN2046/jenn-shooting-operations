@@ -73,7 +73,7 @@ Rules:
 - an existing mismatched local identity fails closed;
 - an already provisioned browser may queue offline while identity verification is
   temporarily unavailable;
-- every online synchronize attempt re-verifies identity before refresh or replay; initial identity failure still starts a read-only recovery poller, and a later verified identity may acquire the control lock without manual reload;
+- every online synchronize attempt re-verifies identity before refresh or replay; initial identity failure still starts a read-only recovery poller, and a later verified identity may acquire the control lock without manual reload; every render/enqueue rechecks the shared blocked identity marker, and cross-tab storage changes immediately revoke stale control trust;
 - authoritative identity mismatch or HTTP auth rejection is first latched in memory, then best-effort persisted; it remains fail-closed across later outages even if localStorage persistence fails, until a matching 200 identity response clears it;
 - run-event submission is denied if the command `deviceId` does not match the
   authenticated runtime device binding.
@@ -109,7 +109,7 @@ production volume = not mounted
 Targeted Kiosk auth/device/runtime tests:
 
 ```text
-90 / 90 PASS
+92 / 92 PASS
 0 fail
 0 skip
 ```
@@ -117,8 +117,8 @@ Targeted Kiosk auth/device/runtime tests:
 A full repository check in that image reported:
 
 ```text
-786 tests
-783 pass
+788 tests
+785 pass
 2 fail
 1 expected VCP skip
 ```

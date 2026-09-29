@@ -128,7 +128,21 @@ function createKioskUi() {
   let identityBound = false;
   let lastServerFresh = false;
 
+  function refreshIdentityTrustFromStorage() {
+    if (!identityBound) return;
+    try {
+      if (deviceProvisioner.current() === null) {
+        identityBound = false;
+        lastServerFresh = false;
+      }
+    } catch {
+      identityBound = false;
+      lastServerFresh = false;
+    }
+  }
+
   function render() {
+    refreshIdentityTrustFromStorage();
     const inspected = queue.inspect();
     const stored = queueState(storage);
     const pendingItems = inspected.ok ? inspected.items : [];
@@ -324,6 +338,16 @@ function createKioskUi() {
     controlLock.start();
   }
 
+  function identityStorageChanged() {
+    const wasBound = identityBound;
+    refreshIdentityTrustFromStorage();
+    if (wasBound && !identityBound) {
+      setMessage('设备身份授权已变更，当前标签已切换为只读。', 'error');
+      render();
+    }
+  }
+  window.addEventListener('storage', identityStorageChanged);
+
   const poller = createVisibilityPoller({ documentTarget: document, task: synchronize });
   async function start() {
     let identity;
@@ -355,6 +379,7 @@ function createKioskUi() {
   window.addEventListener('pagehide', () => {
     poller.stop();
     controlLock.stop();
+    window.removeEventListener('storage', identityStorageChanged);
   }, { once: true });
   return Object.freeze({ synchronize, render, start });
 }
