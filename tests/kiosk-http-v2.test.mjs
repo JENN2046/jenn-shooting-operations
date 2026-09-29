@@ -251,6 +251,65 @@ test('Kiosk endpoints fail closed when authentication is not configured or princ
   }
 });
 
+test('configured Kiosk auth advertises a Basic challenge without changing the unconfigured default', async () => {
+  const challenge = 'Basic realm="Jenn Shooting Kiosk", charset="UTF-8"';
+  const configured = appWith({
+    authenticationChallenge: challenge,
+    authenticate: () => null,
+    readCurrent: () => ({ ok: true, dto: currentDto() }),
+  });
+
+  const page = await invoke(configured, { url: '/kiosk' });
+  assert.equal(page.status, 401);
+  assert.equal(page.body.code, 'UNAUTHENTICATED');
+  assert.equal(page.headers.get('www-authenticate'), challenge);
+
+  const api = await invoke(configured, {
+    url: '/api/v2/kiosk/current?resourceId=RESOURCE-A',
+  });
+  assert.equal(api.status, 401);
+  assert.equal(api.body.code, 'UNAUTHENTICATED');
+  assert.equal(api.headers.get('www-authenticate'), challenge);
+
+  const unconfigured = await invoke(appWith(null), {
+    url: '/api/v2/kiosk/current?resourceId=RESOURCE-A',
+  });
+  assert.equal(unconfigured.status, 401);
+  assert.equal(unconfigured.body.code, 'AUTH_NOT_CONFIGURED');
+  assert.equal(unconfigured.headers.has('www-authenticate'), false);
+});
+
+test('Kiosk identity endpoint returns only the authenticated server-bound device identity', async () => {
+  const trusted = principal('operator');
+  const challenge = 'Basic realm="Jenn Shooting Kiosk", charset="UTF-8"';
+  const authorization = 'Basic ' + Buffer.from('kiosk-prod-01:secret').toString('base64');
+  const app = appWith({
+    authenticationChallenge: challenge,
+    deviceId: 'KIOSK-0001',
+    authenticate: request => (
+      request.headers.authorization === authorization ? trusted : null
+    ),
+    authorizeDeviceId: ({ principal: candidate, deviceId }) => (
+      candidate === trusted && deviceId === 'KIOSK-0001'
+    ),
+  });
+
+  const missing = await invoke(app, { url: '/api/v2/kiosk/identity' });
+  assert.equal(missing.status, 401);
+  assert.equal(missing.headers.get('www-authenticate'), challenge);
+
+  const identity = await invoke(app, {
+    url: '/api/v2/kiosk/identity',
+    headers: { Authorization: authorization },
+  });
+  assert.equal(identity.status, 200);
+  assert.deepEqual(identity.body, {
+    schemaVersion: 1,
+    deviceId: 'KIOSK-0001',
+  });
+  assert.deepEqual([...identity.body && Object.keys(identity.body)], ['schemaVersion', 'deviceId']);
+});
+
 test('current read requires one exact resourceId and enforces principal resource scope', async () => {
   let reads = 0;
   const app = appWith({
@@ -435,6 +494,38 @@ test('event route rejects query ambiguity, invalid JSON, forbidden roles, forged
     assert.equal(forbidden.body.code, 'FORBIDDEN', role);
   }
   assert.equal(writes, 0);
+});
+
+test('event route rejects a deviceId outside the authenticated runtime device binding', async () => {
+  const trusted = principal('operator');
+  let writes = 0;
+  const app = appWith({
+    authenticate: () => trusted,
+    authorizeDeviceId: ({ principal: candidate, deviceId }) => (
+      candidate === trusted && deviceId === 'KIOSK-0001'
+    ),
+    applyRunEvent: () => {
+      writes += 1;
+      return appliedResult();
+    },
+  });
+
+  const forged = await invoke(app, {
+    method: 'POST',
+    url: '/api/v2/schedule-items/SCHEDULE-ITEM-0001/events',
+    body: JSON.stringify(eventCommand({ deviceId: 'KIOSK-FORGED' })),
+  });
+  assert.equal(forged.status, 403);
+  assert.equal(forged.body.code, 'FORBIDDEN');
+  assert.equal(writes, 0);
+
+  const valid = await invoke(app, {
+    method: 'POST',
+    url: '/api/v2/schedule-items/SCHEDULE-ITEM-0001/events',
+    body: JSON.stringify(eventCommand()),
+  });
+  assert.equal(valid.status, 201);
+  assert.equal(writes, 1);
 });
 
 test('event route passes only validated command and trusted principal, then applies stable result mapping', async () => {

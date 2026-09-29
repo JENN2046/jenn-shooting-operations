@@ -27,6 +27,7 @@ const STATIC = new Map([
   ['/submit.js', 'submit.js'],
   ['/kiosk.js', 'kiosk.js'],
   ['/kiosk-control-lock.js', 'kiosk-control-lock.js'],
+  ['/kiosk-device-identity-v1.js', 'kiosk-device-identity-v1.js'],
   ['/kiosk-offline-queue-v2.js', 'kiosk-offline-queue-v2.js'],
 ]);
 const TYPES = new Map([
@@ -65,6 +66,14 @@ function sendMapped(response, mapped, headers = {}) {
 
 function kioskFailure(code) {
   return mapKioskRunEventHttpResult({ ok: false, code });
+}
+
+function kioskAuthHeaders(kiosk, code) {
+  if (!['UNAUTHENTICATED', 'AUTH_NOT_CONFIGURED'].includes(code)) return {};
+  const challenge = kiosk?.authenticationChallenge;
+  return typeof challenge === 'string' && challenge.length > 0
+    ? { 'WWW-Authenticate': challenge }
+    : {};
 }
 
 const KIOSK_CURRENT_FAILURE_CODES = Object.freeze({
@@ -273,11 +282,46 @@ export function createHttpApp({
       }
 
       if (request.method === 'GET' && STATIC.has(url.pathname)) {
+        if (url.pathname === '/kiosk' && typeof kiosk?.authenticationChallenge === 'string') {
+          const authenticated = await authenticateKiosk(kiosk, request);
+          if (!authenticated.ok) {
+            return sendMapped(
+              response,
+              kioskFailure(authenticated.code),
+              kioskAuthHeaders(kiosk, authenticated.code),
+            );
+          }
+        }
         return serveStatic(response, STATIC.get(url.pathname));
       }
 
       if (request.method === 'GET' && url.pathname === '/api/v1/snapshot') {
         return sendJson(response, 200, { ok: true, snapshot: store.getSnapshot() });
+      }
+
+      if (request.method === 'GET' && url.pathname === '/api/v2/kiosk/identity') {
+        const authenticated = await authenticateKiosk(kiosk, request);
+        if (!authenticated.ok) {
+          return sendMapped(
+            response,
+            kioskFailure(authenticated.code),
+            kioskAuthHeaders(kiosk, authenticated.code),
+          );
+        }
+        if (!validIdentifier(kiosk?.deviceId)
+            || typeof kiosk?.authorizeDeviceId !== 'function') {
+          return sendMapped(response, kioskFailure('SERVICE_UNAVAILABLE'));
+        }
+        if (!kiosk.authorizeDeviceId({
+          principal: authenticated.principal,
+          deviceId: kiosk.deviceId,
+        })) {
+          return sendMapped(response, kioskFailure('FORBIDDEN'));
+        }
+        return sendJson(response, 200, {
+          schemaVersion: 1,
+          deviceId: kiosk.deviceId,
+        });
       }
 
       if (request.method === 'GET' && (
@@ -289,7 +333,13 @@ export function createHttpApp({
         const condition = readProjectionCondition(request);
         if (!condition.ok) return sendMapped(response, kioskFailure('INVALID_REQUEST'));
         const authenticated = await authenticateKiosk(kiosk, request);
-        if (!authenticated.ok) return sendMapped(response, kioskFailure(authenticated.code));
+        if (!authenticated.ok) {
+          return sendMapped(
+            response,
+            kioskFailure(authenticated.code),
+            kioskAuthHeaders(kiosk, authenticated.code),
+          );
+        }
         const authorization = authorizeCapability({
           principal: authenticated.principal,
           capability: 'readSchedule',
@@ -331,7 +381,13 @@ export function createHttpApp({
           return sendMapped(response, kioskFailure('INVALID_REQUEST'));
         }
         const authenticated = await authenticateKiosk(kiosk, request);
-        if (!authenticated.ok) return sendMapped(response, kioskFailure(authenticated.code));
+        if (!authenticated.ok) {
+          return sendMapped(
+            response,
+            kioskFailure(authenticated.code),
+            kioskAuthHeaders(kiosk, authenticated.code),
+          );
+        }
         if (!authenticated.principal.capabilities.submitRunEvent) {
           return sendMapped(response, kioskFailure('FORBIDDEN'));
         }
@@ -345,6 +401,13 @@ export function createHttpApp({
         }
         if (!validateKioskRunEvent(command).ok) {
           return sendMapped(response, kioskFailure('INVALID_RUN_EVENT_COMMAND'));
+        }
+        if (typeof kiosk.authorizeDeviceId === 'function'
+            && !kiosk.authorizeDeviceId({
+              principal: authenticated.principal,
+              deviceId: command.deviceId,
+            })) {
+          return sendMapped(response, kioskFailure('FORBIDDEN'));
         }
         if (command.scheduleItemId !== scheduleItemId) {
           return sendMapped(response, kioskFailure('SCHEDULE_ITEM_ID_MISMATCH'));

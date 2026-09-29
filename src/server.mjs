@@ -1,8 +1,9 @@
 import { createServer } from 'node:http';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHttpApp } from './http-app.mjs';
 import { authorizeCapability, validateTrustedPrincipal } from './authorization-v2.mjs';
+import { loadKioskRuntimeAuthV1 } from './kiosk-runtime-auth-v1.mjs';
 import { createReadKioskCurrent } from './kiosk-current-use-case-v2.mjs';
 import { createApplyKioskRunEvent } from './kiosk-run-event-use-case-v2.mjs';
 import { createSqliteKioskCurrentStore } from './sqlite-kiosk-current-store-v2.mjs';
@@ -16,6 +17,9 @@ import { createWriteAdmissionControl, normalizeWriteAdmissionMode } from './writ
 export function createKioskV2Application({
   store,
   authenticate,
+  authenticationChallenge,
+  authorizeDeviceId,
+  deviceId,
   businessTimeZone,
   clock = () => new Date(),
   allowedBriefHosts = [],
@@ -27,6 +31,22 @@ export function createKioskV2Application({
     throw new TypeError('Kiosk ScheduleStore write admission control is required');
   }
   if (typeof authenticate !== 'function') throw new TypeError('Kiosk authenticate port is required');
+  if (authenticationChallenge !== undefined
+      && (typeof authenticationChallenge !== 'string' || authenticationChallenge.length === 0)) {
+    throw new TypeError('Kiosk authentication challenge must be a non-empty string');
+  }
+  if (authorizeDeviceId !== undefined && typeof authorizeDeviceId !== 'function') {
+    throw new TypeError('Kiosk device authorization port must be a function');
+  }
+  if ((authorizeDeviceId === undefined) !== (deviceId === undefined)) {
+    throw new TypeError('Kiosk device identity and authorization port must be configured together');
+  }
+  if (deviceId !== undefined
+      && (typeof deviceId !== 'string'
+        || [...deviceId].length > 160
+        || !/^\S(?:[\s\S]*\S)?$/u.test(deviceId))) {
+    throw new TypeError('Kiosk device identity must be a valid identifier');
+  }
   if (typeof businessTimeZone !== 'string' || businessTimeZone.length === 0) {
     throw new TypeError('Kiosk businessTimeZone is required');
   }
@@ -44,6 +64,9 @@ export function createKioskV2Application({
   });
   return Object.freeze({
     authenticate,
+    authenticationChallenge,
+    authorizeDeviceId,
+    deviceId,
     writeAdmissionControl,
     readCurrent,
     applyRunEvent(input) {
@@ -140,6 +163,9 @@ export function createOperationsServer({
   orphanCleanupEnableEpoch,
   orphanCleanupDomain,
   kioskAuthenticate,
+  kioskAuthenticationChallenge,
+  kioskAuthorizeDeviceId,
+  kioskDeviceId,
   kioskBusinessTimeZone,
   kioskAllowedBriefHosts = [],
   schedulingAuthenticate,
@@ -172,6 +198,9 @@ export function createOperationsServer({
     : createKioskV2Application({
         store,
         authenticate: kioskAuthenticate,
+        authenticationChallenge: kioskAuthenticationChallenge,
+        authorizeDeviceId: kioskAuthorizeDeviceId,
+        deviceId: kioskDeviceId,
         businessTimeZone: kioskBusinessTimeZone,
         clock: effectiveClock,
         allowedBriefHosts: kioskAllowedBriefHosts,
@@ -220,6 +249,23 @@ export function createOperationsServer({
   };
 }
 
+export function createKioskRuntimeOptionsFromEnv(env = process.env) {
+  const configPath = typeof env.KIOSK_AUTH_CONFIG_PATH === 'string'
+    ? env.KIOSK_AUTH_CONFIG_PATH.trim()
+    : '';
+  if (configPath === '') return Object.freeze({});
+  if (!isAbsolute(configPath)) throw new Error('KIOSK_AUTH_CONFIG_PATH_NOT_ABSOLUTE');
+  const runtime = loadKioskRuntimeAuthV1({ configPath });
+  return Object.freeze({
+    kioskAuthenticate: runtime.authenticate,
+    kioskAuthenticationChallenge: runtime.authenticationChallenge,
+    kioskAuthorizeDeviceId: runtime.authorizeDeviceId,
+    kioskDeviceId: runtime.deviceId,
+    kioskBusinessTimeZone: runtime.businessTimeZone,
+    kioskAllowedBriefHosts: runtime.allowedBriefHosts,
+  });
+}
+
 const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (invokedDirectly) {
   const host = process.env.HOST || '127.0.0.1';
@@ -236,6 +282,7 @@ if (invokedDirectly) {
   const orphanCleanupEnableEpoch = process.env.ORPHAN_CLEANUP_ENABLE_EPOCH || undefined;
   const orphanCleanupDomain = process.env.ORPHAN_CLEANUP_DOMAIN || undefined;
   const writeAdmissionMode = process.env.WRITE_ADMISSION_MODE || 'enabled';
+  const kioskRuntimeOptions = createKioskRuntimeOptionsFromEnv(process.env);
   const { server, writeAdmissionControl } = createOperationsServer({
     databasePath,
     uploadRoot,
@@ -244,6 +291,7 @@ if (invokedDirectly) {
     orphanCleanupEnableEpoch,
     orphanCleanupDomain,
     writeAdmissionMode,
+    ...kioskRuntimeOptions,
   });
 
   const enableWriteAdmission = () => {

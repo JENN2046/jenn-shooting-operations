@@ -283,6 +283,8 @@ test('HTML provides semantic controls, live status, labels, all-task lists, and 
 
 test('browser source uses the frozen queue surface, second confirmation, and contains no V1 write or credential material', () => {
   assert.match(script, /from '\/kiosk-offline-queue-v2\.js'/u);
+  assert.match(script, /from '\/kiosk-device-identity-v1\.js'/u);
+  assert.match(script, /createKioskDeviceProvisioner/u);
   assert.match(script, /createBrowserQueueStorage/u);
   assert.match(script, /createFetchKioskTransport/u);
   assert.match(script, /createKioskOfflineQueue/u);
@@ -311,6 +313,7 @@ test('Kiosk assets are served only through the static whitelist with CSP and cac
     ['/kiosk.css', 'text/css; charset=utf-8'],
     ['/kiosk.js', 'text/javascript; charset=utf-8'],
     ['/kiosk-control-lock.js', 'text/javascript; charset=utf-8'],
+    ['/kiosk-device-identity-v1.js', 'text/javascript; charset=utf-8'],
     ['/kiosk-offline-queue-v2.js', 'text/javascript; charset=utf-8'],
   ]) {
     const response = await getStatic(path);

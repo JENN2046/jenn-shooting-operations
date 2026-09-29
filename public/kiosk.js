@@ -10,6 +10,7 @@ import {
   deriveKioskActionState,
   validateBlockingInput,
 } from '/kiosk-control-lock.js';
+import { createKioskDeviceProvisioner } from '/kiosk-device-identity-v1.js';
 
 const QUEUE_KEY = 'jenn.kiosk.offline-queue.v2';
 const DEVICE_KEY = 'jenn.kiosk.device-id.v2';
@@ -34,10 +35,13 @@ function secureId(prefix) {
 
 function deviceId() {
   const existing = localStorage.getItem(DEVICE_KEY);
-  if (existing) return existing;
-  const created = secureId('DEVICE');
-  localStorage.setItem(DEVICE_KEY, created);
-  return created;
+  if (typeof existing !== 'string'
+      || [...existing].length === 0
+      || [...existing].length > 160
+      || !/^\S(?:[\s\S]*\S)?$/u.test(existing)) {
+    throw new Error('DEVICE_IDENTITY_UNAVAILABLE');
+  }
+  return existing;
 }
 
 function formatTime(value) {
@@ -111,6 +115,11 @@ function createKioskUi() {
   }
 
   const storage = createBrowserQueueStorage({ storage: localStorage, key: QUEUE_KEY });
+  const deviceProvisioner = createKioskDeviceProvisioner({
+    storage: localStorage,
+    fetchImpl: fetch,
+    storageKey: DEVICE_KEY,
+  });
   const transport = createFetchKioskTransport({ fetchImpl: fetch, currentUrl: '/api/v2/updates' });
   const queue = createKioskOfflineQueue({ storage, transport, clock: () => new Date() });
   let serverModel = null;
@@ -290,14 +299,29 @@ function createKioskUi() {
     },
   });
   const poller = createVisibilityPoller({ documentTarget: document, task: synchronize });
-  controlLock.start();
-  render();
-  poller.start();
+  async function start() {
+    const identity = await deviceProvisioner.provision();
+    if (!identity.ok) {
+      setMessage('设备身份未完成可信绑定，现场控制保持关闭。', 'error');
+      render();
+      return false;
+    }
+    if (!identity.verified) {
+      setMessage('设备当前离线；沿用已绑定身份，联网后由服务端重新校验。', 'info');
+    }
+    controlLock.start();
+    render();
+    poller.start();
+    return true;
+  }
   window.addEventListener('pagehide', () => {
     poller.stop();
     controlLock.stop();
   }, { once: true });
-  return Object.freeze({ synchronize, render });
+  return Object.freeze({ synchronize, render, start });
 }
 
-if (typeof window !== 'undefined' && typeof document !== 'undefined') createKioskUi();
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  const kioskUi = createKioskUi();
+  if (kioskUi) void kioskUi.start();
+}
