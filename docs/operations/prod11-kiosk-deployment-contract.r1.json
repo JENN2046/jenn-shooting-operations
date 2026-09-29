@@ -447,8 +447,22 @@
     "runtimeEnvFile": "/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime",
     "preProd11RuntimeEnvBackup": "/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime.pre-prod11",
     "imageReference": "UNRESOLVED_REPLACEMENT_IMAGE_AFTER_ATOMIC_CAPABILITY_IMPLEMENTATION",
-    "imageReferenceMode": "IMMUTABLE_ID_REQUIRED_BEFORE_PROD11_REQUEST",
-    "mutableTagUse": "DIAGNOSTIC_ONLY_NEVER_EXECUTION_AUTHORITY"
+    "imageReferenceMode": "SEPARATE_DEPLOYMENT_AUTHORITY_REQUIRED_AND_MUST_COMPLETE_BEFORE_PROD11_REQUEST",
+    "mutableTagUse": "DIAGNOSTIC_ONLY_NEVER_EXECUTION_AUTHORITY",
+    "replacementImageDeploymentAuthority": {
+      "status": "BLOCKED_UNRESOLVED",
+      "blockerId": "SEPARATE_PROD11_REPLACEMENT_IMAGE_DEPLOYMENT_AUTHORITY_UNRESOLVED",
+      "parentActionMayNotPerformImageSwap": true,
+      "requiredBeforeProd11Request": true,
+      "requiredAuthority": "a separate explicit production deployment Action, distinct from PROD-11, bound to the exact frozen replacement immutable image ID/source revision and the existing production service/container topology",
+      "requiredEffects": [
+        "replace or recreate the live application service on the exact frozen replacement immutable image ID while Kiosk authentication/configuration remains disabled",
+        "preserve the existing production data volume, loopback port, read-only rootfs, tmpfs, security options, restart policy, VCP configuration and DingTalk-disabled state",
+        "fresh-pass loopback/public health, production storage identity, VCP continuity and exact immutable image/revision verification before declaring the replacement deployment complete"
+      ],
+      "requiredRollback": "the separate deployment Action must bind its own image/container rollback restoring the exact pre-replacement immutable runtime without deleting production data; ROLLBACK-10 is not image/container rollback authority",
+      "completionRule": "the separate deployment Action must complete and fresh-prove the live service is already running the exact replacement immutable image/revision with Kiosk still disabled before PROD-11 may be requested"
+    }
   },
   "preAuthorizationAttestation": {
     "status": "PASS",
@@ -697,10 +711,13 @@
   },
   "rollbackContract": {
     "actionId": "ROLLBACK-10-DISABLE-KIOSK-CONFIG",
+    "scope": "KIOSK_CONFIGURATION_ONLY",
     "productionVolumeNeverDeleted": true,
     "vcpAndDingTalkUnchanged": true,
-    "beforeAcceptedKioskBusinessFacts": "new container may be removed and exact pre-PROD11 container restored if swap/health/identity acceptance fails",
-    "afterAnyAcceptedOrReviewRequiredKioskSubmission": "do not erase business facts; restore pre-PROD11 runtime env without KIOSK_AUTH_CONFIG_PATH, remove Kiosk bind mount, and recreate the service on the PROD11 image with the same volume/port/security topology",
+    "imageOrContainerRollbackAuthorized": false,
+    "rule": "ROLLBACK-10 disables only the Kiosk configuration/device/trusted-identity mapping introduced by PROD-11. It never swaps, recreates, removes or restores the application image/container and never deletes or rewrites production facts.",
+    "afterAnyProd11FailureOrSubmission": "remove/disable the exact Kiosk auth configuration, credential/profile provisioning and trusted device/identity mapping introduced by PROD-11 as applicable; preserve all accepted/review-required runs, reviews, receipts, audit and revision facts; keep the already-deployed application image/container unchanged",
+    "separateDeploymentRollbackRule": "any rollback of the replacement application image/container belongs exclusively to the separately authorized replacement-image deployment Action and its own bound rollback; that rollback must be completed before PROD-11 is requested if the replacement deployment does not pass",
     "schemaCompatibility": {
       "liveDatabaseMigrationPrefix": [
         1,
@@ -745,7 +762,8 @@
       "FULL_PROD11_ACTION_SPECIFIC_REVALIDATION_NOT_YET_FRESH_PASS",
       "CURRENT_GREENFIELD_AUTHORITY_PROD11_REQUESTABILITY_NOT_YET_FRESH_PASS",
       "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
-      "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE"
+      "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
+      "SEPARATE_PROD11_REPLACEMENT_IMAGE_DEPLOYMENT_AUTHORITY_UNRESOLVED"
     ],
     "credentialGenerationIsExecutionNotRequestPrerequisite": true,
     "dedicatedBrowserProfileCreationIsExecutionNotRequestPrerequisite": true,
@@ -772,7 +790,7 @@
       "currentBaselineEligibleForProd11": false,
       "finalImmutableImageId": "UNRESOLVED",
       "finalSourceRevision": "UNRESOLVED",
-      "rule": "before PROD-11 may be requested, freeze a replacement image containing KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY, KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY, KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY, required immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID support, and immutable KIOSK_SMOKE_ACCEPTANCE_RUN_START/KIOSK_SMOKE_ACCEPTANCE_RUN_END startup and transactional validation support. Freeze its immutable image ID, source revision, and exact derived diagnostic tag, then fresh-pass the complete seven-item PROD-11 action-specific revalidation checklist. After separate scheduling preparation derives the exact scheduleItemId and run window, bind those exact authorization values at container creation. At execution, revalidate that the frozen diagnostic tag resolves to the frozen immutable image ID and the OCI revision label equals the frozen source revision, then create by immutable image ID; mutable tags are never execution authority.",
+      "rule": "before PROD-11 may be requested, freeze a replacement image containing KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY, KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY, KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY, required immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID support, and immutable KIOSK_SMOKE_ACCEPTANCE_RUN_START/KIOSK_SMOKE_ACCEPTANCE_RUN_END startup and transactional validation support. Freeze its immutable image ID, source revision, and exact derived diagnostic tag, then fresh-pass the complete seven-item PROD-11 action-specific revalidation checklist. A separate explicit production deployment Action, not PROD-11, must then deploy that exact immutable image to the live service while Kiosk remains disabled and complete its own health/storage/VCP/rollback verification. Only after the live service is already running that exact replacement image may PROD-11 be requested. PROD-11 execution itself may enable only the frozen Kiosk config/device/browser/identity mapping and must not replace or recreate the application container/image.",
       "requiredActionSpecificRevalidation": [
         "TARGET_HOST_IDENTITY",
         "DISK_PORT_ROUTE_CONFLICTS",
@@ -801,7 +819,7 @@
       "currentBaselineContainsCapability": false,
       "requiredBeforeRequest": true,
       "requiredResolution": "implement all atomic production-context predicates in the Kiosk event transaction, including immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID startup binding and equality with the authorization-frozen scheduleItemId, exact-head test scheduling selection/time-zone/binding races, build a replacement production image, record immutable image ID/source revision, and update the PROD-11 deployment binding before requesting authorization",
-      "noPostAuthorizationImageSwap": "PROD-11 authorization may not rely on adding the capability after authorization or swapping to an unreviewed image",
+      "noPostAuthorizationImageSwap": "PROD-11 authorization may not rely on adding capabilities after authorization and may not replace/recreate the live application image/container. The separately authorized replacement-image deployment must already be complete before the PROD-11 authorization request.",
       "requiredAtomicPredicates": [
         "event schedule target equals immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID and the authorization-frozen derived acceptance scheduleItemId",
         "exact current-item uniqueness for STUDIO-PROD-01 equals KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID",
@@ -904,6 +922,23 @@
       "occurredAtRule": "both authorized smoke phases must satisfy the immutable authorization-frozen acceptance window inside KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY before commit",
       "trustedServerTimeGate": "required: each START/COMPLETE transaction must capture trusted server time after entering the write boundary and prove it is inside the authorization-frozen acceptanceRunStart/acceptanceRunEnd window; command.occurredAt alone is never sufficient",
       "clientClockSkewCannotExpandAuthority": true
+    },
+    "replacementImageDeploymentAuthorityGate": {
+      "status": "BLOCKED_UNRESOLVED",
+      "requiredBeforeRequest": true,
+      "blockerId": "SEPARATE_PROD11_REPLACEMENT_IMAGE_DEPLOYMENT_AUTHORITY_UNRESOLVED",
+      "prod11ImageSwapForbidden": true,
+      "rule": "PROD-11 authorizes only the exact Kiosk device/browser and trusted identity mapping. It does not authorize replacing or recreating the live application container/image. Before PROD-11 may be requested, a separate explicit production deployment Action must deploy the exact frozen replacement immutable image to the live service with Kiosk still disabled and must complete its own rollback/health/VCP/storage verification evidence.",
+      "completionEvidence": [
+        "exact separately authorized deployment Action ID and authority target",
+        "pre-replacement live immutable image/container identity",
+        "post-deployment live immutable image ID equals requestability.executionImageGate.finalImmutableImageId",
+        "post-deployment OCI revision label equals requestability.executionImageGate.finalSourceRevision",
+        "production volume/port/security topology preserved",
+        "Kiosk config/env/profile/credential still disabled or absent",
+        "VCP continuity unchanged",
+        "separate image/container rollback target verified"
+      ]
     }
   },
   "runtimeAuthorityBinding": {
@@ -918,12 +953,12 @@
       "immutableImageId": "UNRESOLVED",
       "authoritativeSource": "requestability.executionImageGate.finalSourceRevision",
       "authoritativeImage": "requestability.executionImageGate.finalImmutableImageId",
-      "consistencyRule": "once the replacement image is frozen, runtimeAuthorityBinding prod11ExecutionAuthority image/revision/tag, candidateImage.executionBinding final values, requestability.executionImageGate final values, isolated WO-03 runtime binding, diagnostic tag resolution, OCI revision label, and the eventual production container create reference must all identify the same immutable image and source revision; any disagreement is fail closed",
+      "consistencyRule": "once the replacement image is frozen and separately deployed, runtimeAuthorityBinding prod11ExecutionAuthority image/revision/tag, candidateImage.executionBinding final values, requestability.executionImageGate final values, isolated WO-03 runtime binding, diagnostic tag resolution, OCI revision label, and the live service image/container identity produced by the separate deployment Action must all identify the same immutable image and source revision; any disagreement is fail closed",
       "baselineMayNotSubstitute": true,
       "diagnosticTag": "UNRESOLVED_UNTIL_REPLACEMENT_IMAGE_FROZEN",
       "diagnosticTagDerivationRule": "exact string jenn-shooting-operations:prod- followed by finalSourceRevision",
       "diagnosticTagAuthority": "diagnostic only; never execution authority by itself",
-      "tagResolutionRule": "immediately before container creation, diagnosticTag must resolve to immutableImageId and the image OCI revision label must equal sourceRevision; container create still uses immutableImageId"
+      "tagResolutionRule": "the separate deployment Action must verify the diagnosticTag resolves to immutableImageId and the image OCI revision label equals sourceRevision immediately before it creates/replaces the live service; PROD-11 itself never creates/replaces the application container"
     }
   },
   "authorityLineage": {
