@@ -234,16 +234,18 @@
       "authorityStatus": "BLOCKED_PREPARATION_AUTHORITY_AND_EXACT_TARGET_UNRESOLVED"
     },
     "productionSmokeWriteGate": {
-      "status": "BLOCKED_PRE_REQUEST_ATOMIC_CAPABILITY_AND_PRE_ACTIVATION_WO03",
+      "status": "BLOCKED_PRE_REQUEST_ATOMIC_WRITE_ADMISSION_OUTBOX_CAPABILITIES_AND_PRE_ACTIVATION_WO03",
       "authorizationPhase": "POST_PROD11_AUTHORIZATION_AFTER_ISOLATED_WO03_AND_PRODUCTION_ACTIVATION",
       "prerequisites": [
         "WO03_EXACT_ISOLATED_ACCEPTANCE_ENVIRONMENT_BOUND",
         "WO03_FULL_ISOLATED_VIEWPORT_AND_ON_SITE_MATRIX",
         "REAL_DEVICE_ACCEPTANCE",
         "OFFLINE_REPLAY_RESULT",
-        "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY"
+        "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
+        "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
+        "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY"
       ],
-      "rule": "after isolated WO-03 PASS and production activation, the only production run-event mutations authorized by PROD-11 are the exact two-phase start then complete sequence frozen in productionSmokeBoundary. Each phase must also satisfy KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY inside the same event transaction. No block/resume/third event or improvised retry is authorized.",
+      "rule": "after isolated WO-03 PASS and production activation, the only production run-event mutations authorized by PROD-11 are the exact two-phase start then complete sequence frozen in productionSmokeBoundary, and only when KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY, KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY, and KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY all PASS. Each phase must satisfy the atomic production-context predicates inside the same event transaction. No block/resume/third event, provider delivery, or improvised retry is authorized.",
       "forbiddenBeforePass": [
         "production start event",
         "production block event",
@@ -251,7 +253,7 @@
         "production complete event",
         "any production review-required Kiosk submission"
       ],
-      "failureRule": "if isolated WO-03 acceptance is incomplete or fails, keep production event writes at zero and use only the bound Kiosk configuration rollback if production runtime configuration must be disabled",
+      "failureRule": "if any prerequisite capability or isolated WO-03 acceptance gate is incomplete or fails, keep production event writes at zero; do not dispatch acceptance smoke notifications to a real provider; use only the bound Kiosk configuration rollback if production runtime configuration must be disabled",
       "atomicSelectionRequirement": {
         "status": "PRE_REQUEST_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
         "capabilityId": "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
