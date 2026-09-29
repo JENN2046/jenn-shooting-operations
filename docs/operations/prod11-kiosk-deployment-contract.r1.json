@@ -1,19 +1,14 @@
 {
   "schemaVersion": 1,
   "contractId": "PROD11_KIOSK_DEPLOYMENT_CONTRACT_R1",
-  "status": "READY_FOR_EXPLICIT_AUTHORIZATION_REQUEST",
+  "status": "BLOCKED_SCHEDULABLE_ACCEPTANCE_TARGET",
   "runtimeSourceAuthorityCommit": "d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
   "candidateImage": {
     "tag": "jenn-shooting-operations:prod-d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
     "imageId": "sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72",
     "nodeVersion": "24.21.0",
     "kioskRuntimeWiring": "PRESENT",
-    "targetedTests": {
-      "tests": 158,
-      "pass": 158,
-      "fail": 0,
-      "skip": 0
-    },
+    "targetedTests": {"tests": 158, "pass": 158, "fail": 0, "skip": 0},
     "fullRegression": {
       "tests": 801,
       "pass": 798,
@@ -50,13 +45,8 @@
   "runtimeAuthConfig": {
     "hostPath": "/mnt/datadisk0/apps/jenn-shooting-operations/kiosk-auth.v1.json",
     "containerPath": "/app/kiosk-auth.v1.json",
-    "environment": {
-      "KIOSK_AUTH_CONFIG_PATH": "/app/kiosk-auth.v1.json"
-    },
-    "mount": {
-      "type": "bind",
-      "readOnly": true
-    },
+    "environment": {"KIOSK_AUTH_CONFIG_PATH": "/app/kiosk-auth.v1.json"},
+    "mount": {"type": "bind", "readOnly": true},
     "hostOwnerUid": 1000,
     "hostOwnerGid": 1000,
     "hostMode": "0600",
@@ -67,9 +57,7 @@
     "principal": {
       "role": "operator",
       "subjectId": "KIOSK-PROD-01",
-      "resourceIds": [
-        "STUDIO-PROD-01"
-      ]
+      "resourceIds": ["STUDIO-PROD-01"]
     },
     "businessTimeZone": "Asia/Shanghai",
     "allowedBriefHosts": []
@@ -82,16 +70,8 @@
     "saltBytes": 16,
     "hashAlgorithm": "scrypt-v1",
     "hashBytes": 32,
-    "serverStoredMaterial": [
-      "saltBase64",
-      "hashBase64"
-    ],
-    "rawPasswordForbiddenDestinations": [
-      "Git",
-      "repository evidence",
-      "logs",
-      "chat"
-    ],
+    "serverStoredMaterial": ["saltBase64", "hashBase64"],
+    "rawPasswordForbiddenDestinations": ["Git", "repository evidence", "logs", "chat"],
     "rawPasswordLifecycle": "one-time operator-to-device provisioning; if lost, rotate by generating a new credential and config rather than recovering plaintext"
   },
   "deploymentTopology": {
@@ -105,12 +85,8 @@
     },
     "portBinding": "127.0.0.1:3800:3800",
     "readOnlyRootfs": true,
-    "tmpfs": [
-      "/tmp"
-    ],
-    "securityOpt": [
-      "no-new-privileges:true"
-    ],
+    "tmpfs": ["/tmp"],
+    "securityOpt": ["no-new-privileges:true"],
     "restartPolicy": "unless-stopped",
     "tokenEnvFile": "/mnt/datadisk0/apps/jenn-shooting-operations/.env.tokens",
     "runtimeEnvFile": "/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime",
@@ -142,6 +118,39 @@
       "dedicatedProfileExists": false
     }
   },
+  "databaseWideBriefHostCompatibility": {
+    "status": "PASS_CURRENT_STATE",
+    "resource": "requests_v2.brief_url",
+    "requestCount": 0,
+    "nonEmptyBriefUrlCount": 0,
+    "observedBriefHosts": [],
+    "allowedBriefHosts": [],
+    "activationRule": "fresh-scan every requests_v2.brief_url before PROD-11 authorization/execution; any non-empty brief URL blocks until every observed host is explicitly reviewed and included in allowedBriefHosts",
+    "scheduledOnlyAssumptionForbidden": true
+  },
+  "schedulableAcceptanceReadiness": {
+    "status": "BLOCKED",
+    "resourceCount": 0,
+    "studioProd01ResourceCount": 0,
+    "activeSchedulingConfigCount": 0,
+    "scheduleItemCount": 0,
+    "requiredRealDeviceEvidence": [
+      "tablet landscape 1024x768",
+      "tablet portrait 768x1024",
+      "touch controls and soft-keyboard blocking form",
+      "browser offline to online recovery",
+      "refresh",
+      "two-tab local control lock",
+      "concurrent start and 409 conflict",
+      "202 reviewRequired visibility",
+      "offline start-block-resume-complete replay",
+      "blocked cannot complete",
+      "browser-cache clearing does not change server facts"
+    ],
+    "requiredBeforeProd11Request": "a separately authorized production scheduling preparation must create or fresh-confirm an exact STUDIO-PROD-01 resource, an applicable active scheduling configuration, and an exact acceptance schedule item capable of exercising the frozen WO-03 real-device checklist",
+    "mustNotBeSmuggledIntoProd11": true,
+    "preparatoryActionId": "UNRESOLVED_SEPARATE_AUTHORITY_REQUIRED"
+  },
   "rollbackContract": {
     "actionId": "ROLLBACK-10-DISABLE-KIOSK-CONFIG",
     "productionVolumeNeverDeleted": true,
@@ -149,29 +158,28 @@
     "beforeAcceptedKioskBusinessFacts": "new container may be removed and exact pre-PROD11 container restored if swap/health/identity acceptance fails",
     "afterAnyAcceptedOrReviewRequiredKioskSubmission": "do not erase business facts; restore pre-PROD11 runtime env without KIOSK_AUTH_CONFIG_PATH, remove Kiosk bind mount, and recreate the service on the PROD11 image with the same volume/port/security topology",
     "schemaCompatibility": {
-      "liveDatabaseMigrationPrefix": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6
-      ],
+      "liveDatabaseMigrationPrefix": [1,2,3,4,5,6],
       "oldAndNewRuntimeRecognizeMigrationV6": true
     }
   },
   "requestability": {
     "actionId": "PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE",
-    "assessment": "READY_TO_REQUEST_EXPLICIT_AUTHORIZATION",
+    "assessment": "NOT_READY_TO_REQUEST_EXPLICIT_AUTHORIZATION",
     "formalAuthorizationState": "FROZEN_NOT_REQUESTED",
     "requiresExplicitAuthorization": true,
     "risk": "HIGH",
     "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
-    "blockingReasons": [],
     "closedPrerequisites": [
       "EXACT_REAL_DEVICE_SELECTED",
       "EXACT_BROWSER_PROFILE_TARGET_FROZEN",
-      "FRESH_PRE_AUTH_TARGET_ATTESTATION_PASS"
+      "FRESH_PRE_AUTH_TARGET_ATTESTATION_PASS",
+      "DATABASE_WIDE_BRIEF_HOST_COMPATIBILITY_PASS_CURRENT_STATE"
+    ],
+    "blockingReasons": [
+      "PRODUCTION_RESOURCE_STUDIO_PROD_01_ABSENT",
+      "ACTIVE_SCHEDULING_CONFIG_ABSENT",
+      "KIOSK_ACCEPTANCE_SCHEDULE_ITEM_ABSENT",
+      "SEPARATE_SCHEDULING_PREPARATION_AUTHORITY_UNRESOLVED"
     ],
     "credentialGenerationIsExecutionNotRequestPrerequisite": true,
     "dedicatedBrowserProfileCreationIsExecutionNotRequestPrerequisite": true,
