@@ -26,6 +26,7 @@ export function createKioskDeviceProvisioner({
   storageKey = 'jenn.kiosk.device-id.v2',
   identityUrl = '/api/v2/kiosk/identity',
   blockedKey = storageKey + '.blocked-v1',
+  blockedGenerationKey = blockedKey + '.generation-v1',
 } = {}) {
   if (!storage
       || typeof storage.getItem !== 'function'
@@ -45,18 +46,27 @@ export function createKioskDeviceProvisioner({
   if (typeof blockedKey !== 'string' || blockedKey.length === 0 || blockedKey === storageKey) {
     throw new TypeError('Kiosk device identity blocked key is required');
   }
+  if (typeof blockedGenerationKey !== 'string'
+      || blockedGenerationKey.length === 0
+      || blockedGenerationKey === storageKey
+      || blockedGenerationKey === blockedKey) {
+    throw new TypeError('Kiosk device identity blocked generation key is required');
+  }
 
   let blockedInMemory = false;
   const persistedBlock = () => storage.getItem(blockedKey);
+  const persistedGeneration = () => storage.getItem(blockedGenerationKey);
   const isBlocked = () => blockedInMemory || persistedBlock() !== null;
   const block = () => {
     blockedInMemory = true;
     try {
-      const parsed = Number.parseInt(persistedBlock() ?? '0', 10);
+      const parsed = Number.parseInt(persistedGeneration() ?? '0', 10);
       const generation = Number.isSafeInteger(parsed) && parsed >= 0
         ? (parsed === Number.MAX_SAFE_INTEGER ? 1 : parsed + 1)
         : 1;
-      storage.setItem(blockedKey, String(generation));
+      const value = String(generation);
+      storage.setItem(blockedGenerationKey, value);
+      storage.setItem(blockedKey, value);
     } catch {
       // The in-memory latch is authoritative for this page even if persistence fails.
     }

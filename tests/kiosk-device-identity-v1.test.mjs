@@ -20,6 +20,8 @@ function storage(initial = null, { failBlockedWrite = false } = {}) {
     removeItem(key) { values.delete(key); },
     snapshot() { return values.get('jenn.kiosk.device-id.v2') ?? null; },
     blocked() { return values.has('jenn.kiosk.device-id.v2.blocked-v1'); },
+    blockValue() { return values.get('jenn.kiosk.device-id.v2.blocked-v1') ?? null; },
+    generation() { return values.get('jenn.kiosk.device-id.v2.blocked-v1.generation-v1') ?? null; },
   };
 }
 
@@ -197,6 +199,53 @@ test('delayed matching success cannot clear a newer block from another provision
     verified: true,
   });
   assert.equal(target.blocked(), false);
+});
+
+test('block generation stays monotonic across unblock and prevents ABA delayed-success clearing', async () => {
+  const target = storage('DEVICE-KIOSK-PROD-01');
+  const mismatch = createKioskDeviceProvisioner({
+    storage: target,
+    fetchImpl: async () => response('DEVICE-OTHER'),
+  });
+  assert.equal((await mismatch.provision()).ok, false);
+  assert.equal(target.blockValue(), '1');
+  assert.equal(target.generation(), '1');
+
+  let releaseDelayed;
+  const delayedResponse = new Promise(resolve => { releaseDelayed = resolve; });
+  const delayed = createKioskDeviceProvisioner({
+    storage: target,
+    fetchImpl: async () => delayedResponse,
+  });
+  const pending = delayed.provision();
+
+  const healer = createKioskDeviceProvisioner({
+    storage: target,
+    fetchImpl: async () => response('DEVICE-KIOSK-PROD-01'),
+  });
+  assert.deepEqual(await healer.provision(), {
+    ok: true,
+    deviceId: 'DEVICE-KIOSK-PROD-01',
+    verified: true,
+  });
+  assert.equal(target.blocked(), false);
+  assert.equal(target.generation(), '1');
+
+  const newerMismatch = createKioskDeviceProvisioner({
+    storage: target,
+    fetchImpl: async () => response('DEVICE-OTHER'),
+  });
+  assert.equal((await newerMismatch.provision()).ok, false);
+  assert.equal(target.blockValue(), '2');
+  assert.equal(target.generation(), '2');
+
+  releaseDelayed(response('DEVICE-KIOSK-PROD-01'));
+  assert.deepEqual(await pending, {
+    ok: false,
+    code: 'DEVICE_IDENTITY_BLOCKED',
+  });
+  assert.equal(target.blockValue(), '2');
+  assert.equal(target.generation(), '2');
 });
 
 test('blocked marker from another provisioner revokes the shared cached identity immediately', async () => {

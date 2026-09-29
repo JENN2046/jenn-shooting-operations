@@ -199,36 +199,35 @@ function createKioskUi() {
       }
 
       ensureControlLockStarted();
-      if (serverModel === null || !controlling) {
-        const refreshed = await transport.refreshCurrent({
-          resourceId,
-          projectionRevision: serverModel?.projectionRevision,
-        });
-        if (isAuthoritativeKioskRefreshRejection(refreshed.status)) {
-          deviceProvisioner.revoke();
-          identityBound = false;
-          lastServerFresh = false;
-          setMessage('设备或场地授权已撤销，现场控制保持关闭。', 'error');
-          render();
-          return false;
-        }
-        if (refreshed.status === 200
-          && validateKioskCurrentResponse(refreshed.body).ok
-          && refreshed.body.resourceId === resourceId) {
-          serverModel = refreshed.body;
-          lastServerFresh = true;
-        } else if (refreshed.status === 304 && serverModel !== null) {
-          lastServerFresh = true;
-        } else {
-          lastServerFresh = false;
-        }
-        if (!controlling || !lastServerFresh) {
-          setMessage(lastServerFresh
-            ? '只读标签已刷新服务端状态。'
-            : '网络不可用；服务端状态未更新。', lastServerFresh ? 'info' : 'error');
-          return lastServerFresh;
-        }
+      const refreshed = await transport.refreshCurrent({
+        resourceId,
+        projectionRevision: serverModel?.projectionRevision,
+      });
+      if (isAuthoritativeKioskRefreshRejection(refreshed.status)) {
+        deviceProvisioner.revoke();
+        identityBound = false;
+        lastServerFresh = false;
+        setMessage('设备或场地授权已撤销，现场控制保持关闭。', 'error');
+        render();
+        return false;
       }
+      if (refreshed.status === 200
+        && validateKioskCurrentResponse(refreshed.body).ok
+        && refreshed.body.resourceId === resourceId) {
+        serverModel = refreshed.body;
+        lastServerFresh = true;
+      } else if (refreshed.status === 304 && serverModel !== null) {
+        lastServerFresh = true;
+      } else {
+        lastServerFresh = false;
+      }
+      if (!controlling || !lastServerFresh) {
+        setMessage(lastServerFresh
+          ? '只读标签已刷新服务端状态。'
+          : '网络不可用；服务端状态未更新。', lastServerFresh ? 'info' : 'error');
+        return lastServerFresh;
+      }
+
       let outcome = await queue.replay({ resourceId });
       if (outcome.ok && outcome.serverStatus.kind === 'fresh') serverModel = outcome.serverStatus.current;
       if (outcome.ok && outcome.processed > 0) {

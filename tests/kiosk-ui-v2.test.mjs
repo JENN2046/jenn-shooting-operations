@@ -323,6 +323,19 @@ test('initial identity failure starts recovery polling without enabling controls
   assert.match(syncSource, /catch \{[\s\S]*identityBound = false;/u);
 });
 
+test('controlling synchronize path performs authoritative refresh before every replay', () => {
+  const source = script;
+  const syncStart = source.indexOf('async function synchronize()');
+  const nextFunction = source.indexOf('function enqueue(', syncStart);
+  const syncSource = source.slice(syncStart, nextFunction);
+  const refresh = syncSource.indexOf('const refreshed = await transport.refreshCurrent(');
+  const replay = syncSource.indexOf('queue.replay(');
+  const legacyConditional = syncSource.indexOf('if (serverModel === null || !controlling)');
+  assert.equal(refresh >= 0, true);
+  assert.equal(replay > refresh, true);
+  assert.equal(legacyConditional, -1);
+});
+
 test('authoritative current refresh rejection revokes persisted identity trust before controls can recover', () => {
   const source = script;
   const syncStart = source.indexOf('async function synchronize()');
@@ -368,7 +381,7 @@ test('browser source uses the frozen queue surface, second confirmation, and con
   assert.match(script, /showModal\(\)/u);
   assert.match(script, /queue\.enqueue\(command\)/u);
   assert.match(script, /void synchronize\(\)/u);
-  assert.match(script, /if \(serverModel === null \|\| !controlling\)/u);
+  assert.doesNotMatch(script, /if \(serverModel === null \|\| !controlling\)/u);
   assert.doesNotMatch(script, /\/api\/v1\//u);
   assert.doesNotMatch(`${html}\n${script}`, /bearer|password|credential|access[_-]?token|actorId|role\s*:/iu);
   assert.doesNotMatch(html, /https?:\/\//iu);
