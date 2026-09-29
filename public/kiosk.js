@@ -180,6 +180,7 @@ function createKioskUi() {
         return false;
       }
 
+      ensureControlLockStarted();
       if (serverModel === null || !controlling) {
         const refreshed = await transport.refreshCurrent({
           resourceId,
@@ -216,6 +217,7 @@ function createKioskUi() {
       else setMessage(outcome.pendingCount > 0 ? '事件已保存在本机，等待服务端确认。' : '已与服务端同步。');
       return lastServerFresh;
     } catch {
+      identityBound = false;
       lastServerFresh = false;
       setMessage('同步失败；本地待发送事件仍保留。', 'error');
       return false;
@@ -315,20 +317,37 @@ function createKioskUi() {
       render();
     },
   });
+  let controlLockStarted = false;
+  function ensureControlLockStarted() {
+    if (controlLockStarted) return;
+    controlLockStarted = true;
+    controlLock.start();
+  }
+
   const poller = createVisibilityPoller({ documentTarget: document, task: synchronize });
   async function start() {
-    const identity = await deviceProvisioner.provision();
+    let identity;
+    try {
+      identity = await deviceProvisioner.provision();
+    } catch {
+      identityBound = false;
+      setMessage('设备身份校验失败，现场控制保持关闭；正在等待自动恢复。', 'error');
+      render();
+      poller.start();
+      return false;
+    }
     if (!identity.ok) {
       identityBound = false;
-      setMessage('设备身份未完成可信绑定，现场控制保持关闭。', 'error');
+      setMessage('设备身份未完成可信绑定，现场控制保持关闭；正在等待自动恢复。', 'error');
       render();
+      poller.start();
       return false;
     }
     identityBound = true;
     if (!identity.verified) {
       setMessage('设备当前离线；沿用已绑定身份，联网后由服务端重新校验。', 'info');
     }
-    controlLock.start();
+    ensureControlLockStarted();
     render();
     poller.start();
     return true;

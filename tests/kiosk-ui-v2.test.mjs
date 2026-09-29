@@ -281,6 +281,29 @@ test('HTML provides semantic controls, live status, labels, all-task lists, and 
   assert.match(html, /id="complete-confirm"/u);
 });
 
+test('initial identity failure starts recovery polling without enabling controls and recovered identity starts the lock', () => {
+  const source = script;
+  const startIndex = source.indexOf('async function start()');
+  const pagehideIndex = source.indexOf("window.addEventListener('pagehide'", startIndex);
+  const startSource = source.slice(startIndex, pagehideIndex);
+  const failedIdentity = startSource.indexOf('if (!identity.ok)');
+  const pollAfterFailure = startSource.indexOf('poller.start();', failedIdentity);
+  const failureReturn = startSource.indexOf('return false;', failedIdentity);
+  assert.equal(startIndex >= 0, true);
+  assert.equal(failedIdentity >= 0, true);
+  assert.equal(pollAfterFailure > failedIdentity, true);
+  assert.equal(failureReturn > pollAfterFailure, true);
+  assert.match(startSource, /ensureControlLockStarted\(\)/u);
+
+  const syncIndex = source.indexOf('async function synchronize()');
+  const enqueueIndex = source.indexOf('function enqueue(', syncIndex);
+  const syncSource = source.slice(syncIndex, enqueueIndex);
+  const verifiedGuard = syncSource.indexOf('if (!identity.verified)');
+  const lockStart = syncSource.indexOf('ensureControlLockStarted();', verifiedGuard);
+  assert.equal(lockStart > verifiedGuard, true);
+  assert.match(syncSource, /catch \{[\s\S]*identityBound = false;/u);
+});
+
 test('browser revalidates the server-bound device identity before refresh or replay', () => {
   const source = script;
   const syncStart = source.indexOf('async function synchronize()');
