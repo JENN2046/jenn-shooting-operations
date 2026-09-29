@@ -123,10 +123,16 @@ test('runtime auth hashes passwords asynchronously and rejects attempts above th
     );
     const overflow = runtime.authenticate(request('kiosk-prod-01', PASSWORD));
     const winner = await Promise.race([
-      overflow.then(value => ({ source: 'overflow', value })),
+      overflow.then(
+        value => ({ source: 'overflow-success', value }),
+        error => ({ source: 'overflow-error', code: error?.code }),
+      ),
       Promise.race(inFlight).then(value => ({ source: 'inflight', value })),
     ]);
-    assert.deepEqual(winner, { source: 'overflow', value: null });
+    assert.deepEqual(winner, {
+      source: 'overflow-error',
+      code: 'KIOSK_AUTH_OVERLOADED',
+    });
     const principals = await Promise.all(inFlight);
     assert.equal(principals.every(value => value?.subjectId === 'DEVICE-KIOSK-PROD-01'), true);
   } finally {

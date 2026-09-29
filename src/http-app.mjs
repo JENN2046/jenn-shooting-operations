@@ -121,8 +121,13 @@ async function authenticateKiosk(kiosk, request) {
   let principal;
   try {
     principal = await kiosk.authenticate(request);
-  } catch {
-    return { ok: false, code: 'UNAUTHENTICATED' };
+  } catch (error) {
+    return {
+      ok: false,
+      code: error?.code === 'KIOSK_AUTH_OVERLOADED'
+        ? 'SERVICE_UNAVAILABLE'
+        : 'UNAUTHENTICATED',
+    };
   }
   return validateTrustedPrincipal(principal).ok
     ? { ok: true, principal }

@@ -213,7 +213,9 @@ export function loadKioskRuntimeAuthV1({
         return null;
       }
       if (activeAuthenticationAttempts >= MAX_CONCURRENT_AUTHENTICATION_ATTEMPTS) {
-        return null;
+        const error = new Error('Kiosk authentication capacity exhausted');
+        error.code = 'KIOSK_AUTH_OVERLOADED';
+        throw error;
       }
 
       activeAuthenticationAttempts += 1;

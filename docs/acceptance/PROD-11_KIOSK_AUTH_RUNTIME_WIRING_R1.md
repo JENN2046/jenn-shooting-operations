@@ -53,7 +53,7 @@ When configured, the path must be absolute and the referenced config must:
 - contain a non-empty explicit resource scope;
 - store only scrypt salt/hash material, never a cleartext password.
 
-The runtime object does not serialize the credential hash or password. Startup also rejects any Kiosk credential that collides with the configured viewer, submitter, scheduler, or administrator token. Request-time password verification uses asynchronous scrypt with a fixed four-attempt concurrency bound; excess attempts fail closed instead of blocking the Node event loop or building an unbounded authentication queue.
+The runtime object does not serialize the credential hash or password. Startup also rejects any Kiosk credential that collides with the configured viewer, submitter, scheduler, or administrator token. Request-time password verification uses asynchronous scrypt with a fixed four-attempt concurrency bound; excess attempts fail closed instead of blocking the Node event loop or building an unbounded authentication queue. Capacity exhaustion is surfaced as transient HTTP 503 rather than 401, so browsers do not mistake authentication saturation for credential revocation.
 
 ## Browser/device identity
 
@@ -109,7 +109,7 @@ production volume = not mounted
 Targeted Kiosk auth/device/runtime tests:
 
 ```text
-92 / 92 PASS
+93 / 93 PASS
 0 fail
 0 skip
 ```
@@ -117,8 +117,8 @@ Targeted Kiosk auth/device/runtime tests:
 A full repository check in that image reported:
 
 ```text
-788 tests
-785 pass
+789 tests
+786 pass
 2 fail
 1 expected VCP skip
 ```

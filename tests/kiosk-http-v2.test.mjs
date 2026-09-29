@@ -279,6 +279,34 @@ test('configured Kiosk auth advertises a Basic challenge without changing the un
   assert.equal(unconfigured.headers.has('www-authenticate'), false);
 });
 
+test('Kiosk authentication saturation maps to transient 503 without Basic revocation semantics', async () => {
+  const overloaded = new Error('busy');
+  overloaded.code = 'KIOSK_AUTH_OVERLOADED';
+  const app = createHttpApp({
+    store: fakeStore(),
+    kiosk: {
+      authenticationChallenge: 'Basic realm="Jenn Shooting Kiosk", charset="UTF-8"',
+      async authenticate() { throw overloaded; },
+      deviceId: 'DEVICE-KIOSK-PROD-01',
+      authorizeDeviceId() { return true; },
+      readCurrent: async () => ({ ok: false, code: 'SERVICE_UNAVAILABLE' }),
+      applyRunEvent: async () => ({ ok: false, code: 'SERVICE_UNAVAILABLE' }),
+    },
+  });
+  const response = await invoke(app, {
+    method: 'GET',
+    url: '/api/v2/kiosk/identity',
+  });
+  assert.equal(response.status, 503);
+  assert.deepEqual(response.body, {
+    schemaVersion: 2,
+    ok: false,
+    code: 'SERVICE_UNAVAILABLE',
+    replayed: false,
+  });
+  assert.equal(response.headers.has('www-authenticate'), false);
+});
+
 test('Kiosk identity endpoint returns only the authenticated server-bound device identity', async () => {
   const trusted = principal('operator');
   const challenge = 'Basic realm="Jenn Shooting Kiosk", charset="UTF-8"';
