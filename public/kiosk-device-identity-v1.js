@@ -14,6 +14,13 @@ function validIdentifier(value) {
     && IDENTIFIER.test(value);
 }
 
+function defaultRevocationToken() {
+  if (!globalThis.crypto || typeof globalThis.crypto.randomUUID !== 'function') {
+    throw new Error('DEVICE_IDENTITY_RANDOM_UNAVAILABLE');
+  }
+  return globalThis.crypto.randomUUID();
+}
+
 export function validateKioskDeviceIdentityResponse(value) {
   return exactKeys(value, RESPONSE_KEYS)
     && value.schemaVersion === 1
@@ -25,9 +32,9 @@ export function createKioskDeviceProvisioner({
   fetchImpl,
   storageKey = 'jenn.kiosk.device-id.v2',
   identityUrl = '/api/v2/kiosk/identity',
-  blockedKey = storageKey + '.blocked-v1',
-  blockedGenerationKey = blockedKey + '.generation-v1',
-  healedGenerationKey = blockedKey + '.healed-generation-v1',
+  blockedKey = storageKey + '.blocked-v2',
+  healedKey = blockedKey + '.healed-v1',
+  createRevocationToken = defaultRevocationToken,
 } = {}) {
   if (!storage
       || typeof storage.getItem !== 'function'
@@ -47,53 +54,45 @@ export function createKioskDeviceProvisioner({
   if (typeof blockedKey !== 'string' || blockedKey.length === 0 || blockedKey === storageKey) {
     throw new TypeError('Kiosk device identity blocked key is required');
   }
-  if (typeof blockedGenerationKey !== 'string'
-      || blockedGenerationKey.length === 0
-      || blockedGenerationKey === storageKey
-      || blockedGenerationKey === blockedKey) {
-    throw new TypeError('Kiosk device identity blocked generation key is required');
+  if (typeof healedKey !== 'string'
+      || healedKey.length === 0
+      || healedKey === storageKey
+      || healedKey === blockedKey) {
+    throw new TypeError('Kiosk device identity healed key is required');
   }
-  if (typeof healedGenerationKey !== 'string'
-      || healedGenerationKey.length === 0
-      || healedGenerationKey === storageKey
-      || healedGenerationKey === blockedKey
-      || healedGenerationKey === blockedGenerationKey) {
-    throw new TypeError('Kiosk device identity healed generation key is required');
+  if (typeof createRevocationToken !== 'function') {
+    throw new TypeError('Kiosk revocation token factory is required');
   }
-
-  const parseGeneration = value => {
-    const parsed = Number.parseInt(value ?? '0', 10);
-    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
-  };
 
   let blockedInMemory = false;
-  const persistedGeneration = () => parseGeneration(storage.getItem(blockedGenerationKey));
-  const persistedHealedGeneration = () => parseGeneration(storage.getItem(healedGenerationKey));
-  const isBlocked = () => (
-    blockedInMemory || persistedGeneration() > persistedHealedGeneration()
-  );
+  const persistedBlock = () => storage.getItem(blockedKey);
+  const persistedHealed = () => storage.getItem(healedKey);
+  const isBlocked = () => {
+    if (blockedInMemory) return true;
+    const blocked = persistedBlock();
+    return blocked !== null && blocked !== persistedHealed();
+  };
   const block = () => {
     blockedInMemory = true;
     try {
-      const current = persistedGeneration();
-      const generation = current === Number.MAX_SAFE_INTEGER ? current : current + 1;
-      const value = String(generation);
-      storage.setItem(blockedGenerationKey, value);
-      storage.setItem(blockedKey, value);
+      const token = createRevocationToken();
+      if (!validIdentifier(token)) {
+        throw new Error('DEVICE_IDENTITY_REVOCATION_TOKEN_INVALID');
+      }
+      storage.setItem(blockedKey, token);
     } catch {
       // The in-memory latch is authoritative for this page even if persistence fails.
     }
   };
-  const healThrough = generation => {
+  const healThrough = token => {
     try {
-      const currentHealed = persistedHealedGeneration();
-      if (generation > currentHealed) {
-        storage.setItem(healedGenerationKey, String(generation));
-      }
+      if (persistedBlock() !== token) return false;
+      if (token !== null) storage.setItem(healedKey, token);
+      if (persistedBlock() !== token) return false;
+      if (token !== null && persistedHealed() !== token) return false;
     } catch {
       return false;
     }
-    if (persistedGeneration() > persistedHealedGeneration()) return false;
     blockedInMemory = false;
     return true;
   };
@@ -108,7 +107,7 @@ export function createKioskDeviceProvisioner({
       block();
     },
     async provision() {
-      const blockGenerationAtStart = persistedGeneration();
+      const blockTokenAtStart = persistedBlock();
       const existing = storage.getItem(storageKey);
       if (existing !== null && !validIdentifier(existing)) {
         return Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_INVALID' });
@@ -167,9 +166,9 @@ export function createKioskDeviceProvisioner({
       if (existing === null) {
         storage.setItem(storageKey, body.deviceId);
       }
-      const blockGenerationAtEnd = persistedGeneration();
-      if (blockGenerationAtEnd !== blockGenerationAtStart
-          || !healThrough(blockGenerationAtStart)) {
+      const blockTokenAtEnd = persistedBlock();
+      if (blockTokenAtEnd !== blockTokenAtStart
+          || !healThrough(blockTokenAtStart)) {
         blockedInMemory = true;
         return Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_BLOCKED' });
       }
