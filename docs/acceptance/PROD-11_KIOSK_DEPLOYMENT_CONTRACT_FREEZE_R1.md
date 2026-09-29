@@ -143,7 +143,7 @@ EXACT_MOBILE_VIEWPORT_EXECUTION_TARGET
 EXACT_ACCESSIBILITY_ASSISTIVE_TECH_ENVIRONMENT
 ```
 
-They are **not** pre-request authorization blockers, because identity-expiry, offline replay and other items require the Kiosk configuration enabled by PROD-11. They remain hard gates before `REAL_DEVICE_ACCEPTANCE`, PROD-11 formal completion, or any production-ready claim.
+Their **exact target bindings are pre-request blockers**: the on-site tablet/iPad, Safari, mobile viewport, and accessibility environments must be frozen as part of the exact isolated WO-03 environment before PROD-11 may be requested. The acceptance tests themselves remain post-authorization because identity-expiry, offline replay, and related flows require the authorized Kiosk runtime. Those executions remain hard gates before `REAL_DEVICE_ACCEPTANCE`, PROD-11 formal completion, or any production-ready claim.
 
 No Windows-Chrome-only evidence set may be used to mark `REAL_DEVICE_ACCEPTANCE` complete.
 
@@ -281,9 +281,9 @@ Inside the **same transaction that commits the Kiosk event**, the replacement ru
    exact match with frozen Kiosk runtime businessTimeZone
 ```
 
-Both predicates must be read after entering the event transaction/write serialization boundary. A prior `/current` GET or prior config read is evidence only and cannot authorize the commit.
+All three predicates must be read after entering the event transaction/write serialization boundary. A prior `/current` GET, prior expected-item comparison, or prior config read is evidence only and cannot authorize the commit.
 
-If either predicate is unavailable or fails, the transaction aborts before any run/review/receipt/revision/audit/outbox fact commits.
+If any of the three predicates is unavailable or fails, the transaction aborts before any run/review/receipt/revision/audit/outbox fact commits.
 
 `KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY` is **not implemented in the current baseline image**, so this is a PROD-11 **pre-request blocker**, not something that may be added after authorization.
 
