@@ -241,7 +241,7 @@ If isolated WO-03 fails or remains incomplete, PROD-11 must not cross the produc
 
 Even after production activation, `GET /api/v2/kiosk/current` is diagnostic/device-facing evidence only. It and the event POST are separate requests.
 
-Before any production run-event write is allowed, the replacement frozen runtime must implement:
+Before any **bounded PROD-11 production-smoke** run-event write is allowed, the replacement frozen runtime must implement:
 
 ```text
 KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY
@@ -252,12 +252,12 @@ Inside the **same transaction that commits the Kiosk event**, the replacement ru
 ```text
 1. immutable authorization binding:
    event schedule target
-   = KIOSK_EXPECTED_SCHEDULE_ITEM_ID
+   = KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID
    = authorization-frozen derived acceptance scheduleItemId
 
 2. STUDIO-PROD-01 resource-wide current selection:
    unique current schedule item
-   = KIOSK_EXPECTED_SCHEDULE_ITEM_ID
+   = KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID
    no competing current candidate or active run
 
 3. active Scheduling config:
@@ -270,6 +270,27 @@ Both predicates must be read after entering the event transaction/write serializ
 If either predicate is unavailable or fails, the transaction aborts before any run/review/receipt/revision/audit/outbox fact commits.
 
 `KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY` is **not implemented in the current baseline image**, so this is a PROD-11 **pre-request blocker**, not something that may be added after authorization.
+
+The expected-item predicate is scoped only to the bounded PROD-11 smoke. Successful smoke completion does **not** grant this container authority to process later unrelated production schedule items.
+
+### Post-smoke normal operation remains a separate authority gap
+
+After the bounded smoke evidence is complete, this contract authorizes no further production Kiosk run-event writes.
+
+Before PROD-11 itself can become requestable, a separate contract must freeze how the smoke-gated runtime transitions to normal ongoing Kiosk production authority without either:
+
+- keeping one immutable smoke item as a permanent lock;
+- hot-rotating the smoke binding between normal jobs;
+- inferring authority from whatever database item happens to be current; or
+- silently recreating a normal-operation container without explicit bounded authority.
+
+Current blocker:
+
+```text
+KIOSK_POST_SMOKE_NORMAL_OPERATION_TRANSITION_CONTRACT_UNRESOLVED
+```
+
+#33 records this as an unresolved authority boundary. It does not design or implement that later lifecycle.
 
 QLL-6 + its dedicated Chrome profile remains the primary production Kiosk identity target. It is not permission to run the WO-03 stateful matrix against production scheduling facts.
 
@@ -295,10 +316,12 @@ The authorization-frozen schedule item is not added to `kiosk-auth.v1.json`; tha
 The replacement PROD-11 runtime must require a separate container-lifetime environment binding:
 
 ```text
-KIOSK_EXPECTED_SCHEDULE_ITEM_ID = exact authorization-frozen derived acceptance scheduleItemId
+KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID = exact authorization-frozen derived acceptance scheduleItemId
 ```
 
 The final value is unresolved until the separately authorized scheduling preparation derives the exact schedule item. The one-time PROD-11 authorization packet freezes that ID, and production container creation supplies exactly that frozen value.
+
+This binding is **smoke-only authority**. While present, the PROD-11 acceptance-smoke container must deny Kiosk production run-event writes for every other schedule item. It is not a standing normal-production item lock and must not be hot-rotated from item to item.
 
 Required behavior:
 
@@ -510,7 +533,7 @@ planned_start <= acceptanceRunStart < acceptanceRunEnd <= planned_end
 
 The authorization packet becomes stale if the item is used, cancelled, rebound, changed, no longer covers the bound acceptance run, or `planned_end` passes before execution starts.
 
-Before PROD-11 becomes requestable, the replacement-image contract must also prove support for the immutable `KIOSK_EXPECTED_SCHEDULE_ITEM_ID` binding. The value in the eventual container must equal the same derived schedule item ID frozen in the authorization packet; it may not be inferred from whichever database item is current at execution time.
+Before PROD-11 becomes requestable, the replacement-image contract must also prove support for the immutable `KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID` binding. The value in the eventual container must equal the same derived schedule item ID frozen in the authorization packet; it may not be inferred from whichever database item is current at execution time.
 
 Only **after** isolated WO-03 has closed `REAL_DEVICE_ACCEPTANCE` and `OFFLINE_REPLAY_RESULT`, a replacement atomic-capable image has been frozen, and the exact production Kiosk configuration has then been enabled, immediately before the first bounded production smoke run event the executor must fresh-read the same schedule item, task binding and run state and prove again:
 
@@ -584,7 +607,7 @@ PROD11_REPLACEMENT_IMMUTABLE_IMAGE_NOT_YET_BUILT_TESTED_AND_FROZEN
 FULL_PROD11_ACTION_SPECIFIC_REVALIDATION_NOT_YET_FRESH_PASS
 ```
 
-The atomic production-context capability is a hard **pre-request** gate. It must cover immutable authorization-frozen schedule-item binding, current-item uniqueness, and active Scheduling time-zone equality inside the same event transaction. It may not be implemented after authorization or introduced by swapping to an unreviewed image.
+The atomic production-context capability is a hard **pre-request** gate for the bounded production smoke. It must cover immutable authorization-frozen smoke schedule-item binding, current-item uniqueness, and active Scheduling time-zone equality inside the same event transaction. It is not normal-operation authority. It may not be implemented after authorization or introduced by swapping to an unreviewed image.
 
 Immediately before the PROD-11 authorization request, fresh revalidate all seven manifest-bound checks: target host identity, disk/port conflicts, built image digest, secret storage, Kiosk auth runtime configuration, external readiness gates, and rollback targets.
 
@@ -599,7 +622,9 @@ IDENTITY_EXPIRY_AND_DEVICE_HANDOFF
 ACCESSIBILITY_AND_ON_SITE_ENVIRONMENT_ACCEPTANCE
 ```
 
-Only after those PASS may the frozen replacement image be revalidated and the production Kiosk config/credential/profile/identity mapping be enabled.
+Only after those PASS may the frozen replacement image be revalidated and the bounded **acceptance-smoke** production Kiosk config/credential/profile/identity mapping be enabled.
+
+Normal ongoing production use remains blocked by `KIOSK_POST_SMOKE_NORMAL_OPERATION_TRANSITION_CONTRACT_UNRESOLVED`; successful smoke evidence must not be interpreted as blanket authority for later production items.
 
 After production activation, before the first production smoke event:
 
