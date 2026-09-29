@@ -834,6 +834,16 @@ export function createKioskOfflineQueue({ storage, transport, clock } = {}) {
         if (protocolFailure(response) || response.status >= 500) {
           return outcome(state, serverStatus, { processed });
         }
+        if ([401, 403].includes(response.status)) {
+          return outcome(
+            state,
+            { ...serverStatus, httpStatus: response.status },
+            {
+              processed,
+              stopCode: response.status === 401 ? 'UNAUTHENTICATED' : 'FORBIDDEN',
+            },
+          );
+        }
         if (
           !validateKioskRunEventResponse(response.body).ok
           || !validResultHttpStatus(response)

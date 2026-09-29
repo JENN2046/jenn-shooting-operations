@@ -80,6 +80,7 @@ Rules:
 - authoritative 401/403 current-resource refresh rejection persists the same trust latch before any replay or control action;
 - every verified synchronize path, including an already-controlling tab with a cached model, performs the authoritative current-resource refresh before replay;
 - replay's own authoritative refresh propagates 401/403 status back to the UI, which revokes trust after either replay refresh before any further control action;
+- submit-time 401/403 also preserves the queued event as pending, propagates authoritative status, and revokes trust instead of converting the event into a terminal conflict;
 - run-event submission is denied if the command `deviceId` does not match the
   authenticated runtime device binding.
 
@@ -114,7 +115,7 @@ production volume = not mounted
 Targeted Kiosk auth/device/runtime tests:
 
 ```text
-99 / 99 PASS
+102 / 102 PASS
 0 fail
 0 skip
 ```
@@ -122,8 +123,8 @@ Targeted Kiosk auth/device/runtime tests:
 A full repository check in that image reported:
 
 ```text
-795 tests
-792 pass
+798 tests
+795 pass
 2 fail
 1 expected VCP skip
 ```

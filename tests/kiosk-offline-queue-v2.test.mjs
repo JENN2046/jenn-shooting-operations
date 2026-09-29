@@ -307,6 +307,33 @@ test('refreshes first, replays immutable heads in sequence, and deletes only app
   });
 });
 
+test('submit authorization rejection preserves the pending head and exposes authoritative status', async t => {
+  for (const [status, code] of [[401, 'UNAUTHENTICATED'], [403, 'FORBIDDEN']]) {
+    await t.test(String(status), async () => {
+      const storage = memoryStorage();
+      const transport = scriptedTransport({
+        responses: [{
+          status,
+          body: { schemaVersion: 2, ok: false, code, replayed: false },
+        }],
+      });
+      const queue = createQueue(storage, transport);
+      queue.enqueue(queueItem(0));
+      const before = clone(storage.value().items);
+
+      const result = await queue.replay({ resourceId: 'STUDIO-A' });
+
+      assert.equal(result.syncStatus, 'pending');
+      assert.equal(result.stopCode, code);
+      assert.equal(result.pendingCount, 1);
+      assert.equal(result.serverStatus.kind, 'fresh');
+      assert.equal(result.serverStatus.httpStatus, status);
+      assert.deepEqual(storage.value().items, before);
+      assert.equal(transport.calls.filter(call => call.type === 'submit').length, 1);
+    });
+  }
+});
+
 test('conflict, invalid transition, ambiguous context, and review stop at the immutable head', async t => {
   const cases = [
     ['revision conflict', 409, 'REVISION_CONFLICT', 'conflict'],
