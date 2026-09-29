@@ -772,11 +772,16 @@ export function createKioskOfflineQueue({ storage, transport, clock } = {}) {
       } catch {
         return outcome(state, { kind: 'unavailable', current: null }, { processed: 0 });
       }
-      if (
-        !refresh
-        || !Number.isInteger(refresh.status)
-        || ![200, 304].includes(refresh.status)
-      ) return outcome(state, { kind: 'unavailable', current: null }, { processed: 0 });
+      if (!refresh || !Number.isInteger(refresh.status)) {
+        return outcome(state, { kind: 'unavailable', current: null }, { processed: 0 });
+      }
+      if (![200, 304].includes(refresh.status)) {
+        return outcome(
+          state,
+          { kind: 'unavailable', current: null, httpStatus: refresh.status },
+          { processed: 0 },
+        );
+      }
 
       const syncedAt = clockTimestamp(clock);
       if (syncedAt === null) return stateFailure('INVALID_CLIENT_TIME');

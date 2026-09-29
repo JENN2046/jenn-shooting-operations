@@ -145,6 +145,16 @@ function createKioskUi() {
     }
   }
 
+  function revokeForAuthoritativeServerStatus(serverStatus) {
+    if (!isAuthoritativeKioskRefreshRejection(serverStatus?.httpStatus)) return false;
+    deviceProvisioner.revoke();
+    identityBound = false;
+    lastServerFresh = false;
+    setMessage('设备或场地授权已撤销，现场控制保持关闭。', 'error');
+    render();
+    return true;
+  }
+
   function render() {
     refreshIdentityTrustFromStorage();
     const inspected = queue.inspect();
@@ -229,9 +239,11 @@ function createKioskUi() {
       }
 
       let outcome = await queue.replay({ resourceId });
+      if (outcome.ok && revokeForAuthoritativeServerStatus(outcome.serverStatus)) return false;
       if (outcome.ok && outcome.serverStatus.kind === 'fresh') serverModel = outcome.serverStatus.current;
       if (outcome.ok && outcome.processed > 0) {
         outcome = await queue.replay({ resourceId });
+        if (outcome.ok && revokeForAuthoritativeServerStatus(outcome.serverStatus)) return false;
         if (outcome.ok && outcome.serverStatus.kind === 'fresh') serverModel = outcome.serverStatus.current;
       }
       lastServerFresh = outcome.ok && ['fresh', 'unchanged'].includes(outcome.serverStatus.kind);

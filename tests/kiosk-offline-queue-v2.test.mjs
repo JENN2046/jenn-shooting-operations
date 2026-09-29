@@ -566,6 +566,29 @@ test('replay never overwrites an event enqueued while refresh is in flight', asy
   assert.deepEqual(storage.value().items.map(item => item.eventId), ['EVENT-0000', 'EVENT-0001']);
 });
 
+test('replay exposes authoritative refresh rejection status without submitting queued events', async () => {
+  for (const status of [401, 403]) {
+    const storage = memoryStorage();
+    const transport = scriptedTransport({
+      refresh: { status, body: { code: status === 401 ? 'UNAUTHENTICATED' : 'FORBIDDEN' } },
+      responses: [applied(false, queueItem(0))],
+    });
+    const queue = createQueue(storage, transport);
+    queue.enqueue(queueItem(0));
+
+    const result = await queue.replay({ resourceId: 'STUDIO-A' });
+
+    assert.deepEqual(result.serverStatus, {
+      kind: 'unavailable',
+      current: null,
+      httpStatus: status,
+    });
+    assert.equal(result.syncStatus, 'pending');
+    assert.equal(result.pendingCount, 1);
+    assert.equal(transport.calls.filter(call => call.type === 'submit').length, 0);
+  }
+});
+
 test('refresh accepts only frozen 200 or 304 status codes', async () => {
   const storage = memoryStorage();
   const transport = scriptedTransport({

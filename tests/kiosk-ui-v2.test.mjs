@@ -323,6 +323,21 @@ test('initial identity failure starts recovery polling without enabling controls
   assert.match(syncSource, /catch \{[\s\S]*identityBound = false;/u);
 });
 
+test('replay refresh authorization rejection is revoked after both replay calls', () => {
+  const source = script;
+  const syncStart = source.indexOf('async function synchronize()');
+  const nextFunction = source.indexOf('function enqueue(', syncStart);
+  const syncSource = source.slice(syncStart, nextFunction);
+  const firstReplay = syncSource.indexOf('let outcome = await queue.replay({ resourceId })');
+  const firstCheck = syncSource.indexOf('revokeForAuthoritativeServerStatus(outcome.serverStatus)', firstReplay);
+  const secondReplay = syncSource.indexOf('outcome = await queue.replay({ resourceId })', firstCheck);
+  const secondCheck = syncSource.indexOf('revokeForAuthoritativeServerStatus(outcome.serverStatus)', secondReplay);
+  assert.equal(firstReplay >= 0, true);
+  assert.equal(firstCheck > firstReplay, true);
+  assert.equal(secondReplay > firstCheck, true);
+  assert.equal(secondCheck > secondReplay, true);
+});
+
 test('controlling synchronize path performs authoritative refresh before every replay', () => {
   const source = script;
   const syncStart = source.indexOf('async function synchronize()');
