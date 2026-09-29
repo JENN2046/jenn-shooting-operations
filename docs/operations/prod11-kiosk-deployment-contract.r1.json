@@ -551,7 +551,8 @@
       "KIOSK_POST_SMOKE_NORMAL_OPERATION_TRANSITION_CONTRACT_UNRESOLVED",
       "WO03_ISOLATED_ENVIRONMENT_PREPARATION_AUTHORITY_UNRESOLVED",
       "WO03_ISOLATED_ENVIRONMENT_EXACT_TARGET_NOT_FROZEN",
-      "FULL_PROD11_ACTION_SPECIFIC_REVALIDATION_NOT_YET_FRESH_PASS"
+      "FULL_PROD11_ACTION_SPECIFIC_REVALIDATION_NOT_YET_FRESH_PASS",
+      "CURRENT_GREENFIELD_AUTHORITY_PROD11_REQUESTABILITY_NOT_YET_FRESH_PASS"
     ],
     "credentialGenerationIsExecutionNotRequestPrerequisite": true,
     "dedicatedBrowserProfileCreationIsExecutionNotRequestPrerequisite": true,
@@ -652,6 +653,24 @@
       "matrixExecutionBeforeRequest": false,
       "matrixExecutionPhase": "POST_AUTHORIZATION_PRE_PRODUCTION_KIOSK_ACTIVATION",
       "rule": "the exact isolated WO-03 environment and separately bounded setup authority must exist before the PROD-11 request; only the acceptance execution itself remains post-authorization"
+    },
+    "currentAuthorityGate": {
+      "status": "BLOCKED_NOT_YET_FRESH_ATTESTED_OR_GRANTED",
+      "requiredBeforeRequest": true,
+      "authoritySource": "docs/operations/production-greenfield-authority.v1.json",
+      "baseManifestNotSufficient": true,
+      "requiredAssertions": [
+        "Greenfield authority validator PASS against the frozen parent manifest",
+        "authorization.nextActionId equals PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE",
+        "completedAcceptanceIds still include PROD-GF-13-ACTIVATE, PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE and PROD-10-ENABLE-VCP-REMOTE-SYNC",
+        "GREENFIELD_ACTIVATION_COMPLETION fresh PASS",
+        "GREENFIELD_FORWARD_CHAIN fresh PASS",
+        "PRODUCTION_TARGET_FACTS fresh PASS",
+        "PRODUCTION_DEPLOYMENT_GATE fresh PASS",
+        "base INTEGRATION_DEPLOYMENT_READINESS is treated only through the Greenfield supersession contract, not its static base BLOCKED value",
+        "current Greenfield authority requestableActionIds explicitly contains PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE before the human authorization request"
+      ],
+      "failureRule": "the local PROD-11 deployment freeze never self-authorizes or self-promotes requestability; if current Greenfield authority does not explicitly admit the exact PROD-11 action after all prerequisite evidence is fresh, no authorization request may be made"
     }
   },
   "runtimeAuthorityBinding": {
@@ -672,6 +691,34 @@
       "diagnosticTagDerivationRule": "exact string jenn-shooting-operations:prod- followed by finalSourceRevision",
       "diagnosticTagAuthority": "diagnostic only; never execution authority by itself",
       "tagResolutionRule": "immediately before container creation, diagnosticTag must resolve to immutableImageId and the image OCI revision label must equal sourceRevision; container create still uses immutableImageId"
+    }
+  },
+  "authorityLineage": {
+    "baseManifest": {
+      "path": "docs/operations/production-change-manifest.v1.json",
+      "role": "FROZEN_PARENT_CONTRACT_NOT_CURRENT_REQUESTABILITY_SOURCE",
+      "prod11StaticStatus": "BLOCKED_PREREQUISITE",
+      "supersededBaseGateHandling": {
+        "INTEGRATION_DEPLOYMENT_READINESS": "must be interpreted through current Greenfield authority supersededBaseGateIds rather than re-imposed from the static base manifest"
+      }
+    },
+    "currentGreenfieldAuthority": {
+      "path": "docs/operations/production-greenfield-authority.v1.json",
+      "role": "CURRENT_PRODUCTION_REQUESTABILITY_AUTHORITY",
+      "expectedNextActionId": "PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE",
+      "requiredCompletedAcceptanceIds": [
+        "PROD-GF-13-ACTIVATE",
+        "PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE",
+        "PROD-10-ENABLE-VCP-REMOTE-SYNC"
+      ],
+      "requiredGreenfieldIntegrationPrerequisites": [
+        "GREENFIELD_ACTIVATION_COMPLETION",
+        "GREENFIELD_FORWARD_CHAIN",
+        "PRODUCTION_TARGET_FACTS",
+        "PRODUCTION_DEPLOYMENT_GATE"
+      ],
+      "requestRule": "this contract can never make PROD-11 requestable by itself; immediately before the human authorization request, the current Greenfield authority must validate against its parent, still identify PROD-11 as the exact next action, fresh-attest all Greenfield integration prerequisites, and explicitly include PROD-11 in its current requestableActionIds under FROZEN_NOT_REQUESTED/exact-target authority semantics",
+      "staleOrMismatchRule": "any authority digest/parent mismatch, next-action drift, missing completion, failed prerequisite, non-empty conflicting requested/approved authority, or absence of PROD-11 from current requestableActionIds leaves PROD-11 blocked"
     }
   }
 }
