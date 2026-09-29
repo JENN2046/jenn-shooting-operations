@@ -488,10 +488,15 @@
             "no wildcard, scheme, path, port, query, fragment, or unobserved extra host is permitted",
             "every non-empty requests_v2.brief_url must parse as a URL and its lowercase hostname must appear exactly in the reviewed allowlist"
           ],
-          "authorizationBinding": "the exact final array and its canonical digest are frozen in the one-time PROD-11 authorization packet; any later requests_v2 brief_url change invalidates the gate and requires a fresh scan/review/rebinding before request or execution"
+          "authorizationBinding": "the exact final array and its canonical digest are frozen in the one-time PROD-11 authorization packet; any later requests_v2 brief_url change invalidates the gate and requires a fresh scan/review/rebinding before request or execution",
+          "preRequestBindingRule": "before the PROD-11 authorization request, bind only the exact reviewed allowedBriefHosts array and its canonical digest into the one-time authorization packet; do not create or install kiosk-auth.v1.json and do not generate Kiosk credentials",
+          "materializationTiming": "POST_PROD11_AUTHORIZATION_AFTER_DEDICATED_CREDENTIAL_GENERATION_AND_BEFORE_ATOMIC_CONFIG_INSTALL",
+          "materializationRule": "after explicit PROD-11 authorization generates the dedicated Kiosk credential, copy the authorization-bound allowedBriefHosts array unchanged into the payload together with the generated salt/hash; any mismatch with the authorization packet is fail closed"
         }
       },
-      "materializationRule": "replace the allowedBriefHosts placeholder with the exact authorization-bound reviewed array and replace both credential null placeholders with the exact generated canonical Base64 values; emit only the exact payload keys above; never copy deployment metadata into the JSON file; validate the final file through loadKioskRuntimeAuthV1 with VIEWER SUBMITTER SCHEDULER and ADMIN credential values supplied only as forbidden comparison inputs before atomic installation"
+      "materializationRule": "only after explicit PROD-11 authorization: replace the allowedBriefHosts placeholder with the exact authorization-bound reviewed array and replace both credential null placeholders with the exact generated canonical Base64 values; emit only the exact payload keys above; never copy deployment metadata into the JSON file; validate the final file through loadKioskRuntimeAuthV1 with VIEWER SUBMITTER SCHEDULER and ADMIN credential values supplied only as forbidden comparison inputs before atomic installation",
+      "materializationPhase": "POST_PROD11_AUTHORIZATION_ONLY",
+      "preRequestRule": "pre-request authority may freeze payload metadata and dynamic values such as the final allowedBriefHosts array/digest, but must not materialize a final config because credential generation is prohibited until explicit PROD-11 authorization"
     }
   },
   "credentialProvisioning": {
@@ -618,8 +623,8 @@
       "observedAllowedBriefHosts": [],
       "meaning": "evidence that the database was compatible at freeze time only; this does not close the pre-request compatibility gate"
     },
-    "finalPreRequestRule": "after every separately authorized pre-request scheduling/data preparation write has completed and immediately before PROD-11 authorization is requested, fresh-scan every requests_v2.brief_url in the live production database, reject invalid URLs, derive the exact sorted unique lowercase hostname set, explicitly review that set, bind the exact final allowedBriefHosts array and canonical digest into the one-time authorization packet, and materialize exactly that array into kiosk-auth.v1.json",
-    "staleOnChangeRule": "any requests_v2 row insertion/update/delete or brief_url change after the final scan invalidates the compatibility proof and authorization binding; re-scan/review/rebind is mandatory",
+    "finalPreRequestRule": "after every separately authorized pre-request scheduling/data preparation write has completed and immediately before PROD-11 authorization is requested, fresh-scan every requests_v2.brief_url in the live production database, reject invalid URLs, derive the exact sorted unique lowercase hostname set, explicitly review that set, and bind the exact final allowedBriefHosts array plus canonical digest into the one-time authorization packet; do not materialize kiosk-auth.v1.json before authorization",
+    "staleOnChangeRule": "any requests_v2 row insertion/update/delete or brief_url change after the final scan invalidates the compatibility proof and authorization binding. Before authorization, re-scan/review/rebind is mandatory. After authorization, stop execution and require a new authorization packet rather than mutating the bound allowlist in place.",
     "finalAllowlistRules": {
       "emptyAllowedOnlyWhenNoNonEmptyBriefUrls": true,
       "exactObservedHostsOnly": true,
@@ -629,7 +634,8 @@
       "scheduledOnlyAssumptionForbidden": true
     },
     "currentFinalAllowedBriefHosts": "UNRESOLVED_UNTIL_FINAL_PRE_REQUEST_SCAN",
-    "currentFinalAllowlistDigest": "UNRESOLVED_UNTIL_FINAL_PRE_REQUEST_SCAN"
+    "currentFinalAllowlistDigest": "UNRESOLVED_UNTIL_FINAL_PRE_REQUEST_SCAN",
+    "postAuthorizationMaterializationRule": "after explicit PROD-11 authorization and dedicated credential generation, materialize kiosk-auth.v1.json using exactly the authorization-bound allowedBriefHosts array plus the newly generated credential values, validate the complete config, then atomically install it"
   },
   "schedulableAcceptanceReadiness": {
     "status": "BLOCKED",
@@ -1097,10 +1103,15 @@
         "canonical digest of the final allowlist",
         "proof every non-empty brief_url hostname is in the final allowlist and no unobserved extra host is present"
       ],
-      "materializationTarget": "runtimeAuthConfig.filePayloadContract.dynamicInsertions./allowedBriefHosts",
       "staleOnAnyPostScanRequestMutation": true,
       "emptyArrayRule": "allowed only when the final fresh scan observes zero non-empty brief URLs",
-      "failureRule": "invalid URL, unreviewed host, missing observed host, extra unobserved host, wildcard, stale scan, or post-scan requests_v2 mutation keeps PROD-11 non-requestable"
+      "failureRule": "invalid URL, unreviewed host, missing observed host, extra unobserved host, wildcard, stale scan, post-scan requests_v2 mutation, pre-authorization config materialization, or any post-authorization allowlist mismatch keeps or returns PROD-11 to fail-closed",
+      "preRequestBindingTarget": "one-time PROD-11 authorization packet exact allowedBriefHosts array + canonical digest",
+      "postAuthorizationMaterializationTarget": "runtimeAuthConfig.filePayloadContract.dynamicInsertions./allowedBriefHosts",
+      "preRequestMaterializedConfigRequired": false,
+      "credentialGenerationRequiredForGate": false,
+      "postAuthorizationRule": "only after explicit PROD-11 authorization generates the dedicated credential may the complete kiosk-auth.v1.json be materialized and validated; it must use the pre-request authorization-bound allowedBriefHosts array unchanged",
+      "staleAfterAuthorizationRule": "abort PROD-11 execution and require a new authorization packet; do not silently rebind allowedBriefHosts after authorization"
     }
   },
   "runtimeAuthorityBinding": {
