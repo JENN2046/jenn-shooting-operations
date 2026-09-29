@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "contractId": "PROD11_KIOSK_DEPLOYMENT_CONTRACT_R1",
-  "status": "BLOCKED_EXACT_REAL_DEVICE_SELECTION",
+  "status": "READY_FOR_EXPLICIT_AUTHORIZATION_REQUEST",
   "runtimeSourceAuthorityCommit": "d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
   "candidateImage": {
     "tag": "jenn-shooting-operations:prod-d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
@@ -28,9 +28,23 @@
   "identityBinding": {
     "resourceId": "STUDIO-PROD-01",
     "deviceId": "KIOSK-PROD-01",
-    "actualDevice": null,
-    "actualBrowser": null,
-    "selectionStatus": "PENDING_OWNER_SELECTED_REAL_DEVICE",
+    "actualDevice": {
+      "deviceLabel": "QLL-6",
+      "platform": "Windows 11",
+      "osVersion": "10.0.26200",
+      "selection": "OWNER_SELECTED_STUDIO_WINDOWS_PC"
+    },
+    "actualBrowser": {
+      "product": "Google Chrome",
+      "versionAtFreeze": "153.0.8010.53",
+      "executable": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "profileIsolation": "DEDICATED_USER_DATA_DIR",
+      "profileUserDataDir": "%LOCALAPPDATA%\\JennShootingOperations\\Chrome-Kiosk-PROD-01",
+      "profileDirectory": "Default",
+      "profileStatusAtFreeze": "NOT_YET_CREATED_BY_DESIGN",
+      "existingDefaultProfileReuse": false
+    },
+    "selectionStatus": "EXACT_DEVICE_AND_BROWSER_TARGET_FROZEN",
     "bindingSemantics": "server-authoritative logical device identity; physical hardware/browser identity is acceptance evidence, not cryptographic hardware attestation"
   },
   "runtimeAuthConfig": {
@@ -61,7 +75,7 @@
     "allowedBriefHosts": []
   },
   "credentialProvisioning": {
-    "generationTiming": "ONLY_AFTER_EXPLICIT_PROD11_AUTHORIZATION_AND_EXACT_DEVICE_SELECTION",
+    "generationTiming": "ONLY_AFTER_EXPLICIT_PROD11_AUTHORIZATION",
     "passwordGenerator": "node:crypto.randomBytes(32).toString('base64url')",
     "passwordEntropyBytes": 32,
     "saltGenerator": "node:crypto.randomBytes(16)",
@@ -100,11 +114,32 @@
     "restartPolicy": "unless-stopped",
     "tokenEnvFile": "/mnt/datadisk0/apps/jenn-shooting-operations/.env.tokens",
     "runtimeEnvFile": "/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime",
-    "preProd11RuntimeEnvBackup": "/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime.pre-prod11",
-    "currentLiveBeforeProd11": {
-      "containerId": "b29798598ac043794420599c23f735c19038744a76f1b490b3e8c5a58e28e6be",
-      "imageId": "sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545",
-      "sourceRevision": "92b7137211bf807f178901e878a8c3d6e335cec4"
+    "preProd11RuntimeEnvBackup": "/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime.pre-prod11"
+  },
+  "preAuthorizationAttestation": {
+    "status": "PASS",
+    "attestedAtUtc": "2026-09-29T09:44:33Z",
+    "productionHost": "VM-0-12-ubuntu",
+    "liveContainerId": "b29798598ac043794420599c23f735c19038744a76f1b490b3e8c5a58e28e6be",
+    "liveImageId": "sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545",
+    "liveSourceRevision": "92b7137211bf807f178901e878a8c3d6e335cec4",
+    "liveHealth": "healthy",
+    "liveKioskConfigBinding": "ABSENT",
+    "liveKioskRuntimeFile": "ABSENT",
+    "candidateImageId": "sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72",
+    "candidateSourceRevision": "d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
+    "productionVolume": "jenn-shooting-operations_shooting_data",
+    "backendHealthStatus": 200,
+    "publicHealthStatus": 200,
+    "publicWriteAdmission": "enabled",
+    "databaseRevision": 3,
+    "nginxRouteFile": "/etc/nginx/conf.d/jso-shooting-operations.conf",
+    "nginxRouteSha256": "35ea9acd80ba600e88d8c594a3a2558ec4cb57dd078c61d6832f5798c2eabc33",
+    "studioDeviceReachability": {
+      "deviceLabel": "QLL-6",
+      "publicHealthStatus": 200,
+      "observedChromeVersion": "153.0.8010.53",
+      "dedicatedProfileExists": false
     }
   },
   "rollbackContract": {
@@ -127,21 +162,19 @@
   },
   "requestability": {
     "actionId": "PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE",
-    "requestable": false,
+    "assessment": "READY_TO_REQUEST_EXPLICIT_AUTHORIZATION",
+    "formalAuthorizationState": "FROZEN_NOT_REQUESTED",
     "requiresExplicitAuthorization": true,
     "risk": "HIGH",
     "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
-    "blockingReasons": [
-      "EXACT_REAL_DEVICE_UNRESOLVED",
-      "EXACT_BROWSER_PROFILE_UNRESOLVED",
-      "FRESH_PRE_AUTH_TARGET_ATTESTATION_NOT_YET_RECORDED"
-    ],
-    "becomesRequestableWhen": [
-      "owner selects one exact physical Kiosk device and browser/profile",
-      "fresh read-only attestation confirms exact production host/container/route/volume and candidate image identity are unchanged",
-      "deployment contract is reviewed without widening resourceId/deviceId/config/rollback scope"
+    "blockingReasons": [],
+    "closedPrerequisites": [
+      "EXACT_REAL_DEVICE_SELECTED",
+      "EXACT_BROWSER_PROFILE_TARGET_FROZEN",
+      "FRESH_PRE_AUTH_TARGET_ATTESTATION_PASS"
     ],
     "credentialGenerationIsExecutionNotRequestPrerequisite": true,
+    "dedicatedBrowserProfileCreationIsExecutionNotRequestPrerequisite": true,
     "realDeviceAcceptanceAndOfflineReplayAreExecutionEvidenceNotPreAuthorizationWrites": true
   }
 }
