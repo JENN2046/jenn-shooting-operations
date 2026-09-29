@@ -72,7 +72,27 @@
         "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
         "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY"
       ],
-      "prod11ExecutionEligibility": "BLOCKED_MISSING_ATOMIC_CONTEXT_SMOKE_WRITE_ADMISSION_AND_SMOKE_OUTBOX_ISOLATION_CAPABILITIES"
+      "prod11ExecutionEligibility": "BLOCKED_MISSING_ATOMIC_CONTEXT_SMOKE_WRITE_ADMISSION_AND_SMOKE_OUTBOX_ISOLATION_CAPABILITIES",
+      "smokeAcceptanceRunWindowBinding": {
+        "status": "BLOCKED_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
+        "scope": "PROD11_BOUNDED_PRODUCTION_SMOKE_ONLY",
+        "startEnvironmentVariable": "KIOSK_SMOKE_ACCEPTANCE_RUN_START",
+        "endEnvironmentVariable": "KIOSK_SMOKE_ACCEPTANCE_RUN_END",
+        "startValue": null,
+        "endValue": null,
+        "valueSource": "exact acceptanceRunStart and acceptanceRunEnd frozen in the one-time PROD-11 authorization packet",
+        "format": "canonical RFC3339 UTC instants",
+        "startupValidation": [
+          "both variables are required for PROD-11 smoke execution mode",
+          "both values parse as canonical instants",
+          "acceptanceRunStart is strictly earlier than acceptanceRunEnd",
+          "values exactly equal the authorization-frozen smoke window",
+          "no default, database-derived fallback, or hot reload is allowed"
+        ],
+        "immutableForContainerLifetime": true,
+        "transactionRule": "inside the same KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY transaction as each accepted smoke phase, parse command.occurredAt and require KIOSK_SMOKE_ACCEPTANCE_RUN_START <= occurredAt <= KIOSK_SMOKE_ACCEPTANCE_RUN_END before any production fact commits",
+        "normalProductionAuthority": false
+      }
     },
     "role": "VERIFIED_BASELINE_NOT_PROD11_EXECUTION_ELIGIBLE",
     "prod11ExecutionEligibility": "BLOCKED_MISSING_KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
@@ -299,6 +319,19 @@
           "finalValueMayNotBeInferredFromCurrentDatabaseState": true,
           "scope": "PROD11_BOUNDED_PRODUCTION_SMOKE_ONLY",
           "normalProductionAuthority": false
+        },
+        "smokeAcceptanceRunWindow": {
+          "startEnvironmentVariable": "KIOSK_SMOKE_ACCEPTANCE_RUN_START",
+          "endEnvironmentVariable": "KIOSK_SMOKE_ACCEPTANCE_RUN_END",
+          "startValue": null,
+          "endValue": null,
+          "source": "authorization packet exact acceptanceRunStart and acceptanceRunEnd",
+          "separateFromAuthJson": true,
+          "canonicalFormat": "RFC3339 UTC instant",
+          "immutableForContainerLifetime": true,
+          "finalValuesRequiredBeforeContainerCreate": true,
+          "databaseDerivedFallbackForbidden": true,
+          "scope": "PROD11_BOUNDED_PRODUCTION_SMOKE_ONLY"
         }
       }
     },
@@ -511,7 +544,9 @@
         "requiredBeforeRequest": true,
         "authorityPacketBindings": {
           "scheduleItemId": "derived acceptance scheduleItemId frozen elsewhere in this contract",
-          "resourceId": "STUDIO-PROD-01"
+          "resourceId": "STUDIO-PROD-01",
+          "acceptanceRunStart": "exact canonical instant frozen by acceptanceItemExecutionWindowContract.authorizationPacketRule",
+          "acceptanceRunEnd": "exact canonical instant frozen by acceptanceItemExecutionWindowContract.authorizationPacketRule"
         },
         "allowedMutatingSequence": [
           {
@@ -523,7 +558,8 @@
             "localSequence": 0,
             "requiredResult": "RUN_EVENT_APPLIED",
             "requiredResultingState": "shooting",
-            "requiredRunRevision": 1
+            "requiredRunRevision": 1,
+            "occurredAtRule": "must parse as an instant and satisfy KIOSK_SMOKE_ACCEPTANCE_RUN_START <= occurredAt <= KIOSK_SMOKE_ACCEPTANCE_RUN_END inside the same smoke write-admission transaction"
           },
           {
             "ordinal": 2,
@@ -534,7 +570,8 @@
             "localSequence": 1,
             "requiredResult": "RUN_EVENT_APPLIED",
             "requiredResultingState": "completed",
-            "requiredRunRevision": 2
+            "requiredRunRevision": 2,
+            "occurredAtRule": "must parse as an instant and satisfy KIOSK_SMOKE_ACCEPTANCE_RUN_START <= occurredAt <= KIOSK_SMOKE_ACCEPTANCE_RUN_END inside the same smoke write-admission transaction"
           }
         ],
         "forbiddenMutations": [
@@ -551,7 +588,7 @@
           "any predictable operator-authored or contract-hard-coded runId/eventId"
         ],
         "idempotentReplayRule": "exact replay of one of the two already-persisted phase commands is permitted only when the runId, eventId and command digest match the corresponding immutable receipt and produces no new production fact; replay does not advance the smoke phase or write budget",
-        "dynamicTimeRule": "occurredAt values are execution-time facts and must fall inside the frozen acceptance run window and pass the normal event-time policy without reviewRequired; they are not standing authority values",
+        "dynamicTimeRule": "occurredAt remains an execution-time fact, but the authorization-frozen acceptanceRunStart and acceptanceRunEnd are immutable trusted runtime inputs via KIOSK_SMOKE_ACCEPTANCE_RUN_START and KIOSK_SMOKE_ACCEPTANCE_RUN_END. Every START and COMPLETE must satisfy the frozen window inside the same write-admission transaction and must also pass the normal event-time policy without reviewRequired.",
         "hardStopOutcomes": [
           "EVENT_TIME_REVIEW_REQUIRED",
           "revision conflict",
@@ -562,7 +599,8 @@
           "complete runId differs from the accepted start runId",
           "ID structure invalid or secure-client generation proof unavailable",
           "any non-RUN_EVENT_APPLIED response for a not-yet-persisted phase",
-          "unexpected pre-existing run/event/review/receipt/outbox facts inconsistent with the exact acceptance item or already-bound smoke identifiers"
+          "unexpected pre-existing run/event/review/receipt/outbox facts inconsistent with the exact acceptance item or already-bound smoke identifiers",
+          "occurredAt before KIOSK_SMOKE_ACCEPTANCE_RUN_START or after KIOSK_SMOKE_ACCEPTANCE_RUN_END"
         ],
         "failureRule": "on any hard-stop outcome, no later smoke mutation is authorized; preserve any facts already committed, disable/rollback Kiosk configuration as applicable, and require a new separately frozen recovery or smoke authority rather than improvising more events",
         "terminalCondition": {
@@ -584,9 +622,10 @@
         ],
         "writeAdmissionCapability": {
           "id": "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
-          "requirement": "inside the same trusted write-admission/event serialization boundary, enforce the exact two-phase mutation budget, client-generated Web Crypto ID contract with immutable receipt binding, phase order, localSequence zero then one, expected revisions, schedule-item binding, no-third-write terminal latch, and receipt-exact replay-only exception",
+          "requirement": "inside the same trusted write-admission/event serialization boundary, enforce the exact two-phase mutation budget, client-generated Web Crypto ID contract with immutable receipt binding, phase order, localSequence zero then one, expected revisions, schedule-item binding, immutable authorization-frozen smoke-window binding, occurredAt window comparison for every phase, no-third-write terminal latch, and receipt-exact replay-only exception",
           "currentBaselineContainsCapability": false,
-          "clientCompatibility": "must accept the existing reviewed Kiosk client's secureId('RUN') and secureId('EVENT') values and its queue sequence starting at zero; must not require predictable predeclared IDs"
+          "clientCompatibility": "must accept the existing reviewed Kiosk client's secureId('RUN') and secureId('EVENT') values and its queue sequence starting at zero; must not require predictable predeclared IDs",
+          "windowBindingRequirement": "replacement runtime must require immutable KIOSK_SMOKE_ACCEPTANCE_RUN_START and KIOSK_SMOKE_ACCEPTANCE_RUN_END values copied exactly from the authorization packet, validate them at startup, and compare each phase occurredAt against them inside the same event transaction before commit"
         },
         "outboxIsolationCapability": {
           "id": "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY",
@@ -616,6 +655,17 @@
           },
           "provenanceRule": "the server cannot infer randomness from a string; Web Crypto provenance is established by exact-head client implementation/tests, while server admission validates structure, phase, identity, schedule binding, local sequence and immutable receipt/latch consistency",
           "replayRule": "idempotent replay must reuse the exact runId/eventId already bound in the immutable receipt and the exact command digest"
+        },
+        "runtimeWindowBinding": {
+          "startEnvironmentVariable": "KIOSK_SMOKE_ACCEPTANCE_RUN_START",
+          "endEnvironmentVariable": "KIOSK_SMOKE_ACCEPTANCE_RUN_END",
+          "source": "authorityPacketBindings.acceptanceRunStart and acceptanceRunEnd",
+          "requiredAtStartup": true,
+          "immutableForContainerLifetime": true,
+          "databaseDerivedFallbackForbidden": true,
+          "equalityRule": "container values must exactly equal the authorization-frozen acceptanceRunStart and acceptanceRunEnd",
+          "transactionRule": "for START and COMPLETE, inside the same trusted write-admission/event transaction and before any production fact commits, require acceptanceRunStart <= command.occurredAt <= acceptanceRunEnd",
+          "normalEventTimePolicyStillRequired": true
         }
       }
     },
@@ -703,7 +753,7 @@
       "currentBaselineEligibleForProd11": false,
       "finalImmutableImageId": "UNRESOLVED",
       "finalSourceRevision": "UNRESOLVED",
-      "rule": "before PROD-11 may be requested, freeze a replacement image containing KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY, KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY, KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY, and required immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID startup/runtime binding support. Freeze its immutable image ID, source revision, and exact derived diagnostic tag, then fresh-pass the complete seven-item PROD-11 action-specific revalidation checklist. After separate scheduling preparation derives the exact scheduleItemId, bind that exact authorization value at container creation. At execution, revalidate that the frozen diagnostic tag resolves to the frozen immutable image ID and the OCI revision label equals the frozen source revision, then create by immutable image ID; mutable tags are never execution authority.",
+      "rule": "before PROD-11 may be requested, freeze a replacement image containing KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY, KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY, KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY, required immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID support, and immutable KIOSK_SMOKE_ACCEPTANCE_RUN_START/KIOSK_SMOKE_ACCEPTANCE_RUN_END startup and transactional validation support. Freeze its immutable image ID, source revision, and exact derived diagnostic tag, then fresh-pass the complete seven-item PROD-11 action-specific revalidation checklist. After separate scheduling preparation derives the exact scheduleItemId and run window, bind those exact authorization values at container creation. At execution, revalidate that the frozen diagnostic tag resolves to the frozen immutable image ID and the OCI revision label equals the frozen source revision, then create by immutable image ID; mutable tags are never execution authority.",
       "requiredActionSpecificRevalidation": [
         "TARGET_HOST_IDENTITY",
         "DISK_PORT_ROUTE_CONFLICTS",
@@ -821,7 +871,13 @@
       ],
       "runIdRule": "start generates RUN-{crypto.randomUUID()}; complete must reuse the exact runId bound by the accepted start receipt",
       "eventIdRule": "start and complete each generate EVENT-{crypto.randomUUID()}; each exact value becomes immutable only through its accepted phase receipt and must be reused unchanged for idempotent replay",
-      "predictableIdentifiersForbidden": true
+      "predictableIdentifiersForbidden": true,
+      "runtimeWindowBindingRequired": true,
+      "runtimeWindowEnvironmentVariables": [
+        "KIOSK_SMOKE_ACCEPTANCE_RUN_START",
+        "KIOSK_SMOKE_ACCEPTANCE_RUN_END"
+      ],
+      "occurredAtRule": "both authorized smoke phases must satisfy the immutable authorization-frozen acceptance window inside KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY before commit"
     }
   },
   "runtimeAuthorityBinding": {
