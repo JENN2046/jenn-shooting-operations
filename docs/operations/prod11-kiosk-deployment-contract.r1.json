@@ -23,6 +23,15 @@
         "migration-recovery-v2 touch @nanosecond timestamp",
         "migration-v2 touch @nanosecond timestamp"
       ]
+    },
+    "executionBinding": {
+      "deploymentReference": "IMMUTABLE_IMAGE_ID",
+      "immutableImageId": "sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72",
+      "diagnosticTag": "jenn-shooting-operations:prod-d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
+      "expectedSourceRevision": "d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
+      "immediatePreCreateRevalidationRequired": true,
+      "requiredManifestRevalidation": "BUILT_IMAGE_DIGEST",
+      "rule": "immediately before production container create or replacement, docker image inspect the diagnostic tag and require its Id to equal immutableImageId and its org.opencontainers.image.revision label to equal expectedSourceRevision; create the production container by immutableImageId, not by mutable tag; any mismatch is a hard stop"
     }
   },
   "identityBinding": {
@@ -149,9 +158,10 @@
         "WO03_EXACT_ISOLATED_ACCEPTANCE_ENVIRONMENT_BOUND",
         "WO03_FULL_ISOLATED_VIEWPORT_AND_ON_SITE_MATRIX",
         "REAL_DEVICE_ACCEPTANCE",
-        "OFFLINE_REPLAY_RESULT"
+        "OFFLINE_REPLAY_RESULT",
+        "KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY"
       ],
-      "rule": "PROD-11 may enable the exact production Kiosk configuration and server-authoritative identity before isolated WO-03 execution, but no production run event may be submitted until every prerequisite above is recorded PASS",
+      "rule": "PROD-11 may enable the exact production Kiosk configuration and server-authoritative identity before isolated WO-03 execution, but no production run event may be submitted until isolated WO-03 is PASS and KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY is present and passes inside the same transaction as the event write",
       "forbiddenBeforePass": [
         "production start event",
         "production block event",
@@ -159,7 +169,14 @@
         "production complete event",
         "any production review-required Kiosk submission"
       ],
-      "failureRule": "if isolated WO-03 acceptance is incomplete or fails, keep production event writes at zero and use only the bound Kiosk configuration rollback if production runtime configuration must be disabled"
+      "failureRule": "if isolated WO-03 acceptance is incomplete or fails, keep production event writes at zero and use only the bound Kiosk configuration rollback if production runtime configuration must be disabled",
+      "atomicSelectionRequirement": {
+        "status": "BLOCKED_CAPABILITY_NOT_IMPLEMENTED",
+        "capabilityId": "KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY",
+        "requiredPredicate": "inside the same transaction that commits the first production Kiosk run event, re-evaluate the resource-wide current selection for STUDIO-PROD-01 and require the exact frozen acceptance scheduleItemId to be the unique current item with no competing active run or current candidate",
+        "getCurrentIsNotAuthority": "the preceding authenticated GET /api/v2/kiosk/current is diagnostic and device-facing evidence only; it is not sufficient write authority because another scheduling or run mutation can occur before POST commit",
+        "implementationRule": "the production event write must fail closed before any production fact if the atomic predicate is unavailable or does not match"
+      }
     }
   },
   "runtimeAuthConfig": {
@@ -275,7 +292,10 @@
     "restartPolicy": "unless-stopped",
     "tokenEnvFile": "/mnt/datadisk0/apps/jenn-shooting-operations/.env.tokens",
     "runtimeEnvFile": "/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime",
-    "preProd11RuntimeEnvBackup": "/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime.pre-prod11"
+    "preProd11RuntimeEnvBackup": "/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime.pre-prod11",
+    "imageReference": "sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72",
+    "imageReferenceMode": "IMMUTABLE_ID_ONLY",
+    "mutableTagUse": "DIAGNOSTIC_REVALIDATION_ONLY"
   },
   "preAuthorizationAttestation": {
     "status": "PASS",
@@ -348,9 +368,18 @@
       "authorizationExpiryRule": "if current time reaches or passes planned_end before PROD-11 execution starts, or the item becomes used, cancelled, rebound, changed or no longer covers the bound acceptance run window, the authorization packet is stale and PROD-11 must not execute from it",
       "executionTimeRecheck": "after PROD-11 has enabled the exact production Kiosk auth configuration, but only after the isolated WO-03 productionSmokeWriteGate has passed, immediately before the first production smoke run event fresh-read the same schedule item, schedule_item_tasks binding and production_runs state and require confirmed status, exact STUDIO-PROD-01, exactly one binding to the frozen V2 acceptance request, zero prior runs, planned_start <= current time < planned_end, and planned_end still covers the bound acceptanceRunEnd",
       "failureRule": "on any execution-time item, binding, run-state or resource-wide current-selection mismatch stop before the Kiosk run event; PROD-11 does not authorize creating or moving a replacement schedule item. Return to a separately authorized scheduling preparation. If Kiosk runtime configuration has already changed, use the bound configuration rollback without erasing production facts.",
-      "resourceWideSelectionRecheck": "after PROD-11 has enabled the exact Kiosk auth configuration, the isolated WO-03 productionSmokeWriteGate has passed, and server-authoritative device identity has been verified, immediately before the first production smoke run event perform an authenticated GET /api/v2/kiosk/current?resourceId=STUDIO-PROD-01 and require a successful response whose current.scheduleItemId equals the frozen derived acceptance scheduleItemId exactly",
+      "resourceWideSelectionRecheck": "after PROD-11 has enabled the exact Kiosk auth configuration, the isolated WO-03 productionSmokeWriteGate has passed, and server-authoritative device identity has been verified, perform authenticated GET /api/v2/kiosk/current?resourceId=STUDIO-PROD-01 and require current.scheduleItemId to equal the frozen derived acceptance item as device-facing evidence; this GET is non-authoritative for the later write and must be followed by the KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY predicate inside the event transaction",
       "selectionConflictRule": "any MULTIPLE_CURRENT_CANDIDATES result, any other current scheduleItemId, any other active run exposed as current, a null current item, authentication or identity failure, or any non-success current-read result blocks the run event and forces fail-closed recovery",
-      "productionEventWriteGate": "before the authenticated production current-selection recheck may be followed by any Kiosk run event, require WO03_EXACT_ISOLATED_ACCEPTANCE_ENVIRONMENT_BOUND, WO03_FULL_ISOLATED_VIEWPORT_AND_ON_SITE_MATRIX, REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT all PASS; otherwise stop with zero production run-event writes"
+      "productionEventWriteGate": "before the authenticated production current-selection recheck may be followed by any Kiosk run event, require WO03_EXACT_ISOLATED_ACCEPTANCE_ENVIRONMENT_BOUND, WO03_FULL_ISOLATED_VIEWPORT_AND_ON_SITE_MATRIX, REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT all PASS; otherwise stop with zero production run-event writes",
+      "atomicCurrentSelectionGate": {
+        "capabilityId": "KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY",
+        "currentStatus": "NOT_IMPLEMENTED_IN_FROZEN_RUNTIME",
+        "requiredBeforeProductionEventWrite": true,
+        "transactionBoundary": "same transaction as Kiosk production event commit",
+        "exactResourceId": "STUDIO-PROD-01",
+        "exactScheduleItemPredicate": "unique current item equals frozen derived acceptance scheduleItemId and no competing active run or current candidate exists",
+        "failureRule": "absence, race, ambiguity, mismatch, or inability to evaluate the predicate aborts before the event receipt, run/review facts, projection revision, audit, or notification outbox can commit"
+      }
     },
     "requiredProductionSmokeEvidence": [
       "exact production Kiosk identity binding and authenticated current-read path",
@@ -411,11 +440,20 @@
       "IDENTITY_EXPIRY_AND_DEVICE_HANDOFF",
       "ACCESSIBILITY_AND_ON_SITE_ENVIRONMENT_ACCEPTANCE",
       "WO03_ISOLATED_ACCEPTANCE_BEFORE_PRODUCTION_EVENT_WRITE",
+      "KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY",
       "KIOSK_ACCEPTANCE_ITEM_EXECUTION_TIME_RECHECK",
       "KIOSK_CURRENT_SELECTION_EQUALS_FROZEN_ACCEPTANCE_ITEM",
       "PROD11_PRODUCTION_SMOKE_SEPARATE_FROM_WO03"
     ],
     "wo03EvidenceSourceRule": "REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT must come from the exact isolated WO-03 acceptance environment; production smoke evidence is separate and non-substitutable",
-    "productionEventWriteGate": "no production Kiosk run-event write is authorized by execution ordering until isolated WO-03 REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT are PASS; PROD-11 configuration/identity enablement may precede that isolated execution, but production facts must remain unchanged until the gate closes"
+    "productionEventWriteGate": "no production Kiosk run-event write may commit until isolated WO-03 REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT are PASS and KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY revalidates the exact frozen current item inside the same event transaction; the prior GET /current is evidence only and cannot authorize the write",
+    "executionImageGate": {
+      "required": true,
+      "check": "BUILT_IMAGE_DIGEST",
+      "immutableImageId": "sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72",
+      "expectedSourceRevision": "d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
+      "mutableTag": "jenn-shooting-operations:prod-d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
+      "rule": "fresh tag-to-imageId and revision-label equality immediately before container create, then create by immutable imageId; mismatch blocks PROD-11 execution"
+    }
   }
 }
