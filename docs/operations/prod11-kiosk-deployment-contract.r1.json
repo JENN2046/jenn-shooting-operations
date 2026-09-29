@@ -986,7 +986,7 @@
       "diagnosticTag": "UNRESOLVED_UNTIL_REPLACEMENT_IMAGE_FROZEN",
       "diagnosticTagDerivationRule": "exact string jenn-shooting-operations:prod- followed by finalSourceRevision",
       "diagnosticTagAuthority": "diagnostic only; never execution authority by itself",
-      "tagResolutionRule": "the separate deployment Action must verify the diagnosticTag resolves to immutableImageId and the image OCI revision label equals sourceRevision immediately before it creates/replaces the live service; PROD-11 itself never creates/replaces the application container"
+      "tagResolutionRule": "the separate deployment Action must verify the diagnosticTag resolves to immutableImageId and the image OCI revision label equals sourceRevision immediately before it creates/replaces the live service. PROD-11 may not change the application image ID/source revision, but may perform only the separately frozen same-image config-only container recreation needed to apply/remove Kiosk startup bindings while preserving all non-Kiosk topology/configuration exactly."
     }
   },
   "authorityLineage": {
