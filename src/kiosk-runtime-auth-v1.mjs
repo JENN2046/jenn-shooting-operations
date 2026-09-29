@@ -1,6 +1,6 @@
 import { closeSync, constants, fstatSync, openSync, readFileSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
-import { scryptSync, timingSafeEqual } from 'node:crypto';
+import { scrypt, scryptSync, timingSafeEqual } from 'node:crypto';
 import { createTrustedPrincipal, validateTrustedPrincipal } from './authorization-v2.mjs';
 
 const MAX_IDENTIFIER_LENGTH = 160;
@@ -13,6 +13,7 @@ const CONFIG_KEYS = new Set([
 ]);
 const PRINCIPAL_KEYS = new Set(['subjectId', 'role', 'resourceIds']);
 const CREDENTIAL_KEYS = new Set(['algorithm', 'saltBase64', 'hashBase64']);
+const MAX_CONCURRENT_AUTHENTICATION_ATTEMPTS = 4;
 
 function exactKeys(value, expected) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -116,10 +117,12 @@ function parseBasicAuthorization(value) {
   };
 }
 
-function credentialMatches(config, password) {
-  if (typeof password !== 'string' || password.length === 0 || password.length > 256) {
-    return false;
-  }
+function validPasswordCandidate(password) {
+  return typeof password === 'string' && password.length > 0 && password.length <= 256;
+}
+
+function credentialMatchesSync(config, password) {
+  if (!validPasswordCandidate(password)) return false;
   let candidate;
   try {
     candidate = scryptSync(password, config.salt, config.hash.length);
@@ -129,8 +132,17 @@ function credentialMatches(config, password) {
   return candidate.length === config.hash.length && timingSafeEqual(candidate, config.hash);
 }
 
-function verifyCredential(config, username, password) {
-  return username === config.username && credentialMatches(config, password);
+function credentialMatchesAsync(config, password) {
+  if (!validPasswordCandidate(password)) return Promise.resolve(false);
+  return new Promise(resolve => {
+    scrypt(password, config.salt, config.hash.length, (error, candidate) => {
+      if (error || !Buffer.isBuffer(candidate) || candidate.length !== config.hash.length) {
+        resolve(false);
+        return;
+      }
+      resolve(timingSafeEqual(candidate, config.hash));
+    });
+  });
 }
 
 export function loadKioskRuntimeAuthV1({
@@ -180,10 +192,12 @@ export function loadKioskRuntimeAuthV1({
     throw new Error('KIOSK_AUTH_CONFIG_INVALID');
   }
   const config = validateConfig(parsed);
-  if (forbiddenCredentialValues.some(value => credentialMatches(config, value))) {
+  if (forbiddenCredentialValues.some(value => credentialMatchesSync(config, value))) {
     throw new Error('KIOSK_AUTH_CREDENTIAL_COLLISION');
   }
   const challenge = `Basic realm="${config.realm}", charset="UTF-8"`;
+
+  let activeAuthenticationAttempts = 0;
 
   return Object.freeze({
     authenticationChallenge: challenge,
@@ -191,10 +205,25 @@ export function loadKioskRuntimeAuthV1({
     allowedBriefHosts: config.allowedBriefHosts,
     deviceId: config.deviceId,
     principal: config.principal,
-    authenticate(request) {
+    async authenticate(request) {
       const supplied = parseBasicAuthorization(request?.headers?.authorization);
-      if (!supplied || !verifyCredential(config, supplied.username, supplied.password)) return null;
-      return config.principal;
+      if (!supplied
+          || supplied.username !== config.username
+          || !validPasswordCandidate(supplied.password)) {
+        return null;
+      }
+      if (activeAuthenticationAttempts >= MAX_CONCURRENT_AUTHENTICATION_ATTEMPTS) {
+        return null;
+      }
+
+      activeAuthenticationAttempts += 1;
+      try {
+        return await credentialMatchesAsync(config, supplied.password)
+          ? config.principal
+          : null;
+      } finally {
+        activeAuthenticationAttempts -= 1;
+      }
     },
     authorizeDeviceId({ principal, deviceId } = {}) {
       return validateTrustedPrincipal(principal).ok

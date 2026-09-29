@@ -64,11 +64,11 @@ function request(username = 'kiosk-prod-01', password = PASSWORD) {
   };
 }
 
-test('runtime auth maps one Basic credential to an exact operator/device/resource principal', () => {
+test('runtime auth maps one Basic credential to an exact operator/device/resource principal', async () => {
   const f = fixture();
   try {
     const runtime = loadKioskRuntimeAuthV1({ configPath: f.path });
-    const principal = runtime.authenticate(request());
+    const principal = await runtime.authenticate(request());
     assert.ok(principal);
     assert.equal(principal.subjectId, 'DEVICE-KIOSK-PROD-01');
     assert.equal(principal.role, 'operator');
@@ -96,18 +96,39 @@ test('runtime auth maps one Basic credential to an exact operator/device/resourc
   }
 });
 
-test('runtime auth rejects wrong credentials without exposing credential material', () => {
+test('runtime auth rejects wrong credentials without exposing credential material', async () => {
   const f = fixture();
   try {
     const runtime = loadKioskRuntimeAuthV1({ configPath: f.path });
-    assert.equal(runtime.authenticate(request('kiosk-prod-01', 'wrong')), null);
-    assert.equal(runtime.authenticate(request('wrong-user', PASSWORD)), null);
-    assert.equal(runtime.authenticate(request('kiosk-prod-01', 'x'.repeat(257))), null);
-    assert.equal(runtime.authenticate({ headers: {} }), null);
-    assert.equal(runtime.authenticate({ headers: { authorization: 'Bearer x' } }), null);
+    assert.equal(await runtime.authenticate(request('kiosk-prod-01', 'wrong')), null);
+    assert.equal(await runtime.authenticate(request('wrong-user', PASSWORD)), null);
+    assert.equal(await runtime.authenticate(request('kiosk-prod-01', 'x'.repeat(257))), null);
+    assert.equal(await runtime.authenticate({ headers: {} }), null);
+    assert.equal(await runtime.authenticate({ headers: { authorization: 'Bearer x' } }), null);
     const serialized = JSON.stringify(runtime);
     assert.equal(serialized.includes(PASSWORD), false);
     assert.equal(serialized.includes(configFor().credential.hashBase64), false);
+  } finally {
+    f.close();
+  }
+});
+
+test('runtime auth hashes passwords asynchronously and rejects attempts above the fixed concurrency bound', async () => {
+  const f = fixture();
+  try {
+    const runtime = loadKioskRuntimeAuthV1({ configPath: f.path });
+    const inFlight = Array.from(
+      { length: 4 },
+      () => runtime.authenticate(request('kiosk-prod-01', PASSWORD)),
+    );
+    const overflow = runtime.authenticate(request('kiosk-prod-01', PASSWORD));
+    const winner = await Promise.race([
+      overflow.then(value => ({ source: 'overflow', value })),
+      Promise.race(inFlight).then(value => ({ source: 'inflight', value })),
+    ]);
+    assert.deepEqual(winner, { source: 'overflow', value: null });
+    const principals = await Promise.all(inFlight);
+    assert.equal(principals.every(value => value?.subjectId === 'DEVICE-KIOSK-PROD-01'), true);
   } finally {
     f.close();
   }
@@ -197,7 +218,7 @@ test('production entrypoint rejects Kiosk credential reuse across every existing
   }
 });
 
-test('production entrypoint remains disabled by default and injects only explicit Kiosk auth config', () => {
+test('production entrypoint remains disabled by default and injects only explicit Kiosk auth config', async () => {
   assert.deepEqual(createKioskRuntimeOptionsFromEnv({}), {});
 
   const f = fixture();
@@ -205,7 +226,7 @@ test('production entrypoint remains disabled by default and injects only explici
     const options = createKioskRuntimeOptionsFromEnv({
       KIOSK_AUTH_CONFIG_PATH: f.path,
     });
-    const principal = options.kioskAuthenticate(request());
+    const principal = await options.kioskAuthenticate(request());
     assert.equal(principal.role, 'operator');
     assert.deepEqual(principal.resourceIds, ['STUDIO-A']);
     assert.equal(
