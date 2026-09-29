@@ -289,6 +289,7 @@ PROD-11 explicit authorization
 → startup validates all smoke bindings before listen
 → revalidate the frozen production smoke item
 → authenticated production current-read evidence
+→ KIOSK_TRUSTED_SERVICE_CONTEXT_SIGNAL_CAPABILITY confirms immutable KIOSK_SERVICE_CONTEXT = PROD11_PRODUCTION
 → KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY passes all three predicates inside the same event transaction
 → KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY passes the exact two-phase mutation/ID/sequence/window gate
 → KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY is active for the exact acceptance-only notification intent
@@ -942,13 +943,14 @@ After production activation, before the first production smoke event:
 KIOSK_ACCEPTANCE_ITEM_EXECUTION_TIME_RECHECK
 KIOSK_SMOKE_AUTHORIZATION_BINDING_EQUALS_EVENT_TARGET
 KIOSK_CURRENT_SELECTION_EQUALS_FROZEN_ACCEPTANCE_ITEM
+KIOSK_TRUSTED_SERVICE_CONTEXT_SIGNAL_CAPABILITY = PASS with KIOSK_SERVICE_CONTEXT = PROD11_PRODUCTION
 KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY = PASS for all three predicates inside same event transaction
 KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY = PASS
 KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY = PASS
 PROD11_PRODUCTION_SMOKE_SEPARATE_FROM_WO03
 ```
 
-All three smoke capabilities are co-required authority. Passing the atomic production-context predicates alone never authorizes a production smoke write.
+All four production-write capabilities are co-required authority: trusted service context, atomic production context, bounded smoke write admission, and smoke outbox isolation. Passing any subset never authorizes a production smoke write.
 
 `REAL_DEVICE_ACCEPTANCE` and `OFFLINE_REPLAY_RESULT` come only from the isolated WO-03 environment. Production smoke evidence is separate and non-substitutable.
 
