@@ -90,13 +90,21 @@
           "no default, database-derived fallback, or hot reload is allowed"
         ],
         "immutableForContainerLifetime": true,
-        "transactionRule": "inside the same KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY transaction as each accepted smoke phase, parse command.occurredAt and require KIOSK_SMOKE_ACCEPTANCE_RUN_START <= occurredAt <= KIOSK_SMOKE_ACCEPTANCE_RUN_END before any production fact commits",
-        "normalProductionAuthority": false
+        "transactionRule": "inside the same KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY transaction as each accepted smoke phase, after entering the write-serialization boundary capture trusted server time from the runtime clock; require both KIOSK_SMOKE_ACCEPTANCE_RUN_START <= command.occurredAt <= KIOSK_SMOKE_ACCEPTANCE_RUN_END and KIOSK_SMOKE_ACCEPTANCE_RUN_START <= trustedServerTime <= KIOSK_SMOKE_ACCEPTANCE_RUN_END before any production fact commits; accepted receipt/audit timestamps must use that same trusted in-transaction server time",
+        "normalProductionAuthority": false,
+        "clientOccurredAtAloneNeverAuthorizes": true,
+        "trustedServerTimeCapturePoint": "after entering the same smoke event transaction/write-serialization boundary",
+        "receiptAuditTimeSource": "same trusted in-transaction server time that passed the frozen-window predicate"
       }
     },
     "role": "VERIFIED_BASELINE_NOT_PROD11_EXECUTION_ELIGIBLE",
-    "prod11ExecutionEligibility": "BLOCKED_MISSING_KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
-    "replacementImageRequired": true
+    "prod11ExecutionEligibility": "BLOCKED_MISSING_ATOMIC_CONTEXT_SMOKE_WRITE_ADMISSION_AND_SMOKE_OUTBOX_ISOLATION_CAPABILITIES",
+    "replacementImageRequired": true,
+    "missingProd11ExecutionCapabilities": [
+      "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
+      "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
+      "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY"
+    ]
   },
   "identityBinding": {
     "resourceId": "STUDIO-PROD-01",
