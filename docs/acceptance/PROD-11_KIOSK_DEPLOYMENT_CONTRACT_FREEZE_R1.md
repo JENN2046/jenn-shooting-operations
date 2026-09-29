@@ -272,6 +272,8 @@ PROD-11 explicit authorization
 → revalidate the frozen production smoke item
 → authenticated production current-read evidence
 → KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY passes all three predicates inside the same event transaction
+→ KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY passes the exact two-phase mutation/ID/sequence/window gate
+→ KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY is active for the exact acceptance-only notification intent
 → only then may the first bounded production Kiosk run event commit
 ```
 
