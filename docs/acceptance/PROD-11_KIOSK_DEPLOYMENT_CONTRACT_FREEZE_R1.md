@@ -62,7 +62,47 @@ existing normal profile reuse = false
 The dedicated profile directory does not exist yet by design. Creating it is part of the later explicitly authorized PROD-11 execution, not this freeze.
 
 The server-authoritative `deviceId` is a logical identity binding. The current Kiosk design does not claim cryptographic hardware attestation.
-The association between `QLL-6`, the dedicated Chrome profile and `KIOSK-PROD-01` is therefore recorded and verified as real-device acceptance evidence.
+
+`QLL-6 + Chrome dedicated profile` is frozen as the **primary production Kiosk identity target**. It is necessary evidence, but it is not sufficient to close the full WO-03 browser/device acceptance matrix.
+
+## WO-03 browser/device matrix remains fully binding
+
+The authoritative matrix in `docs/acceptance/WO-03_KIOSK_BROWSER_AND_DEVICE_ACCEPTANCE.md` is not reduced by this deployment freeze.
+
+Before `REAL_DEVICE_ACCEPTANCE` can close, evidence must still cover all of the following:
+
+### Browser viewport plan
+
+- Desktop 1440×900: keyboard operation, focus order, dialog focus return, long task-name wrapping;
+- Tablet landscape 1024×768: touch controls, status wrapping, offline recovery;
+- Tablet portrait 768×1024: current/next stacking and blocking form under the soft keyboard;
+- Mobile 390×844: two-column controls, safe-area, 200% zoom and screen-reader announcement;
+- Chromium/Safari Web Locks support differences and lease fallback;
+- DevTools offline/online, refresh, two tabs, concurrent start, 409 conflict and 202 `reviewRequired` visible feedback.
+
+### On-site device checklist
+
+- iPad or on-site tablet opens the explicit `resourceId` Kiosk URL and fails closed without configured identity;
+- landscape/portrait rotation, auto-lock recovery, weak network, offline and reconnect;
+- rapid taps and two-tab contention do not create duplicate facts; non-controller tab is read-only;
+- offline `start → block → resume → complete` replays in strict order;
+- blocked state cannot directly complete;
+- conflict/reviewRequired stays at queue head without automatic rebase or skip;
+- browser-cache clearing removes only local delivery state and does not change server facts;
+- grouped sessions display all tasks without pretending they are one-task labor time;
+- real screen reader, external keyboard, touch-target and studio-lighting contrast checks;
+- operator logout, identity expiry and device handoff flow.
+
+Therefore the following remain explicit blockers after QLL-6 selection:
+
+```text
+EXACT_ON_SITE_IPAD_OR_TABLET
+EXACT_SAFARI_BROWSER_TARGET
+EXACT_MOBILE_VIEWPORT_EXECUTION_TARGET
+EXACT_ACCESSIBILITY_ASSISTIVE_TECH_ENVIRONMENT
+```
+
+No Windows-Chrome-only evidence set may be used to mark `REAL_DEVICE_ACCEPTANCE` complete.
 
 ## Frozen runtime auth config
 
@@ -181,41 +221,37 @@ The absence of the dedicated profile is expected. No browser state is created be
 Fresh production inspection now shows:
 
 ```text
+requests_v2                           = 0
 scheduling_resources                  = 0
 STUDIO-PROD-01 resource rows          = 0
 scheduling_active_config              = 0
 schedule_items                        = 0
+schedule_item_tasks                   = 0
 
-requests_v2                           = 0
 non-empty requests_v2.brief_url       = 0
 ```
 
 This blocks PROD-11 requestability.
 
-The frozen WO-03 real-device checklist includes:
+Those checks require an exact canonical V2 request, production resource, active scheduling config, canonical proposal acceptance, derived schedule item and exact task binding. They cannot be truthfully closed against an empty scheduling domain.
 
-- tablet landscape and portrait;
-- touch controls and soft-keyboard blocking form;
-- offline to online recovery;
-- refresh;
-- two-tab local control lock;
-- concurrent start / 409 conflict;
-- 202 `reviewRequired` visibility;
-- offline `start -> block -> resume -> complete` replay;
-- blocked cannot complete;
-- browser-cache clearing does not change server facts.
-
-Those checks require an exact production resource and schedulable acceptance item. They cannot be truthfully closed against an empty scheduling domain.
+The supported Scheduling path requires `schedule_item_tasks.task_id` to reference `requests_v2`, and a single schedule item must bind exactly one request. A V1 snapshot-only request is insufficient.
 
 Preparing that schedulable acceptance target is a **separate production scheduling write** and must not be smuggled into PROD-11's frozen effects.
 
 Before PROD-11 can be requested, a separately authorized preparation must create or fresh-confirm:
 
 ```text
+exact canonical requests_v2 acceptance request
 resourceId = STUDIO-PROD-01
 applicable active scheduling config
-exact Kiosk acceptance schedule item
+deterministic acceptance proposal
+canonical accept decision
+derived Kiosk acceptance schedule item
+schedule_item_tasks binding from that item to the exact V2 request
 ```
+
+The schedule item and task binding must come from the canonical proposal-acceptance path. Direct SQL insertion is forbidden.
 
 The exact preparatory Action ID is not yet frozen and remains an authority gap.
 
@@ -240,8 +276,8 @@ Fresh inspection shows the live database already has the continuous migration pr
 Closed:
 
 ```text
-EXACT_REAL_DEVICE_SELECTED                    = QLL-6
-EXACT_BROWSER_PROFILE_TARGET_FROZEN           = PASS
+PRIMARY_PRODUCTION_KIOSK_TARGET_SELECTED      = QLL-6
+DEDICATED_CHROME_PROFILE_TARGET_FROZEN        = PASS
 FRESH_PRE_AUTH_TARGET_ATTESTATION             = PASS
 DATABASE_WIDE_BRIEF_HOST_COMPATIBILITY        = PASS_CURRENT_STATE
 ```
@@ -249,10 +285,14 @@ DATABASE_WIDE_BRIEF_HOST_COMPATIBILITY        = PASS_CURRENT_STATE
 Still blocked:
 
 ```text
+KIOSK_ACCEPTANCE_V2_REQUEST_ABSENT
 PRODUCTION_RESOURCE_STUDIO_PROD_01_ABSENT
 ACTIVE_SCHEDULING_CONFIG_ABSENT
 KIOSK_ACCEPTANCE_SCHEDULE_ITEM_ABSENT
+KIOSK_ACCEPTANCE_TASK_BINDING_ABSENT
 SEPARATE_SCHEDULING_PREPARATION_AUTHORITY_UNRESOLVED
+WO03_FULL_DEVICE_BROWSER_MATRIX_INCOMPLETE
+WO03_ADDITIONAL_DEVICE_BROWSER_TARGETS_UNRESOLVED
 ```
 
 Therefore:

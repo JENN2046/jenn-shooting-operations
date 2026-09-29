@@ -1,14 +1,19 @@
 {
   "schemaVersion": 1,
   "contractId": "PROD11_KIOSK_DEPLOYMENT_CONTRACT_R1",
-  "status": "BLOCKED_SCHEDULABLE_ACCEPTANCE_TARGET",
+  "status": "BLOCKED_SCHEDULABLE_ACCEPTANCE_AND_WO03_MATRIX",
   "runtimeSourceAuthorityCommit": "d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
   "candidateImage": {
     "tag": "jenn-shooting-operations:prod-d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
     "imageId": "sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72",
     "nodeVersion": "24.21.0",
     "kioskRuntimeWiring": "PRESENT",
-    "targetedTests": {"tests": 158, "pass": 158, "fail": 0, "skip": 0},
+    "targetedTests": {
+      "tests": 158,
+      "pass": 158,
+      "fail": 0,
+      "skip": 0
+    },
     "fullRegression": {
       "tests": 801,
       "pass": 798,
@@ -39,14 +44,56 @@
       "profileStatusAtFreeze": "NOT_YET_CREATED_BY_DESIGN",
       "existingDefaultProfileReuse": false
     },
-    "selectionStatus": "EXACT_DEVICE_AND_BROWSER_TARGET_FROZEN",
-    "bindingSemantics": "server-authoritative logical device identity; physical hardware/browser identity is acceptance evidence, not cryptographic hardware attestation"
+    "selectionStatus": "PRIMARY_PRODUCTION_KIOSK_TARGET_FROZEN_WO03_MATRIX_INCOMPLETE",
+    "bindingSemantics": "server-authoritative logical device identity; physical hardware/browser identity is acceptance evidence, not cryptographic hardware attestation",
+    "acceptanceScopeNote": "QLL-6 plus its dedicated Chrome profile is the primary production Kiosk identity target only; it does not by itself close the full WO-03 browser/device acceptance matrix."
+  },
+  "wo03AcceptanceMatrix": {
+    "status": "BLOCKED_INCOMPLETE_DEVICE_BROWSER_MATRIX",
+    "source": "docs/acceptance/WO-03_KIOSK_BROWSER_AND_DEVICE_ACCEPTANCE.md",
+    "primaryProductionTarget": {
+      "deviceLabel": "QLL-6",
+      "browser": "Google Chrome 153.0.8010.53",
+      "profileIsolation": "DEDICATED_USER_DATA_DIR"
+    },
+    "requiredViewportEvidence": [
+      "Desktop 1440x900 keyboard operation, focus order, dialog focus return, long task wrapping",
+      "Tablet landscape 1024x768 touch controls, status wrapping, offline recovery",
+      "Tablet portrait 768x1024 current-next stacking and blocking form under soft keyboard",
+      "Mobile 390x844 two-column controls, safe-area, 200 percent zoom, screen-reader announcement",
+      "Chromium and Safari Web Locks support comparison plus lease fallback",
+      "DevTools offline-online, refresh, two tabs, concurrent start, 409 conflict and 202 reviewRequired visible feedback"
+    ],
+    "requiredOnSiteDeviceEvidence": [
+      "iPad or on-site tablet opens the explicit resourceId Kiosk URL and fails closed when identity is not configured",
+      "landscape and portrait rotation, auto-lock recovery, weak network, offline and reconnect",
+      "rapid taps and two-tab contention do not create duplicate facts and non-controller tab is read-only",
+      "offline start-block-resume-complete replays in strict order",
+      "blocked state cannot complete directly",
+      "conflict or reviewRequired stays at queue head without automatic rebase or skip",
+      "browser-cache clearing removes only local delivery state and does not change server facts",
+      "grouped sessions display all tasks without presenting them as one-task labor time",
+      "real screen reader, external keyboard, touch target and studio-lighting contrast checks",
+      "operator logout, identity expiry and device handoff flow"
+    ],
+    "unresolvedAdditionalTargets": [
+      "EXACT_ON_SITE_IPAD_OR_TABLET",
+      "EXACT_SAFARI_BROWSER_TARGET",
+      "EXACT_MOBILE_VIEWPORT_EXECUTION_TARGET",
+      "EXACT_ACCESSIBILITY_ASSISTIVE_TECH_ENVIRONMENT"
+    ],
+    "closureRule": "REAL_DEVICE_ACCEPTANCE must not be marked complete until every frozen WO-03 viewport and on-site device item is recorded; QLL-6 Chrome evidence is necessary but not sufficient."
   },
   "runtimeAuthConfig": {
     "hostPath": "/mnt/datadisk0/apps/jenn-shooting-operations/kiosk-auth.v1.json",
     "containerPath": "/app/kiosk-auth.v1.json",
-    "environment": {"KIOSK_AUTH_CONFIG_PATH": "/app/kiosk-auth.v1.json"},
-    "mount": {"type": "bind", "readOnly": true},
+    "environment": {
+      "KIOSK_AUTH_CONFIG_PATH": "/app/kiosk-auth.v1.json"
+    },
+    "mount": {
+      "type": "bind",
+      "readOnly": true
+    },
     "hostOwnerUid": 1000,
     "hostOwnerGid": 1000,
     "hostMode": "0600",
@@ -57,7 +104,9 @@
     "principal": {
       "role": "operator",
       "subjectId": "KIOSK-PROD-01",
-      "resourceIds": ["STUDIO-PROD-01"]
+      "resourceIds": [
+        "STUDIO-PROD-01"
+      ]
     },
     "businessTimeZone": "Asia/Shanghai",
     "allowedBriefHosts": []
@@ -70,8 +119,16 @@
     "saltBytes": 16,
     "hashAlgorithm": "scrypt-v1",
     "hashBytes": 32,
-    "serverStoredMaterial": ["saltBase64", "hashBase64"],
-    "rawPasswordForbiddenDestinations": ["Git", "repository evidence", "logs", "chat"],
+    "serverStoredMaterial": [
+      "saltBase64",
+      "hashBase64"
+    ],
+    "rawPasswordForbiddenDestinations": [
+      "Git",
+      "repository evidence",
+      "logs",
+      "chat"
+    ],
     "rawPasswordLifecycle": "one-time operator-to-device provisioning; if lost, rotate by generating a new credential and config rather than recovering plaintext"
   },
   "deploymentTopology": {
@@ -85,8 +142,12 @@
     },
     "portBinding": "127.0.0.1:3800:3800",
     "readOnlyRootfs": true,
-    "tmpfs": ["/tmp"],
-    "securityOpt": ["no-new-privileges:true"],
+    "tmpfs": [
+      "/tmp"
+    ],
+    "securityOpt": [
+      "no-new-privileges:true"
+    ],
     "restartPolicy": "unless-stopped",
     "tokenEnvFile": "/mnt/datadisk0/apps/jenn-shooting-operations/.env.tokens",
     "runtimeEnvFile": "/mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime",
@@ -135,21 +196,30 @@
     "activeSchedulingConfigCount": 0,
     "scheduleItemCount": 0,
     "requiredRealDeviceEvidence": [
-      "tablet landscape 1024x768",
-      "tablet portrait 768x1024",
-      "touch controls and soft-keyboard blocking form",
-      "browser offline to online recovery",
-      "refresh",
-      "two-tab local control lock",
+      "full WO-03 browser viewport plan",
+      "full WO-03 on-site device checklist",
       "concurrent start and 409 conflict",
       "202 reviewRequired visibility",
       "offline start-block-resume-complete replay",
       "blocked cannot complete",
       "browser-cache clearing does not change server facts"
     ],
-    "requiredBeforeProd11Request": "a separately authorized production scheduling preparation must create or fresh-confirm an exact STUDIO-PROD-01 resource, an applicable active scheduling configuration, and an exact acceptance schedule item capable of exercising the frozen WO-03 real-device checklist",
+    "requiredBeforeProd11Request": "a separately authorized production scheduling preparation must create or fresh-confirm one exact canonical requests_v2 acceptance request, STUDIO-PROD-01, an applicable active scheduling configuration, one canonical proposal acceptance that derives the acceptance schedule item, and the resulting schedule_item_tasks binding from that item to the exact V2 request",
     "mustNotBeSmuggledIntoProd11": true,
-    "preparatoryActionId": "UNRESOLVED_SEPARATE_AUTHORITY_REQUIRED"
+    "preparatoryActionId": "UNRESOLVED_SEPARATE_AUTHORITY_REQUIRED",
+    "requestCount": 0,
+    "taskBindingCount": 0,
+    "canonicalRequestRequirement": "the acceptance request must exist in requests_v2 through a bounded canonical materialization path before proposal generation; a V1 snapshot-only request is insufficient",
+    "canonicalTaskBindingRequirement": "the schedule item must be created through canonical proposal acceptance so schedule_item_tasks binds exactly one acceptance request to the single acceptance schedule item; raw SQL insertion is forbidden",
+    "requiredPreparationFacts": [
+      "EXACT_CANONICAL_V2_ACCEPTANCE_REQUEST",
+      "STUDIO_PROD_01_RESOURCE",
+      "ACTIVE_ACCEPTANCE_SCHEDULING_CONFIG",
+      "DETERMINISTIC_ACCEPTANCE_PROPOSAL",
+      "CANONICAL_ACCEPT_DECISION",
+      "DERIVED_ACCEPTANCE_SCHEDULE_ITEM",
+      "EXACT_SCHEDULE_ITEM_TASK_BINDING"
+    ]
   },
   "rollbackContract": {
     "actionId": "ROLLBACK-10-DISABLE-KIOSK-CONFIG",
@@ -158,7 +228,14 @@
     "beforeAcceptedKioskBusinessFacts": "new container may be removed and exact pre-PROD11 container restored if swap/health/identity acceptance fails",
     "afterAnyAcceptedOrReviewRequiredKioskSubmission": "do not erase business facts; restore pre-PROD11 runtime env without KIOSK_AUTH_CONFIG_PATH, remove Kiosk bind mount, and recreate the service on the PROD11 image with the same volume/port/security topology",
     "schemaCompatibility": {
-      "liveDatabaseMigrationPrefix": [1,2,3,4,5,6],
+      "liveDatabaseMigrationPrefix": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
       "oldAndNewRuntimeRecognizeMigrationV6": true
     }
   },
@@ -170,16 +247,20 @@
     "risk": "HIGH",
     "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
     "closedPrerequisites": [
-      "EXACT_REAL_DEVICE_SELECTED",
-      "EXACT_BROWSER_PROFILE_TARGET_FROZEN",
+      "PRIMARY_PRODUCTION_KIOSK_TARGET_SELECTED_QLL6",
+      "DEDICATED_CHROME_PROFILE_TARGET_FROZEN",
       "FRESH_PRE_AUTH_TARGET_ATTESTATION_PASS",
       "DATABASE_WIDE_BRIEF_HOST_COMPATIBILITY_PASS_CURRENT_STATE"
     ],
     "blockingReasons": [
+      "KIOSK_ACCEPTANCE_V2_REQUEST_ABSENT",
       "PRODUCTION_RESOURCE_STUDIO_PROD_01_ABSENT",
       "ACTIVE_SCHEDULING_CONFIG_ABSENT",
       "KIOSK_ACCEPTANCE_SCHEDULE_ITEM_ABSENT",
-      "SEPARATE_SCHEDULING_PREPARATION_AUTHORITY_UNRESOLVED"
+      "KIOSK_ACCEPTANCE_TASK_BINDING_ABSENT",
+      "SEPARATE_SCHEDULING_PREPARATION_AUTHORITY_UNRESOLVED",
+      "WO03_FULL_DEVICE_BROWSER_MATRIX_INCOMPLETE",
+      "WO03_ADDITIONAL_DEVICE_BROWSER_TARGETS_UNRESOLVED"
     ],
     "credentialGenerationIsExecutionNotRequestPrerequisite": true,
     "dedicatedBrowserProfileCreationIsExecutionNotRequestPrerequisite": true,
