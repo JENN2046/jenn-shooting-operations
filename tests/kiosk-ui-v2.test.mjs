@@ -281,8 +281,113 @@ test('HTML provides semantic controls, live status, labels, all-task lists, and 
   assert.match(html, /id="complete-confirm"/u);
 });
 
+test('render and storage events revoke cross-tab identity trust before any enqueue', () => {
+  const source = script;
+  const renderIndex = source.indexOf('function render()');
+  const syncIndex = source.indexOf('async function synchronize()', renderIndex);
+  const renderSource = source.slice(renderIndex, syncIndex);
+  const trustCheck = renderSource.indexOf('refreshIdentityTrustFromStorage();');
+  const actionDerive = renderSource.indexOf('deriveKioskActionState({');
+  assert.equal(trustCheck >= 0, true);
+  assert.equal(actionDerive > trustCheck, true);
+
+  const enqueueIndex = source.indexOf('function enqueue(');
+  const nextHandler = source.indexOf("byId('action-start')", enqueueIndex);
+  const enqueueSource = source.slice(enqueueIndex, nextHandler);
+  assert.match(enqueueSource, /const \{ action, stored \} = render\(\);/u);
+
+  assert.match(source, /window\.addEventListener\('storage', identityStorageChanged\)/u);
+  assert.match(source, /window\.removeEventListener\('storage', identityStorageChanged\)/u);
+});
+
+test('initial identity failure starts recovery polling without enabling controls and recovered identity starts the lock', () => {
+  const source = script;
+  const startIndex = source.indexOf('async function start()');
+  const pagehideIndex = source.indexOf("window.addEventListener('pagehide'", startIndex);
+  const startSource = source.slice(startIndex, pagehideIndex);
+  const failedIdentity = startSource.indexOf('if (!identity.ok)');
+  const pollAfterFailure = startSource.indexOf('poller.start();', failedIdentity);
+  const failureReturn = startSource.indexOf('return false;', failedIdentity);
+  assert.equal(startIndex >= 0, true);
+  assert.equal(failedIdentity >= 0, true);
+  assert.equal(pollAfterFailure > failedIdentity, true);
+  assert.equal(failureReturn > pollAfterFailure, true);
+  assert.match(startSource, /ensureControlLockStarted\(\)/u);
+
+  const syncIndex = source.indexOf('async function synchronize()');
+  const enqueueIndex = source.indexOf('function enqueue(', syncIndex);
+  const syncSource = source.slice(syncIndex, enqueueIndex);
+  const verifiedGuard = syncSource.indexOf('if (!identity.verified)');
+  const lockStart = syncSource.indexOf('ensureControlLockStarted();', verifiedGuard);
+  assert.equal(lockStart > verifiedGuard, true);
+  assert.match(syncSource, /catch \{[\s\S]*identityBound = false;/u);
+});
+
+test('replay refresh authorization rejection is revoked after both replay calls', () => {
+  const source = script;
+  const syncStart = source.indexOf('async function synchronize()');
+  const nextFunction = source.indexOf('function enqueue(', syncStart);
+  const syncSource = source.slice(syncStart, nextFunction);
+  const firstReplay = syncSource.indexOf('let outcome = await queue.replay({ resourceId })');
+  const firstCheck = syncSource.indexOf('revokeForAuthoritativeServerStatus(outcome.serverStatus)', firstReplay);
+  const secondReplay = syncSource.indexOf('outcome = await queue.replay({ resourceId })', firstCheck);
+  const secondCheck = syncSource.indexOf('revokeForAuthoritativeServerStatus(outcome.serverStatus)', secondReplay);
+  assert.equal(firstReplay >= 0, true);
+  assert.equal(firstCheck > firstReplay, true);
+  assert.equal(secondReplay > firstCheck, true);
+  assert.equal(secondCheck > secondReplay, true);
+});
+
+test('controlling synchronize path performs authoritative refresh before every replay', () => {
+  const source = script;
+  const syncStart = source.indexOf('async function synchronize()');
+  const nextFunction = source.indexOf('function enqueue(', syncStart);
+  const syncSource = source.slice(syncStart, nextFunction);
+  const refresh = syncSource.indexOf('const refreshed = await transport.refreshCurrent(');
+  const replay = syncSource.indexOf('queue.replay(');
+  const legacyConditional = syncSource.indexOf('if (serverModel === null || !controlling)');
+  assert.equal(refresh >= 0, true);
+  assert.equal(replay > refresh, true);
+  assert.equal(legacyConditional, -1);
+});
+
+test('authoritative current refresh rejection revokes persisted identity trust before controls can recover', () => {
+  const source = script;
+  const syncStart = source.indexOf('async function synchronize()');
+  const nextFunction = source.indexOf('function enqueue(', syncStart);
+  const syncSource = source.slice(syncStart, nextFunction);
+  const refresh = syncSource.indexOf('transport.refreshCurrent(');
+  const rejectCheck = syncSource.indexOf('isAuthoritativeKioskRefreshRejection(refreshed.status)');
+  const revoke = syncSource.indexOf('deviceProvisioner.revoke()');
+  const replay = syncSource.indexOf('queue.replay(');
+  assert.equal(refresh >= 0, true);
+  assert.equal(rejectCheck > refresh, true);
+  assert.equal(revoke > rejectCheck, true);
+  assert.equal(replay > revoke, true);
+  assert.match(syncSource, /identityBound = false/u);
+  assert.match(source, /status === 401 \|\| status === 403/u);
+});
+
+test('browser revalidates the server-bound device identity before refresh or replay', () => {
+  const source = script;
+  const syncStart = source.indexOf('async function synchronize()');
+  const nextFunction = source.indexOf('function enqueue(', syncStart);
+  const syncSource = source.slice(syncStart, nextFunction);
+  const identityCheck = syncSource.indexOf('await deviceProvisioner.provision()');
+  const refresh = syncSource.indexOf('transport.refreshCurrent(');
+  const replay = syncSource.indexOf('queue.replay(');
+  assert.equal(syncStart >= 0, true);
+  assert.equal(identityCheck >= 0, true);
+  assert.equal(refresh > identityCheck, true);
+  assert.equal(replay > identityCheck, true);
+  assert.match(syncSource, /identityBound = false/u);
+  assert.match(source, /controlling: controlling && identityBound/u);
+});
+
 test('browser source uses the frozen queue surface, second confirmation, and contains no V1 write or credential material', () => {
   assert.match(script, /from '\/kiosk-offline-queue-v2\.js'/u);
+  assert.match(script, /from '\/kiosk-device-identity-v1\.js'/u);
+  assert.match(script, /createKioskDeviceProvisioner/u);
   assert.match(script, /createBrowserQueueStorage/u);
   assert.match(script, /createFetchKioskTransport/u);
   assert.match(script, /createKioskOfflineQueue/u);
@@ -291,7 +396,7 @@ test('browser source uses the frozen queue surface, second confirmation, and con
   assert.match(script, /showModal\(\)/u);
   assert.match(script, /queue\.enqueue\(command\)/u);
   assert.match(script, /void synchronize\(\)/u);
-  assert.match(script, /if \(serverModel === null \|\| !controlling\)/u);
+  assert.doesNotMatch(script, /if \(serverModel === null \|\| !controlling\)/u);
   assert.doesNotMatch(script, /\/api\/v1\//u);
   assert.doesNotMatch(`${html}\n${script}`, /bearer|password|credential|access[_-]?token|actorId|role\s*:/iu);
   assert.doesNotMatch(html, /https?:\/\//iu);
@@ -311,6 +416,7 @@ test('Kiosk assets are served only through the static whitelist with CSP and cac
     ['/kiosk.css', 'text/css; charset=utf-8'],
     ['/kiosk.js', 'text/javascript; charset=utf-8'],
     ['/kiosk-control-lock.js', 'text/javascript; charset=utf-8'],
+    ['/kiosk-device-identity-v1.js', 'text/javascript; charset=utf-8'],
     ['/kiosk-offline-queue-v2.js', 'text/javascript; charset=utf-8'],
   ]) {
     const response = await getStatic(path);

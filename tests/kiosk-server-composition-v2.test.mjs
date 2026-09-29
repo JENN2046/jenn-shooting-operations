@@ -24,14 +24,26 @@ test('Kiosk V2 runtime composition is explicit, injected, and empty-resource saf
       resourceIds: ['STUDIO-EMPTY'],
     });
     assert.equal(created.ok, true);
+    const authorizeDeviceId = ({ principal, deviceId }) => (
+      principal === created.principal && deviceId === 'DEVICE-KIOSK-LOCAL'
+    );
     const kiosk = createKioskV2Application({
       store,
       authenticate: () => created.principal,
+      authenticationChallenge: 'Basic realm="Jenn Shooting Kiosk", charset="UTF-8"',
+      authorizeDeviceId,
+      deviceId: 'DEVICE-KIOSK-LOCAL',
       businessTimeZone: 'UTC',
       clock: () => new Date(NOW),
     });
     assert.equal(kiosk.writeAdmissionControl, store.writeAdmissionControl);
     assert.equal(kiosk.authenticate(), created.principal);
+    assert.equal(
+      kiosk.authenticationChallenge,
+      'Basic realm="Jenn Shooting Kiosk", charset="UTF-8"',
+    );
+    assert.equal(kiosk.authorizeDeviceId, authorizeDeviceId);
+    assert.equal(kiosk.deviceId, 'DEVICE-KIOSK-LOCAL');
     const current = kiosk.readCurrent({
       principal: created.principal,
       resourceId: 'STUDIO-EMPTY',
@@ -151,6 +163,34 @@ test('Kiosk V2 runtime composition refuses implicit authentication or time-zone 
     assert.throws(
       () => createKioskV2Application({ store, authenticate: () => null }),
       /businessTimeZone/u,
+    );
+    assert.throws(
+      () => createKioskV2Application({
+        store,
+        authenticate: () => null,
+        authenticationChallenge: '',
+        businessTimeZone: 'UTC',
+      }),
+      /authentication challenge/u,
+    );
+    assert.throws(
+      () => createKioskV2Application({
+        store,
+        authenticate: () => null,
+        authorizeDeviceId: true,
+        deviceId: 'DEVICE-KIOSK-LOCAL',
+        businessTimeZone: 'UTC',
+      }),
+      /device authorization port/u,
+    );
+    assert.throws(
+      () => createKioskV2Application({
+        store,
+        authenticate: () => null,
+        authorizeDeviceId: () => true,
+        businessTimeZone: 'UTC',
+      }),
+      /configured together/u,
     );
   } finally {
     store.close();

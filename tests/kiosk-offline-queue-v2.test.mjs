@@ -307,6 +307,33 @@ test('refreshes first, replays immutable heads in sequence, and deletes only app
   });
 });
 
+test('submit authorization rejection preserves the pending head and exposes authoritative status', async t => {
+  for (const [status, code] of [[401, 'UNAUTHENTICATED'], [403, 'FORBIDDEN']]) {
+    await t.test(String(status), async () => {
+      const storage = memoryStorage();
+      const transport = scriptedTransport({
+        responses: [{
+          status,
+          body: { schemaVersion: 2, ok: false, code, replayed: false },
+        }],
+      });
+      const queue = createQueue(storage, transport);
+      queue.enqueue(queueItem(0));
+      const before = clone(storage.value().items);
+
+      const result = await queue.replay({ resourceId: 'STUDIO-A' });
+
+      assert.equal(result.syncStatus, 'pending');
+      assert.equal(result.stopCode, code);
+      assert.equal(result.pendingCount, 1);
+      assert.equal(result.serverStatus.kind, 'fresh');
+      assert.equal(result.serverStatus.httpStatus, status);
+      assert.deepEqual(storage.value().items, before);
+      assert.equal(transport.calls.filter(call => call.type === 'submit').length, 1);
+    });
+  }
+});
+
 test('conflict, invalid transition, ambiguous context, and review stop at the immutable head', async t => {
   const cases = [
     ['revision conflict', 409, 'REVISION_CONFLICT', 'conflict'],
@@ -564,6 +591,29 @@ test('replay never overwrites an event enqueued while refresh is in flight', asy
   assert.equal(result.pendingCount, 2);
   assert.equal(storage.value().nextLocalSequence, 2);
   assert.deepEqual(storage.value().items.map(item => item.eventId), ['EVENT-0000', 'EVENT-0001']);
+});
+
+test('replay exposes authoritative refresh rejection status without submitting queued events', async () => {
+  for (const status of [401, 403]) {
+    const storage = memoryStorage();
+    const transport = scriptedTransport({
+      refresh: { status, body: { code: status === 401 ? 'UNAUTHENTICATED' : 'FORBIDDEN' } },
+      responses: [applied(false, queueItem(0))],
+    });
+    const queue = createQueue(storage, transport);
+    queue.enqueue(queueItem(0));
+
+    const result = await queue.replay({ resourceId: 'STUDIO-A' });
+
+    assert.deepEqual(result.serverStatus, {
+      kind: 'unavailable',
+      current: null,
+      httpStatus: status,
+    });
+    assert.equal(result.syncStatus, 'pending');
+    assert.equal(result.pendingCount, 1);
+    assert.equal(transport.calls.filter(call => call.type === 'submit').length, 0);
+  }
 });
 
 test('refresh accepts only frozen 200 or 304 status codes', async () => {

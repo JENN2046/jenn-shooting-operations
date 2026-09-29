@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { containsForbiddenEvidenceInput } from './production-evidence-input-boundary-v1.mjs';
 
 const EXPECTED_BASE_MANIFEST_DIGEST =
-  'sha256:ece64d36ce042b0cee05ee08cb24f7eff71064a104bf886ba46c483d41b5b27b';
+  'sha256:e84bc05f9351773316e2f4c33eab77b67743d44c39689276aea67412294d514a';
 
 const EXPECTED_NOT_APPLICABLE_GATES = Object.freeze([
   'PRODUCTION_DATA_MIGRATION',
