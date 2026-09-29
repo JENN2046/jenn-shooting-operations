@@ -114,7 +114,7 @@ Direct table insertion into request, resource, config, schedule, proposal, decis
 
 ## Capability blockers
 
-GF-15 remains not requestable until both capabilities exist and pass exact-head review.
+GF-15 remains not requestable until all three bounded capabilities exist and pass exact-head review.
 
 1. KIOSK_ACCEPTANCE_REQUEST_MATERIALIZATION_CAPABILITY
 
@@ -123,6 +123,14 @@ Current POST /api/v1/requests updates the V1 snapshot but does not create a cano
 2. KIOSK_ACCEPTANCE_OUTBOX_ISOLATION_CAPABILITY
 
 Canonical proposal acceptance creates a schedule.confirmed.v1 Notification Outbox intent. The acceptance-only intent must be permanently isolated from future real-provider delivery without deleting or rewriting unrelated outbox facts.
+
+3. KIOSK_ACCEPTANCE_SCHEDULING_QUIESCENCE_CAPABILITY
+
+Scheduling resource changes, config activation, request-requirements changes, and final proposal acceptance can stale stored draft proposals globally. GF-15 must therefore acquire a bounded Scheduling quiescence lease before the first mutation and hold it through the final proposal decision.
+
+Before the lease is acquired, the production database must show zero draft scheduling proposals. While the lease is held, unrelated proposal generation and Scheduling-admin writes are forbidden. After GF-15 generates its proposal, the stored draft set must contain exactly that GF-15 proposal and no other draft. The lease is released only after the exact decision and post-decision verification complete.
+
+Current fresh baseline: draft scheduling proposals = 0.
 
 ## Database-wide brief-host gate
 
@@ -156,7 +164,9 @@ GF-15 itself is blocked until:
 
 - KIOSK_ACCEPTANCE_REQUEST_MATERIALIZATION_CAPABILITY
 - KIOSK_ACCEPTANCE_OUTBOX_ISOLATION_CAPABILITY
+- KIOSK_ACCEPTANCE_SCHEDULING_QUIESCENCE_CAPABILITY
 - GF15_ACCEPTANCE_CANDIDATE_ISOLATION
+- prewrite draft proposal count is exactly zero
 - KIOSK_ACCEPTANCE_TARGET_PACKET containing the exact future local date/window plus the complete normalized config JSON and canonical config digest
 - DATABASE_WIDE_BRIEF_HOST_COMPATIBILITY
 - fresh exact production target attestation

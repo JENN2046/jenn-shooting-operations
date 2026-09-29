@@ -1034,6 +1034,10 @@ test('GF15 freezes one bounded irreversible Kiosk acceptance scheduling preparat
     true,
   );
   assert.equal(
+    action.preconditions.includes('KIOSK_ACCEPTANCE_SCHEDULING_QUIESCENCE_CAPABILITY'),
+    true,
+  );
+  assert.equal(
     action.effects.some(effect => /no raw SQL bypass/u.test(effect)),
     true,
   );
@@ -1043,6 +1047,14 @@ test('GF15 freezes one bounded irreversible Kiosk acceptance scheduling preparat
   );
   assert.equal(
     action.effects.some(effect => /decision selects exactly that item/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    action.effects.some(effect => /zero stored draft scheduling proposals/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    action.effects.some(effect => /stored draft-proposal set contains exactly that GF15 proposal and no other draft/u.test(effect)),
     true,
   );
   assert.equal(
@@ -1062,7 +1074,19 @@ test('GF15 freezes one bounded irreversible Kiosk acceptance scheduling preparat
     true,
   );
   assert.equal(
+    action.evidenceRequired.includes('GF15_PREWRITE_DRAFT_PROPOSAL_COUNT_ZERO'),
+    true,
+  );
+  assert.equal(
     action.evidenceRequired.includes('GF15_CANDIDATE_ISOLATION_PROOF'),
+    true,
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_POST_GENERATION_ONLY_ACCEPTANCE_DRAFT_PROOF'),
+    true,
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_SCHEDULING_QUIESCENCE_CAPABILITY_PROOF'),
     true,
   );
   assert.equal(
