@@ -820,8 +820,12 @@ KIOSK_ACCEPTANCE_ITEM_EXECUTION_TIME_RECHECK
 KIOSK_SMOKE_AUTHORIZATION_BINDING_EQUALS_EVENT_TARGET
 KIOSK_CURRENT_SELECTION_EQUALS_FROZEN_ACCEPTANCE_ITEM
 KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY = PASS for all three predicates inside same event transaction
+KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY = PASS
+KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY = PASS
 PROD11_PRODUCTION_SMOKE_SEPARATE_FROM_WO03
 ```
+
+All three smoke capabilities are co-required authority. Passing the atomic production-context predicates alone never authorizes a production smoke write.
 
 `REAL_DEVICE_ACCEPTANCE` and `OFFLINE_REPLAY_RESULT` come only from the isolated WO-03 environment. Production smoke evidence is separate and non-substitutable.
 
