@@ -247,14 +247,20 @@ Before any production run-event write is allowed, the replacement frozen runtime
 KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY
 ```
 
-Inside the **same transaction that commits the Kiosk event**, the replacement runtime must enforce both:
+Inside the **same transaction that commits the Kiosk event**, the replacement runtime must enforce all three authority predicates:
 
 ```text
-1. STUDIO-PROD-01 resource-wide current selection:
-   exact frozen acceptance schedule item is the unique current item
+1. immutable authorization binding:
+   event schedule target
+   = KIOSK_EXPECTED_SCHEDULE_ITEM_ID
+   = authorization-frozen derived acceptance scheduleItemId
+
+2. STUDIO-PROD-01 resource-wide current selection:
+   unique current schedule item
+   = KIOSK_EXPECTED_SCHEDULE_ITEM_ID
    no competing current candidate or active run
 
-2. active Scheduling config:
+3. active Scheduling config:
    businessTimeZone = Asia/Shanghai
    exact match with frozen Kiosk runtime businessTimeZone
 ```
@@ -281,6 +287,27 @@ host mode      = 0600
 ```
 
 None of those deployment fields may appear inside `kiosk-auth.v1.json`.
+
+### Authorization-frozen schedule-item runtime binding
+
+The authorization-frozen schedule item is not added to `kiosk-auth.v1.json`; that file keeps its exact loader-defined schema.
+
+The replacement PROD-11 runtime must require a separate container-lifetime environment binding:
+
+```text
+KIOSK_EXPECTED_SCHEDULE_ITEM_ID = exact authorization-frozen derived acceptance scheduleItemId
+```
+
+The final value is unresolved until the separately authorized scheduling preparation derives the exact schedule item. The one-time PROD-11 authorization packet freezes that ID, and production container creation supplies exactly that frozen value.
+
+Required behavior:
+
+- no default, database-derived fallback, or current-item inference;
+- startup fails closed before listen when missing or invalid;
+- canonical Scheduling identifier validation at startup;
+- immutable for the container lifetime with no hot reload;
+- the database's current item is evidence, never authority for the expected ID.
+
 
 The final file must contain **exactly** these top-level keys:
 
@@ -483,6 +510,8 @@ planned_start <= acceptanceRunStart < acceptanceRunEnd <= planned_end
 
 The authorization packet becomes stale if the item is used, cancelled, rebound, changed, no longer covers the bound acceptance run, or `planned_end` passes before execution starts.
 
+Before PROD-11 becomes requestable, the replacement-image contract must also prove support for the immutable `KIOSK_EXPECTED_SCHEDULE_ITEM_ID` binding. The value in the eventual container must equal the same derived schedule item ID frozen in the authorization packet; it may not be inferred from whichever database item is current at execution time.
+
 Only **after** isolated WO-03 has closed `REAL_DEVICE_ACCEPTANCE` and `OFFLINE_REPLAY_RESULT`, a replacement atomic-capable image has been frozen, and the exact production Kiosk configuration has then been enabled, immediately before the first bounded production smoke run event the executor must fresh-read the same schedule item, task binding and run state and prove again:
 
 ```text
@@ -555,7 +584,7 @@ PROD11_REPLACEMENT_IMMUTABLE_IMAGE_NOT_YET_BUILT_TESTED_AND_FROZEN
 FULL_PROD11_ACTION_SPECIFIC_REVALIDATION_NOT_YET_FRESH_PASS
 ```
 
-The atomic production-context capability is a hard **pre-request** gate. It must cover both current-item uniqueness and active Scheduling time-zone equality inside the event transaction. It may not be implemented after authorization or introduced by swapping to an unreviewed image.
+The atomic production-context capability is a hard **pre-request** gate. It must cover immutable authorization-frozen schedule-item binding, current-item uniqueness, and active Scheduling time-zone equality inside the same event transaction. It may not be implemented after authorization or introduced by swapping to an unreviewed image.
 
 Immediately before the PROD-11 authorization request, fresh revalidate all seven manifest-bound checks: target host identity, disk/port conflicts, built image digest, secret storage, Kiosk auth runtime configuration, external readiness gates, and rollback targets.
 
