@@ -323,6 +323,23 @@ test('initial identity failure starts recovery polling without enabling controls
   assert.match(syncSource, /catch \{[\s\S]*identityBound = false;/u);
 });
 
+test('authoritative current refresh rejection revokes persisted identity trust before controls can recover', () => {
+  const source = script;
+  const syncStart = source.indexOf('async function synchronize()');
+  const nextFunction = source.indexOf('function enqueue(', syncStart);
+  const syncSource = source.slice(syncStart, nextFunction);
+  const refresh = syncSource.indexOf('transport.refreshCurrent(');
+  const rejectCheck = syncSource.indexOf('isAuthoritativeKioskRefreshRejection(refreshed.status)');
+  const revoke = syncSource.indexOf('deviceProvisioner.revoke()');
+  const replay = syncSource.indexOf('queue.replay(');
+  assert.equal(refresh >= 0, true);
+  assert.equal(rejectCheck > refresh, true);
+  assert.equal(revoke > rejectCheck, true);
+  assert.equal(replay > revoke, true);
+  assert.match(syncSource, /identityBound = false/u);
+  assert.match(source, /status === 401 \|\| status === 403/u);
+});
+
 test('browser revalidates the server-bound device identity before refresh or replay', () => {
   const source = script;
   const syncStart = source.indexOf('async function synchronize()');

@@ -47,11 +47,16 @@ export function createKioskDeviceProvisioner({
   }
 
   let blockedInMemory = false;
-  const isBlocked = () => blockedInMemory || storage.getItem(blockedKey) === '1';
+  const persistedBlock = () => storage.getItem(blockedKey);
+  const isBlocked = () => blockedInMemory || persistedBlock() !== null;
   const block = () => {
     blockedInMemory = true;
     try {
-      storage.setItem(blockedKey, '1');
+      const parsed = Number.parseInt(persistedBlock() ?? '0', 10);
+      const generation = Number.isSafeInteger(parsed) && parsed >= 0
+        ? (parsed === Number.MAX_SAFE_INTEGER ? 1 : parsed + 1)
+        : 1;
+      storage.setItem(blockedKey, String(generation));
     } catch {
       // The in-memory latch is authoritative for this page even if persistence fails.
     }
@@ -67,7 +72,11 @@ export function createKioskDeviceProvisioner({
       const value = storage.getItem(storageKey);
       return validIdentifier(value) ? value : null;
     },
+    revoke() {
+      block();
+    },
     async provision() {
+      const blockMarkerAtStart = persistedBlock();
       const existing = storage.getItem(storageKey);
       if (existing !== null && !validIdentifier(existing)) {
         return Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_INVALID' });
@@ -125,6 +134,11 @@ export function createKioskDeviceProvisioner({
       }
       if (existing === null) {
         storage.setItem(storageKey, body.deviceId);
+      }
+      const blockMarkerAtEnd = persistedBlock();
+      if (blockMarkerAtEnd !== null && blockMarkerAtEnd !== blockMarkerAtStart) {
+        blockedInMemory = true;
+        return Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_BLOCKED' });
       }
       unblock();
 

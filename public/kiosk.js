@@ -14,6 +14,10 @@ import { createKioskDeviceProvisioner } from '/kiosk-device-identity-v1.js';
 
 const QUEUE_KEY = 'jenn.kiosk.offline-queue.v2';
 const DEVICE_KEY = 'jenn.kiosk.device-id.v2';
+function isAuthoritativeKioskRefreshRejection(status) {
+  return status === 401 || status === 403;
+}
+
 const labels = Object.freeze({
   scheduled: '待开始',
   shooting: '拍摄中',
@@ -200,6 +204,14 @@ function createKioskUi() {
           resourceId,
           projectionRevision: serverModel?.projectionRevision,
         });
+        if (isAuthoritativeKioskRefreshRejection(refreshed.status)) {
+          deviceProvisioner.revoke();
+          identityBound = false;
+          lastServerFresh = false;
+          setMessage('设备或场地授权已撤销，现场控制保持关闭。', 'error');
+          render();
+          return false;
+        }
         if (refreshed.status === 200
           && validateKioskCurrentResponse(refreshed.body).ok
           && refreshed.body.resourceId === resourceId) {

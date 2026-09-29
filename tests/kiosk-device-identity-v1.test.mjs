@@ -19,7 +19,7 @@ function storage(initial = null, { failBlockedWrite = false } = {}) {
     },
     removeItem(key) { values.delete(key); },
     snapshot() { return values.get('jenn.kiosk.device-id.v2') ?? null; },
-    blocked() { return values.get('jenn.kiosk.device-id.v2.blocked-v1') === '1'; },
+    blocked() { return values.has('jenn.kiosk.device-id.v2.blocked-v1'); },
   };
 }
 
@@ -161,6 +161,42 @@ test('HTTP auth rejection latches identity while 5xx remains transient for a cle
     verified: false,
   });
   assert.equal(transient.blocked(), false);
+});
+
+test('delayed matching success cannot clear a newer block from another provisioner', async () => {
+  const target = storage('DEVICE-KIOSK-PROD-01');
+  let releaseFirst;
+  const firstResponse = new Promise(resolve => { releaseFirst = resolve; });
+  const delayed = createKioskDeviceProvisioner({
+    storage: target,
+    fetchImpl: async () => firstResponse,
+  });
+  const rejecting = createKioskDeviceProvisioner({
+    storage: target,
+    fetchImpl: async () => response('DEVICE-OTHER'),
+  });
+
+  const pending = delayed.provision();
+  assert.deepEqual(await rejecting.provision(), {
+    ok: false,
+    code: 'DEVICE_IDENTITY_MISMATCH',
+  });
+  assert.equal(target.blocked(), true);
+
+  releaseFirst(response('DEVICE-KIOSK-PROD-01'));
+  assert.deepEqual(await pending, {
+    ok: false,
+    code: 'DEVICE_IDENTITY_BLOCKED',
+  });
+  assert.equal(target.blocked(), true);
+  assert.equal(delayed.current(), null);
+
+  assert.deepEqual(await delayed.provision(), {
+    ok: true,
+    deviceId: 'DEVICE-KIOSK-PROD-01',
+    verified: true,
+  });
+  assert.equal(target.blocked(), false);
 });
 
 test('blocked marker from another provisioner revokes the shared cached identity immediately', async () => {

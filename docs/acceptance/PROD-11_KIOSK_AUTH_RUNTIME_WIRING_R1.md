@@ -75,6 +75,8 @@ Rules:
   temporarily unavailable;
 - every online synchronize attempt re-verifies identity before refresh or replay; initial identity failure still starts a read-only recovery poller, and a later verified identity may acquire the control lock without manual reload; every render/enqueue rechecks the shared blocked identity marker, and cross-tab storage changes immediately revoke stale control trust;
 - authoritative identity mismatch or HTTP auth rejection is first latched in memory, then best-effort persisted; it remains fail-closed across later outages even if localStorage persistence fails, until a matching 200 identity response clears it;
+- a delayed matching identity response cannot clear a newer shared block recorded after that request began;
+- authoritative 401/403 current-resource refresh rejection persists the same trust latch before any replay or control action;
 - run-event submission is denied if the command `deviceId` does not match the
   authenticated runtime device binding.
 
@@ -109,7 +111,7 @@ production volume = not mounted
 Targeted Kiosk auth/device/runtime tests:
 
 ```text
-93 / 93 PASS
+95 / 95 PASS
 0 fail
 0 skip
 ```
@@ -117,8 +119,8 @@ Targeted Kiosk auth/device/runtime tests:
 A full repository check in that image reported:
 
 ```text
-789 tests
-786 pass
+791 tests
+788 pass
 2 fail
 1 expected VCP skip
 ```
