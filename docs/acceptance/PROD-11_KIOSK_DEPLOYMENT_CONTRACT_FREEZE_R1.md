@@ -139,6 +139,32 @@ profile directory = Default
 existing normal profile reuse = false
 ```
 
+The production Kiosk launch target is frozen exactly:
+
+```text
+origin = https://jso.skmt617.top
+path   = /kiosk
+query  = resourceId=STUDIO-PROD-01
+fragment = none
+
+exact URL:
+https://jso.skmt617.top/kiosk?resourceId=STUDIO-PROD-01
+```
+
+The Kiosk client accepts only **one** query pair and that pair must be `resourceId`. Therefore no extra query parameter, duplicate `resourceId`, empty value, alternate path, root-page launch, or fragment is an admitted production target.
+
+The dedicated production Chrome launch mechanism is the exact command-line contract:
+
+```text
+"C:\Program Files\Google\Chrome\Application\chrome.exe"
+  --user-data-dir="%LOCALAPPDATA%\JennShootingOperations\Chrome-Kiosk-PROD-01"
+  --profile-directory=Default
+  "https://jso.skmt617.top/kiosk?resourceId=STUDIO-PROD-01"
+```
+
+`%LOCALAPPDATA%` is resolved for the selected Windows user at provisioning/launch. The resulting directory must equal the frozen dedicated profile root and must not resolve to an existing ordinary Chrome profile. If a Windows shortcut or wrapper is later materialized, its resolved executable and argument vector must be exactly equivalent to this command; no different URL or extra URL argument is permitted.
+
+
 The dedicated profile directory does not exist yet by design. Creating it is part of the later explicitly authorized PROD-11 execution, not this freeze.
 
 The server-authoritative `deviceId` is a logical identity binding. The current Kiosk design does not claim cryptographic hardware attestation.
@@ -198,14 +224,15 @@ The isolated WO-03 environment has two distinct phases:
 before PROD-11 request:
   bind KIOSK_SERVICE_CONTEXT=WO03_ISOLATED_ACCEPTANCE
   freeze the exact isolated endpoint / database / test identity / fixture digests / device targets
-  freeze and complete the separately bounded authority for any setup writes
-  bind the environment to the exact replacement immutable image/revision
+  freeze the separately bounded authority for setup writes
+  complete every authorized isolated-environment setup write
+  bind the prepared runtime to the exact replacement immutable image/revision
 
 after PROD-11 authorization, before production Kiosk activation:
   execute the full isolated WO-03 matrix
 ```
 
-The environment setup/binding is therefore a **pre-request gate**, while the actual WO-03 acceptance execution remains post-authorization.
+The exact target bindings, setup authority, **completed setup writes**, `KIOSK_SERVICE_CONTEXT=WO03_ISOLATED_ACCEPTANCE`, and exact replacement-image runtime binding are all **pre-request gates**. The actual WO-03 acceptance execution remains post-authorization.
 
 Critically, before the PROD-11 request the prepared isolated environment must already be bound to **the same replacement immutable image ID and source revision frozen for eventual production activation**.
 
