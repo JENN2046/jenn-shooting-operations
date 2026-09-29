@@ -93,7 +93,7 @@ ROLLBACK_TARGETS
 
 `BUILT_IMAGE_DIGEST` is necessary but not sufficient. Any stale, missing, changed, or failed item leaves PROD-11 non-requestable.
 
-The production application image/container replacement is **not** a PROD-11 effect. Before PROD-11 may be requested, a separate explicit deployment Action must have already deployed the frozen immutable replacement image to the live service with Kiosk still disabled, after revalidating `BUILT_IMAGE_DIGEST`, diagnostic-tag resolution, OCI revision, production storage identity, health, VCP continuity and its own image/container rollback. PROD-11 execution then operates only on Kiosk configuration/device/browser/identity mapping; it must not replace or recreate the application service.
+The production application **image change** is not a PROD-11 effect. Before PROD-11 may be requested, a separate explicit deployment Action must have already deployed the frozen immutable replacement image to the live service with Kiosk still disabled, after revalidating `BUILT_IMAGE_DIGEST`, diagnostic-tag resolution, OCI revision, production storage identity, health, VCP continuity and its own image rollback. PROD-11 may then perform only a bounded **same-image config-only container recreation** required to apply the startup-only Kiosk bind/env/runtime bindings. The recreated container must use exactly the same immutable image ID/source revision and preserve every non-Kiosk topology/configuration field.
 
 ## Frozen logical identity
 
@@ -575,7 +575,7 @@ The Kiosk credential must remain distinct from VIEWER/SUBMITTER/SCHEDULER/ADMIN 
 
 ## Frozen container topology
 
-The deployment reuses the current production container topology and changes only the image plus the Kiosk config binding:
+The replacement image must already have been deployed by the separate production deployment Action **before** PROD-11 is requested. PROD-11 reuses that exact immutable image and the existing production topology; its only permitted container-level mutation is a same-image config-only recreation to add the frozen Kiosk startup bindings:
 
 ```text
 container        = jenn-shooting-operations-prod
@@ -591,6 +591,23 @@ tokens env        = /mnt/datadisk0/apps/jenn-shooting-operations/.env.tokens
 runtime env       = /mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime
 pre-PROD11 backup = /mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime.pre-prod11
 ```
+
+During the PROD-11 config-only recreate:
+
+```text
+image ID / source revision = EXACTLY UNCHANGED
+volume / port / rootfs / tmpfs / security / restart = EXACTLY UNCHANGED
+role-token / VCP / DingTalk state = EXACTLY UNCHANGED
+
+allowed Kiosk-only additions:
+  read-only kiosk-auth.v1.json bind
+  KIOSK_AUTH_CONFIG_PATH
+  KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID
+  KIOSK_SMOKE_ACCEPTANCE_RUN_START
+  KIOSK_SMOKE_ACCEPTANCE_RUN_END
+```
+
+Any image-ID/revision change is outside PROD-11 authority.
 
 The production volume is never copied into a test container and is never deleted by rollback.
 
@@ -736,23 +753,28 @@ The exact preparatory Action ID is not yet frozen and remains an authority gap.
 
 `ROLLBACK-10-DISABLE-KIOSK-CONFIG` is **Kiosk-configuration-only**.
 
-It may disable/remove only the Kiosk configuration, production credential/profile provisioning, approved device/browser binding, and trusted identity mapping introduced by PROD-11. It does not authorize:
+It may disable/remove only the Kiosk configuration, production credential/profile provisioning, approved device/browser binding, and trusted identity mapping introduced by PROD-11.
+
+Because those runtime bindings are startup-only, `ROLLBACK-10` may perform a bounded **same-image config-only container recreation** to remove them, but only when:
 
 ```text
-application image swap
-container recreate/remove/restore
-replacement-image rollback
-production data deletion or rewrite
+immutable image ID = unchanged
+source revision     = unchanged
+production volume  = unchanged
+port/security/rootfs/tmpfs/restart = unchanged
+role tokens / VCP / DingTalk state = unchanged
 ```
+
+`ROLLBACK-10` never authorizes selecting another image, rolling back the replacement image, deleting production data, or rewriting accepted production facts.
 
 If PROD-11 fails before or after any accepted/review-required Kiosk submission:
 
 1. preserve all production runs/reviews/receipts/audit/revision facts;
 2. disable/remove only the exact Kiosk configuration/device/identity bindings introduced by PROD-11;
-3. keep the already-deployed application image/container unchanged;
+3. when required by startup-only config, recreate on the **same immutable image** with all non-Kiosk topology/configuration preserved exactly;
 4. verify VCP remains unchanged and DingTalk remains disabled/unmodified.
 
-Any rollback of the replacement application image/container belongs exclusively to the **separately authorized replacement-image deployment Action and its own bound rollback**. If that separate deployment cannot pass its health/storage/VCP/rollback verification, it must be rolled back before PROD-11 may be requested.
+Any image-ID/source-revision rollback belongs exclusively to the separately authorized replacement-image deployment Action and its own bound rollback.
 
 Fresh inspection shows the live database already has the continuous migration prefix 1 through 6, and both old and replacement runtimes must recognize migration v6. No PROD-11 rollback depends on a schema downgrade.
 
@@ -874,7 +896,7 @@ formal authorization state
 = FROZEN_NOT_REQUESTED
 ```
 
-Credential generation, production profile activation, production config materialization, production identity enrollment, and any production run-event submission remain prohibited until their respective gates above close. Live application image/container replacement is outside PROD-11 authority entirely and requires the separate deployment Action described above.
+Credential generation, production profile activation, production config materialization, production identity enrollment, and any production run-event submission remain prohibited until their respective gates above close. Live application **image changes** remain outside PROD-11 authority and require the separate deployment Action described above; only the frozen same-image config-only recreation is permitted under PROD-11.
 
 Machine-readable contract:
 
