@@ -140,7 +140,7 @@
       "scope": "FULL_WO03_VIEWPORT_AND_ON_SITE_MATRIX",
       "evidencePurpose": "execute the complete frozen WO-03 browser viewport and on-site device matrix with test identity and isolated test data; this environment is the source of REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT closure evidence",
       "executionPhase": "POST_PROD11_AUTHORIZATION_PRE_PRODUCTION_KIOSK_ACTIVATION",
-      "preRequestBlocking": false,
+      "preRequestBlocking": true,
       "closureBlocking": true,
       "exactEnvironmentBindingRequiredBeforeExecution": true,
       "identityContract": {
@@ -187,7 +187,7 @@
         "EXACT_MOBILE_VIEWPORT_EXECUTION_TARGET",
         "EXACT_ACCESSIBILITY_ASSISTIVE_TECH_ENVIRONMENT"
       ],
-      "failureRule": "if the isolated environment is not running the exact replacement production immutable image/revision, or any required device/browser/accessibility target is absent, drifts, or fails, do not enable production Kiosk config/credential/profile/identity; REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT remain open",
+      "failureRule": "if the exact isolated environment target or its preparation authority is unresolved, PROD-11 remains non-requestable. After authorization, if the prepared isolated environment is not running the exact replacement production immutable image/revision, or any required device/browser/accessibility target drifts or fails, do not enable production Kiosk config/credential/profile/identity; REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT remain open",
       "requiredBeforeProductionKioskActivation": true,
       "runtimeBinding": {
         "status": "UNRESOLVED_UNTIL_REPLACEMENT_IMAGE_FROZEN",
@@ -202,7 +202,30 @@
           "fresh image identity is revalidated immediately before WO-03 isolated execution"
         ],
         "evidenceRule": "REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT are invalid if produced on the baseline image, a different image, a different source revision, or an unverified rebuild; the isolated acceptance environment must exercise the same immutable runtime intended for production activation"
-      }
+      },
+      "preRequestPreparationGate": {
+        "status": "BLOCKED_UNRESOLVED",
+        "requiredBeforeProd11Request": true,
+        "executionOfWo03MatrixBeforeProd11Request": false,
+        "rule": "before PROD-11 authorization may be requested, freeze and prepare the exact isolated WO-03 environment target and the exact authority covering any setup writes needed to create or bind it; this gate authorizes preparation only and does not execute the WO-03 acceptance matrix",
+        "requiredTargetBindings": [
+          "EXACT_ISOLATED_TEST_ENDPOINT",
+          "EXACT_ISOLATED_DATABASE_IDENTITY",
+          "EXACT_TEST_IDENTITY_SCOPE",
+          "EXACT_SINGLE_FIXTURE_DIGEST",
+          "EXACT_GROUPED_FIXTURE_DIGEST",
+          "EXACT_ON_SITE_IPAD_OR_TABLET",
+          "EXACT_SAFARI_BROWSER_TARGET",
+          "EXACT_MOBILE_VIEWPORT_EXECUTION_TARGET",
+          "EXACT_ACCESSIBILITY_ASSISTIVE_TECH_ENVIRONMENT"
+        ],
+        "requiredAuthority": "SEPARATELY_FROZEN_WO03_ISOLATED_ENVIRONMENT_PREPARATION_AUTHORITY",
+        "setupWritesMustCompleteBeforeRequest": true,
+        "runtimeImageBindingRule": "the prepared isolated environment must be bound to the exact replacement immutable image ID and source revision frozen for PROD-11 before the authorization request",
+        "noImplicitPostAuthorizationSetup": true
+      },
+      "preparationPhase": "PRE_PROD11_REQUEST",
+      "authorityStatus": "BLOCKED_PREPARATION_AUTHORITY_AND_EXACT_TARGET_UNRESOLVED"
     },
     "productionSmokeWriteGate": {
       "status": "BLOCKED_PRE_REQUEST_ATOMIC_CAPABILITY_AND_PRE_ACTIVATION_WO03",
@@ -520,14 +543,16 @@
       "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
       "PROD11_REPLACEMENT_IMMUTABLE_IMAGE_NOT_YET_BUILT_TESTED_AND_FROZEN",
       "KIOSK_EXPECTED_SCHEDULE_ITEM_RUNTIME_BINDING_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
-      "KIOSK_POST_SMOKE_NORMAL_OPERATION_TRANSITION_CONTRACT_UNRESOLVED"
+      "KIOSK_POST_SMOKE_NORMAL_OPERATION_TRANSITION_CONTRACT_UNRESOLVED",
+      "WO03_ISOLATED_ENVIRONMENT_PREPARATION_AUTHORITY_UNRESOLVED",
+      "WO03_ISOLATED_ENVIRONMENT_EXACT_TARGET_NOT_FROZEN"
     ],
     "credentialGenerationIsExecutionNotRequestPrerequisite": true,
     "dedicatedBrowserProfileCreationIsExecutionNotRequestPrerequisite": true,
     "realDeviceAcceptanceAndOfflineReplayAreExecutionEvidenceNotPreAuthorizationWrites": true,
     "postAuthorizationExecutionClosureGates": [
+      "WO03_PREBOUND_ISOLATED_ENVIRONMENT_FRESH_REVALIDATION",
       "WO03_ISOLATED_MATRIX_BEFORE_PRODUCTION_KIOSK_ACTIVATION",
-      "WO03_EXACT_ISOLATED_ACCEPTANCE_ENVIRONMENT_BOUND",
       "WO03_FULL_ISOLATED_VIEWPORT_AND_ON_SITE_MATRIX",
       "REAL_DEVICE_ACCEPTANCE",
       "OFFLINE_REPLAY_RESULT",
@@ -538,7 +563,7 @@
       "KIOSK_CURRENT_SELECTION_EQUALS_FROZEN_ACCEPTANCE_ITEM",
       "PROD11_PRODUCTION_SMOKE_SEPARATE_FROM_WO03"
     ],
-    "wo03EvidenceSourceRule": "REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT must come from the exact isolated WO-03 acceptance environment; production smoke evidence is separate and non-substitutable",
+    "wo03EvidenceSourceRule": "REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT must come from the exact isolated WO-03 acceptance environment whose target and setup authority were frozen and completed before the PROD-11 request; the matrix executes only after authorization and before production Kiosk activation. Production smoke evidence remains separate and non-substitutable.",
     "productionEventWriteGate": "during the bounded PROD-11 production smoke only, no Kiosk run-event write may commit unless KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY atomically proves the event target, immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID binding, authorization-frozen derived scheduleItemId and unique current STUDIO-PROD-01 item are the same item, and the active Scheduling config businessTimeZone equals Asia/Shanghai inside the same event transaction. This smoke gate grants no authority for later unrelated production schedule items.",
     "executionImageGate": {
       "required": true,
@@ -609,6 +634,16 @@
         "do not silently recreate a normal-operation container without separately frozen authority"
       ]
     },
-    "productionReadyClaimRule": "neither successful isolated WO-03 nor successful bounded production smoke authorizes or proves normal ongoing Kiosk production operation; no production-ready or normal-operation claim is allowed until the separate post-smoke normal-operation transition authority is frozen and completed"
+    "productionReadyClaimRule": "neither successful isolated WO-03 nor successful bounded production smoke authorizes or proves normal ongoing Kiosk production operation; no production-ready or normal-operation claim is allowed until the separate post-smoke normal-operation transition authority is frozen and completed",
+    "preRequestIsolatedEnvironmentGate": {
+      "status": "BLOCKED",
+      "requiredBeforeRequest": true,
+      "exactTargetMustBeFrozen": true,
+      "preparationAuthorityMustBeFrozen": true,
+      "setupWritesMustBeCompleted": true,
+      "matrixExecutionBeforeRequest": false,
+      "matrixExecutionPhase": "POST_AUTHORIZATION_PRE_PRODUCTION_KIOSK_ACTIVATION",
+      "rule": "the exact isolated WO-03 environment and separately bounded setup authority must exist before the PROD-11 request; only the acceptance execution itself remains post-authorization"
+    }
   }
 }
