@@ -2177,3 +2177,40 @@ nextAction         = PROD-10-ENABLE-VCP-REMOTE-SYNC
 
 This validation performed no production mutation. Because this paragraph is docs-only, the resulting final head is validated once more before merge eligibility.
 
+---
+
+## PROD-10 live integration closure
+
+`PROD-10-ENABLE-VCP-REMOTE-SYNC` is formally complete after a second explicitly authorized re-acceptance.
+
+The re-acceptance first bound fresh pre-write evidence to the exact Tencent instance, container ID, image digest, persistent volume/database identities, Nginx route hash, backend health, public health, current revision and disabled acceptance gate.
+
+It then performed exactly one bounded guarded write:
+
+```text
+revision 2
+→ create PROD10-ACCEPT-R2 / TASK-PROD10-REACCEPT-R2
+→ guarded push
+→ revision 3
+→ verification pull revision 3
+```
+
+Post-write exact target continuity passed and the acceptance write gate was closed.
+
+Evidence:
+
+`docs/acceptance/PROD-10_VCP_REMOTE_SYNC_EVIDENCE.md`
+
+Machine authority now records:
+
+```text
+completedAcceptanceIds += PROD-10-ENABLE-VCP-REMOTE-SYNC
+
+authorization.status  = FROZEN_NOT_REQUESTED
+requestedActionIds    = []
+approvedActionIds     = []
+requestableActionIds  = []
+nextActionId          = PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE
+```
+
+No standing Agent write authority was granted. Kiosk and DingTalk remain unchanged.

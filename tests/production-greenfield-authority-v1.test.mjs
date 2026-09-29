@@ -31,13 +31,13 @@ test('greenfield authority binds the frozen parent and grants no production muta
   assert.deepEqual(authority.authorization.requestedActionIds, []);
   assert.deepEqual(authority.authorization.approvedActionIds, []);
   assert.deepEqual(authority.authorization.requestableActionIds, []);
-  assert.equal(authority.authorization.nextActionId, 'PROD-10-ENABLE-VCP-REMOTE-SYNC');
+  assert.equal(authority.authorization.nextActionId, 'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE');
   assert.equal(authority.authorization.nextActionRequiresExplicitAuthorization, true);
 });
 
 test('greenfield authority records GF14L completion while retaining rolled-back GF14 history', () => {
   assert.deepEqual(
-    authority.completedAcceptanceIds.slice(-8),
+    authority.completedAcceptanceIds.slice(-9),
     [
       'PROD-03-GENERATE-INSTALL-TOKENS',
       'PROD-04-BUILD-IMAGE',
@@ -47,11 +47,22 @@ test('greenfield authority records GF14L completion while retaining rolled-back 
       'PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION',
       'PROD-GF-13-ACTIVATE',
       'PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE',
+      'PROD-10-ENABLE-VCP-REMOTE-SYNC',
     ],
   );
   assert.equal(authority.completedAcceptanceIds.includes('PROD-GF-14-RESTORE-ORPHAN-CLEANUP'), false);
   assert.equal(authority.completedAcceptanceIds.includes('PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE'), true);
   assert.equal(authority.completedAcceptanceIds.includes('PROD-GF-13-ACTIVATE'), true);
+  assert.equal(authority.acceptance.prod10.status, 'PASS');
+  assert.equal(authority.acceptance.prod10.prewriteAttestationFinalSha256,
+    'sha256:ab276166e3cdcc601fc397b95a9abe83c73b927ceba14e40e1403501c1a9fcbd');
+  assert.equal(authority.acceptance.prod10.prewriteContainerId,
+    'b29798598ac043794420599c23f735c19038744a76f1b490b3e8c5a58e28e6be');
+  assert.equal(authority.acceptance.prod10.postRevision, 3);
+  assert.equal(authority.acceptance.prod10.createdTaskIdSha256,
+    'sha256:87062fd994bc89887e8b4322948b2d4899aa191ae8255f2e904c459c498e0960');
+  assert.equal(authority.acceptance.prod10.acceptanceWriteEnabledPost, false);
+
   assert.deepEqual(authority.acceptance.prod03, {
     status: 'PASS',
     recordedAtUtc: '2026-09-27T16:34:04.678274744Z',

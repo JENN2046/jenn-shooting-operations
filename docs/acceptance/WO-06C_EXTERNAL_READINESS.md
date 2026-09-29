@@ -377,3 +377,50 @@ PROD-10-ENABLE-VCP-REMOTE-SYNC = NOT_AUTHORIZED
 ```
 
 The historical VCPChat adapter-path assumption is no longer used by the integration test or the WO-06C VCP boundary harness. Historical WO-06C evidence remains unchanged as historical evidence.
+
+---
+
+## Live VCP external closure after PROD-10 re-acceptance
+
+The earlier source-only and first-execution blocked checkpoints above are retained as historical evidence.
+
+A second explicitly authorized PROD-10 acceptance run first completed fresh exact-target attestation while the write gate was disabled, then performed one bounded guarded write and verification pull.
+
+Canonical evidence:
+
+```text
+VCPToolBox release = 12380d7d
+Jenn extension release = 7ea5d49c
+plugin = JennShootingOperations
+endpoint = https://jso.skmt617.top
+
+pre-write exact target attestation = PASS
+running-image strict validator = PASS
+pull revision = 2
+guarded push revision = 3
+verification revision = 3
+
+created task = TASK-PROD10-REACCEPT-R2
+created SKU = PROD10-ACCEPT-R2
+standing Agent write capability = DISABLED
+acceptance write gate = DISABLED
+```
+
+Pre-write final attestation SHA-256:
+
+`ab276166e3cdcc601fc397b95a9abe83c73b927ceba14e40e1403501c1a9fcbd`
+
+Post-write continuity SHA-256:
+
+`9ffbbae81dfe8d969fa073556f33f6e6e83d5368d1c69bf0d0e175583b3aef45`
+
+Canonical live state:
+
+```text
+VCP_SOURCE_COMPATIBILITY = PASS
+VCP_EXTERNAL_COMPATIBILITY = PASS
+PROD-10-ENABLE-VCP-REMOTE-SYNC = COMPLETED
+nextActionId = PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE
+```
+
+See `docs/acceptance/PROD-10_VCP_REMOTE_SYNC_EVIDENCE.md`.
