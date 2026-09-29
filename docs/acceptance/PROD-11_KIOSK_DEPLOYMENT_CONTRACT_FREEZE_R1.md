@@ -1,9 +1,9 @@
 # PROD-11 Kiosk Deployment Contract Freeze R1
 
-Status: **DEPLOYMENT MECHANICS FROZEN / BLOCKED ON EXACT REAL DEVICE**
+Status: **READY FOR EXPLICIT AUTHORIZATION REQUEST / NOT AUTHORIZED**
 
-This document freezes the deployment mechanics for `PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE`.
-It does **not** authorize PROD-11, replace the live container, generate a real credential, enroll a browser, or submit a production run event.
+This document freezes the deployment mechanics and exact device/browser target for `PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE`.
+It does **not** authorize PROD-11, replace the live container, generate a real credential, create the dedicated browser profile, enroll the device, or submit a production run event.
 
 ## Runtime image
 
@@ -31,11 +31,38 @@ principal.resourceIds = [STUDIO-PROD-01]
 
 These are production logical identifiers, not the test-only `STUDIO-A` fixture.
 
-The exact physical device and exact browser/profile are **not yet selected**. No historical authority or owner instruction identifies them.
-Therefore this contract remains fail-closed and PROD-11 is not requestable yet.
+## Frozen real device and browser
+
+Owner-selected real device:
+
+```text
+device label = QLL-6
+platform     = Windows 11
+OS version   = 10.0.26200
+```
+
+Fresh device inspection shows Google Chrome installed at:
+
+```text
+C:\Program Files\Google\Chrome\Application\chrome.exe
+Chrome version at freeze = 153.0.8010.53
+```
+
+The Kiosk must **not** reuse the operator's ordinary Chrome profile.
+
+The frozen browser isolation target is:
+
+```text
+profile mode = dedicated user-data-dir
+profile root = %LOCALAPPDATA%\JennShootingOperations\Chrome-Kiosk-PROD-01
+profile directory = Default
+existing normal profile reuse = false
+```
+
+The dedicated profile directory does not exist yet by design. Creating it is part of the later explicitly authorized PROD-11 execution, not this freeze.
 
 The server-authoritative `deviceId` is a logical identity binding. The current Kiosk design does not claim cryptographic hardware attestation.
-The real physical device/browser association must therefore be recorded as acceptance evidence for the owner-selected device.
+The association between `QLL-6`, the dedicated Chrome profile and `KIOSK-PROD-01` is therefore recorded and verified as real-device acceptance evidence.
 
 ## Frozen runtime auth config
 
@@ -55,12 +82,12 @@ businessTimeZone  = Asia/Shanghai
 allowedBriefHosts = []
 ```
 
-`allowedBriefHosts` is deliberately empty for the initial freeze. A business brief host must not be guessed from the JSO API hostname.
+`allowedBriefHosts` is deliberately empty for the initial enablement. A business brief host must not be guessed from the JSO API hostname.
 If a future scheduled item needs a `briefUrl`, that host requires an explicit separately reviewed allowlist update.
 
 ## Frozen credential generation
 
-A dedicated Kiosk credential is generated only after explicit PROD-11 authorization and exact real-device selection.
+A dedicated Kiosk credential is generated only after explicit PROD-11 authorization.
 
 ```text
 password = node:crypto.randomBytes(32).toString('base64url')
@@ -100,6 +127,40 @@ pre-PROD11 backup = /mnt/datadisk0/apps/jenn-shooting-operations/.env.runtime.pr
 
 The production volume is never copied into a test container and is never deleted by rollback.
 
+## Fresh pre-authorization attestation
+
+Recorded at `2026-09-29T09:44:33Z`:
+
+```text
+production host = VM-0-12-ubuntu
+
+live container = b29798598ac043794420599c23f735c19038744a76f1b490b3e8c5a58e28e6be
+live image     = sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545
+live revision  = 92b7137211bf807f178901e878a8c3d6e335cec4
+live health    = healthy
+
+candidate image    = sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72
+candidate revision = d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7
+
+production volume = jenn-shooting-operations_shooting_data
+backend health    = 200
+public health     = 200
+write admission   = enabled
+database revision = 3
+
+KIOSK_AUTH_CONFIG_PATH in live = absent
+Kiosk runtime file in live     = absent
+
+Nginx route file   = /etc/nginx/conf.d/jso-shooting-operations.conf
+Nginx route SHA256 = 35ea9acd80ba600e88d8c594a3a2558ec4cb57dd078c61d6832f5798c2eabc33
+
+QLL-6 → https://jso.skmt617.top/healthz = 200
+QLL-6 Chrome = 153.0.8010.53
+dedicated Kiosk profile exists = false
+```
+
+The absence of the dedicated profile is expected. No browser state is created before PROD-11 authorization.
+
 ## Rollback contract
 
 `ROLLBACK-10-DISABLE-KIOSK-CONFIG` is configuration-only.
@@ -118,28 +179,27 @@ Fresh inspection shows the live database already has the continuous migration pr
 
 ## Requestability decision
 
-Current verdict:
+All three pre-request blockers are now closed:
+
+```text
+EXACT_REAL_DEVICE_SELECTED              = QLL-6
+EXACT_BROWSER_PROFILE_TARGET_FROZEN     = PASS
+FRESH_PRE_AUTH_TARGET_ATTESTATION       = PASS
+```
+
+Therefore:
 
 ```text
 PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE
-= NOT REQUESTABLE YET
+= READY TO REQUEST EXPLICIT AUTHORIZATION
+
+formal authorization state
+= FROZEN_NOT_REQUESTED
 ```
 
-Blocking facts:
+This is a readiness judgment only. It is **not** an authorization.
 
-```text
-EXACT_REAL_DEVICE_UNRESOLVED
-EXACT_BROWSER_PROFILE_UNRESOLVED
-FRESH_PRE_AUTH_TARGET_ATTESTATION_NOT_YET_RECORDED
-```
-
-PROD-11 becomes requestable only when:
-
-1. the owner selects one exact physical Kiosk device and exact browser/profile;
-2. a fresh read-only pre-authorization attestation confirms the production host, live container, route, volume and candidate image identities;
-3. review confirms no widening of the frozen resource/device/config/rollback scope.
-
-Credential generation, config materialization, real-device acceptance and offline replay occur only inside the later explicitly authorized PROD-11 execution. They are not performed during this freeze.
+Credential generation, dedicated Chrome profile creation, config materialization, live container replacement, identity enrollment, real-device acceptance, offline replay and any run-event submission remain inside the later explicitly authorized PROD-11 execution.
 
 Machine-readable contract:
 
