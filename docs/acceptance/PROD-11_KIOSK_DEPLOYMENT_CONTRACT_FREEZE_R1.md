@@ -332,7 +332,22 @@ planned_start <= current time < planned_end
 planned_end still covers acceptanceRunEnd
 ```
 
-If this execution-time check fails, no Kiosk run event may be submitted. PROD-11 does not authorize creating, moving or replacing the schedule item. The flow returns to a separately authorized scheduling preparation; if Kiosk runtime configuration has already changed, only the bound configuration rollback may be used.
+That row-level check is necessary but not sufficient. After the exact PROD-11 Kiosk auth configuration is enabled and server-authoritative device identity is verified, the executor must perform an authenticated:
+
+```text
+GET /api/v2/kiosk/current?resourceId=STUDIO-PROD-01
+```
+
+immediately before the first run event and require:
+
+```text
+HTTP/current-read success
+current.scheduleItemId = exact frozen derived acceptance scheduleItemId
+```
+
+This resource-wide selection proof closes the case where another confirmed item overlaps the same instant or another item already owns an active run. Any `MULTIPLE_CURRENT_CANDIDATES`, other current item, other active run, null current item, authentication/identity failure, or other non-success result is a hard stop.
+
+If either the row-level recheck or the resource-wide current-selection recheck fails, no Kiosk run event may be submitted. PROD-11 does not authorize creating, moving or replacing the schedule item. The flow returns to a separately authorized scheduling preparation; if Kiosk runtime configuration has already changed, only the bound configuration rollback may be used.
 
 The exact preparatory Action ID is not yet frozen and remains an authority gap.
 
@@ -380,6 +395,7 @@ Mandatory after authorization, before PROD-11 can close:
 
 ```text
 KIOSK_ACCEPTANCE_ITEM_EXECUTION_TIME_RECHECK
+KIOSK_CURRENT_SELECTION_EQUALS_FROZEN_ACCEPTANCE_ITEM
 WO03_FULL_DEVICE_BROWSER_MATRIX
 REAL_DEVICE_ACCEPTANCE
 OFFLINE_REPLAY_RESULT
