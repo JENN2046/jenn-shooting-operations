@@ -509,19 +509,16 @@
         "requiredBeforeRequest": true,
         "authorityPacketBindings": {
           "scheduleItemId": "derived acceptance scheduleItemId frozen elsewhere in this contract",
-          "runId": "RUN-PROD11-SMOKE-01",
-          "startEventId": "EVENT-PROD11-SMOKE-START-01",
-          "completeEventId": "EVENT-PROD11-SMOKE-COMPLETE-01",
           "resourceId": "STUDIO-PROD-01"
         },
         "allowedMutatingSequence": [
           {
             "ordinal": 1,
             "eventType": "start",
-            "runId": "RUN-PROD11-SMOKE-01",
-            "eventId": "EVENT-PROD11-SMOKE-START-01",
+            "runIdBinding": "executionGeneratedIdentifierContract.startPhaseBinding.runId",
+            "eventIdBinding": "executionGeneratedIdentifierContract.startPhaseBinding.eventId",
             "expectedRunRevision": 0,
-            "localSequence": 1,
+            "localSequence": 0,
             "requiredResult": "RUN_EVENT_APPLIED",
             "requiredResultingState": "shooting",
             "requiredRunRevision": 1
@@ -529,10 +526,10 @@
           {
             "ordinal": 2,
             "eventType": "complete",
-            "runId": "RUN-PROD11-SMOKE-01",
-            "eventId": "EVENT-PROD11-SMOKE-COMPLETE-01",
+            "runIdBinding": "exact runId bound by the accepted start receipt",
+            "eventIdBinding": "executionGeneratedIdentifierContract.completePhaseBinding.eventId",
             "expectedRunRevision": 1,
-            "localSequence": 2,
+            "localSequence": 1,
             "requiredResult": "RUN_EVENT_APPLIED",
             "requiredResultingState": "completed",
             "requiredRunRevision": 2
@@ -542,31 +539,39 @@
           "block event",
           "resume event",
           "any third accepted production smoke event",
-          "any event with a different runId",
-          "any event with a different eventId than the exact phase-bound IDs",
+          "any complete event whose runId differs from the runId bound by the accepted start receipt",
+          "any replay whose eventId or command digest differs from the corresponding immutable phase receipt",
           "any event for a schedule item other than KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID",
+          "any start whose localSequence is not zero",
+          "any complete whose localSequence is not one",
           "any new event after the terminal completion receipt exists",
-          "any attempt to convert conflict or reviewRequired into a wider retry sequence"
+          "any attempt to convert conflict or reviewRequired into a wider retry sequence",
+          "any predictable operator-authored or contract-hard-coded runId/eventId"
         ],
-        "idempotentReplayRule": "exact replay of one of the two already-persisted phase commands is permitted only when the eventId and command digest match the existing receipt and produces no new production fact; replay does not advance the smoke phase or write budget",
+        "idempotentReplayRule": "exact replay of one of the two already-persisted phase commands is permitted only when the runId, eventId and command digest match the corresponding immutable receipt and produces no new production fact; replay does not advance the smoke phase or write budget",
         "dynamicTimeRule": "occurredAt values are execution-time facts and must fall inside the frozen acceptance run window and pass the normal event-time policy without reviewRequired; they are not standing authority values",
         "hardStopOutcomes": [
           "EVENT_TIME_REVIEW_REQUIRED",
           "revision conflict",
           "current-item or authorization-binding mismatch",
           "active Scheduling time-zone mismatch",
+          "start localSequence other than zero",
+          "complete localSequence other than one",
+          "complete runId differs from the accepted start runId",
+          "ID structure invalid or secure-client generation proof unavailable",
           "any non-RUN_EVENT_APPLIED response for a not-yet-persisted phase",
-          "unexpected existing run/event/review/receipt/outbox facts for the frozen IDs"
+          "unexpected pre-existing run/event/review/receipt/outbox facts inconsistent with the exact acceptance item or already-bound smoke identifiers"
         ],
         "failureRule": "on any hard-stop outcome, no later smoke mutation is authorized; preserve any facts already committed, disable/rollback Kiosk configuration as applicable, and require a new separately frozen recovery or smoke authority rather than improvising more events",
         "terminalCondition": {
-          "exactCondition": "the exact complete event has an accepted immutable receipt with resultingState completed and runRevision 2 for RUN-PROD11-SMOKE-01 and KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID, after exactly the authorized start and complete mutations and no other accepted smoke mutation",
+          "exactCondition": "the complete event has an accepted immutable receipt with resultingState completed and runRevision 2 for the cryptographically generated runId bound by the accepted start receipt and KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID, after exactly the authorized start(localSequence 0) and complete(localSequence 1) mutations and no other accepted smoke mutation",
           "evidenceRequired": [
-            "exact start receipt and command digest",
-            "exact complete receipt and command digest",
-            "production run completed with runRevision 2",
-            "exactly two accepted smoke event facts for the frozen run",
-            "no pending review for either frozen smoke event ID",
+            "exact start receipt, command digest, generated runId and generated start eventId",
+            "exact complete receipt, command digest and generated complete eventId",
+            "exact-head proof that the Kiosk client uses secureId(prefix) backed only by globalThis.crypto.randomUUID() and fails closed without secure randomness",
+            "production run completed with runRevision 2 under the runId bound by the start receipt",
+            "exactly two accepted smoke event facts for that bound run",
+            "no pending review for either bound smoke event ID",
             "completion notification intent permanently isolated from real provider delivery"
           ],
           "afterTerminal": "all further production Kiosk run-event writes remain denied under PROD-11 smoke authority; successful smoke completion does not grant normal-operation authority"
@@ -577,14 +582,38 @@
         ],
         "writeAdmissionCapability": {
           "id": "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
-          "requirement": "inside the same trusted write-admission/event serialization boundary, enforce the exact two-phase mutation budget, exact run/event IDs, phase order, expected revisions, schedule-item binding, no-third-write terminal latch, and replay-only exception",
-          "currentBaselineContainsCapability": false
+          "requirement": "inside the same trusted write-admission/event serialization boundary, enforce the exact two-phase mutation budget, client-generated Web Crypto ID contract with immutable receipt binding, phase order, localSequence zero then one, expected revisions, schedule-item binding, no-third-write terminal latch, and receipt-exact replay-only exception",
+          "currentBaselineContainsCapability": false,
+          "clientCompatibility": "must accept the existing reviewed Kiosk client's secureId('RUN') and secureId('EVENT') values and its queue sequence starting at zero; must not require predictable predeclared IDs"
         },
         "outboxIsolationCapability": {
           "id": "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY",
           "reason": "the authorized complete event enqueues a production-run-completed notification intent; that acceptance-only intent must never later dispatch as a real provider notification",
           "requirement": "before smoke write authority exists, freeze and implement a permanent exact-intent containment mechanism that preserves the audit/outbox fact but prevents real DingTalk or other provider delivery without affecting unrelated outbox facts",
           "currentBaselineContainsCapability": false
+        },
+        "executionGeneratedIdentifierContract": {
+          "clientGenerationInvariant": {
+            "implementation": "public/kiosk.js secureId(prefix)",
+            "entropySource": "globalThis.crypto.randomUUID()",
+            "runIdFormat": "RUN-{crypto.randomUUID()}",
+            "eventIdFormat": "EVENT-{crypto.randomUUID()}",
+            "failClosedWhenSecureRandomUnavailable": true,
+            "predictableIdsForbidden": true,
+            "exactHeadClientGenerationProofRequired": true
+          },
+          "startPhaseBinding": {
+            "runId": "generated by the exact reviewed Kiosk client immediately before queue enqueue",
+            "eventId": "generated by the exact reviewed Kiosk client immediately before queue enqueue",
+            "bindingRule": "on the first valid start only, inside the same trusted smoke write-admission/event transaction, validate canonical ID structure and atomically bind the exact received runId and start eventId to the accepted immutable start receipt; no public constant or operator-chosen predictable identifier is authority"
+          },
+          "completePhaseBinding": {
+            "runId": "must equal the runId bound by the accepted start receipt",
+            "eventId": "new eventId generated by the exact reviewed Kiosk client with secureId('EVENT')",
+            "bindingRule": "on the one valid complete only, inside the same trusted smoke write-admission/event transaction, require the bound start runId, validate canonical event ID structure, and bind the exact received complete eventId to the accepted immutable complete receipt"
+          },
+          "provenanceRule": "the server cannot infer randomness from a string; Web Crypto provenance is established by exact-head client implementation/tests, while server admission validates structure, phase, identity, schedule binding, local sequence and immutable receipt/latch consistency",
+          "replayRule": "idempotent replay must reuse the exact runId/eventId already bound in the immutable receipt and the exact command digest"
         }
       }
     },
@@ -781,12 +810,16 @@
         "start",
         "complete"
       ],
-      "exactRunId": "RUN-PROD11-SMOKE-01",
-      "exactEventIds": [
-        "EVENT-PROD11-SMOKE-START-01",
-        "EVENT-PROD11-SMOKE-COMPLETE-01"
+      "terminalRule": "accepted complete receipt with resultingState completed and runRevision 2 closes all PROD-11 smoke write authority after exactly start localSequence 0 and complete localSequence 1 under the runId bound by the accepted start receipt; no third production Kiosk mutation is permitted",
+      "identifierBindingMode": "WEB_CRYPTO_GENERATED_AND_IMMUTABLY_RECEIPT_BOUND_PER_SMOKE_PHASE",
+      "clientGenerator": "public/kiosk.js secureId(prefix) using globalThis.crypto.randomUUID()",
+      "localSequenceContract": [
+        0,
+        1
       ],
-      "terminalRule": "accepted complete receipt with resultingState completed and runRevision 2 closes all PROD-11 smoke write authority; no third production Kiosk mutation is permitted"
+      "runIdRule": "start generates RUN-{crypto.randomUUID()}; complete must reuse the exact runId bound by the accepted start receipt",
+      "eventIdRule": "start and complete each generate EVENT-{crypto.randomUUID()}; each exact value becomes immutable only through its accepted phase receipt and must be reused unchanged for idempotent replay",
+      "predictableIdentifiersForbidden": true
     }
   },
   "runtimeAuthorityBinding": {
