@@ -28,10 +28,9 @@
       "currentBaselineImageId": "sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72",
       "currentBaselineTag": "jenn-shooting-operations:prod-d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
       "currentBaselineSourceRevision": "d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
-      "requiredCapability": "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
       "finalImmutableImageId": "UNRESOLVED_AFTER_ATOMIC_CAPABILITY_IMPLEMENTATION",
       "finalSourceRevision": "UNRESOLVED_AFTER_ATOMIC_CAPABILITY_IMPLEMENTATION",
-      "deploymentReferenceRule": "PROD-11 must not be requested until a replacement image containing the atomic capability has passed exact-head tests and its immutable image ID, source revision, and derived diagnostic tag are frozen; at execution the diagnostic tag must resolve to that frozen immutable image ID, the OCI revision label must equal the frozen source revision, and the container must be created by immutable image ID, never by mutable tag",
+      "deploymentReferenceRule": "PROD-11 must not be requested until a replacement image containing KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY, KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY, and KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY has passed exact-head tests and its immutable image ID, source revision, and derived diagnostic tag are frozen; at execution the diagnostic tag must resolve to that frozen immutable image ID, the OCI revision label must equal the frozen source revision, and the container must be created by immutable image ID, never by mutable tag",
       "immediatePreCreateRevalidationRequired": true,
       "requiredActionSpecificRevalidation": [
         "TARGET_HOST_IDENTITY",
@@ -95,7 +94,12 @@
         "clientOccurredAtAloneNeverAuthorizes": true,
         "trustedServerTimeCapturePoint": "after entering the same smoke event transaction/write-serialization boundary",
         "receiptAuditTimeSource": "same trusted in-transaction server time that passed the frozen-window predicate"
-      }
+      },
+      "requiredCapabilities": [
+        "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
+        "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
+        "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY"
+      ]
     },
     "role": "VERIFIED_BASELINE_NOT_PROD11_EXECUTION_ELIGIBLE",
     "prod11ExecutionEligibility": "BLOCKED_MISSING_ATOMIC_CONTEXT_SMOKE_WRITE_ADMISSION_AND_SMOKE_OUTBOX_ISOLATION_CAPABILITIES",
@@ -689,7 +693,7 @@
       "exact confirmed unused production acceptance item is the current STUDIO-PROD-01 item immediately before any separately bounded production smoke run event",
       "any production smoke run event is integration evidence only and cannot satisfy WO-03 REAL_DEVICE_ACCEPTANCE or OFFLINE_REPLAY_RESULT"
     ],
-    "productionSmokeSeparationRule": "the separately authorized production scheduling preparation supports only a later bounded production integration smoke. Before PROD-11 production Kiosk activation, the complete isolated WO-03 REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT gates must pass. Before PROD-11 may even be requested, a replacement immutable image implementing KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY must be built, tested and frozen."
+    "productionSmokeSeparationRule": "the separately authorized production scheduling preparation supports only a later bounded production integration smoke. Before PROD-11 production Kiosk activation, the complete isolated WO-03 REAL_DEVICE_ACCEPTANCE and OFFLINE_REPLAY_RESULT gates must pass. Before PROD-11 may even be requested, a replacement immutable image implementing KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY, KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY, and KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY must be built, exact-head tested and frozen."
   },
   "rollbackContract": {
     "actionId": "ROLLBACK-10-DISABLE-KIOSK-CONFIG",
@@ -764,7 +768,6 @@
     "executionImageGate": {
       "required": true,
       "status": "BLOCKED_REPLACEMENT_IMAGE_UNRESOLVED",
-      "requiredCapability": "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
       "currentBaselineImageId": "sha256:de849c3005e484874e0e55130ee3a36ab74e6db3785a817ad612c1903d8f1c72",
       "currentBaselineEligibleForProd11": false,
       "finalImmutableImageId": "UNRESOLVED",
@@ -782,6 +785,11 @@
       "finalDiagnosticTag": "UNRESOLVED",
       "finalDiagnosticTagDerivationRule": "jenn-shooting-operations:prod-<finalSourceRevision>",
       "additionalRequiredCapabilities": [
+        "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
+        "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY"
+      ],
+      "requiredCapabilities": [
+        "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
         "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
         "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY"
       ]
