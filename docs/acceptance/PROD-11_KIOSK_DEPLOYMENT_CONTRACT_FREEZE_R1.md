@@ -28,7 +28,7 @@ baseline tag      = jenn-shooting-operations:prod-d1fe85ec73e3241e8da3cff6c5f433
 baseline revision = d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7
 ```
 
-That image is **not eligible for PROD-11 execution** because it does not implement the newly required `KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY`.
+That image is **not eligible for PROD-11 execution** because it does not implement the newly required `KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY`.
 
 Therefore PROD-11 remains pre-request blocked until:
 
@@ -42,6 +42,20 @@ atomic current-selection capability implemented
 ```
 
 The final immutable image ID is currently unresolved by design.
+
+Before PROD-11 may be requested, the **complete frozen action-specific revalidation checklist** from the production manifest must fresh-pass:
+
+```text
+TARGET_HOST_IDENTITY
+DISK_PORT_ROUTE_CONFLICTS
+BUILT_IMAGE_DIGEST
+SECRET_STORAGE
+KIOSK_AUTH_RUNTIME_CONFIGURATION
+EXTERNAL_READINESS_GATES
+ROLLBACK_TARGETS
+```
+
+`BUILT_IMAGE_DIGEST` is necessary but not sufficient. Any stale, missing, changed, or failed item leaves PROD-11 non-requestable.
 
 At eventual execution, immediately before production container create/replacement, the executor must revalidate `BUILT_IMAGE_DIGEST`: the frozen diagnostic tag must resolve to the frozen replacement immutable image ID, the OCI revision label must equal the frozen replacement source revision, and the container must be created by immutable image ID rather than mutable tag. Any mismatch is a hard stop.
 
@@ -139,7 +153,19 @@ The entire WO-03 browser/device matrix, not only grouped-session presentation, m
 
 This applies to the full viewport and on-site checklist whenever the evidence depends on authentication, queue state, run state, contention, replay, cache behavior, grouped data, accessibility interaction, identity expiry, or device handoff.
 
-The exact isolated environment remains a post-authorization execution/closure target and must be bound before those checks run:
+The exact isolated environment remains a post-authorization, pre-production-activation target and must be bound before those checks run.
+
+Critically, it must run **the same replacement immutable image ID and source revision frozen for eventual production activation**. WO-03 evidence from the current baseline image, a different image, a different revision, or an unverified rebuild is invalid.
+
+Immediately before isolated WO-03 execution, fresh prove:
+
+```text
+isolated runtime image ID = frozen replacement production image ID
+isolated runtime revision = frozen replacement production source revision
+replacement image exact-head validation = PASS
+```
+
+Then bind the remaining isolated environment facts:
 
 ```text
 exact isolated test endpoint
@@ -218,12 +244,26 @@ Even after production activation, `GET /api/v2/kiosk/current` is diagnostic/devi
 Before any production run-event write is allowed, the replacement frozen runtime must implement:
 
 ```text
-KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY
+KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY
 ```
 
-Inside the **same transaction that commits the Kiosk event**, it must re-evaluate `STUDIO-PROD-01` resource-wide current selection and require the exact frozen acceptance schedule item to be the unique current item with no competing current candidate or active run. If that predicate cannot be evaluated or does not match, the transaction aborts before any run/review/receipt/revision/audit/outbox fact commits.
+Inside the **same transaction that commits the Kiosk event**, the replacement runtime must enforce both:
 
-`KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY` is **not implemented in the current baseline image**, so this is a PROD-11 **pre-request blocker**, not something that may be added after authorization.
+```text
+1. STUDIO-PROD-01 resource-wide current selection:
+   exact frozen acceptance schedule item is the unique current item
+   no competing current candidate or active run
+
+2. active Scheduling config:
+   businessTimeZone = Asia/Shanghai
+   exact match with frozen Kiosk runtime businessTimeZone
+```
+
+Both predicates must be read after entering the event transaction/write serialization boundary. A prior `/current` GET or prior config read is evidence only and cannot authorize the commit.
+
+If either predicate is unavailable or fails, the transaction aborts before any run/review/receipt/revision/audit/outbox fact commits.
+
+`KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY` is **not implemented in the current baseline image**, so this is a PROD-11 **pre-request blocker**, not something that may be added after authorization.
 
 QLL-6 + its dedicated Chrome profile remains the primary production Kiosk identity target. It is not permission to run the WO-03 stateful matrix against production scheduling facts.
 
@@ -466,7 +506,7 @@ HTTP/current-read success
 current.scheduleItemId = exact frozen derived acceptance scheduleItemId
 ```
 
-This resource-wide GET is device-facing evidence only. Any `MULTIPLE_CURRENT_CANDIDATES`, other current item, other active run, null current item, authentication/identity failure, or other non-success result is an immediate hard stop. A successful GET still does **not** authorize the event write: the same exact current-item predicate must be re-evaluated atomically inside the Kiosk event transaction by `KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY`.
+This resource-wide GET is device-facing evidence only. Any `MULTIPLE_CURRENT_CANDIDATES`, other current item, other active run, null current item, authentication/identity failure, or other non-success result is an immediate hard stop. A successful GET still does **not** authorize the event write: inside the Kiosk event transaction `KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY` must atomically re-evaluate both the exact current-item predicate and active Scheduling `businessTimeZone = Asia/Shanghai`.
 
 If either the row-level recheck or the resource-wide current-selection recheck fails, no Kiosk run event may be submitted. PROD-11 does not authorize creating, moving or replacing the schedule item. The flow returns to a separately authorized scheduling preparation; if Kiosk runtime configuration has already changed, only the bound configuration rollback may be used.
 
@@ -510,11 +550,14 @@ KIOSK_ACCEPTANCE_SCHEDULE_ITEM_ABSENT
 KIOSK_ACCEPTANCE_TASK_BINDING_ABSENT
 SEPARATE_SCHEDULING_PREPARATION_AUTHORITY_UNRESOLVED
 KIOSK_ACCEPTANCE_EXECUTION_WINDOW_NOT_YET_BOUND_AND_FRESH
-KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE
+KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE
 PROD11_REPLACEMENT_IMMUTABLE_IMAGE_NOT_YET_BUILT_TESTED_AND_FROZEN
+FULL_PROD11_ACTION_SPECIFIC_REVALIDATION_NOT_YET_FRESH_PASS
 ```
 
-The atomic current-selection capability is a hard **pre-request** gate. It may not be implemented after authorization or introduced by swapping to an unreviewed image.
+The atomic production-context capability is a hard **pre-request** gate. It must cover both current-item uniqueness and active Scheduling time-zone equality inside the event transaction. It may not be implemented after authorization or introduced by swapping to an unreviewed image.
+
+Immediately before the PROD-11 authorization request, fresh revalidate all seven manifest-bound checks: target host identity, disk/port conflicts, built image digest, secret storage, Kiosk auth runtime configuration, external readiness gates, and rollback targets.
 
 After explicit authorization, but **before production Kiosk activation**, the following isolated gates must close:
 
@@ -534,7 +577,7 @@ After production activation, before the first production smoke event:
 ```text
 KIOSK_ACCEPTANCE_ITEM_EXECUTION_TIME_RECHECK
 KIOSK_CURRENT_SELECTION_EQUALS_FROZEN_ACCEPTANCE_ITEM
-KIOSK_EVENT_ATOMIC_CURRENT_SELECTION_CAPABILITY = PASS inside same event transaction
+KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY = PASS inside same event transaction
 PROD11_PRODUCTION_SMOKE_SEPARATE_FROM_WO03
 ```
 
