@@ -102,6 +102,52 @@ test('stalled identity fetch is bounded and returns unavailable so recovery poll
   assert.equal(target.snapshot(), null);
 });
 
+test('identity deadline remains active through a stalled 200 response body', async () => {
+  const target = storage();
+  let timeoutCallback;
+  let aborted = false;
+  let cleared = false;
+  const controller = {
+    signal: Object.freeze({ type: 'body-test-signal' }),
+    abort() { aborted = true; },
+  };
+  const provisioner = createKioskDeviceProvisioner({
+    storage: target,
+    fetchImpl: async () => ({
+      status: 200,
+      async json() {
+        return new Promise(() => {});
+      },
+    }),
+    requestTimeoutMs: 19,
+    createAbortController: () => controller,
+    setTimer(callback, delay) {
+      assert.equal(delay, 19);
+      timeoutCallback = callback;
+      return 79;
+    },
+    clearTimer(handle) {
+      assert.equal(handle, 79);
+      cleared = true;
+    },
+  });
+
+  const pending = provisioner.provision();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(typeof timeoutCallback, 'function');
+  assert.equal(cleared, false);
+  timeoutCallback();
+
+  assert.deepEqual(await pending, {
+    ok: false,
+    code: 'DEVICE_IDENTITY_UNAVAILABLE',
+  });
+  assert.equal(aborted, true);
+  assert.equal(cleared, true);
+  assert.equal(target.snapshot(), null);
+});
+
 test('device provisioning fails closed on an existing mismatched browser identity', async () => {
   const target = storage('DEVICE-OTHER');
   const provisioner = createKioskDeviceProvisioner({

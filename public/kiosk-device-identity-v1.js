@@ -131,6 +131,13 @@ export function createKioskDeviceProvisioner({
       let response;
       let timeoutHandle;
       let controller;
+      let timedOut = false;
+      let timeout;
+      const clearDeadline = () => {
+        if (timeoutHandle === undefined) return;
+        clearTimer(timeoutHandle);
+        timeoutHandle = undefined;
+      };
       try {
         controller = createAbortController();
         if (!controller
@@ -138,8 +145,9 @@ export function createKioskDeviceProvisioner({
             || !controller.signal) {
           throw new Error('DEVICE_IDENTITY_ABORT_CONTROLLER_INVALID');
         }
-        const timeout = new Promise((_, reject) => {
+        timeout = new Promise((_, reject) => {
           timeoutHandle = setTimer(() => {
+            timedOut = true;
             try {
               controller.abort();
             } catch {
@@ -157,21 +165,22 @@ export function createKioskDeviceProvisioner({
           timeout,
         ]);
       } catch {
+        clearDeadline();
         if (isBlocked()) {
           return Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_BLOCKED' });
         }
         return existing === null
           ? Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_UNAVAILABLE' })
           : Object.freeze({ ok: true, deviceId: existing, verified: false });
-      } finally {
-        if (timeoutHandle !== undefined) clearTimer(timeoutHandle);
       }
 
       if (!response || !Number.isInteger(response.status)) {
+        clearDeadline();
         block();
         return Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_INVALID' });
       }
       if (response.status !== 200) {
+        clearDeadline();
         if (response.status >= 500 && response.status <= 599 && !isBlocked()) {
           return existing === null
             ? Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_UNAVAILABLE' })
@@ -188,11 +197,21 @@ export function createKioskDeviceProvisioner({
 
       let body;
       try {
-        body = await response.json();
+        body = await Promise.race([response.json(), timeout]);
       } catch {
+        clearDeadline();
+        if (timedOut) {
+          if (isBlocked()) {
+            return Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_BLOCKED' });
+          }
+          return existing === null
+            ? Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_UNAVAILABLE' })
+            : Object.freeze({ ok: true, deviceId: existing, verified: false });
+        }
         block();
         return Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_INVALID' });
       }
+      clearDeadline();
       if (!validateKioskDeviceIdentityResponse(body)) {
         block();
         return Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_INVALID' });
