@@ -287,23 +287,36 @@ Even after production activation, `GET /api/v2/kiosk/current` is diagnostic/devi
 
 The PROD-11 production smoke is not an open-ended run-event session.
 
-Only this exact mutation sequence may ever commit under PROD-11 smoke authority:
+Only this exact two-phase mutation sequence may ever commit under PROD-11 smoke authority.
+
+The identifiers are **not** public constants. They must come from the reviewed Kiosk client's existing secure generator:
 
 ```text
-runId = RUN-PROD11-SMOKE-01
+secureId('RUN')   -> RUN-{crypto.randomUUID()}
+secureId('EVENT') -> EVENT-{crypto.randomUUID()}
+```
 
+If Web Crypto secure randomness is unavailable, the client fails closed.
+
+```text
 1. START
-   eventId = EVENT-PROD11-SMOKE-START-01
+   runId = client-generated secureId('RUN')
+   eventId = client-generated secureId('EVENT')
    expectedRunRevision = 0
-   localSequence = 1
+   localSequence = 0
    required result = RUN_EVENT_APPLIED / shooting / runRevision 1
+   binding = accepted immutable start receipt locks exact runId + start eventId
 
 2. COMPLETE
-   eventId = EVENT-PROD11-SMOKE-COMPLETE-01
+   runId = exact runId locked by the accepted start receipt
+   eventId = new client-generated secureId('EVENT')
    expectedRunRevision = 1
-   localSequence = 2
+   localSequence = 1
    required result = RUN_EVENT_APPLIED / completed / runRevision 2
+   binding = accepted immutable complete receipt locks exact complete eventId
 ```
+
+Web Crypto provenance is established by exact-head client implementation/tests. Server admission validates canonical ID structure, phase/order, exact authenticated identity, schedule binding, local sequence, and immutable receipt consistency; it must not substitute predictable operator-authored identifiers.
 
 Both events must target `KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID`, which equals the authorization-frozen derived acceptance schedule item.
 
@@ -313,16 +326,17 @@ Forbidden under this authority:
 block
 resume
 any third accepted mutation
-another runId
-another eventId
+complete with a runId different from the runId bound by the accepted START receipt
+replay with an eventId or command digest different from the corresponding immutable phase receipt
+predictable or contract-hard-coded run/event IDs
 another schedule item
 any new mutation after the exact complete receipt exists
 widening a conflict or reviewRequired outcome into an improvised retry sequence
 ```
 
-Exact idempotent replay of one already-persisted phase command is allowed only when the event ID and command digest match the immutable receipt and no new production fact is written.
+Exact idempotent replay of one already-persisted phase command is allowed only when the run ID, event ID, and command digest match the corresponding immutable receipt and no new production fact is written.
 
-Any conflict, reviewRequired, time-policy failure, binding/current-item/time-zone mismatch, unexpected pre-existing smoke fact, or non-success for a not-yet-persisted phase is a hard stop. No later smoke mutation is authorized without a newly frozen recovery/smoke authority.
+Any conflict, reviewRequired, time-policy failure, binding/current-item/time-zone mismatch, invalid secure-ID structure, START localSequence other than 0, COMPLETE localSequence other than 1, COMPLETE runId mismatch, unexpected pre-existing smoke fact, or non-success for a not-yet-persisted phase is a hard stop. No later smoke mutation is authorized without a newly frozen recovery/smoke authority.
 
 The smoke terminal condition is machine-evaluable:
 
@@ -330,10 +344,12 @@ The smoke terminal condition is machine-evaluable:
 exact complete receipt exists
 resultingState = completed
 runRevision = 2
-same frozen runId
+same cryptographically generated runId bound by the START receipt
 same frozen scheduleItemId
+START localSequence = 0
+COMPLETE localSequence = 1
 exactly two accepted smoke event facts
-no pending review for either frozen event ID
+no pending review for either receipt-bound smoke event ID
 ```
 
 After that terminal point, all PROD-11 smoke write authority is closed. Normal operation remains separately blocked.
