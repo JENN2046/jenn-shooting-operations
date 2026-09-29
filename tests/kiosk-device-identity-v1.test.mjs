@@ -19,9 +19,14 @@ function storage(initial = null, { failBlockedWrite = false } = {}) {
     },
     removeItem(key) { values.delete(key); },
     snapshot() { return values.get('jenn.kiosk.device-id.v2') ?? null; },
-    blocked() { return values.has('jenn.kiosk.device-id.v2.blocked-v1'); },
+    blocked() {
+      const blocked = Number.parseInt(values.get('jenn.kiosk.device-id.v2.blocked-v1.generation-v1') ?? '0', 10);
+      const healed = Number.parseInt(values.get('jenn.kiosk.device-id.v2.blocked-v1.healed-generation-v1') ?? '0', 10);
+      return blocked > healed;
+    },
     blockValue() { return values.get('jenn.kiosk.device-id.v2.blocked-v1') ?? null; },
     generation() { return values.get('jenn.kiosk.device-id.v2.blocked-v1.generation-v1') ?? null; },
+    healedGeneration() { return values.get('jenn.kiosk.device-id.v2.blocked-v1.healed-generation-v1') ?? null; },
   };
 }
 
@@ -104,6 +109,7 @@ test('identity mismatch stays latched across a following outage until a matching
     verified: true,
   });
   assert.equal(target.blocked(), false);
+  assert.equal(target.healedGeneration(), target.generation());
   assert.equal(provisioner.current(), 'DEVICE-OTHER');
 });
 
@@ -199,6 +205,7 @@ test('delayed matching success cannot clear a newer block from another provision
     verified: true,
   });
   assert.equal(target.blocked(), false);
+  assert.equal(target.healedGeneration(), target.generation());
 });
 
 test('block generation stays monotonic across unblock and prevents ABA delayed-success clearing', async () => {
@@ -230,6 +237,7 @@ test('block generation stays monotonic across unblock and prevents ABA delayed-s
   });
   assert.equal(target.blocked(), false);
   assert.equal(target.generation(), '1');
+  assert.equal(target.healedGeneration(), '1');
 
   const newerMismatch = createKioskDeviceProvisioner({
     storage: target,
@@ -246,6 +254,38 @@ test('block generation stays monotonic across unblock and prevents ABA delayed-s
   });
   assert.equal(target.blockValue(), '2');
   assert.equal(target.generation(), '2');
+});
+
+test('matching success never deletes a newer revocation written during healing', async () => {
+  const target = storage('DEVICE-KIOSK-PROD-01');
+  let injected = false;
+  const originalSet = target.setItem.bind(target);
+  const racingStorage = {
+    ...target,
+    setItem(key, value) {
+      if (!injected && key === 'jenn.kiosk.device-id.v2.blocked-v1.healed-generation-v1') {
+        injected = true;
+        originalSet('jenn.kiosk.device-id.v2.blocked-v1.generation-v1', '2');
+        originalSet('jenn.kiosk.device-id.v2.blocked-v1', '2');
+      }
+      originalSet(key, value);
+    },
+  };
+  originalSet('jenn.kiosk.device-id.v2.blocked-v1.generation-v1', '1');
+  originalSet('jenn.kiosk.device-id.v2.blocked-v1', '1');
+
+  const provisioner = createKioskDeviceProvisioner({
+    storage: racingStorage,
+    fetchImpl: async () => response('DEVICE-KIOSK-PROD-01'),
+  });
+  assert.deepEqual(await provisioner.provision(), {
+    ok: false,
+    code: 'DEVICE_IDENTITY_BLOCKED',
+  });
+  assert.equal(target.generation(), '2');
+  assert.equal(target.healedGeneration(), '1');
+  assert.equal(target.blocked(), true);
+  assert.equal(provisioner.current(), null);
 });
 
 test('blocked marker from another provisioner revokes the shared cached identity immediately', async () => {

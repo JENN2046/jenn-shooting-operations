@@ -27,6 +27,7 @@ export function createKioskDeviceProvisioner({
   identityUrl = '/api/v2/kiosk/identity',
   blockedKey = storageKey + '.blocked-v1',
   blockedGenerationKey = blockedKey + '.generation-v1',
+  healedGenerationKey = blockedKey + '.healed-generation-v1',
 } = {}) {
   if (!storage
       || typeof storage.getItem !== 'function'
@@ -52,18 +53,30 @@ export function createKioskDeviceProvisioner({
       || blockedGenerationKey === blockedKey) {
     throw new TypeError('Kiosk device identity blocked generation key is required');
   }
+  if (typeof healedGenerationKey !== 'string'
+      || healedGenerationKey.length === 0
+      || healedGenerationKey === storageKey
+      || healedGenerationKey === blockedKey
+      || healedGenerationKey === blockedGenerationKey) {
+    throw new TypeError('Kiosk device identity healed generation key is required');
+  }
+
+  const parseGeneration = value => {
+    const parsed = Number.parseInt(value ?? '0', 10);
+    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+  };
 
   let blockedInMemory = false;
-  const persistedBlock = () => storage.getItem(blockedKey);
-  const persistedGeneration = () => storage.getItem(blockedGenerationKey);
-  const isBlocked = () => blockedInMemory || persistedBlock() !== null;
+  const persistedGeneration = () => parseGeneration(storage.getItem(blockedGenerationKey));
+  const persistedHealedGeneration = () => parseGeneration(storage.getItem(healedGenerationKey));
+  const isBlocked = () => (
+    blockedInMemory || persistedGeneration() > persistedHealedGeneration()
+  );
   const block = () => {
     blockedInMemory = true;
     try {
-      const parsed = Number.parseInt(persistedGeneration() ?? '0', 10);
-      const generation = Number.isSafeInteger(parsed) && parsed >= 0
-        ? (parsed === Number.MAX_SAFE_INTEGER ? 1 : parsed + 1)
-        : 1;
+      const current = persistedGeneration();
+      const generation = current === Number.MAX_SAFE_INTEGER ? current : current + 1;
       const value = String(generation);
       storage.setItem(blockedGenerationKey, value);
       storage.setItem(blockedKey, value);
@@ -71,9 +84,18 @@ export function createKioskDeviceProvisioner({
       // The in-memory latch is authoritative for this page even if persistence fails.
     }
   };
-  const unblock = () => {
-    storage.removeItem(blockedKey);
+  const healThrough = generation => {
+    try {
+      const currentHealed = persistedHealedGeneration();
+      if (generation > currentHealed) {
+        storage.setItem(healedGenerationKey, String(generation));
+      }
+    } catch {
+      return false;
+    }
+    if (persistedGeneration() > persistedHealedGeneration()) return false;
     blockedInMemory = false;
+    return true;
   };
 
   return Object.freeze({
@@ -86,7 +108,7 @@ export function createKioskDeviceProvisioner({
       block();
     },
     async provision() {
-      const blockMarkerAtStart = persistedBlock();
+      const blockGenerationAtStart = persistedGeneration();
       const existing = storage.getItem(storageKey);
       if (existing !== null && !validIdentifier(existing)) {
         return Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_INVALID' });
@@ -145,12 +167,12 @@ export function createKioskDeviceProvisioner({
       if (existing === null) {
         storage.setItem(storageKey, body.deviceId);
       }
-      const blockMarkerAtEnd = persistedBlock();
-      if (blockMarkerAtEnd !== null && blockMarkerAtEnd !== blockMarkerAtStart) {
+      const blockGenerationAtEnd = persistedGeneration();
+      if (blockGenerationAtEnd !== blockGenerationAtStart
+          || !healThrough(blockGenerationAtStart)) {
         blockedInMemory = true;
         return Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_BLOCKED' });
       }
-      unblock();
 
       return Object.freeze({ ok: true, deviceId: body.deviceId, verified: true });
     },
