@@ -12,7 +12,9 @@ function storage(initial = null) {
   return {
     getItem(key) { return values.get(key) ?? null; },
     setItem(key, value) { values.set(key, value); },
+    removeItem(key) { values.delete(key); },
     snapshot() { return values.get('jenn.kiosk.device-id.v2') ?? null; },
+    blocked() { return values.get('jenn.kiosk.device-id.v2.blocked-v1') === '1'; },
   };
 }
 
@@ -62,6 +64,74 @@ test('device provisioning fails closed on an existing mismatched browser identit
     code: 'DEVICE_IDENTITY_MISMATCH',
   });
   assert.equal(target.snapshot(), 'DEVICE-OTHER');
+});
+
+test('identity mismatch stays latched across a following outage until a matching server identity returns', async () => {
+  const target = storage('DEVICE-OTHER');
+  let mode = 'mismatch';
+  const provisioner = createKioskDeviceProvisioner({
+    storage: target,
+    fetchImpl: async () => {
+      if (mode === 'offline') throw new Error('offline');
+      return response(mode === 'match' ? 'DEVICE-OTHER' : 'DEVICE-KIOSK-PROD-01');
+    },
+  });
+
+  assert.deepEqual(await provisioner.provision(), {
+    ok: false,
+    code: 'DEVICE_IDENTITY_MISMATCH',
+  });
+  assert.equal(target.blocked(), true);
+  assert.equal(provisioner.current(), null);
+
+  mode = 'offline';
+  assert.deepEqual(await provisioner.provision(), {
+    ok: false,
+    code: 'DEVICE_IDENTITY_BLOCKED',
+  });
+
+  mode = 'match';
+  assert.deepEqual(await provisioner.provision(), {
+    ok: true,
+    deviceId: 'DEVICE-OTHER',
+    verified: true,
+  });
+  assert.equal(target.blocked(), false);
+  assert.equal(provisioner.current(), 'DEVICE-OTHER');
+});
+
+test('HTTP auth rejection latches identity while 5xx remains transient for a clean cached identity', async () => {
+  const revoked = storage('DEVICE-KIOSK-PROD-01');
+  let mode = 'unauthorized';
+  const revokedProvisioner = createKioskDeviceProvisioner({
+    storage: revoked,
+    fetchImpl: async () => {
+      if (mode === 'offline') throw new Error('offline');
+      return { status: 401, async json() { return {}; } };
+    },
+  });
+  assert.deepEqual(await revokedProvisioner.provision(), {
+    ok: false,
+    code: 'DEVICE_IDENTITY_UNAUTHORIZED',
+  });
+  assert.equal(revoked.blocked(), true);
+  mode = 'offline';
+  assert.deepEqual(await revokedProvisioner.provision(), {
+    ok: false,
+    code: 'DEVICE_IDENTITY_BLOCKED',
+  });
+
+  const transient = storage('DEVICE-KIOSK-PROD-01');
+  const transientProvisioner = createKioskDeviceProvisioner({
+    storage: transient,
+    fetchImpl: async () => ({ status: 503, async json() { return {}; } }),
+  });
+  assert.deepEqual(await transientProvisioner.provision(), {
+    ok: true,
+    deviceId: 'DEVICE-KIOSK-PROD-01',
+    verified: false,
+  });
+  assert.equal(transient.blocked(), false);
 });
 
 test('previously provisioned identity can queue offline but remains unverified until server recovery', async () => {

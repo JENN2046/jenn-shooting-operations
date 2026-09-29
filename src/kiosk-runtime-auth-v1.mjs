@@ -147,13 +147,16 @@ export function loadKioskRuntimeAuthV1({
       || forbiddenCredentialValues.some(value => typeof value !== 'string')) {
     throw new TypeError('Kiosk forbidden credential values must be strings');
   }
-  if (!Number.isInteger(constants.O_NOFOLLOW)) {
-    throw new Error('KIOSK_AUTH_CONFIG_NOFOLLOW_UNAVAILABLE');
+  if (!Number.isInteger(constants.O_NOFOLLOW) || !Number.isInteger(constants.O_NONBLOCK)) {
+    throw new Error('KIOSK_AUTH_CONFIG_SAFE_OPEN_UNAVAILABLE');
   }
 
   let descriptor;
   try {
-    descriptor = openSync(configPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    descriptor = openSync(
+      configPath,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
   } catch {
     throw new Error('KIOSK_AUTH_CONFIG_PERMISSIONS_UNSAFE');
   }

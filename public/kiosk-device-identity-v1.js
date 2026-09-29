@@ -25,10 +25,12 @@ export function createKioskDeviceProvisioner({
   fetchImpl,
   storageKey = 'jenn.kiosk.device-id.v2',
   identityUrl = '/api/v2/kiosk/identity',
+  blockedKey = storageKey + '.blocked-v1',
 } = {}) {
   if (!storage
       || typeof storage.getItem !== 'function'
-      || typeof storage.setItem !== 'function') {
+      || typeof storage.setItem !== 'function'
+      || typeof storage.removeItem !== 'function') {
     throw new TypeError('Kiosk device identity storage is required');
   }
   if (typeof fetchImpl !== 'function') {
@@ -40,9 +42,17 @@ export function createKioskDeviceProvisioner({
   if (typeof identityUrl !== 'string' || identityUrl.length === 0) {
     throw new TypeError('Kiosk device identity URL is required');
   }
+  if (typeof blockedKey !== 'string' || blockedKey.length === 0 || blockedKey === storageKey) {
+    throw new TypeError('Kiosk device identity blocked key is required');
+  }
+
+  const isBlocked = () => storage.getItem(blockedKey) === '1';
+  const block = () => storage.setItem(blockedKey, '1');
+  const unblock = () => storage.removeItem(blockedKey);
 
   return Object.freeze({
     current() {
+      if (isBlocked()) return null;
       const value = storage.getItem(storageKey);
       return validIdentifier(value) ? value : null;
     },
@@ -59,32 +69,53 @@ export function createKioskDeviceProvisioner({
           headers: { Accept: 'application/json' },
         });
       } catch {
+        if (isBlocked()) {
+          return Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_BLOCKED' });
+        }
         return existing === null
           ? Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_UNAVAILABLE' })
           : Object.freeze({ ok: true, deviceId: existing, verified: false });
       }
-      if (!response || response.status !== 200) {
-        return existing === null
-          ? Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_UNAVAILABLE' })
-          : Object.freeze({ ok: true, deviceId: existing, verified: false });
+
+      if (!response || !Number.isInteger(response.status)) {
+        block();
+        return Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_INVALID' });
+      }
+      if (response.status !== 200) {
+        if (response.status >= 500 && response.status <= 599 && !isBlocked()) {
+          return existing === null
+            ? Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_UNAVAILABLE' })
+            : Object.freeze({ ok: true, deviceId: existing, verified: false });
+        }
+        block();
+        return Object.freeze({
+          ok: false,
+          code: [401, 403].includes(response.status)
+            ? 'DEVICE_IDENTITY_UNAUTHORIZED'
+            : 'DEVICE_IDENTITY_REJECTED',
+        });
       }
 
       let body;
       try {
         body = await response.json();
       } catch {
+        block();
         return Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_INVALID' });
       }
       if (!validateKioskDeviceIdentityResponse(body)) {
+        block();
         return Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_INVALID' });
       }
 
       if (existing !== null && existing !== body.deviceId) {
+        block();
         return Object.freeze({ ok: false, code: 'DEVICE_IDENTITY_MISMATCH' });
       }
       if (existing === null) {
         storage.setItem(storageKey, body.deviceId);
       }
+      unblock();
 
       return Object.freeze({ ok: true, deviceId: body.deviceId, verified: true });
     },

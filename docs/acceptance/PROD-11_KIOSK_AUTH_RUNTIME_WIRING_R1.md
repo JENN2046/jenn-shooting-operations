@@ -43,7 +43,7 @@ existing `AUTH_NOT_CONFIGURED` behavior.
 
 When configured, the path must be absolute and the referenced config must:
 
-- be opened with no-follow semantics and validated/read through the same descriptor;
+- be opened with no-follow + nonblocking semantics and validated/read through the same descriptor;
 - be owned by the running process UID;
 - expose no group/other permissions and no owner execute bit;
 - contain an exact schema with no extra keys;
@@ -74,6 +74,7 @@ Rules:
 - an already provisioned browser may queue offline while identity verification is
   temporarily unavailable;
 - every online synchronize attempt re-verifies identity before refresh or replay;
+- authoritative identity mismatch or HTTP auth rejection is persistently latched across later outages until a matching 200 identity response clears it;
 - run-event submission is denied if the command `deviceId` does not match the
   authenticated runtime device binding.
 
@@ -108,7 +109,7 @@ production volume = not mounted
 Targeted Kiosk auth/device/runtime tests:
 
 ```text
-85 / 85 PASS
+87 / 87 PASS
 0 fail
 0 skip
 ```
@@ -116,8 +117,8 @@ Targeted Kiosk auth/device/runtime tests:
 A full repository check in that image reported:
 
 ```text
-781 tests
-778 pass
+783 tests
+780 pass
 2 fail
 1 expected VCP skip
 ```

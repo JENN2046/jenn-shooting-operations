@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
   mkdtempSync,
@@ -132,6 +133,19 @@ test('runtime auth fails closed on unsafe paths, permissions, links, and invalid
     } finally {
       unsafe.close();
     }
+  }
+
+  const fifoRoot = mkdtempSync(join(tmpdir(), 'kiosk-auth-fifo-'));
+  try {
+    const fifoPath = join(fifoRoot, 'kiosk-auth.fifo');
+    const created = spawnSync('mkfifo', [fifoPath], { encoding: 'utf8' });
+    assert.equal(created.status, 0, created.stderr);
+    assert.throws(
+      () => loadKioskRuntimeAuthV1({ configPath: fifoPath }),
+      /KIOSK_AUTH_CONFIG_PERMISSIONS_UNSAFE/u,
+    );
+  } finally {
+    rmSync(fifoRoot, { recursive: true, force: true });
   }
 
   const linked = fixture();
