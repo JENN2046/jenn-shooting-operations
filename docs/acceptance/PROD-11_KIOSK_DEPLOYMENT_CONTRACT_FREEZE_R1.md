@@ -54,14 +54,21 @@ The tag is diagnostic only, not execution authority. Immediately before containe
 
 Once resolved, every execution-bearing image/revision/tag reference, the isolated WO-03 runtime, and the production container create reference must agree exactly. The `d1fe85...` baseline may never substitute.
 
-Therefore PROD-11 remains pre-request blocked until:
+Therefore PROD-11 remains pre-request blocked until the replacement image contains **all three** required smoke capabilities:
 
 ```text
-KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY implemented with all three predicates:
+KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY
   1. smoke event target = immutable authorization-frozen smoke item binding
   2. unique current STUDIO-PROD-01 item = that same binding, with no competing run/candidate
   3. active Scheduling businessTimeZone = Asia/Shanghai
-→ exact-head tests PASS
+
+KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY
+  exact two-phase budget / secure IDs / zero-based local sequence / frozen smoke window / receipt-exact replay
+
+KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY
+  exact acceptance-only completion intent cannot reach a real provider
+
+→ exact-head tests PASS for all three capabilities
 → replacement production image built
 → replacement diagnostic tag / immutable image ID / source revision frozen consistently
 → PROD-11 deployment binding updated to that replacement authority
