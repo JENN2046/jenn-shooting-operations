@@ -610,7 +610,7 @@ The frozen payload template is:
     "resourceIds": ["STUDIO-PROD-01"]
   },
   "businessTimeZone": "Asia/Shanghai",
-  "allowedBriefHosts": [],
+  "allowedBriefHosts": null,
   "credential": {
     "algorithm": "scrypt-v1",
     "saltBase64": null,
@@ -619,30 +619,46 @@ The frozen payload template is:
 }
 ```
 
-The two `null` values are **materialization placeholders only** and must never be written as the final file:
+The three `null` values are **materialization placeholders only** and must never be written as the final file:
 
+- `/allowedBriefHosts` receives the exact authorization-bound reviewed hostname array produced by the final fresh whole-database `requests_v2.brief_url` scan; it may be `[]` only when that final scan finds zero non-empty brief URLs;
 - `/credential/saltBase64` receives canonical Base64 for exactly 16 execution-generated random bytes;
 - `/credential/hashBase64` receives canonical Base64 for exactly 32 scrypt-v1 output bytes derived from the dedicated execution-generated Kiosk password and that salt.
 
-Before atomic installation, the fully materialized file must pass `loadKioskRuntimeAuthV1` with the four existing role credential values supplied only as forbidden comparison inputs. The final JSON must contain no deployment metadata or extra keys.
+Before atomic installation, the fully materialized file must pass `loadKioskRuntimeAuthV1` with the four existing role credential values supplied only as forbidden comparison inputs. `allowedBriefHosts` must be a lowercase unique hostname-only array with no wildcards or unobserved extras. The final JSON must contain no deployment metadata or extra keys.
 
 ## Database-wide brief-host compatibility
 
-Fresh production inspection:
+The freeze-time production scan is **baseline evidence only**:
 
 ```text
-requests_v2 rows with non-empty brief_url = 0
-observed brief hosts                      = []
-allowedBriefHosts                         = []
-current compatibility                     = PASS
+requests_v2 rows                         = 0
+non-empty requests_v2.brief_url rows     = 0
+observed brief hosts                     = []
+baseline compatibility                   = PASS
+final pre-request compatibility          = NOT YET CLOSED
+final allowedBriefHosts                  = UNRESOLVED
 ```
 
-The empty allowlist is safe **only while the whole database has no non-empty `requests_v2.brief_url`**.
+The baseline `[]` is not a permanent Kiosk allowlist and does not close requestability.
 
-Before PROD-11 authorization or execution, the whole `requests_v2` table must be scanned again.
-If any request, scheduled or unscheduled, has a non-empty `briefUrl`, PROD-11 remains blocked until every observed host is explicitly reviewed and included in `allowedBriefHosts`.
+After every separately authorized pre-request write that can create or modify `requests_v2` has completed, and immediately before PROD-11 authorization is requested, the executor must fresh-scan the **entire live production `requests_v2.brief_url` column**, scheduled or unscheduled.
 
-A scheduled-only compatibility check is forbidden.
+The final gate must:
+
+1. reject any invalid non-empty URL;
+2. derive the exact sorted unique lowercase hostname set;
+3. explicitly review every observed hostname;
+4. reject wildcards and any unobserved extra hostname;
+5. freeze the exact final `allowedBriefHosts` array and its canonical digest in the one-time PROD-11 authorization packet;
+6. materialize that exact array into `/allowedBriefHosts` in `kiosk-auth.v1.json`;
+7. prove every non-empty `brief_url` hostname is covered by the final array.
+
+An empty final array is permitted **only when the final fresh scan still observes zero non-empty brief URLs**.
+
+Any `requests_v2` insertion/update/delete or `brief_url` change after the final scan invalidates the proof and requires a fresh scan, review, allowlist binding and config materialization before request or execution.
+
+A scheduled-only scan is forbidden.
 
 ## Frozen credential generation
 
@@ -906,7 +922,6 @@ Closed:
 PRIMARY_PRODUCTION_KIOSK_TARGET_SELECTED      = QLL-6
 DEDICATED_CHROME_PROFILE_TARGET_FROZEN        = PASS
 FRESH_PRE_AUTH_TARGET_ATTESTATION             = PASS
-DATABASE_WIDE_BRIEF_HOST_COMPATIBILITY        = PASS_CURRENT_STATE
 ```
 
 Still blocked before PROD-11 may be requested:
@@ -933,11 +948,14 @@ KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELI
 KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE
 SEPARATE_PROD11_REPLACEMENT_IMAGE_DEPLOYMENT_AUTHORITY_UNRESOLVED
 KIOSK_TRUSTED_SERVICE_CONTEXT_SIGNAL_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE
+DATABASE_WIDE_BRIEF_HOST_FINAL_SCAN_AND_ALLOWLIST_BINDING_PENDING
 ```
 
 The atomic production-context capability is a hard **pre-request** gate for the bounded production smoke. It must cover immutable authorization-frozen smoke schedule-item binding, current-item uniqueness, and active Scheduling time-zone equality inside the same event transaction. It is not normal-operation authority. It may not be implemented after authorization or introduced by swapping to an unreviewed image.
 
 Immediately before the PROD-11 authorization request, fresh revalidate all seven manifest-bound checks: target host identity, disk/port conflicts, built image digest, secret storage, Kiosk auth runtime configuration, external readiness gates, and rollback targets.
+
+Also immediately before the authorization request, and only after all pre-request `requests_v2` preparation writes are complete, close `DATABASE_WIDE_BRIEF_HOST_FINAL_SCAN_AND_ALLOWLIST_BINDING_PENDING` by performing the final whole-database scan and binding the exact reviewed `allowedBriefHosts` array into both the authorization packet and the materialized Kiosk auth config. Any later request mutation makes that proof stale.
 
 Before the PROD-11 authorization request, the following preparation gates must already be closed:
 
