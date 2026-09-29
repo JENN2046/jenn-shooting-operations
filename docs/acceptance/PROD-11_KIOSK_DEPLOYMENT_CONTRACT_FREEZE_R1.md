@@ -304,6 +304,7 @@ If Web Crypto secure randomness is unavailable, the client fails closed.
    eventId = client-generated secureId('EVENT')
    expectedRunRevision = 0
    localSequence = 0
+   occurredAt = must satisfy KIOSK_SMOKE_ACCEPTANCE_RUN_START <= occurredAt <= KIOSK_SMOKE_ACCEPTANCE_RUN_END inside the same write-admission transaction
    required result = RUN_EVENT_APPLIED / shooting / runRevision 1
    binding = accepted immutable start receipt locks exact runId + start eventId
 
@@ -312,6 +313,7 @@ If Web Crypto secure randomness is unavailable, the client fails closed.
    eventId = new client-generated secureId('EVENT')
    expectedRunRevision = 1
    localSequence = 1
+   occurredAt = must satisfy KIOSK_SMOKE_ACCEPTANCE_RUN_START <= occurredAt <= KIOSK_SMOKE_ACCEPTANCE_RUN_END inside the same write-admission transaction
    required result = RUN_EVENT_APPLIED / completed / runRevision 2
    binding = accepted immutable complete receipt locks exact complete eventId
 ```
@@ -319,6 +321,10 @@ If Web Crypto secure randomness is unavailable, the client fails closed.
 Web Crypto provenance is established by exact-head client implementation/tests. Server admission validates canonical ID structure, phase/order, exact authenticated identity, schedule binding, local sequence, and immutable receipt consistency; it must not substitute predictable operator-authored identifiers.
 
 Both events must target `KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID`, which equals the authorization-frozen derived acceptance schedule item.
+
+Both events must also be checked against the immutable authorization-frozen smoke window **inside the same `KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY` transaction**. A prior clock check, `/current` read, or database schedule-window read is evidence only and cannot authorize the commit.
+
+The normal event-time policy still applies in addition to this stricter bounded smoke window.
 
 Forbidden under this authority:
 
@@ -336,7 +342,7 @@ widening a conflict or reviewRequired outcome into an improvised retry sequence
 
 Exact idempotent replay of one already-persisted phase command is allowed only when the run ID, event ID, and command digest match the corresponding immutable receipt and no new production fact is written.
 
-Any conflict, reviewRequired, time-policy failure, binding/current-item/time-zone mismatch, invalid secure-ID structure, START localSequence other than 0, COMPLETE localSequence other than 1, COMPLETE runId mismatch, unexpected pre-existing smoke fact, or non-success for a not-yet-persisted phase is a hard stop. No later smoke mutation is authorized without a newly frozen recovery/smoke authority.
+Any conflict, reviewRequired, normal time-policy failure, `occurredAt` before `KIOSK_SMOKE_ACCEPTANCE_RUN_START` or after `KIOSK_SMOKE_ACCEPTANCE_RUN_END`, binding/current-item/time-zone mismatch, invalid secure-ID structure, START localSequence other than 0, COMPLETE localSequence other than 1, COMPLETE runId mismatch, unexpected pre-existing smoke fact, or non-success for a not-yet-persisted phase is a hard stop. No later smoke mutation is authorized without a newly frozen recovery/smoke authority.
 
 The smoke terminal condition is machine-evaluable:
 
@@ -366,6 +372,8 @@ KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY
 ```
 
 The outbox isolation mechanism must preserve the acceptance audit/outbox fact while permanently preventing real DingTalk or other provider delivery, without mutating unrelated outbox facts.
+
+`KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY` must also consume the immutable `KIOSK_SMOKE_ACCEPTANCE_RUN_START` / `KIOSK_SMOKE_ACCEPTANCE_RUN_END` bindings and reject either smoke phase before commit when its `occurredAt` falls outside that exact frozen window.
 
 Before any **bounded PROD-11 production-smoke** run-event write is allowed, the replacement frozen runtime must implement:
 
@@ -660,6 +668,15 @@ planned_start <= acceptanceRunStart < acceptanceRunEnd <= planned_end
 The authorization packet becomes stale if the item is used, cancelled, rebound, changed, no longer covers the bound acceptance run, or `planned_end` passes before execution starts.
 
 Before PROD-11 becomes requestable, the replacement-image contract must also prove support for the immutable `KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID` binding. The value in the eventual container must equal the same derived schedule item ID frozen in the authorization packet; it may not be inferred from whichever database item is current at execution time.
+
+The same replacement runtime must also require two separate smoke-window bindings, outside `kiosk-auth.v1.json`:
+
+```text
+KIOSK_SMOKE_ACCEPTANCE_RUN_START = exact authorization-frozen acceptanceRunStart
+KIOSK_SMOKE_ACCEPTANCE_RUN_END   = exact authorization-frozen acceptanceRunEnd
+```
+
+Both values are canonical RFC3339 UTC instants, required before listen in PROD-11 smoke mode, immutable for the container lifetime, and have no default, database-derived fallback, or hot-reload path. The container values must exactly equal the one-time authorization packet.
 
 Only **after** isolated WO-03 has closed `REAL_DEVICE_ACCEPTANCE` and `OFFLINE_REPLAY_RESULT`, a replacement atomic-capable image has been frozen, and the exact production Kiosk configuration has then been enabled, immediately before the first bounded production smoke run event the executor must fresh-read the same schedule item, task binding and run state and prove again:
 
