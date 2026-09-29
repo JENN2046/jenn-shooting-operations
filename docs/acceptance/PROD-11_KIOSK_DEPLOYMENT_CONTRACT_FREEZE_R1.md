@@ -1,9 +1,9 @@
 # PROD-11 Kiosk Deployment Contract Freeze R1
 
-Status: **READY FOR EXPLICIT AUTHORIZATION REQUEST / NOT AUTHORIZED**
+Status: **DEVICE / BROWSER FROZEN / BLOCKED ON SCHEDULABLE ACCEPTANCE TARGET**
 
 This document freezes the deployment mechanics and exact device/browser target for `PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE`.
-It does **not** authorize PROD-11, replace the live container, generate a real credential, create the dedicated browser profile, enroll the device, or submit a production run event.
+It does **not** authorize PROD-11, replace the live container, generate a real credential, create the dedicated browser profile, enroll the device, prepare production scheduling data, or submit a production run event.
 
 ## Runtime image
 
@@ -82,8 +82,23 @@ businessTimeZone  = Asia/Shanghai
 allowedBriefHosts = []
 ```
 
-`allowedBriefHosts` is deliberately empty for the initial enablement. A business brief host must not be guessed from the JSO API hostname.
-If a future scheduled item needs a `briefUrl`, that host requires an explicit separately reviewed allowlist update.
+## Database-wide brief-host compatibility
+
+Fresh production inspection:
+
+```text
+requests_v2 rows with non-empty brief_url = 0
+observed brief hosts                      = []
+allowedBriefHosts                         = []
+current compatibility                     = PASS
+```
+
+The empty allowlist is safe **only while the whole database has no non-empty `requests_v2.brief_url`**.
+
+Before PROD-11 authorization or execution, the whole `requests_v2` table must be scanned again.
+If any request, scheduled or unscheduled, has a non-empty `briefUrl`, PROD-11 remains blocked until every observed host is explicitly reviewed and included in `allowedBriefHosts`.
+
+A scheduled-only compatibility check is forbidden.
 
 ## Frozen credential generation
 
@@ -154,12 +169,55 @@ Kiosk runtime file in live     = absent
 Nginx route file   = /etc/nginx/conf.d/jso-shooting-operations.conf
 Nginx route SHA256 = 35ea9acd80ba600e88d8c594a3a2558ec4cb57dd078c61d6832f5798c2eabc33
 
-QLL-6 → https://jso.skmt617.top/healthz = 200
+QLL-6 -> https://jso.skmt617.top/healthz = 200
 QLL-6 Chrome = 153.0.8010.53
 dedicated Kiosk profile exists = false
 ```
 
 The absence of the dedicated profile is expected. No browser state is created before PROD-11 authorization.
+
+## Schedulable acceptance readiness
+
+Fresh production inspection now shows:
+
+```text
+scheduling_resources                  = 0
+STUDIO-PROD-01 resource rows          = 0
+scheduling_active_config              = 0
+schedule_items                        = 0
+
+requests_v2                           = 0
+non-empty requests_v2.brief_url       = 0
+```
+
+This blocks PROD-11 requestability.
+
+The frozen WO-03 real-device checklist includes:
+
+- tablet landscape and portrait;
+- touch controls and soft-keyboard blocking form;
+- offline to online recovery;
+- refresh;
+- two-tab local control lock;
+- concurrent start / 409 conflict;
+- 202 `reviewRequired` visibility;
+- offline `start -> block -> resume -> complete` replay;
+- blocked cannot complete;
+- browser-cache clearing does not change server facts.
+
+Those checks require an exact production resource and schedulable acceptance item. They cannot be truthfully closed against an empty scheduling domain.
+
+Preparing that schedulable acceptance target is a **separate production scheduling write** and must not be smuggled into PROD-11's frozen effects.
+
+Before PROD-11 can be requested, a separately authorized preparation must create or fresh-confirm:
+
+```text
+resourceId = STUDIO-PROD-01
+applicable active scheduling config
+exact Kiosk acceptance schedule item
+```
+
+The exact preparatory Action ID is not yet frozen and remains an authority gap.
 
 ## Rollback contract
 
@@ -179,25 +237,33 @@ Fresh inspection shows the live database already has the continuous migration pr
 
 ## Requestability decision
 
-All three pre-request blockers are now closed:
+Closed:
 
 ```text
-EXACT_REAL_DEVICE_SELECTED              = QLL-6
-EXACT_BROWSER_PROFILE_TARGET_FROZEN     = PASS
-FRESH_PRE_AUTH_TARGET_ATTESTATION       = PASS
+EXACT_REAL_DEVICE_SELECTED                    = QLL-6
+EXACT_BROWSER_PROFILE_TARGET_FROZEN           = PASS
+FRESH_PRE_AUTH_TARGET_ATTESTATION             = PASS
+DATABASE_WIDE_BRIEF_HOST_COMPATIBILITY        = PASS_CURRENT_STATE
+```
+
+Still blocked:
+
+```text
+PRODUCTION_RESOURCE_STUDIO_PROD_01_ABSENT
+ACTIVE_SCHEDULING_CONFIG_ABSENT
+KIOSK_ACCEPTANCE_SCHEDULE_ITEM_ABSENT
+SEPARATE_SCHEDULING_PREPARATION_AUTHORITY_UNRESOLVED
 ```
 
 Therefore:
 
 ```text
 PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE
-= READY TO REQUEST EXPLICIT AUTHORIZATION
+= NOT READY TO REQUEST EXPLICIT AUTHORIZATION
 
 formal authorization state
 = FROZEN_NOT_REQUESTED
 ```
-
-This is a readiness judgment only. It is **not** an authorization.
 
 Credential generation, dedicated Chrome profile creation, config materialization, live container replacement, identity enrollment, real-device acceptance, offline replay and any run-event submission remain inside the later explicitly authorized PROD-11 execution.
 
