@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { createProductionChangeManifestValidator } from '../src/production-change-manifest-v1.mjs';
 import { validateProductionGreenfieldAuthority } from '../src/production-greenfield-authority-v1.mjs';
+import { normalizeSchedulingConfigV1 } from '../src/scheduling-admin-contract-v1.mjs';
 
 const schema = JSON.parse(readFileSync(new URL('../contracts/production-change-manifest.v1.schema.json', import.meta.url), 'utf8'));
 const base = JSON.parse(readFileSync(new URL('../docs/operations/production-change-manifest.v1.json', import.meta.url), 'utf8'));
@@ -664,6 +665,7 @@ test('greenfield authority rejects malformed nested shapes without throwing', ()
     value => { value.greenfieldForwardChain = null; },
     value => { value.greenfieldActivationAction = null; },
     value => { value.greenfieldKioskAcceptancePreparationAction = null; },
+    value => { value.greenfieldKioskAcceptancePreparationConfigContract = null; },
     value => { value.greenfieldPreActivationWriteFence = null; },
     value => { value.authorization.requestableActionIds = null; },
   ]) {
@@ -930,6 +932,80 @@ test('greenfield cleanup cannot bypass activation or disable-and-drain recovery'
 });
 
 
+test('GF15 freezes every scheduling config field except the one authorization-bound local window', () => {
+  const config = authority.greenfieldKioskAcceptancePreparationConfigContract;
+  assert.equal(config.schemaVersion, 1);
+  assert.equal(config.configVersion, 'GF15-ACCEPT-CONFIG-R1');
+  assert.equal(config.algorithmVersion, 'deterministic-scheduler-v1');
+  assert.equal(config.calendarCompilerVersion, 'calendar-compiler-v1');
+  assert.equal(config.estimatePolicyVersion, 'estimate-policy-v1');
+  assert.equal(config.businessTimeZone, 'Asia/Shanghai');
+  assert.deepEqual(config.resourceCalendarStatic, {
+    resourceId: 'STUDIO-PROD-01',
+    capabilityDigest: 'sha256:d32c7c24657ca59e09348cb394471525bdefee9777b51d498eb3b2ba16782068',
+    weeklyWindows: [],
+  });
+  assert.deepEqual(config.durationFallbackRules, [{
+    ruleId: 'GF15-DURATION-FLAT-DETAIL',
+    productionType: '平面',
+    shootingSubtype: '细节',
+    durationMs: 900000,
+  }]);
+  assert.deepEqual(config.bufferRules, [{
+    ruleId: 'GF15-BUFFER-FLAT-DETAIL',
+    productionType: '平面',
+    shootingSubtype: '细节',
+    bufferAfterMinutes: 5,
+  }]);
+  assert.deepEqual(config.softScoringWeights, {
+    LIGHTING_SWITCH: 0,
+    REFLECTIVITY_SEQUENCE: 0,
+    IDLE_GAP: 0,
+    EXPECTED_OVERRUN: 0,
+    DESIRED_DATE_MISS: 0,
+  });
+  assert.deepEqual(config.compatibleAlgorithmVersions, ['deterministic-scheduler-v1']);
+  assert.deepEqual(config.dateOverrideContract, {
+    status: 'custom',
+    dateSource: 'AUTHORIZATION_BOUND_FUTURE_ASIA_SHANGHAI_DATE',
+    windowSource: 'AUTHORIZATION_BOUND_SINGLE_LOCAL_WINDOW',
+  });
+  assert.equal(
+    config.finalBindingRequirements.includes('TARGET_PACKET_CONTAINS_COMPLETE_NORMALIZED_CONFIG_JSON'),
+    true,
+  );
+  assert.equal(
+    config.finalBindingRequirements.includes('CONFIG_DIGEST_MUST_EQUAL_DIGEST_SCHEDULING_CONFIG_V1'),
+    true,
+  );
+
+  const bound = normalizeSchedulingConfigV1({
+    schemaVersion: config.schemaVersion,
+    businessTimeZone: config.businessTimeZone,
+    resourceCalendars: [{
+      ...config.resourceCalendarStatic,
+      dateOverrides: [{
+        date: '2026-10-01',
+        status: config.dateOverrideContract.status,
+        windows: [{ start: '10:00', end: '12:00' }],
+      }],
+    }],
+    durationFallbackRules: config.durationFallbackRules,
+    bufferRules: config.bufferRules,
+    softScoringWeights: config.softScoringWeights,
+    compatibleAlgorithmVersions: config.compatibleAlgorithmVersions,
+  });
+  assert.equal(bound.ok, true);
+  assert.equal(
+    bound.configDigest,
+    'sha256:0755a61402931e756cf68a1360e8dfcb6f58820b518ed920df73096a1b6c0ef8',
+  );
+
+  rejected(value => {
+    value.greenfieldKioskAcceptancePreparationConfigContract.bufferRules[0].bufferAfterMinutes = 20;
+  }, 'GREENFIELD_KIOSK_ACCEPTANCE_PREPARATION_CONFIG_INVALID');
+});
+
 test('GF15 freezes one bounded irreversible Kiosk acceptance scheduling preparation action', () => {
   const action = authority.greenfieldKioskAcceptancePreparationAction;
   assert.equal(action.id, 'PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE');
@@ -954,7 +1030,19 @@ test('GF15 freezes one bounded irreversible Kiosk acceptance scheduling preparat
     true,
   );
   assert.equal(
+    action.preconditions.includes('GF15_ACCEPTANCE_CANDIDATE_ISOLATION'),
+    true,
+  );
+  assert.equal(
     action.effects.some(effect => /no raw SQL bypass/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    action.effects.some(effect => /contains exactly one candidate whose requestId is REQ-GF15-ACCEPT-PROD-01/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    action.effects.some(effect => /decision selects exactly that item/u.test(effect)),
     true,
   );
   assert.equal(
@@ -964,6 +1052,22 @@ test('GF15 freezes one bounded irreversible Kiosk acceptance scheduling preparat
   assert.deepEqual(
     action.rollbackActionIds,
     ['ROLLBACK-GF-13-CONTAIN-DEVICE-ACCEPTANCE-SCHEDULE'],
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_BOUND_CONFIG_JSON'),
+    true,
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_BOUND_CONFIG_DIGEST'),
+    true,
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_CANDIDATE_ISOLATION_PROOF'),
+    true,
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_SELECTED_REQUEST_BINDING_PROOF'),
+    true,
   );
   assert.equal(
     action.evidenceRequired.includes('GF15_REQUEST_MATERIALIZATION_CAPABILITY_PROOF'),

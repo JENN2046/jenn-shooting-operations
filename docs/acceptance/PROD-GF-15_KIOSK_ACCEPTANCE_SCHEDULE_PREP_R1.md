@@ -75,17 +75,27 @@ No raw SQL insertion is permitted.
 
 Resource STUDIO-PROD-01 is acceptance-only, active during the prepared test window, labeled Studio PROD 01 Kiosk Acceptance, with canonical capability JSON containing only FLAT.
 
-The config is GF15-ACCEPT-CONFIG-R1 with:
+The config is GF15-ACCEPT-CONFIG-R1. Every static field is frozen now. Only the future local date plus one local start/end window may be bound later by the exact authorization packet.
 
+Static config contract:
+
+- schemaVersion: 1
 - businessTimeZone: Asia/Shanghai
 - algorithmVersion: deterministic-scheduler-v1
 - calendarCompilerVersion: calendar-compiler-v1
 - estimatePolicyVersion: estimate-policy-v1
+- resourceId: STUDIO-PROD-01
+- resource capability digest: sha256:d32c7c24657ca59e09348cb394471525bdefee9777b51d498eb3b2ba16782068
+- weeklyWindows: empty
+- date override status: custom
+- durationFallbackRules: one 平面 / 细节 rule, 900000 ms
+- bufferRules: one 平面 / 细节 rule, 5 minutes
+- softScoringWeights: LIGHTING_SWITCH 0, REFLECTIVITY_SEQUENCE 0, IDLE_GAP 0, EXPECTED_OVERRUN 0, DESIRED_DATE_MISS 0
 - compatibleAlgorithmVersions: deterministic-scheduler-v1
 
-Its resource calendar may contain only the exact authorization-bound future acceptance window. GF-15 is not a general studio scheduling rollout.
+The authorization-bound target packet must supply the one future Asia/Shanghai date and exactly one local start/end window, then carry the complete normalized config JSON and its canonical config digest. The digest must equal digestSchedulingConfigV1 for that exact final config. No other config field may vary at authorization or execution time.
 
-The deterministic proposal must use resourceScope STUDIO-PROD-01 and exactly the authorization-bound planning window. Exactly one proposal item may be accepted.
+The deterministic proposal must use resourceScope STUDIO-PROD-01 and exactly the authorization-bound planning window. Before accepting anything, the assembled candidate set must contain exactly one candidate, its requestId must be REQ-GF15-ACCEPT-PROD-01, the proposal must contain exactly one proposed item for that request, and the decision must select exactly that item. Any unrelated open candidate blocks GF-15.
 
 ## Canonical path only
 
@@ -146,7 +156,8 @@ GF-15 itself is blocked until:
 
 - KIOSK_ACCEPTANCE_REQUEST_MATERIALIZATION_CAPABILITY
 - KIOSK_ACCEPTANCE_OUTBOX_ISOLATION_CAPABILITY
-- KIOSK_ACCEPTANCE_TARGET_PACKET
+- GF15_ACCEPTANCE_CANDIDATE_ISOLATION
+- KIOSK_ACCEPTANCE_TARGET_PACKET containing the exact future local date/window plus the complete normalized config JSON and canonical config digest
 - DATABASE_WIDE_BRIEF_HOST_COMPATIBILITY
 - fresh exact production target attestation
 

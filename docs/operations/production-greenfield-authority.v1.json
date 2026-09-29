@@ -692,6 +692,56 @@
       "DELETION_IRREVERSIBILITY_ACKNOWLEDGED"
     ]
   },
+  "greenfieldKioskAcceptancePreparationConfigContract": {
+    "schemaVersion": 1,
+    "configVersion": "GF15-ACCEPT-CONFIG-R1",
+    "algorithmVersion": "deterministic-scheduler-v1",
+    "calendarCompilerVersion": "calendar-compiler-v1",
+    "estimatePolicyVersion": "estimate-policy-v1",
+    "businessTimeZone": "Asia/Shanghai",
+    "resourceCalendarStatic": {
+      "resourceId": "STUDIO-PROD-01",
+      "capabilityDigest": "sha256:d32c7c24657ca59e09348cb394471525bdefee9777b51d498eb3b2ba16782068",
+      "weeklyWindows": []
+    },
+    "dateOverrideContract": {
+      "status": "custom",
+      "dateSource": "AUTHORIZATION_BOUND_FUTURE_ASIA_SHANGHAI_DATE",
+      "windowSource": "AUTHORIZATION_BOUND_SINGLE_LOCAL_WINDOW"
+    },
+    "durationFallbackRules": [
+      {
+        "ruleId": "GF15-DURATION-FLAT-DETAIL",
+        "productionType": "平面",
+        "shootingSubtype": "细节",
+        "durationMs": 900000
+      }
+    ],
+    "bufferRules": [
+      {
+        "ruleId": "GF15-BUFFER-FLAT-DETAIL",
+        "productionType": "平面",
+        "shootingSubtype": "细节",
+        "bufferAfterMinutes": 5
+      }
+    ],
+    "softScoringWeights": {
+      "LIGHTING_SWITCH": 0,
+      "REFLECTIVITY_SEQUENCE": 0,
+      "IDLE_GAP": 0,
+      "EXPECTED_OVERRUN": 0,
+      "DESIRED_DATE_MISS": 0
+    },
+    "compatibleAlgorithmVersions": [
+      "deterministic-scheduler-v1"
+    ],
+    "finalBindingRequirements": [
+      "TARGET_PACKET_CONTAINS_COMPLETE_NORMALIZED_CONFIG_JSON",
+      "TARGET_PACKET_CONTAINS_CONFIG_DIGEST",
+      "ONLY_DATE_OVERRIDE_DATE_START_END_MAY_VARY",
+      "CONFIG_DIGEST_MUST_EQUAL_DIGEST_SCHEDULING_CONFIG_V1"
+    ]
+  },
   "greenfieldKioskAcceptancePreparationAction": {
     "id": "PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE",
     "title": "Prepare bounded Kiosk real-device acceptance schedule",
@@ -709,13 +759,14 @@
       "PRODUCTION_DEPLOYMENT_GATE",
       "DATABASE_WIDE_BRIEF_HOST_COMPATIBILITY",
       "KIOSK_ACCEPTANCE_TARGET_PACKET",
+      "GF15_ACCEPTANCE_CANDIDATE_ISOLATION",
       "KIOSK_ACCEPTANCE_REQUEST_MATERIALIZATION_CAPABILITY",
       "KIOSK_ACCEPTANCE_OUTBOX_ISOLATION_CAPABILITY"
     ],
     "effects": [
       "Revalidate the exact production host, container, image, volume, database, current revisions, Kiosk-disabled state, whole-database requests_v2 brief-host compatibility and absence-or-exact-replay state of every frozen acceptance identifier before the first write",
       "Materialize exactly one canonical acceptance-only requests_v2 request through the dedicated bounded domain capability, register only STUDIO-PROD-01 with the frozen FLAT capability digest, publish and activate only the frozen acceptance scheduling config, and record only the exact request requirements required by the acceptance fixture",
-      "Generate one deterministic scheduling proposal scoped only to STUDIO-PROD-01 and the exact authorization-bound acceptance window, accept exactly one proposal item through the canonical proposal decision path, capture the derived schedule item ID and isolate its schedule-confirmed Outbox intent so it cannot later dispatch as a real DingTalk notification",
+      "Generate one deterministic scheduling proposal scoped only to STUDIO-PROD-01 and the exact authorization-bound acceptance window; fail closed unless the assembled candidate set contains exactly one candidate whose requestId is REQ-GF15-ACCEPT-PROD-01, the proposal contains exactly one proposed item for that request, and the decision selects exactly that item; accept no unrelated request, capture the derived schedule item ID and isolate its schedule-confirmed Outbox intent so it cannot later dispatch as a real DingTalk notification",
       "Perform no raw SQL bypass, no unrelated scheduling mutation, no general scheduling rollout, no Kiosk credential/config/profile enablement, and no production run event; preserve VCP state unchanged",
       "Acknowledge that request/resource/config/proposal/decision/schedule/outbox facts are persistent production facts; rollback is containment-only and never deletes or rewrites those immutable facts"
     ],
@@ -729,7 +780,10 @@
       "GF15_REQUEST_MATERIALIZATION_CAPABILITY_PROOF",
       "GF15_OUTBOX_ISOLATION_CAPABILITY_PROOF",
       "GF15_ACCEPTANCE_TARGET_PACKET",
+      "GF15_BOUND_CONFIG_JSON",
+      "GF15_BOUND_CONFIG_DIGEST",
       "GF15_PREWRITE_SCHEDULING_BASELINE",
+      "GF15_CANDIDATE_ISOLATION_PROOF",
       "DATABASE_WIDE_BRIEF_HOST_SCAN",
       "GF15_ACCEPTANCE_REQUEST_MATERIALIZATION_RECEIPT",
       "GF15_RESOURCE_REGISTRATION_RECEIPT",
@@ -740,6 +794,7 @@
       "GF15_PROPOSAL_GENERATION_RECEIPT",
       "GF15_PROPOSAL_INPUT_DIGEST",
       "GF15_PROPOSAL_RESULT_DIGEST",
+      "GF15_SELECTED_REQUEST_BINDING_PROOF",
       "GF15_DECISION_RECEIPT",
       "GF15_DERIVED_SCHEDULE_ITEM_ID",
       "GF15_OUTBOX_ISOLATION_PROOF",
