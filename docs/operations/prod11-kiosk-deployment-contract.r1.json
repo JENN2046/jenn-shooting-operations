@@ -559,7 +559,8 @@
             "requiredResult": "RUN_EVENT_APPLIED",
             "requiredResultingState": "shooting",
             "requiredRunRevision": 1,
-            "occurredAtRule": "must parse as an instant and satisfy KIOSK_SMOKE_ACCEPTANCE_RUN_START <= occurredAt <= KIOSK_SMOKE_ACCEPTANCE_RUN_END inside the same smoke write-admission transaction"
+            "occurredAtRule": "must parse as an instant and satisfy KIOSK_SMOKE_ACCEPTANCE_RUN_START <= occurredAt <= KIOSK_SMOKE_ACCEPTANCE_RUN_END inside the same smoke write-admission transaction",
+            "trustedServerTimeRule": "inside the same trusted smoke write-admission/event transaction, after entering the write-serialization boundary and before any production fact commits, capture server time from the trusted runtime clock and require KIOSK_SMOKE_ACCEPTANCE_RUN_START <= trustedServerTime <= KIOSK_SMOKE_ACCEPTANCE_RUN_END"
           },
           {
             "ordinal": 2,
@@ -571,7 +572,8 @@
             "requiredResult": "RUN_EVENT_APPLIED",
             "requiredResultingState": "completed",
             "requiredRunRevision": 2,
-            "occurredAtRule": "must parse as an instant and satisfy KIOSK_SMOKE_ACCEPTANCE_RUN_START <= occurredAt <= KIOSK_SMOKE_ACCEPTANCE_RUN_END inside the same smoke write-admission transaction"
+            "occurredAtRule": "must parse as an instant and satisfy KIOSK_SMOKE_ACCEPTANCE_RUN_START <= occurredAt <= KIOSK_SMOKE_ACCEPTANCE_RUN_END inside the same smoke write-admission transaction",
+            "trustedServerTimeRule": "inside the same trusted smoke write-admission/event transaction, after entering the write-serialization boundary and before any production fact commits, capture server time from the trusted runtime clock and require KIOSK_SMOKE_ACCEPTANCE_RUN_START <= trustedServerTime <= KIOSK_SMOKE_ACCEPTANCE_RUN_END"
           }
         ],
         "forbiddenMutations": [
@@ -588,7 +590,7 @@
           "any predictable operator-authored or contract-hard-coded runId/eventId"
         ],
         "idempotentReplayRule": "exact replay of one of the two already-persisted phase commands is permitted only when the runId, eventId and command digest match the corresponding immutable receipt and produces no new production fact; replay does not advance the smoke phase or write budget",
-        "dynamicTimeRule": "occurredAt remains an execution-time fact, but the authorization-frozen acceptanceRunStart and acceptanceRunEnd are immutable trusted runtime inputs via KIOSK_SMOKE_ACCEPTANCE_RUN_START and KIOSK_SMOKE_ACCEPTANCE_RUN_END. Every START and COMPLETE must satisfy the frozen window inside the same write-admission transaction and must also pass the normal event-time policy without reviewRequired.",
+        "dynamicTimeRule": "command.occurredAt remains an untrusted client execution-time fact and must satisfy the frozen window plus the normal event-time policy. Independently, the replacement runtime must capture trusted server time only after entering the same smoke write-admission/event transaction/write-serialization boundary and require that trustedServerTime also lies within KIOSK_SMOKE_ACCEPTANCE_RUN_START and KIOSK_SMOKE_ACCEPTANCE_RUN_END before any production fact commits. Client clock skew can never open the authority window early or keep it open late.",
         "hardStopOutcomes": [
           "EVENT_TIME_REVIEW_REQUIRED",
           "revision conflict",
@@ -600,7 +602,9 @@
           "ID structure invalid or secure-client generation proof unavailable",
           "any non-RUN_EVENT_APPLIED response for a not-yet-persisted phase",
           "unexpected pre-existing run/event/review/receipt/outbox facts inconsistent with the exact acceptance item or already-bound smoke identifiers",
-          "occurredAt before KIOSK_SMOKE_ACCEPTANCE_RUN_START or after KIOSK_SMOKE_ACCEPTANCE_RUN_END"
+          "occurredAt before KIOSK_SMOKE_ACCEPTANCE_RUN_START or after KIOSK_SMOKE_ACCEPTANCE_RUN_END",
+          "trusted server transaction time before KIOSK_SMOKE_ACCEPTANCE_RUN_START or after KIOSK_SMOKE_ACCEPTANCE_RUN_END",
+          "trusted server time captured outside the smoke event transaction/write-serialization boundary"
         ],
         "failureRule": "on any hard-stop outcome, no later smoke mutation is authorized; preserve any facts already committed, disable/rollback Kiosk configuration as applicable, and require a new separately frozen recovery or smoke authority rather than improvising more events",
         "terminalCondition": {
@@ -622,10 +626,10 @@
         ],
         "writeAdmissionCapability": {
           "id": "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
-          "requirement": "inside the same trusted write-admission/event serialization boundary, enforce the exact two-phase mutation budget, client-generated Web Crypto ID contract with immutable receipt binding, phase order, localSequence zero then one, expected revisions, schedule-item binding, immutable authorization-frozen smoke-window binding, occurredAt window comparison for every phase, no-third-write terminal latch, and receipt-exact replay-only exception",
+          "requirement": "inside the same trusted write-admission/event serialization boundary, enforce the exact two-phase mutation budget, client-generated Web Crypto ID contract with immutable receipt binding, phase order, localSequence zero then one, expected revisions, schedule-item binding, immutable authorization-frozen smoke-window binding, both client occurredAt and in-transaction trusted server-time window predicates for every phase, no-third-write terminal latch, and receipt-exact replay-only exception",
           "currentBaselineContainsCapability": false,
           "clientCompatibility": "must accept the existing reviewed Kiosk client's secureId('RUN') and secureId('EVENT') values and its queue sequence starting at zero; must not require predictable predeclared IDs",
-          "windowBindingRequirement": "replacement runtime must require immutable KIOSK_SMOKE_ACCEPTANCE_RUN_START and KIOSK_SMOKE_ACCEPTANCE_RUN_END values copied exactly from the authorization packet, validate them at startup, and compare each phase occurredAt against them inside the same event transaction before commit"
+          "windowBindingRequirement": "replacement runtime must require immutable KIOSK_SMOKE_ACCEPTANCE_RUN_START and KIOSK_SMOKE_ACCEPTANCE_RUN_END values copied exactly from the authorization packet and validate them at startup. For START and COMPLETE, after entering the same trusted write transaction/write-serialization boundary, capture trusted server time from the runtime clock and require both acceptanceRunStart <= trustedServerTime <= acceptanceRunEnd and acceptanceRunStart <= command.occurredAt <= acceptanceRunEnd before commit. The normal event-time policy remains additional validation and cannot substitute for trusted server-time admission."
         },
         "outboxIsolationCapability": {
           "id": "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY",
@@ -664,8 +668,11 @@
           "immutableForContainerLifetime": true,
           "databaseDerivedFallbackForbidden": true,
           "equalityRule": "container values must exactly equal the authorization-frozen acceptanceRunStart and acceptanceRunEnd",
-          "transactionRule": "for START and COMPLETE, inside the same trusted write-admission/event transaction and before any production fact commits, require acceptanceRunStart <= command.occurredAt <= acceptanceRunEnd",
-          "normalEventTimePolicyStillRequired": true
+          "transactionRule": "for START and COMPLETE, after entering the same trusted write-admission/event transaction and before any production fact commits, capture trusted server time from the runtime clock; require acceptanceRunStart <= trustedServerTime <= acceptanceRunEnd and independently require acceptanceRunStart <= command.occurredAt <= acceptanceRunEnd",
+          "normalEventTimePolicyStillRequired": true,
+          "trustedServerTimeSource": "runtime-injected server clock captured only after entering the same event transaction/write-serialization boundary",
+          "receiptTimestampRule": "the accepted smoke receipt/audit timestamps must use the same trusted in-transaction server time that passed the frozen-window predicate",
+          "clientClockCannotAuthorizeWindow": true
         }
       }
     },
@@ -878,7 +885,9 @@
         "KIOSK_SMOKE_ACCEPTANCE_RUN_START",
         "KIOSK_SMOKE_ACCEPTANCE_RUN_END"
       ],
-      "occurredAtRule": "both authorized smoke phases must satisfy the immutable authorization-frozen acceptance window inside KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY before commit"
+      "occurredAtRule": "both authorized smoke phases must satisfy the immutable authorization-frozen acceptance window inside KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY before commit",
+      "trustedServerTimeGate": "required: each START/COMPLETE transaction must capture trusted server time after entering the write boundary and prove it is inside the authorization-frozen acceptanceRunStart/acceptanceRunEnd window; command.occurredAt alone is never sufficient",
+      "clientClockSkewCannotExpandAuthority": true
     }
   },
   "runtimeAuthorityBinding": {
