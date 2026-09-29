@@ -91,6 +91,8 @@ const EXPECTED_TOP_LEVEL_KEYS = Object.freeze([
   'greenfieldCleanupAction',
   'greenfieldCleanupLifecycleAction',
   'greenfieldCleanupRollbackAction',
+  'greenfieldKioskAcceptancePreparationAction',
+  'greenfieldKioskAcceptancePreparationRollbackAction',
   'authorization',
 ]);
 
@@ -353,6 +355,96 @@ const EXPECTED_CLEANUP_ROLLBACK = Object.freeze({
   ]
 });
 
+
+const EXPECTED_KIOSK_ACCEPTANCE_PREPARATION = Object.freeze({
+  id: 'PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE',
+  title: 'Prepare bounded Kiosk real-device acceptance schedule',
+  category: 'DATA',
+  risk: 'HIGH',
+  sideEffect: 'IRREVERSIBLE_OR_EXTERNAL',
+  requiresExplicitAuthorization: true,
+  authorityTarget:
+    'Only the exact acceptance-only production scheduling fixture resourceId STUDIO-PROD-01, requestId REQ-GF15-ACCEPT-PROD-01, requestOperationId PRODGF15-REQUEST-R1, resourceOperationId PRODGF15-RESOURCE-R1, configVersion GF15-ACCEPT-CONFIG-R1, configPublishOperationId PRODGF15-CONFIG-PUBLISH-R1, configActivateOperationId PRODGF15-CONFIG-ACTIVATE-R1, requestRequirementsOperationId PRODGF15-REQS-R1, proposalOperationId PRODGF15-PROPOSAL-R1, decisionId PRODGF15-DECISION-R1 and one derived scheduleItemId within one authorization-bound future Asia/Shanghai window; no general scheduling rollout',
+  preconditions: Object.freeze([
+    'GREENFIELD_ACTIVATION_COMPLETION',
+    'PROD_10_COMPLETION',
+    'KIOSK_DEPLOYABLE_AUTH_WIRING',
+    'PROD11_DEPLOYMENT_CONTRACT_FREEZE',
+    'PRODUCTION_TARGET_FACTS',
+    'PRODUCTION_DEPLOYMENT_GATE',
+    'DATABASE_WIDE_BRIEF_HOST_COMPATIBILITY',
+    'KIOSK_ACCEPTANCE_TARGET_PACKET',
+    'KIOSK_ACCEPTANCE_REQUEST_MATERIALIZATION_CAPABILITY',
+    'KIOSK_ACCEPTANCE_OUTBOX_ISOLATION_CAPABILITY',
+  ]),
+  effects: Object.freeze([
+    'Revalidate the exact production host, container, image, volume, database, current revisions, Kiosk-disabled state, whole-database requests_v2 brief-host compatibility and absence-or-exact-replay state of every frozen acceptance identifier before the first write',
+    'Materialize exactly one canonical acceptance-only requests_v2 request through the dedicated bounded domain capability, register only STUDIO-PROD-01 with the frozen FLAT capability digest, publish and activate only the frozen acceptance scheduling config, and record only the exact request requirements required by the acceptance fixture',
+    'Generate one deterministic scheduling proposal scoped only to STUDIO-PROD-01 and the exact authorization-bound acceptance window, accept exactly one proposal item through the canonical proposal decision path, capture the derived schedule item ID and isolate its schedule-confirmed Outbox intent so it cannot later dispatch as a real DingTalk notification',
+    'Perform no raw SQL bypass, no unrelated scheduling mutation, no general scheduling rollout, no Kiosk credential/config/profile enablement, and no production run event; preserve VCP state unchanged',
+    'Acknowledge that request/resource/config/proposal/decision/schedule/outbox facts are persistent production facts; rollback is containment-only and never deletes or rewrites those immutable facts',
+  ]),
+  rollbackActionIds: Object.freeze([
+    'ROLLBACK-GF-13-CONTAIN-DEVICE-ACCEPTANCE-SCHEDULE',
+  ]),
+  evidenceRequired: Object.freeze([
+    'GF15_EXACT_TARGET_ATTESTATION',
+    'PROD10_COMPLETION_PROOF',
+    'PROD11_DEPLOYMENT_CONTRACT_FREEZE_PROOF',
+    'GF15_REQUEST_MATERIALIZATION_CAPABILITY_PROOF',
+    'GF15_OUTBOX_ISOLATION_CAPABILITY_PROOF',
+    'GF15_ACCEPTANCE_TARGET_PACKET',
+    'GF15_PREWRITE_SCHEDULING_BASELINE',
+    'DATABASE_WIDE_BRIEF_HOST_SCAN',
+    'GF15_ACCEPTANCE_REQUEST_MATERIALIZATION_RECEIPT',
+    'GF15_RESOURCE_REGISTRATION_RECEIPT',
+    'GF15_RESOURCE_CAPABILITY_DIGEST',
+    'GF15_CONFIG_PUBLISH_RECEIPT',
+    'GF15_CONFIG_ACTIVATION_RECEIPT',
+    'GF15_REQUEST_REQUIREMENTS_RECEIPT',
+    'GF15_PROPOSAL_GENERATION_RECEIPT',
+    'GF15_PROPOSAL_INPUT_DIGEST',
+    'GF15_PROPOSAL_RESULT_DIGEST',
+    'GF15_DECISION_RECEIPT',
+    'GF15_DERIVED_SCHEDULE_ITEM_ID',
+    'GF15_OUTBOX_ISOLATION_PROOF',
+    'GF15_UNRELATED_SCHEDULING_FACTS_UNCHANGED',
+    'GF15_KIOSK_REMAINS_DISABLED',
+    'GF15_VCP_UNCHANGED',
+    'GF15_ROLLBACK_CONTAINMENT_BINDING',
+  ]),
+});
+
+const EXPECTED_KIOSK_ACCEPTANCE_PREPARATION_ROLLBACK = Object.freeze({
+  id: 'ROLLBACK-GF-13-CONTAIN-DEVICE-ACCEPTANCE-SCHEDULE',
+  title: 'Contain the PROD-GF-15 Kiosk acceptance scheduling fixture',
+  category: 'ROLLBACK',
+  risk: 'HIGH',
+  sideEffect: 'IRREVERSIBLE_OR_EXTERNAL',
+  requiresExplicitAuthorization: false,
+  authorityTarget:
+    'Only the exact STUDIO-PROD-01 acceptance fixture and scheduling state introduced by PROD-GF-15; never unrelated production scheduling, VCP, Kiosk configuration or DingTalk configuration',
+  preconditions: Object.freeze([]),
+  effects: Object.freeze([
+    'Immediately block progression to PROD-11 and keep Kiosk authentication/configuration disabled while binding containment to the exact PROD-GF-15 receipts and current scheduling revisions',
+    'If STUDIO-PROD-01 was activated by PROD-GF-15, replace only that resource to inactive with the same capability digest; if a prior active scheduling config existed, reactivate exactly that prior config, otherwise retain the acceptance config with the acceptance resource inactive because the current domain has no delete-or-clear-active-config command',
+    'Contain the acceptance schedule-confirmed Outbox intent through the preverified isolation capability and preserve the acceptance request, resource/config history, proposal, decision, schedule item, outbox and audit facts rather than deleting or rewriting immutable production history',
+    'Verify unrelated scheduling facts, production volume/database identity and VCP state are unchanged and confirm PROD-11 remains unauthorized',
+  ]),
+  rollbackActionIds: Object.freeze([]),
+  evidenceRequired: Object.freeze([
+    'GF15_ROLLBACK_SOURCE_BINDING',
+    'GF15_ACCEPTANCE_RESOURCE_INACTIVE_OR_UNCHANGED',
+    'GF15_PRIOR_CONFIG_RESTORED_OR_NO_PRIOR_CONFIG_ACKNOWLEDGED',
+    'GF15_OUTBOX_CONTAINED',
+    'GF15_KIOSK_DISABLED',
+    'GF15_IMMUTABLE_FACTS_PRESERVED',
+    'GF15_UNRELATED_SCHEDULING_FACTS_UNCHANGED',
+    'GF15_PRODUCTION_STORAGE_IDENTITY_PRESERVED',
+    'GF15_VCP_UNCHANGED',
+  ]),
+});
+
 function stableJson(value) {
   if (Array.isArray(value)) return '[' + value.map(stableJson).join(',') + ']';
   if (value && typeof value === 'object') {
@@ -420,6 +512,8 @@ function validAuthorityShape(value) {
       || !plainObject(value.greenfieldCleanupAction)
       || !plainObject(value.greenfieldCleanupLifecycleAction)
       || !plainObject(value.greenfieldCleanupRollbackAction)
+      || !plainObject(value.greenfieldKioskAcceptancePreparationAction)
+      || !plainObject(value.greenfieldKioskAcceptancePreparationRollbackAction)
       || !plainObject(value.authorization)) {
     return false;
   }
@@ -444,6 +538,8 @@ function validAuthorityShape(value) {
     value.greenfieldCleanupAction,
     value.greenfieldCleanupLifecycleAction,
     value.greenfieldCleanupRollbackAction,
+    value.greenfieldKioskAcceptancePreparationAction,
+    value.greenfieldKioskAcceptancePreparationRollbackAction,
   ]) {
     for (const key of ['preconditions', 'effects', 'rollbackActionIds', 'evidenceRequired']) {
       if (!stringArray(action[key])) return false;
@@ -1193,6 +1289,24 @@ export function validateProductionGreenfieldAuthority(value, {
       '/greenfieldCleanupRollbackAction',
     ));
   }
+  if (!sameObject(
+    value.greenfieldKioskAcceptancePreparationAction,
+    EXPECTED_KIOSK_ACCEPTANCE_PREPARATION,
+  )) {
+    issues.push(issue(
+      'GREENFIELD_KIOSK_ACCEPTANCE_PREPARATION_ACTION_INVALID',
+      '/greenfieldKioskAcceptancePreparationAction',
+    ));
+  }
+  if (!sameObject(
+    value.greenfieldKioskAcceptancePreparationRollbackAction,
+    EXPECTED_KIOSK_ACCEPTANCE_PREPARATION_ROLLBACK,
+  )) {
+    issues.push(issue(
+      'GREENFIELD_KIOSK_ACCEPTANCE_PREPARATION_ROLLBACK_INVALID',
+      '/greenfieldKioskAcceptancePreparationRollbackAction',
+    ));
+  }
 
   if (value.greenfieldContainerStartPrerequisites.includes('PROD-09-PRODUCTION-DATA-IMPORT')
       || value.greenfieldForwardChain.includes('PROD-09-PRODUCTION-DATA-IMPORT')
@@ -1213,7 +1327,7 @@ export function validateProductionGreenfieldAuthority(value, {
     requestedActionIds: [],
     approvedActionIds: [],
     requestableActionIds: [],
-    nextActionId: 'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE',
+    nextActionId: 'PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE',
     nextActionRequiresExplicitAuthorization: true,
   };
   if (!sameObject(value.authorization, expectedAuthorization)) {

@@ -31,7 +31,7 @@ test('greenfield authority binds the frozen parent and grants no production muta
   assert.deepEqual(authority.authorization.requestedActionIds, []);
   assert.deepEqual(authority.authorization.approvedActionIds, []);
   assert.deepEqual(authority.authorization.requestableActionIds, []);
-  assert.equal(authority.authorization.nextActionId, 'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE');
+  assert.equal(authority.authorization.nextActionId, 'PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE');
   assert.equal(authority.authorization.nextActionRequiresExplicitAuthorization, true);
 });
 
@@ -663,6 +663,7 @@ test('greenfield authority rejects malformed nested shapes without throwing', ()
   for (const mutate of [
     value => { value.greenfieldForwardChain = null; },
     value => { value.greenfieldActivationAction = null; },
+    value => { value.greenfieldKioskAcceptancePreparationAction = null; },
     value => { value.greenfieldPreActivationWriteFence = null; },
     value => { value.authorization.requestableActionIds = null; },
   ]) {
@@ -926,6 +927,96 @@ test('greenfield cleanup cannot bypass activation or disable-and-drain recovery'
   rejected(value => {
     value.greenfieldCleanupAction.rollbackActionIds = [];
   }, 'GREENFIELD_CLEANUP_ACTION_INVALID');
+});
+
+
+test('GF15 freezes one bounded irreversible Kiosk acceptance scheduling preparation action', () => {
+  const action = authority.greenfieldKioskAcceptancePreparationAction;
+  assert.equal(action.id, 'PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE');
+  assert.equal(action.category, 'DATA');
+  assert.equal(action.risk, 'HIGH');
+  assert.equal(action.sideEffect, 'IRREVERSIBLE_OR_EXTERNAL');
+  assert.equal(action.requiresExplicitAuthorization, true);
+  assert.match(action.authorityTarget, /STUDIO-PROD-01/u);
+  assert.match(action.authorityTarget, /requestId REQ-GF15-ACCEPT-PROD-01/u);
+  assert.match(action.authorityTarget, /configVersion GF15-ACCEPT-CONFIG-R1/u);
+  assert.match(action.authorityTarget, /decisionId PRODGF15-DECISION-R1/u);
+  assert.equal(
+    action.preconditions.includes('KIOSK_ACCEPTANCE_REQUEST_MATERIALIZATION_CAPABILITY'),
+    true,
+  );
+  assert.equal(
+    action.preconditions.includes('KIOSK_ACCEPTANCE_OUTBOX_ISOLATION_CAPABILITY'),
+    true,
+  );
+  assert.equal(
+    action.preconditions.includes('DATABASE_WIDE_BRIEF_HOST_COMPATIBILITY'),
+    true,
+  );
+  assert.equal(
+    action.effects.some(effect => /no raw SQL bypass/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    action.effects.some(effect => /persistent production facts/u.test(effect)),
+    true,
+  );
+  assert.deepEqual(
+    action.rollbackActionIds,
+    ['ROLLBACK-GF-13-CONTAIN-DEVICE-ACCEPTANCE-SCHEDULE'],
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_REQUEST_MATERIALIZATION_CAPABILITY_PROOF'),
+    true,
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_OUTBOX_ISOLATION_CAPABILITY_PROOF'),
+    true,
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_DERIVED_SCHEDULE_ITEM_ID'),
+    true,
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_OUTBOX_ISOLATION_PROOF'),
+    true,
+  );
+
+  rejected(value => {
+    value.greenfieldKioskAcceptancePreparationAction.preconditions =
+      value.greenfieldKioskAcceptancePreparationAction.preconditions
+        .filter(id => id !== 'KIOSK_ACCEPTANCE_REQUEST_MATERIALIZATION_CAPABILITY');
+  }, 'GREENFIELD_KIOSK_ACCEPTANCE_PREPARATION_ACTION_INVALID');
+  rejected(value => {
+    value.greenfieldKioskAcceptancePreparationAction.effects =
+      ['directly insert a schedule row'];
+  }, 'GREENFIELD_KIOSK_ACCEPTANCE_PREPARATION_ACTION_INVALID');
+});
+
+test('GF15 rollback is containment-only and cannot pretend immutable scheduling facts disappear', () => {
+  const rollback = authority.greenfieldKioskAcceptancePreparationRollbackAction;
+  assert.equal(rollback.id, 'ROLLBACK-GF-13-CONTAIN-DEVICE-ACCEPTANCE-SCHEDULE');
+  assert.equal(rollback.category, 'ROLLBACK');
+  assert.equal(rollback.requiresExplicitAuthorization, false);
+  assert.equal(rollback.sideEffect, 'IRREVERSIBLE_OR_EXTERNAL');
+  assert.match(rollback.authorityTarget, /STUDIO-PROD-01/u);
+  assert.equal(
+    rollback.effects.some(effect => /preserve the acceptance request/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    rollback.effects.some(effect => /no delete-or-clear-active-config command/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    rollback.evidenceRequired.includes('GF15_IMMUTABLE_FACTS_PRESERVED'),
+    true,
+  );
+
+  rejected(value => {
+    value.greenfieldKioskAcceptancePreparationRollbackAction.effects =
+      ['delete all acceptance facts'];
+  }, 'GREENFIELD_KIOSK_ACCEPTANCE_PREPARATION_ROLLBACK_INVALID');
 });
 
 test('greenfield authority cannot self-authorize the next production action', () => {

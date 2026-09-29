@@ -2214,3 +2214,33 @@ nextActionId          = PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE
 ```
 
 No standing Agent write authority was granted. Kiosk and DingTalk remain unchanged.
+
+
+---
+
+## PROD-GF-15 Kiosk acceptance scheduling preparation authority freeze
+
+After PROD-10 completion and the PROD-11 deployment-contract review, live production inspection proved that the exact Kiosk device/browser target is known but the production Scheduling domain is empty.
+
+A separate Action is therefore frozen before PROD-11:
+
+PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE
+
+This action is HIGH / IRREVERSIBLE_OR_EXTERNAL and may create only the bounded acceptance-only Scheduling fixture defined in docs/acceptance/PROD-GF-15_KIOSK_ACCEPTANCE_SCHEDULE_PREP_R1.md.
+
+It may not enable Kiosk authentication, create the Chrome Kiosk profile, submit Kiosk run events, widen general production scheduling, or perform raw SQLite writes.
+
+The action is currently blocked by two missing bounded capabilities:
+
+- KIOSK_ACCEPTANCE_REQUEST_MATERIALIZATION_CAPABILITY
+- KIOSK_ACCEPTANCE_OUTBOX_ISOLATION_CAPABILITY
+
+Machine authority now records:
+
+- authorization.status = FROZEN_NOT_REQUESTED
+- requestedActionIds = empty
+- approvedActionIds = empty
+- requestableActionIds = empty
+- nextActionId = PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE
+
+This authority freeze executes no GF-15 production mutation and does not authorize PROD-11.
