@@ -67,7 +67,12 @@
         "postSmokeRule": "after the bounded PROD-11 smoke reaches its frozen terminal evidence point, this smoke-gated container grants no authority for other production schedule items; normal Kiosk operation remains blocked until a separately frozen post-smoke normal-operation transition contract exists"
       },
       "finalDiagnosticTag": "UNRESOLVED_AFTER_ATOMIC_CAPABILITY_IMPLEMENTATION",
-      "finalDiagnosticTagDerivationRule": "jenn-shooting-operations:prod-<finalSourceRevision>"
+      "finalDiagnosticTagDerivationRule": "jenn-shooting-operations:prod-<finalSourceRevision>",
+      "additionalRequiredCapabilities": [
+        "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
+        "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY"
+      ],
+      "prod11ExecutionEligibility": "BLOCKED_MISSING_ATOMIC_CONTEXT_SMOKE_WRITE_ADMISSION_AND_SMOKE_OUTBOX_ISOLATION_CAPABILITIES"
     },
     "role": "VERIFIED_BASELINE_NOT_PROD11_EXECUTION_ELIGIBLE",
     "prod11ExecutionEligibility": "BLOCKED_MISSING_KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY",
@@ -238,7 +243,7 @@
         "OFFLINE_REPLAY_RESULT",
         "KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY"
       ],
-      "rule": "after isolated WO-03 PASS and production activation, no bounded production smoke run event may commit unless the replacement frozen runtime enforces KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY inside the same event transaction, covering all three predicates: immutable authorization-frozen smoke-item binding, unique current STUDIO-PROD-01 selection with no competing run/candidate, and active Scheduling businessTimeZone equality to Asia/Shanghai",
+      "rule": "after isolated WO-03 PASS and production activation, the only production run-event mutations authorized by PROD-11 are the exact two-phase start then complete sequence frozen in productionSmokeBoundary. Each phase must also satisfy KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY inside the same event transaction. No block/resume/third event or improvised retry is authorized.",
       "forbiddenBeforePass": [
         "production start event",
         "production block event",
@@ -259,7 +264,8 @@
           "inside that same event transaction, re-evaluate STUDIO-PROD-01 resource-wide current selection and require KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID to be the unique current item with no competing active run or current candidate",
           "inside that same event transaction, read the active Scheduling config and require businessTimeZone exactly Asia/Shanghai, matching the frozen Kiosk runtime businessTimeZone"
         ]
-      }
+      },
+      "smokeBoundaryReference": "schedulableAcceptanceReadiness.acceptanceItemExecutionWindowContract.productionSmokeBoundary"
     },
     "preRequestBlockingScope": "EXACT_ISOLATED_ENVIRONMENT_TARGET_BINDING_AND_SETUP_AUTHORITY_ONLY",
     "matrixExecutionPreRequestBlocking": false,
@@ -496,7 +502,91 @@
       },
       "expectedScheduleItemRuntimeBindingRule": "before PROD-11 becomes requestable, the replacement image contract must support KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID as a required immutable smoke-container binding whose final value is the exact authorization-frozen derived acceptance scheduleItemId; while that binding is present all Kiosk production run-event writes for any other schedule item are denied, and the binding is not normal-operation authority",
       "productionSmokeScopeRule": "the immutable expected-item equality gate applies only to the bounded PROD-11 production smoke. Completing the smoke does not authorize the same container to process later unrelated production schedule items",
-      "postSmokeRule": "after the bounded smoke evidence is complete, no further production Kiosk run-event write is authorized by this contract until a separately frozen normal-operation transition/lifecycle contract removes or replaces the smoke gate under explicit authority"
+      "postSmokeRule": "after the bounded smoke evidence is complete, no further production Kiosk run-event write is authorized by this contract until a separately frozen normal-operation transition/lifecycle contract removes or replaces the smoke gate under explicit authority",
+      "productionSmokeBoundary": {
+        "status": "BLOCKED_PRE_REQUEST_WRITE_ADMISSION_AND_OUTBOX_ISOLATION_CAPABILITIES_NOT_IMPLEMENTED",
+        "scope": "EXACTLY_ONE_BOUNDED_PROD11_PRODUCTION_SMOKE_RUN",
+        "requiredBeforeRequest": true,
+        "authorityPacketBindings": {
+          "scheduleItemId": "derived acceptance scheduleItemId frozen elsewhere in this contract",
+          "runId": "RUN-PROD11-SMOKE-01",
+          "startEventId": "EVENT-PROD11-SMOKE-START-01",
+          "completeEventId": "EVENT-PROD11-SMOKE-COMPLETE-01",
+          "resourceId": "STUDIO-PROD-01"
+        },
+        "allowedMutatingSequence": [
+          {
+            "ordinal": 1,
+            "eventType": "start",
+            "runId": "RUN-PROD11-SMOKE-01",
+            "eventId": "EVENT-PROD11-SMOKE-START-01",
+            "expectedRunRevision": 0,
+            "localSequence": 1,
+            "requiredResult": "RUN_EVENT_APPLIED",
+            "requiredResultingState": "shooting",
+            "requiredRunRevision": 1
+          },
+          {
+            "ordinal": 2,
+            "eventType": "complete",
+            "runId": "RUN-PROD11-SMOKE-01",
+            "eventId": "EVENT-PROD11-SMOKE-COMPLETE-01",
+            "expectedRunRevision": 1,
+            "localSequence": 2,
+            "requiredResult": "RUN_EVENT_APPLIED",
+            "requiredResultingState": "completed",
+            "requiredRunRevision": 2
+          }
+        ],
+        "forbiddenMutations": [
+          "block event",
+          "resume event",
+          "any third accepted production smoke event",
+          "any event with a different runId",
+          "any event with a different eventId than the exact phase-bound IDs",
+          "any event for a schedule item other than KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID",
+          "any new event after the terminal completion receipt exists",
+          "any attempt to convert conflict or reviewRequired into a wider retry sequence"
+        ],
+        "idempotentReplayRule": "exact replay of one of the two already-persisted phase commands is permitted only when the eventId and command digest match the existing receipt and produces no new production fact; replay does not advance the smoke phase or write budget",
+        "dynamicTimeRule": "occurredAt values are execution-time facts and must fall inside the frozen acceptance run window and pass the normal event-time policy without reviewRequired; they are not standing authority values",
+        "hardStopOutcomes": [
+          "EVENT_TIME_REVIEW_REQUIRED",
+          "revision conflict",
+          "current-item or authorization-binding mismatch",
+          "active Scheduling time-zone mismatch",
+          "any non-RUN_EVENT_APPLIED response for a not-yet-persisted phase",
+          "unexpected existing run/event/review/receipt/outbox facts for the frozen IDs"
+        ],
+        "failureRule": "on any hard-stop outcome, no later smoke mutation is authorized; preserve any facts already committed, disable/rollback Kiosk configuration as applicable, and require a new separately frozen recovery or smoke authority rather than improvising more events",
+        "terminalCondition": {
+          "exactCondition": "the exact complete event has an accepted immutable receipt with resultingState completed and runRevision 2 for RUN-PROD11-SMOKE-01 and KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID, after exactly the authorized start and complete mutations and no other accepted smoke mutation",
+          "evidenceRequired": [
+            "exact start receipt and command digest",
+            "exact complete receipt and command digest",
+            "production run completed with runRevision 2",
+            "exactly two accepted smoke event facts for the frozen run",
+            "no pending review for either frozen smoke event ID",
+            "completion notification intent permanently isolated from real provider delivery"
+          ],
+          "afterTerminal": "all further production Kiosk run-event writes remain denied under PROD-11 smoke authority; successful smoke completion does not grant normal-operation authority"
+        },
+        "requiredCapabilities": [
+          "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
+          "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY"
+        ],
+        "writeAdmissionCapability": {
+          "id": "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
+          "requirement": "inside the same trusted write-admission/event serialization boundary, enforce the exact two-phase mutation budget, exact run/event IDs, phase order, expected revisions, schedule-item binding, no-third-write terminal latch, and replay-only exception",
+          "currentBaselineContainsCapability": false
+        },
+        "outboxIsolationCapability": {
+          "id": "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY",
+          "reason": "the authorized complete event enqueues a production-run-completed notification intent; that acceptance-only intent must never later dispatch as a real provider notification",
+          "requirement": "before smoke write authority exists, freeze and implement a permanent exact-intent containment mechanism that preserves the audit/outbox fact but prevents real DingTalk or other provider delivery without affecting unrelated outbox facts",
+          "currentBaselineContainsCapability": false
+        }
+      }
     },
     "requiredProductionSmokeEvidence": [
       "exact production Kiosk identity binding and authenticated current-read path",
@@ -552,7 +642,9 @@
       "WO03_ISOLATED_ENVIRONMENT_PREPARATION_AUTHORITY_UNRESOLVED",
       "WO03_ISOLATED_ENVIRONMENT_EXACT_TARGET_NOT_FROZEN",
       "FULL_PROD11_ACTION_SPECIFIC_REVALIDATION_NOT_YET_FRESH_PASS",
-      "CURRENT_GREENFIELD_AUTHORITY_PROD11_REQUESTABILITY_NOT_YET_FRESH_PASS"
+      "CURRENT_GREENFIELD_AUTHORITY_PROD11_REQUESTABILITY_NOT_YET_FRESH_PASS",
+      "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
+      "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE"
     ],
     "credentialGenerationIsExecutionNotRequestPrerequisite": true,
     "dedicatedBrowserProfileCreationIsExecutionNotRequestPrerequisite": true,
@@ -580,7 +672,7 @@
       "currentBaselineEligibleForProd11": false,
       "finalImmutableImageId": "UNRESOLVED",
       "finalSourceRevision": "UNRESOLVED",
-      "rule": "before PROD-11 may be requested, freeze a replacement image containing KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY plus required immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID startup/runtime binding support, and freeze its immutable image ID, source revision, and exact derived diagnostic tag. Fresh-pass the complete seven-item PROD-11 action-specific revalidation checklist. After separate scheduling preparation derives the exact scheduleItemId, bind that exact authorization value at container creation. At execution, revalidate that the frozen diagnostic tag resolves to the frozen immutable image ID and that the OCI revision label equals the frozen source revision, then create by that immutable ID; mutable tags are never execution authority.",
+      "rule": "before PROD-11 may be requested, freeze a replacement image containing KIOSK_EVENT_ATOMIC_PRODUCTION_CONTEXT_CAPABILITY, KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY, KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY, and required immutable KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID startup/runtime binding support. Freeze its immutable image ID, source revision, and exact derived diagnostic tag, then fresh-pass the complete seven-item PROD-11 action-specific revalidation checklist. After separate scheduling preparation derives the exact scheduleItemId, bind that exact authorization value at container creation. At execution, revalidate that the frozen diagnostic tag resolves to the frozen immutable image ID and the OCI revision label equals the frozen source revision, then create by immutable image ID; mutable tags are never execution authority.",
       "requiredActionSpecificRevalidation": [
         "TARGET_HOST_IDENTITY",
         "DISK_PORT_ROUTE_CONFLICTS",
@@ -591,7 +683,11 @@
         "ROLLBACK_TARGETS"
       ],
       "finalDiagnosticTag": "UNRESOLVED",
-      "finalDiagnosticTagDerivationRule": "jenn-shooting-operations:prod-<finalSourceRevision>"
+      "finalDiagnosticTagDerivationRule": "jenn-shooting-operations:prod-<finalSourceRevision>",
+      "additionalRequiredCapabilities": [
+        "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
+        "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY"
+      ]
     },
     "atomicCapabilityPreRequestGate": {
       "status": "BLOCKED",
@@ -671,6 +767,26 @@
         "current Greenfield authority requestableActionIds explicitly contains PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE before the human authorization request"
       ],
       "failureRule": "the local PROD-11 deployment freeze never self-authorizes or self-promotes requestability; if current Greenfield authority does not explicitly admit the exact PROD-11 action after all prerequisite evidence is fresh, no authorization request may be made"
+    },
+    "productionSmokeBoundaryGate": {
+      "status": "BLOCKED",
+      "requiredBeforeRequest": true,
+      "source": "schedulableAcceptanceReadiness.acceptanceItemExecutionWindowContract.productionSmokeBoundary",
+      "requiredCapabilities": [
+        "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY",
+        "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY"
+      ],
+      "exactMutationBudget": 2,
+      "exactSequence": [
+        "start",
+        "complete"
+      ],
+      "exactRunId": "RUN-PROD11-SMOKE-01",
+      "exactEventIds": [
+        "EVENT-PROD11-SMOKE-START-01",
+        "EVENT-PROD11-SMOKE-COMPLETE-01"
+      ],
+      "terminalRule": "accepted complete receipt with resultingState completed and runRevision 2 closes all PROD-11 smoke write authority; no third production Kiosk mutation is permitted"
     }
   },
   "runtimeAuthorityBinding": {
