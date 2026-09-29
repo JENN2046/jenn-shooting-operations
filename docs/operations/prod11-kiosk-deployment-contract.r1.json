@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "contractId": "PROD11_KIOSK_DEPLOYMENT_CONTRACT_R1",
-  "status": "BLOCKED_SCHEDULABLE_ACCEPTANCE_AND_WO03_MATRIX",
+  "status": "BLOCKED_SCHEDULABLE_PREAUTH_WO03_EXECUTION_GATES_PENDING",
   "runtimeSourceAuthorityCommit": "d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
   "candidateImage": {
     "tag": "jenn-shooting-operations:prod-d1fe85ec73e3241e8da3cff6c5f433b7e22e20e7",
@@ -49,7 +49,7 @@
     "acceptanceScopeNote": "QLL-6 plus its dedicated Chrome profile is the primary production Kiosk identity target only; it does not by itself close the full WO-03 browser/device acceptance matrix."
   },
   "wo03AcceptanceMatrix": {
-    "status": "BLOCKED_INCOMPLETE_DEVICE_BROWSER_MATRIX",
+    "status": "MANDATORY_EXECUTION_CLOSURE_GATE_NOT_YET_RUN",
     "source": "docs/acceptance/WO-03_KIOSK_BROWSER_AND_DEVICE_ACCEPTANCE.md",
     "primaryProductionTarget": {
       "deviceLabel": "QLL-6",
@@ -82,34 +82,85 @@
       "EXACT_MOBILE_VIEWPORT_EXECUTION_TARGET",
       "EXACT_ACCESSIBILITY_ASSISTIVE_TECH_ENVIRONMENT"
     ],
-    "closureRule": "REAL_DEVICE_ACCEPTANCE must not be marked complete until every frozen WO-03 viewport and on-site device item is recorded; QLL-6 Chrome evidence is necessary but not sufficient."
+    "closureRule": "REAL_DEVICE_ACCEPTANCE and PROD-11 formal completion must not be marked complete until every frozen WO-03 viewport and on-site device item is recorded; QLL-6 Chrome evidence is necessary but not sufficient. These items are execution and closure evidence and do not block requesting explicit PROD-11 authorization once true preconditions are satisfied.",
+    "preRequestBlocking": false,
+    "prod11ExecutionRequired": true,
+    "closureBlocking": true,
+    "requiredBefore": "PROD11_FORMAL_COMPLETION_AND_PRODUCTION_READY",
+    "unresolvedAdditionalTargetsPhase": "PROD11_EXECUTION_ACCEPTANCE"
   },
   "runtimeAuthConfig": {
-    "hostPath": "/mnt/datadisk0/apps/jenn-shooting-operations/kiosk-auth.v1.json",
-    "containerPath": "/app/kiosk-auth.v1.json",
-    "environment": {
-      "KIOSK_AUTH_CONFIG_PATH": "/app/kiosk-auth.v1.json"
+    "deployment": {
+      "hostPath": "/mnt/datadisk0/apps/jenn-shooting-operations/kiosk-auth.v1.json",
+      "containerPath": "/app/kiosk-auth.v1.json",
+      "environment": {
+        "KIOSK_AUTH_CONFIG_PATH": "/app/kiosk-auth.v1.json"
+      },
+      "mount": {
+        "type": "bind",
+        "readOnly": true
+      },
+      "hostOwnerUid": 1000,
+      "hostOwnerGid": 1000,
+      "hostMode": "0600"
     },
-    "mount": {
-      "type": "bind",
-      "readOnly": true
-    },
-    "hostOwnerUid": 1000,
-    "hostOwnerGid": 1000,
-    "hostMode": "0600",
-    "schemaVersion": 1,
-    "authMode": "basic-v1",
-    "realm": "Jenn Shooting Operations Kiosk",
-    "username": "jso-kiosk-prod-01",
-    "principal": {
-      "role": "operator",
-      "subjectId": "KIOSK-PROD-01",
-      "resourceIds": [
-        "STUDIO-PROD-01"
-      ]
-    },
-    "businessTimeZone": "Asia/Shanghai",
-    "allowedBriefHosts": []
+    "filePayloadContract": {
+      "exactTopLevelKeys": [
+        "schemaVersion",
+        "authMode",
+        "realm",
+        "username",
+        "deviceId",
+        "principal",
+        "businessTimeZone",
+        "allowedBriefHosts",
+        "credential"
+      ],
+      "exactPrincipalKeys": [
+        "subjectId",
+        "role",
+        "resourceIds"
+      ],
+      "exactCredentialKeys": [
+        "algorithm",
+        "saltBase64",
+        "hashBase64"
+      ],
+      "payloadTemplate": {
+        "schemaVersion": 1,
+        "authMode": "basic-v1",
+        "realm": "Jenn Shooting Operations Kiosk",
+        "username": "jso-kiosk-prod-01",
+        "deviceId": "KIOSK-PROD-01",
+        "principal": {
+          "role": "operator",
+          "subjectId": "KIOSK-PROD-01",
+          "resourceIds": [
+            "STUDIO-PROD-01"
+          ]
+        },
+        "businessTimeZone": "Asia/Shanghai",
+        "allowedBriefHosts": [],
+        "credential": {
+          "algorithm": "scrypt-v1",
+          "saltBase64": null,
+          "hashBase64": null
+        }
+      },
+      "dynamicInsertions": {
+        "/credential/saltBase64": {
+          "source": "execution generated randomBytes(16)",
+          "encoding": "canonical base64",
+          "expectedDecodedBytes": 16
+        },
+        "/credential/hashBase64": {
+          "source": "scrypt-v1 of the execution generated dedicated Kiosk password using the inserted salt",
+          "encoding": "canonical base64",
+          "expectedDecodedBytes": 32
+        }
+      },
+      "materializationRule": "replace both null credential placeholders with the exact generated canonical Base64 values; emit only the exact payload keys above; never copy deployment metadata into the JSON file; validate the final file through loadKioskRuntimeAuthV1 with VIEWER SUBMITTER SCHEDULER and ADMIN credential values supplied only as forbidden comparison inputs before atomic installation"
+    }
   },
   "credentialProvisioning": {
     "generationTiming": "ONLY_AFTER_EXPLICIT_PROD11_AUTHORIZATION",
@@ -204,7 +255,7 @@
       "blocked cannot complete",
       "browser-cache clearing does not change server facts"
     ],
-    "requiredBeforeProd11Request": "a separately authorized production scheduling preparation must create or fresh-confirm one exact canonical requests_v2 acceptance request, STUDIO-PROD-01, an applicable active scheduling configuration, one canonical proposal acceptance that derives the acceptance schedule item, and the resulting schedule_item_tasks binding from that item to the exact V2 request",
+    "requiredBeforeProd11Request": "a separately authorized production scheduling preparation must create or fresh-confirm one exact canonical requests_v2 acceptance request, STUDIO-PROD-01, an active acceptance scheduling configuration whose businessTimeZone is exactly Asia/Shanghai, one canonical proposal acceptance that derives the acceptance schedule item, and the resulting schedule_item_tasks binding from that item to the exact V2 request",
     "mustNotBeSmuggledIntoProd11": true,
     "preparatoryActionId": "UNRESOLVED_SEPARATE_AUTHORITY_REQUIRED",
     "requestCount": 0,
@@ -215,11 +266,14 @@
       "EXACT_CANONICAL_V2_ACCEPTANCE_REQUEST",
       "STUDIO_PROD_01_RESOURCE",
       "ACTIVE_ACCEPTANCE_SCHEDULING_CONFIG",
+      "ACTIVE_CONFIG_TIME_ZONE_MATCHES_KIOSK_ASIA_SHANGHAI",
       "DETERMINISTIC_ACCEPTANCE_PROPOSAL",
       "CANONICAL_ACCEPT_DECISION",
       "DERIVED_ACCEPTANCE_SCHEDULE_ITEM",
       "EXACT_SCHEDULE_ITEM_TASK_BINDING"
-    ]
+    ],
+    "requiredSchedulingBusinessTimeZone": "Asia/Shanghai",
+    "timeZoneBindingRule": "the active acceptance scheduling config businessTimeZone must equal Asia/Shanghai exactly, matching the frozen Kiosk auth payload, before proposal generation and must be revalidated before PROD-11 Kiosk event execution"
   },
   "rollbackContract": {
     "actionId": "ROLLBACK-10-DISABLE-KIOSK-CONFIG",
@@ -256,14 +310,20 @@
       "KIOSK_ACCEPTANCE_V2_REQUEST_ABSENT",
       "PRODUCTION_RESOURCE_STUDIO_PROD_01_ABSENT",
       "ACTIVE_SCHEDULING_CONFIG_ABSENT",
+      "ACTIVE_ACCEPTANCE_CONFIG_TIME_ZONE_NOT_YET_BOUND",
       "KIOSK_ACCEPTANCE_SCHEDULE_ITEM_ABSENT",
       "KIOSK_ACCEPTANCE_TASK_BINDING_ABSENT",
-      "SEPARATE_SCHEDULING_PREPARATION_AUTHORITY_UNRESOLVED",
-      "WO03_FULL_DEVICE_BROWSER_MATRIX_INCOMPLETE",
-      "WO03_ADDITIONAL_DEVICE_BROWSER_TARGETS_UNRESOLVED"
+      "SEPARATE_SCHEDULING_PREPARATION_AUTHORITY_UNRESOLVED"
     ],
     "credentialGenerationIsExecutionNotRequestPrerequisite": true,
     "dedicatedBrowserProfileCreationIsExecutionNotRequestPrerequisite": true,
-    "realDeviceAcceptanceAndOfflineReplayAreExecutionEvidenceNotPreAuthorizationWrites": true
+    "realDeviceAcceptanceAndOfflineReplayAreExecutionEvidenceNotPreAuthorizationWrites": true,
+    "postAuthorizationExecutionClosureGates": [
+      "WO03_FULL_DEVICE_BROWSER_MATRIX",
+      "REAL_DEVICE_ACCEPTANCE",
+      "OFFLINE_REPLAY_RESULT",
+      "IDENTITY_EXPIRY_AND_DEVICE_HANDOFF",
+      "ACCESSIBILITY_AND_ON_SITE_ENVIRONMENT_ACCEPTANCE"
+    ]
   }
 }

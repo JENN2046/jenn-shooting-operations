@@ -93,7 +93,7 @@ Before `REAL_DEVICE_ACCEPTANCE` can close, evidence must still cover all of the 
 - real screen reader, external keyboard, touch-target and studio-lighting contrast checks;
 - operator logout, identity expiry and device handoff flow.
 
-Therefore the following remain explicit blockers after QLL-6 selection:
+The following remain mandatory PROD-11 **execution/closure targets** after QLL-6 selection:
 
 ```text
 EXACT_ON_SITE_IPAD_OR_TABLET
@@ -102,9 +102,13 @@ EXACT_MOBILE_VIEWPORT_EXECUTION_TARGET
 EXACT_ACCESSIBILITY_ASSISTIVE_TECH_ENVIRONMENT
 ```
 
+They are **not** pre-request authorization blockers, because identity-expiry, offline replay and other items require the Kiosk configuration enabled by PROD-11. They remain hard gates before `REAL_DEVICE_ACCEPTANCE`, PROD-11 formal completion, or any production-ready claim.
+
 No Windows-Chrome-only evidence set may be used to mark `REAL_DEVICE_ACCEPTANCE` complete.
 
 ## Frozen runtime auth config
+
+Deployment metadata is separate from the JSON file payload:
 
 ```text
 host path      = /mnt/datadisk0/apps/jenn-shooting-operations/kiosk-auth.v1.json
@@ -113,14 +117,54 @@ env            = KIOSK_AUTH_CONFIG_PATH=/app/kiosk-auth.v1.json
 mount          = read-only bind
 host owner     = uid 1000 / gid 1000
 host mode      = 0600
-
-schemaVersion     = 1
-authMode          = basic-v1
-realm             = Jenn Shooting Operations Kiosk
-username          = jso-kiosk-prod-01
-businessTimeZone  = Asia/Shanghai
-allowedBriefHosts = []
 ```
+
+None of those deployment fields may appear inside `kiosk-auth.v1.json`.
+
+The final file must contain **exactly** these top-level keys:
+
+```text
+schemaVersion
+authMode
+realm
+username
+deviceId
+principal
+businessTimeZone
+allowedBriefHosts
+credential
+```
+
+The frozen payload template is:
+
+```json
+{
+  "schemaVersion": 1,
+  "authMode": "basic-v1",
+  "realm": "Jenn Shooting Operations Kiosk",
+  "username": "jso-kiosk-prod-01",
+  "deviceId": "KIOSK-PROD-01",
+  "principal": {
+    "subjectId": "KIOSK-PROD-01",
+    "role": "operator",
+    "resourceIds": ["STUDIO-PROD-01"]
+  },
+  "businessTimeZone": "Asia/Shanghai",
+  "allowedBriefHosts": [],
+  "credential": {
+    "algorithm": "scrypt-v1",
+    "saltBase64": null,
+    "hashBase64": null
+  }
+}
+```
+
+The two `null` values are **materialization placeholders only** and must never be written as the final file:
+
+- `/credential/saltBase64` receives canonical Base64 for exactly 16 execution-generated random bytes;
+- `/credential/hashBase64` receives canonical Base64 for exactly 32 scrypt-v1 output bytes derived from the dedicated execution-generated Kiosk password and that salt.
+
+Before atomic installation, the fully materialized file must pass `loadKioskRuntimeAuthV1` with the four existing role credential values supplied only as forbidden comparison inputs. The final JSON must contain no deployment metadata or extra keys.
 
 ## Database-wide brief-host compatibility
 
@@ -244,12 +288,14 @@ Before PROD-11 can be requested, a separately authorized preparation must create
 ```text
 exact canonical requests_v2 acceptance request
 resourceId = STUDIO-PROD-01
-applicable active scheduling config
+active scheduling config with businessTimeZone = Asia/Shanghai
 deterministic acceptance proposal
 canonical accept decision
 derived Kiosk acceptance schedule item
 schedule_item_tasks binding from that item to the exact V2 request
 ```
+
+The active acceptance Scheduling config must use `businessTimeZone = Asia/Shanghai`, exactly matching the frozen Kiosk auth payload. This equality must be verified before proposal generation and revalidated before PROD-11 Kiosk event execution so projection refresh cannot change legacy wall-clock dates/times between Scheduling and Kiosk paths.
 
 The schedule item and task binding must come from the canonical proposal-acceptance path. Direct SQL insertion is forbidden.
 
@@ -282,17 +328,26 @@ FRESH_PRE_AUTH_TARGET_ATTESTATION             = PASS
 DATABASE_WIDE_BRIEF_HOST_COMPATIBILITY        = PASS_CURRENT_STATE
 ```
 
-Still blocked:
+Still blocked before PROD-11 may be requested:
 
 ```text
 KIOSK_ACCEPTANCE_V2_REQUEST_ABSENT
 PRODUCTION_RESOURCE_STUDIO_PROD_01_ABSENT
 ACTIVE_SCHEDULING_CONFIG_ABSENT
+ACTIVE_ACCEPTANCE_CONFIG_TIME_ZONE_NOT_YET_BOUND
 KIOSK_ACCEPTANCE_SCHEDULE_ITEM_ABSENT
 KIOSK_ACCEPTANCE_TASK_BINDING_ABSENT
 SEPARATE_SCHEDULING_PREPARATION_AUTHORITY_UNRESOLVED
-WO03_FULL_DEVICE_BROWSER_MATRIX_INCOMPLETE
-WO03_ADDITIONAL_DEVICE_BROWSER_TARGETS_UNRESOLVED
+```
+
+Mandatory after authorization, before PROD-11 can close:
+
+```text
+WO03_FULL_DEVICE_BROWSER_MATRIX
+REAL_DEVICE_ACCEPTANCE
+OFFLINE_REPLAY_RESULT
+IDENTITY_EXPIRY_AND_DEVICE_HANDOFF
+ACCESSIBILITY_AND_ON_SITE_ENVIRONMENT_ACCEPTANCE
 ```
 
 Therefore:
