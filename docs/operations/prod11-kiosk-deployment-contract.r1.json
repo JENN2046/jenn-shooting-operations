@@ -461,7 +461,7 @@
           ]
         },
         "businessTimeZone": "Asia/Shanghai",
-        "allowedBriefHosts": [],
+        "allowedBriefHosts": null,
         "credential": {
           "algorithm": "scrypt-v1",
           "saltBase64": null,
@@ -478,9 +478,20 @@
           "source": "scrypt-v1 of the execution generated dedicated Kiosk password using the inserted salt",
           "encoding": "canonical base64",
           "expectedDecodedBytes": 32
+        },
+        "/allowedBriefHosts": {
+          "source": "final authorization-bound reviewed allowlist produced by the fresh whole-database requests_v2.brief_url scan after all pre-request scheduling preparation writes complete",
+          "encoding": "JSON array of exact lowercase host names",
+          "validation": [
+            "array required; empty array allowed only when the final fresh scan observes zero non-empty brief URLs",
+            "each host is non-empty, lowercase, unique, <=253 characters, and matches ^[a-z0-9.-]+$",
+            "no wildcard, scheme, path, port, query, fragment, or unobserved extra host is permitted",
+            "every non-empty requests_v2.brief_url must parse as a URL and its lowercase hostname must appear exactly in the reviewed allowlist"
+          ],
+          "authorizationBinding": "the exact final array and its canonical digest are frozen in the one-time PROD-11 authorization packet; any later requests_v2 brief_url change invalidates the gate and requires a fresh scan/review/rebinding before request or execution"
         }
       },
-      "materializationRule": "replace both null credential placeholders with the exact generated canonical Base64 values; emit only the exact payload keys above; never copy deployment metadata into the JSON file; validate the final file through loadKioskRuntimeAuthV1 with VIEWER SUBMITTER SCHEDULER and ADMIN credential values supplied only as forbidden comparison inputs before atomic installation"
+      "materializationRule": "replace the allowedBriefHosts placeholder with the exact authorization-bound reviewed array and replace both credential null placeholders with the exact generated canonical Base64 values; emit only the exact payload keys above; never copy deployment metadata into the JSON file; validate the final file through loadKioskRuntimeAuthV1 with VIEWER SUBMITTER SCHEDULER and ADMIN credential values supplied only as forbidden comparison inputs before atomic installation"
     }
   },
   "credentialProvisioning": {
@@ -598,14 +609,27 @@
     }
   },
   "databaseWideBriefHostCompatibility": {
-    "status": "PASS_CURRENT_STATE",
+    "status": "BASELINE_PASS_NOT_FINAL",
     "resource": "requests_v2.brief_url",
-    "requestCount": 0,
-    "nonEmptyBriefUrlCount": 0,
-    "observedBriefHosts": [],
-    "allowedBriefHosts": [],
-    "activationRule": "fresh-scan every requests_v2.brief_url before PROD-11 authorization/execution; any non-empty brief URL blocks until every observed host is explicitly reviewed and included in allowedBriefHosts",
-    "scheduledOnlyAssumptionForbidden": true
+    "baselineObservation": {
+      "requestCount": 0,
+      "nonEmptyBriefUrlCount": 0,
+      "observedBriefHosts": [],
+      "observedAllowedBriefHosts": [],
+      "meaning": "evidence that the database was compatible at freeze time only; this does not close the pre-request compatibility gate"
+    },
+    "finalPreRequestRule": "after every separately authorized pre-request scheduling/data preparation write has completed and immediately before PROD-11 authorization is requested, fresh-scan every requests_v2.brief_url in the live production database, reject invalid URLs, derive the exact sorted unique lowercase hostname set, explicitly review that set, bind the exact final allowedBriefHosts array and canonical digest into the one-time authorization packet, and materialize exactly that array into kiosk-auth.v1.json",
+    "staleOnChangeRule": "any requests_v2 row insertion/update/delete or brief_url change after the final scan invalidates the compatibility proof and authorization binding; re-scan/review/rebind is mandatory",
+    "finalAllowlistRules": {
+      "emptyAllowedOnlyWhenNoNonEmptyBriefUrls": true,
+      "exactObservedHostsOnly": true,
+      "lowercaseUniqueHostsOnly": true,
+      "wildcardsForbidden": true,
+      "extraHostsForbidden": true,
+      "scheduledOnlyAssumptionForbidden": true
+    },
+    "currentFinalAllowedBriefHosts": "UNRESOLVED_UNTIL_FINAL_PRE_REQUEST_SCAN",
+    "currentFinalAllowlistDigest": "UNRESOLVED_UNTIL_FINAL_PRE_REQUEST_SCAN"
   },
   "schedulableAcceptanceReadiness": {
     "status": "BLOCKED",
@@ -850,8 +874,7 @@
     "closedPrerequisites": [
       "PRIMARY_PRODUCTION_KIOSK_TARGET_SELECTED_QLL6",
       "DEDICATED_CHROME_PROFILE_TARGET_FROZEN",
-      "FRESH_PRE_AUTH_TARGET_ATTESTATION_PASS",
-      "DATABASE_WIDE_BRIEF_HOST_COMPATIBILITY_PASS_CURRENT_STATE"
+      "FRESH_PRE_AUTH_TARGET_ATTESTATION_PASS"
     ],
     "blockingReasons": [
       "KIOSK_ACCEPTANCE_V2_REQUEST_ABSENT",
@@ -874,7 +897,8 @@
       "KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
       "KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
       "SEPARATE_PROD11_REPLACEMENT_IMAGE_DEPLOYMENT_AUTHORITY_UNRESOLVED",
-      "KIOSK_TRUSTED_SERVICE_CONTEXT_SIGNAL_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE"
+      "KIOSK_TRUSTED_SERVICE_CONTEXT_SIGNAL_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE",
+      "DATABASE_WIDE_BRIEF_HOST_FINAL_SCAN_AND_ALLOWLIST_BINDING_PENDING"
     ],
     "credentialGenerationIsExecutionNotRequestPrerequisite": true,
     "dedicatedBrowserProfileCreationIsExecutionNotRequestPrerequisite": true,
@@ -1056,6 +1080,27 @@
         "VCP continuity unchanged",
         "separate image/container rollback target verified"
       ]
+    },
+    "databaseWideBriefHostGate": {
+      "status": "BLOCKED_PENDING_FINAL_SCAN_AND_BINDING",
+      "requiredBeforeRequest": true,
+      "ordering": "must run after all separately authorized pre-request writes that can create/update requests_v2 and before the human PROD-11 authorization request",
+      "scanScope": "every live production requests_v2.brief_url, scheduled or unscheduled",
+      "requiredProof": [
+        "live production database identity and revision/freshness marker",
+        "total requests_v2 row count",
+        "non-empty brief_url count",
+        "canonical digest over the scanned request_id + brief_url set",
+        "exact sorted unique lowercase observed hostname set",
+        "explicit review result for every observed host",
+        "exact final allowedBriefHosts JSON array",
+        "canonical digest of the final allowlist",
+        "proof every non-empty brief_url hostname is in the final allowlist and no unobserved extra host is present"
+      ],
+      "materializationTarget": "runtimeAuthConfig.filePayloadContract.dynamicInsertions./allowedBriefHosts",
+      "staleOnAnyPostScanRequestMutation": true,
+      "emptyArrayRule": "allowed only when the final fresh scan observes zero non-empty brief URLs",
+      "failureRule": "invalid URL, unreviewed host, missing observed host, extra unobserved host, wildcard, stale scan, or post-scan requests_v2 mutation keeps PROD-11 non-requestable"
     }
   },
   "runtimeAuthorityBinding": {
