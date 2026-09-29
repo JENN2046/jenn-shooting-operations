@@ -283,6 +283,74 @@ If the environment was prepared correctly but isolated WO-03 later fails or rema
 
 Even after production activation, `GET /api/v2/kiosk/current` is diagnostic/device-facing evidence only. It and the event POST are separate requests.
 
+### Exact bounded production smoke write budget
+
+The PROD-11 production smoke is not an open-ended run-event session.
+
+Only this exact mutation sequence may ever commit under PROD-11 smoke authority:
+
+```text
+runId = RUN-PROD11-SMOKE-01
+
+1. START
+   eventId = EVENT-PROD11-SMOKE-START-01
+   expectedRunRevision = 0
+   localSequence = 1
+   required result = RUN_EVENT_APPLIED / shooting / runRevision 1
+
+2. COMPLETE
+   eventId = EVENT-PROD11-SMOKE-COMPLETE-01
+   expectedRunRevision = 1
+   localSequence = 2
+   required result = RUN_EVENT_APPLIED / completed / runRevision 2
+```
+
+Both events must target `KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID`, which equals the authorization-frozen derived acceptance schedule item.
+
+Forbidden under this authority:
+
+```text
+block
+resume
+any third accepted mutation
+another runId
+another eventId
+another schedule item
+any new mutation after the exact complete receipt exists
+widening a conflict or reviewRequired outcome into an improvised retry sequence
+```
+
+Exact idempotent replay of one already-persisted phase command is allowed only when the event ID and command digest match the immutable receipt and no new production fact is written.
+
+Any conflict, reviewRequired, time-policy failure, binding/current-item/time-zone mismatch, unexpected pre-existing smoke fact, or non-success for a not-yet-persisted phase is a hard stop. No later smoke mutation is authorized without a newly frozen recovery/smoke authority.
+
+The smoke terminal condition is machine-evaluable:
+
+```text
+exact complete receipt exists
+resultingState = completed
+runRevision = 2
+same frozen runId
+same frozen scheduleItemId
+exactly two accepted smoke event facts
+no pending review for either frozen event ID
+```
+
+After that terminal point, all PROD-11 smoke write authority is closed. Normal operation remains separately blocked.
+
+### Smoke notification outbox containment
+
+The authorized `complete` event creates a production-run-completed notification intent. That acceptance-only intent must never later dispatch to a real provider.
+
+Therefore these are additional pre-request capabilities:
+
+```text
+KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY
+KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY
+```
+
+The outbox isolation mechanism must preserve the acceptance audit/outbox fact while permanently preventing real DingTalk or other provider delivery, without mutating unrelated outbox facts.
+
 Before any **bounded PROD-11 production-smoke** run-event write is allowed, the replacement frozen runtime must implement:
 
 ```text
@@ -679,6 +747,8 @@ WO03_ISOLATED_ENVIRONMENT_PREPARATION_AUTHORITY_UNRESOLVED
 WO03_ISOLATED_ENVIRONMENT_EXACT_TARGET_NOT_FROZEN
 FULL_PROD11_ACTION_SPECIFIC_REVALIDATION_NOT_YET_FRESH_PASS
 CURRENT_GREENFIELD_AUTHORITY_PROD11_REQUESTABILITY_NOT_YET_FRESH_PASS
+KIOSK_SMOKE_BOUNDED_WRITE_ADMISSION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE
+KIOSK_SMOKE_OUTBOX_ISOLATION_CAPABILITY_NOT_IMPLEMENTED_IN_CURRENT_BASELINE_IMAGE
 ```
 
 The atomic production-context capability is a hard **pre-request** gate for the bounded production smoke. It must cover immutable authorization-frozen smoke schedule-item binding, current-item uniqueness, and active Scheduling time-zone equality inside the same event transaction. It is not normal-operation authority. It may not be implemented after authorization or introduced by swapping to an unreviewed image.
