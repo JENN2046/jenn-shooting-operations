@@ -194,10 +194,11 @@ export function staleDraftProposalsInTransactionV1({ db, triggerOperationId, rea
 
 /** Internal-only store. The trusted assembler must read only through the supplied db transaction. */
 export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
-  refreshProjections, authorizeAcceptance, schedulingLease = null } = {}) {
+  refreshProjections, authorizeAcceptance, schedulingLease = null, beforeAcceptanceCommit = null } = {}) {
   if (!db || typeof db.exec !== 'function' || typeof db.prepare !== 'function'
-    || typeof assembleInput !== 'function' || typeof now !== 'function') {
-    throw new TypeError('SQLite db, trusted input assembler, and injected clock are required');
+    || typeof assembleInput !== 'function' || typeof now !== 'function'
+    || (beforeAcceptanceCommit !== null && typeof beforeAcceptanceCommit !== 'function')) {
+    throw new TypeError('SQLite db, trusted input assembler, injected clock, and optional acceptance precondition are required');
   }
 
   function readAssembled(command, active) {
@@ -490,6 +491,9 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
         const selected = admitted.command.selectedProposalItemIds.map(id => byId.get(id));
         if (selected.some(item => !item)) throw new Error('SCHEDULING_SELECTION_REVALIDATION_FAILED');
         const decidedAt = now().toISOString();
+        if (beforeAcceptanceCommit) beforeAcceptanceCommit({
+          db, proposal, selectedItems: selected, decision: admitted.command, decidedAt,
+        });
         const applied = applyCanonicalScheduleAcceptanceInTransactionV2({ db, proposal,
           selectedItems: selected, decisionId: admitted.command.decisionId,
           currentScheduleRevision: current.schedule_revision,

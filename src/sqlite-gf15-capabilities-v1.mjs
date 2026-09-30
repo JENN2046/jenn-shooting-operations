@@ -64,6 +64,10 @@ export function createSqliteGf15CapabilitiesV1({ db, now, refreshProjections, al
   function proposals(lease, binding) {
     return createSqliteSchedulingProposalStoreV1({ db, now, refreshProjections, schedulingLease: lease,
       authorizeAcceptance: principal => authorizeCapability({ principal, capability: 'modifySchedule', resourceId: ids.resource }).allowed,
+      beforeAcceptanceCommit: ({ decidedAt }) => {
+        if (lease.purpose !== 'forward') gf15Fail('GF15_FORWARD_LEASE_REQUIRED');
+        assertGf15FreshWindowV1(binding, () => new Date(decidedAt));
+      },
       assembleInput: context => {
         const input = assembleSchedulingInputFromSqliteV1(context);
         // The acceptance reassembly after generation uses the same gate. Never filter candidates.
@@ -274,7 +278,6 @@ export function createSqliteGf15CapabilitiesV1({ db, now, refreshProjections, al
         if (generated.lifecycle.status === 'draft' && (drafts.length !== 1 || drafts[0].proposal_id !== decision.proposalId)) gf15Fail('GF15_DRAFT_GATE_FAILED');
       });
       checkpoint('after-proposal');
-      immediateGf15(db, () => { assertForwardFreshInTransaction(lease, principal); });
       const accepted = requireOk(proposalStore.accept(decision, principal));
       checkpoint('after-decision');
       immediateGf15(db, () => {
