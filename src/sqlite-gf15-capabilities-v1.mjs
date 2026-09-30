@@ -49,6 +49,10 @@ export function createSqliteGf15CapabilitiesV1({ db, now, refreshProjections, al
   function packet(id, lease, principal, make) {
     return immediateGf15(db, () => {
       gate(lease, principal);
+      if (lease.purpose === 'forward') {
+        const state = classify(lease);
+        if (!state.decisionComplete) assertGf15FreshWindowV1(state.base.binding, now);
+      }
       return readGf15Packet(db, id) ?? bindGf15PacketInTransaction(db, id, make(), now().toISOString());
     });
   }
@@ -182,7 +186,7 @@ export function createSqliteGf15CapabilitiesV1({ db, now, refreshProjections, al
       const config = db.prepare('SELECT * FROM scheduling_config_versions WHERE config_version = ?').get(ids.config);
       if (!config || config.config_digest !== base.binding.configDigest || !gf15Equal(JSON.parse(config.config_json), base.binding.config)) gf15Fail('GF15_CONFIG_BINDING_MISMATCH');
     }
-    return { pair, resourceState, configState, base };
+    return { pair, resourceState, configState, decisionComplete: Boolean(decisionReceipt), base };
   }
 
   return Object.freeze({
@@ -229,15 +233,9 @@ export function createSqliteGf15CapabilitiesV1({ db, now, refreshProjections, al
         return state.base;
       });
       const binding = base.binding;
-      const requestPacket = immediateGf15(db, () => {
-        gate(lease, principal);
-        const materialized = db.prepare('SELECT 1 FROM operations WHERE operation_id = ?').get(ids.requestOperation);
-        const observedAt = materialized ? null : assertGf15FreshWindowV1(binding, now);
-        return readGf15Packet(db, ids.requestOperation) ?? bindGf15PacketInTransaction(db, ids.requestOperation, {
-          command: binding.requestCommand, commandDigest: binding.requestDigest, desiredDate: binding.desiredDate,
-          expectedProjectionRevision: counters(db).expectedProjectionRevision,
-        }, (observedAt ?? now()).toISOString());
-      });
+      const requestPacket = packet(ids.requestOperation, lease, principal, () => ({
+        command: binding.requestCommand, commandDigest: binding.requestDigest, desiredDate: binding.desiredDate,
+        expectedProjectionRevision: counters(db).expectedProjectionRevision }));
       const requestResult = createSqliteGf15RequestStoreV1({ db, now, refreshProjections, schedulingLease: lease })
         .materialize(requestPacket, principal);
       checkpoint('after-request');

@@ -156,6 +156,51 @@ test('forward creates no GF15 domain facts when the bound future window becomes 
   } finally { f.db.close(); }
 });
 
+test('partial forward retry stays freshness-gated until the decision completes', () => {
+  const f = gf15Fixture();
+  try {
+    f.quiescence.release(f.lease);
+    f.setTime('2026-09-30T15:59:30.000Z');
+    const lease = f.quiescence.acquire({ leaseId: 'partial-forward-freshness', owner: f.principal.subjectId, ttlMs: 900000 });
+    f.service.begin(f.binding, lease, f.principal);
+    const paused = f.serviceWith({ checkpoint: step => { if (step === 'after-request') throw new Error('pause-after-request'); } });
+    assert.throws(() => paused.forward(lease, f.principal), /pause-after-request/);
+    assert.equal(f.db.prepare('SELECT count(*) AS n FROM requests_v2').get().n, 1);
+    assert.equal(f.db.prepare('SELECT count(*) AS n FROM scheduling_resources').get().n, 0);
+    const before = facts(f.db);
+    const packets = f.db.prepare('SELECT * FROM gf15_command_packets ORDER BY packet_id').all();
+
+    f.setTime('2026-09-30T16:00:00.000Z');
+    assert.throws(() => f.service.forward(lease, f.principal), /GF15_DATE_NOT_FUTURE|GF15_WINDOW_NOT_FUTURE/);
+    assert.deepEqual(facts(f.db), before);
+    assert.deepEqual(f.db.prepare('SELECT * FROM gf15_command_packets ORDER BY packet_id').all(), packets);
+    assert.equal(f.service.rollback(lease, f.principal).ok, true);
+  } finally { f.db.close(); }
+});
+
+test('fully completed decision replay may remain exact after the bound window becomes stale', () => {
+  const f = gf15Fixture();
+  try {
+    f.quiescence.release(f.lease);
+    f.setTime('2026-09-30T15:59:30.000Z');
+    const lease = f.quiescence.acquire({ leaseId: 'completed-forward-replay', owner: f.principal.subjectId, ttlMs: 900000 });
+    f.service.begin(f.binding, lease, f.principal);
+    const first = f.service.forward(lease, f.principal);
+    assert.equal(first.ok, true);
+    const before = facts(f.db);
+    const revisions = { ...f.db.prepare('SELECT * FROM revision_counters WHERE id = 1').get() };
+
+    f.setTime('2026-09-30T16:00:00.000Z');
+    const replay = f.service.forward(lease, f.principal);
+    assert.equal(replay.ok, true);
+    assert.equal(replay.exactReplay, true);
+    assert.deepEqual(replay.receipt, first.receipt);
+    assert.deepEqual(facts(f.db), before);
+    assert.deepEqual({ ...f.db.prepare('SELECT * FROM revision_counters WHERE id = 1').get() }, revisions);
+  } finally { f.db.close(); }
+});
+
+
 for (const prior of [false, true]) {
   for (const stop of ['before-forward', 'after-request', 'after-resource', 'before-config', 'after-config', 'after-proposal', 'after-decision']) {
     test(`rollback after ${stop}, prior=${prior}, preserves facts and retries exact commands`, () => {
