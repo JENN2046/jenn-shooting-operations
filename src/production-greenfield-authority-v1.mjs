@@ -405,6 +405,8 @@ const EXPECTED_KIOSK_ACCEPTANCE_PREPARATION_CONFIG = Object.freeze({
     'TARGET_PACKET_CONTAINS_CONFIG_DIGEST',
     'ONLY_DATE_OVERRIDE_DATE_START_END_MAY_VARY',
     'CONFIG_DIGEST_MUST_EQUAL_DIGEST_SCHEDULING_CONFIG_V1',
+    'TARGET_PACKET_WINDOW_MINIMUM_CONTIGUOUS_CAPACITY_MS_1200000',
+    'TARGET_PACKET_DETERMINISTIC_PROPOSAL_PREFLIGHT_EXACTLY_ONE_ITEM_PASS',
   ]),
 });
 
@@ -548,7 +550,7 @@ const EXPECTED_KIOSK_ACCEPTANCE_PREPARATION = Object.freeze({
     'KIOSK_ACCEPTANCE_OUTBOX_ISOLATION_CAPABILITY',
   ]),
   effects: Object.freeze([
-    'Revalidate the exact production host, container, image, volume, database, Kiosk-disabled state and whole-database requests_v2 brief-host compatibility; acquire the bounded GF15 Scheduling quiescence capability before reading the prewrite draft-proposal gate; while that same lease is held revalidate current Scheduling revisions, prove zero stored draft scheduling proposals and absence-or-exact-replay state of every frozen acceptance identifier, and only then perform the first GF15 mutation; retain the lease through the final proposal decision so unrelated proposal or scheduling-admin writes cannot race the preparation chain',
+    'Revalidate the exact production host, container, image, volume, database, Kiosk-disabled state and whole-database requests_v2 brief-host compatibility; acquire the bounded GF15 Scheduling quiescence capability before reading the prewrite draft-proposal gate; while that same lease is held revalidate current Scheduling revisions, prove zero stored draft scheduling proposals and absence-or-exact-replay state of every frozen acceptance identifier, then prove the authorization-bound local window and planning range contain at least 1200000 ms of contiguous capacity for the frozen 900000 ms duration plus 5-minute buffer and run a pure deterministic-scheduler-v1 preflight from the frozen target packet that yields exactly one proposed item for REQ-GF15-ACCEPT-PROD-01 on STUDIO-PROD-01; only after that preflight passes may the first GF15 mutation occur; retain the lease through the final proposal decision so unrelated proposal or scheduling-admin writes cannot race the preparation chain',
     'Materialize exactly one canonical production-smoke-only requests_v2 request through the dedicated bounded domain capability and require its exact command plus all 36 persisted requests_v2 fields to match requestContract, register only STUDIO-PROD-01 with the frozen FLAT capability digest, publish and activate only the frozen acceptance scheduling config, and record only the exact request requirements required by the acceptance fixture',
     'Generate one deterministic scheduling proposal scoped only to STUDIO-PROD-01 and the exact authorization-bound production-smoke window while the Scheduling quiescence capability remains held; fail closed unless the assembled candidate set contains exactly one candidate whose requestId is REQ-GF15-ACCEPT-PROD-01, the proposal contains exactly one proposed item for that request, the stored draft-proposal set contains exactly that GF15 proposal and no other draft, and the decision selects exactly that item; before submitting the decision, pre-arm Outbox isolation for the exact proposal/decision or require the same acceptance transaction to atomically install isolation, and prove that the resulting schedule.confirmed.v1 intent is never dispatcher-claimable from enqueue commit with no post-commit claimable window; only then accept the exact item, capture the derived schedule item ID, and release quiescence after post-decision verification',
     'Perform no raw SQL bypass, no unrelated scheduling mutation, no general scheduling rollout, no Kiosk credential/config/profile enablement, and no production run event; preserve VCP state unchanged',
@@ -569,6 +571,8 @@ const EXPECTED_KIOSK_ACCEPTANCE_PREPARATION = Object.freeze({
     'GF15_BOUND_CONFIG_DIGEST',
     'GF15_PREWRITE_SCHEDULING_BASELINE',
     'GF15_PREWRITE_DRAFT_PROPOSAL_COUNT_ZERO',
+    'GF15_TARGET_PACKET_MINIMUM_1200000MS_CONTIGUOUS_CAPACITY_PROOF',
+    'GF15_PREWRITE_DETERMINISTIC_PROPOSAL_PREFLIGHT_ONE_ITEM_PASS',
     'GF15_CANDIDATE_ISOLATION_PROOF',
     'GF15_POST_GENERATION_ONLY_ACCEPTANCE_DRAFT_PROOF',
     'DATABASE_WIDE_BRIEF_HOST_SCAN',
@@ -613,7 +617,7 @@ const EXPECTED_KIOSK_ACCEPTANCE_PREPARATION_ROLLBACK = Object.freeze({
   ]),
   effects: Object.freeze([
     'Immediately block progression to PROD-11 and keep Kiosk authentication/configuration disabled while binding containment to the exact PROD-GF-15 receipts and current scheduling revisions',
-    'Before any rollback Scheduling resource/config mutation, continue the still-held forward GF15 Scheduling quiescence lease or reacquire a bounded rollback lease tied to the exact GF15 source receipts; while that lease is held fail closed unless the stored draft-proposal set is empty or contains only the exact source-bound GF15 proposal and contains no unrelated draft',
+    'Before any rollback Scheduling resource/config mutation, continue the still-held forward GF15 Scheduling quiescence lease or reacquire a bounded rollback lease tied to the exact GF15 source receipts; while that lease is held fail closed unless the stored draft-proposal set is empty or contains only the exact source-bound GF15 proposal and contains no unrelated draft, and revalidate ownership of the mutable GF15 post-state: STUDIO-PROD-01 must still match the exact GF15 active resource value, capability digest and source operation from the forward receipts, and the active config must still match GF15-ACCEPT-CONFIG-R1 plus its exact activation operation from the forward receipts; if either mutable value/source operation has been changed by any later Scheduling action, perform no rollback mutation; an already-contained state is accepted only as an exact rollback replay bound to the same GF15 source receipts',
     'Only after that rollback draft gate passes, if STUDIO-PROD-01 was activated by PROD-GF-15 replace only that resource to inactive with the same capability digest; if a prior active scheduling config existed reactivate exactly that prior config, otherwise retain the acceptance config with the acceptance resource inactive because the current domain has no delete-or-clear-active-config command',
     'Contain the production-smoke schedule-confirmed Outbox intent through the preverified isolation capability and preserve the acceptance request, resource/config history, proposal, decision, schedule item, outbox and audit facts rather than deleting or rewriting immutable production history',
     'Verify unrelated scheduling facts, production volume/database identity and VCP state are unchanged, confirm PROD-11 remains unauthorized, then release the rollback/continued quiescence lease and record the release receipt; if lease acquisition or the draft gate fails, perform no Scheduling rollback mutation',
@@ -623,6 +627,8 @@ const EXPECTED_KIOSK_ACCEPTANCE_PREPARATION_ROLLBACK = Object.freeze({
     'GF15_ROLLBACK_SOURCE_BINDING',
     'GF15_ROLLBACK_SCHEDULING_QUIESCENCE_ACQUIRE_OR_CONTINUE_RECEIPT',
     'GF15_ROLLBACK_PREMUTATION_DRAFT_PROPOSAL_GATE',
+    'GF15_ROLLBACK_POSTSTATE_OWNERSHIP_GATE',
+    'GF15_ROLLBACK_NO_POST_GF15_SCHEDULING_OVERWRITE_PROOF',
     'GF15_ACCEPTANCE_RESOURCE_INACTIVE_OR_UNCHANGED',
     'GF15_PRIOR_CONFIG_RESTORED_OR_NO_PRIOR_CONFIG_ACKNOWLEDGED',
     'GF15_OUTBOX_CONTAINED',
