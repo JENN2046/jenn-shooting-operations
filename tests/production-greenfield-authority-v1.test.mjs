@@ -1006,6 +1006,83 @@ test('GF15 freezes every scheduling config field except the one authorization-bo
   }, 'GREENFIELD_KIOSK_ACCEPTANCE_PREPARATION_CONFIG_INVALID');
 });
 
+test('GF15 freezes the complete canonical request command and all requests_v2 persisted columns', () => {
+  const contract = authority.greenfieldKioskAcceptancePreparationAction.requestContract;
+  assert.equal(contract.schemaVersion, 1);
+  assert.equal(contract.requestId, 'REQ-GF15-ACCEPT-PROD-01');
+  assert.equal(contract.requestOperationId, 'PRODGF15-REQUEST-R1');
+  assert.equal(contract.commandContract.submissionSchemaVersion, 2);
+  assert.equal(contract.commandContract.fixedFields.operationId, 'PRODGF15-REQUEST-R1');
+  assert.equal(contract.commandContract.fixedFields.coreBriefSummary, 'PROD-11 Kiosk 真机验收');
+  assert.deepEqual(contract.commandContract.fixedFields.uploadIds, []);
+  assert.deepEqual(contract.commandContract.omittedOptionalFields, ['briefUrl', 'heroAssetId', 'sampleShelfId']);
+  assert.equal(contract.commandContract.dynamicFields.desiredDate, 'AUTHORIZATION_BOUND_FUTURE_ASIA_SHANGHAI_DATE');
+
+  const expectedColumns = [
+  "id",
+  "source_ordinal",
+  "sku",
+  "name",
+  "client",
+  "legacy_deliver_text",
+  "kind",
+  "legacy_v1_status",
+  "v1_status_mode",
+  "request_lifecycle",
+  "lifecycle_provenance",
+  "source",
+  "business_created_at",
+  "business_updated_at",
+  "imported_at",
+  "v1_assets_present",
+  "v1_request_present",
+  "production_type",
+  "shooting_subtype",
+  "deliverable_count",
+  "aspect_ratio",
+  "duration_seconds",
+  "audio_requirement",
+  "requested_by",
+  "desired_date",
+  "note",
+  "source_operation_id",
+  "core_brief_summary",
+  "brief_url",
+  "hero_asset_id",
+  "sample_status",
+  "sample_shelf_id",
+  "lighting_preset",
+  "reflectivity",
+  "priority",
+  "migration_batch_id"
+];
+  assert.deepEqual(contract.completePersistedColumns, expectedColumns);
+  assert.equal(new Set(contract.completePersistedColumns).size, 36);
+  assert.deepEqual(
+    [...new Set([...Object.keys(contract.fixedPersistedFields), ...Object.keys(contract.derivedPersistedFields)])].sort(),
+    [...contract.completePersistedColumns].sort(),
+  );
+  assert.equal(contract.fixedPersistedFields.legacy_deliver_text, 'PROD-11 Kiosk 真机验收');
+  assert.equal(contract.fixedPersistedFields.v1_status_mode, 'canonical');
+  assert.equal(contract.fixedPersistedFields.v1_assets_present, 0);
+  assert.equal(contract.fixedPersistedFields.v1_request_present, 1);
+  assert.equal(contract.fixedPersistedFields.requested_by, 'internal-acceptance');
+  assert.equal(contract.fixedPersistedFields.note, '');
+  assert.equal(contract.fixedPersistedFields.core_brief_summary, 'PROD-11 Kiosk 真机验收');
+  assert.equal(contract.fixedPersistedFields.hero_asset_id, null);
+  assert.equal(contract.fixedPersistedFields.sample_shelf_id, null);
+  assert.equal(
+    contract.derivedPersistedFields.source_ordinal,
+    'NEXT_AVAILABLE_CANONICAL_SOURCE_ORDINAL_IN_MATERIALIZATION_TRANSACTION',
+  );
+  assert.equal(contract.finalBindingRequirements.includes('NO_UNLISTED_OR_UNBOUND_REQUESTS_V2_FIELD'), true);
+
+  rejected(value => {
+    value.greenfieldKioskAcceptancePreparationAction.requestContract.fixedPersistedFields.core_brief_summary =
+      'implementation-chosen';
+  }, 'GREENFIELD_KIOSK_ACCEPTANCE_PREPARATION_ACTION_INVALID');
+});
+
 test('GF15 freezes one bounded irreversible Kiosk acceptance scheduling preparation action', () => {
   const action = authority.greenfieldKioskAcceptancePreparationAction;
   assert.equal(action.id, 'PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE');
@@ -1053,6 +1130,13 @@ test('GF15 freezes one bounded irreversible Kiosk acceptance scheduling preparat
     action.effects.some(effect => /zero stored draft scheduling proposals/u.test(effect)),
     true,
   );
+  const prewriteEffect = action.effects.find(effect => /prewrite draft-proposal gate/u.test(effect));
+  assert.equal(typeof prewriteEffect, 'string');
+  assert.equal(
+    prewriteEffect.indexOf('acquire the bounded GF15 Scheduling quiescence capability')
+      < prewriteEffect.indexOf('prove zero stored draft scheduling proposals'),
+    true,
+  );
   assert.equal(
     action.effects.some(effect => /stored draft-proposal set contains exactly that GF15 proposal and no other draft/u.test(effect)),
     true,
@@ -1089,6 +1173,17 @@ test('GF15 freezes one bounded irreversible Kiosk acceptance scheduling preparat
     action.evidenceRequired.includes('GF15_SCHEDULING_QUIESCENCE_CAPABILITY_PROOF'),
     true,
   );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_SCHEDULING_QUIESCENCE_ACQUIRE_RECEIPT'),
+    true,
+  );
+  for (const proof of [
+    'GF15_BOUND_REQUEST_COMMAND',
+    'GF15_BOUND_REQUEST_ROW_CONTRACT',
+    'GF15_MATERIALIZED_REQUEST_ROW_ATTESTATION',
+  ]) {
+    assert.equal(action.evidenceRequired.includes(proof), true, proof);
+  }
   assert.equal(
     action.evidenceRequired.includes('GF15_SELECTED_REQUEST_BINDING_PROOF'),
     true,
@@ -1137,13 +1232,28 @@ test('GF15 rollback is containment-only and cannot pretend immutable scheduling 
     true,
   );
   assert.equal(
-    rollback.effects.some(effect => /quiescence lease/u.test(effect)),
+    rollback.preconditions.includes('KIOSK_ACCEPTANCE_SCHEDULING_QUIESCENCE_CAPABILITY'),
     true,
   );
   assert.equal(
-    rollback.evidenceRequired.includes('GF15_SCHEDULING_QUIESCENCE_RELEASE_RECEIPT'),
+    rollback.effects.some(effect => /reacquire a bounded rollback lease/u.test(effect)),
     true,
   );
+  assert.equal(
+    rollback.effects.some(effect => /empty or contains only the exact source-bound GF15 proposal/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    rollback.effects.some(effect => /contains no unrelated draft/u.test(effect)),
+    true,
+  );
+  for (const proof of [
+    'GF15_ROLLBACK_SCHEDULING_QUIESCENCE_ACQUIRE_OR_CONTINUE_RECEIPT',
+    'GF15_ROLLBACK_PREMUTATION_DRAFT_PROPOSAL_GATE',
+    'GF15_SCHEDULING_QUIESCENCE_RELEASE_RECEIPT',
+  ]) {
+    assert.equal(rollback.evidenceRequired.includes(proof), true, proof);
+  }
   assert.equal(
     rollback.evidenceRequired.includes('GF15_IMMUTABLE_FACTS_PRESERVED'),
     true,
