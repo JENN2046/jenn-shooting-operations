@@ -201,6 +201,13 @@ Config states admitted under the same lease:
 - **CONFIG_ROLLBACK_APPLIED_PRIOR_PRESENT**: the exact pre-GF15 config is already active with activation_operation_id = PRODGF15-ROLLBACK-CONFIG-ACTIVATE-R1 and the rollback receipt. Treat as exact replay.
 - **CONFIG_CONTAINED_NO_PRIOR**: there was no pre-GF15 active config; GF15 config remains active only after the resource is already contained inactive. No config mutation is allowed because the domain has no delete-or-clear-active-config command.
 
+The allowlist also includes the two immediate outputs produced when rollback begins from a partial-forward state:
+
+- RESOURCE_ROLLBACK_APPLIED + CONFIG_FORWARD_NOT_REACHED_PRIOR_PRESENT
+- RESOURCE_ROLLBACK_APPLIED + CONFIG_FORWARD_NOT_REACHED_NO_PRIOR
+
+Those states are terminal for config rollback because forward config activation never happened; the exact prior/absent config is already correct and must not be touched.
+
 Only state pairs explicitly frozen in machine authority are valid. Any other resource/config owner, value, operation receipt, or combination means a later/unrelated Scheduling change or inconsistent partial state and **fails closed with zero Scheduling rollback mutation**.
 
 Exact rollback commands:
