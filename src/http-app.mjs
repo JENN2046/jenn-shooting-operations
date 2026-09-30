@@ -373,18 +373,6 @@ export function createHttpApp({
         ? /^\/api\/v2\/schedule-items\/([^/]+)\/events$/u.exec(url.pathname)
         : null;
       if (kioskEventRoute) {
-        if ([...url.searchParams].length !== 0) {
-          return sendMapped(response, kioskFailure('INVALID_REQUEST'));
-        }
-        let scheduleItemId;
-        try {
-          scheduleItemId = decodeURIComponent(kioskEventRoute[1]);
-        } catch {
-          return sendMapped(response, kioskFailure('INVALID_REQUEST'));
-        }
-        if (!validIdentifier(scheduleItemId)) {
-          return sendMapped(response, kioskFailure('INVALID_REQUEST'));
-        }
         const authenticated = await authenticateKiosk(kiosk, request);
         if (!authenticated.ok) {
           return sendMapped(
@@ -395,6 +383,21 @@ export function createHttpApp({
         }
         if (!authenticated.principal.capabilities.submitRunEvent) {
           return sendMapped(response, kioskFailure('FORBIDDEN'));
+        }
+        if ([...url.searchParams].length !== 0) {
+          kiosk.rejectRunEvent?.({ principal: authenticated.principal });
+          return sendMapped(response, kioskFailure('INVALID_REQUEST'));
+        }
+        let scheduleItemId;
+        try {
+          scheduleItemId = decodeURIComponent(kioskEventRoute[1]);
+        } catch {
+          kiosk.rejectRunEvent?.({ principal: authenticated.principal });
+          return sendMapped(response, kioskFailure('INVALID_REQUEST'));
+        }
+        if (!validIdentifier(scheduleItemId)) {
+          kiosk.rejectRunEvent?.({ principal: authenticated.principal });
+          return sendMapped(response, kioskFailure('INVALID_REQUEST'));
         }
         let command;
         try {

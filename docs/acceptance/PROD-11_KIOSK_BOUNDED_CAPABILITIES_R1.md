@@ -50,13 +50,29 @@ phase can follow a durable stop, including after reopening the database; exact
 accepted receipt replay remains available. A normal-operation or recovery/reset
 API is intentionally absent.
 
-If SQLite cannot enter or commit a transaction, no durable stop can be promised
-while storage is unavailable. The current application instance latches interruption
-and persists the stop at its next successful write boundary. After any such error,
-the frozen operational failure rule still requires disabling/rolling back Kiosk
-configuration; an unreviewed process restart is not recovery authority. Crash or
-storage-loss recovery is not claimed by these tests and must not be used to resume
-smoke under an old packet.
+Independent review of `806833302ed9122d3bcdf3c798707095e486c442` identified that
+volatile interruption alone could be lost on process restart, and that HTTP route
+validation / direct wrong-device rejection could skip the durable stop. These are
+implementation defects, not issues deferred to operational recovery.
+
+The repair adds append-only migration v9 with permanent runtime ownership. Before
+constructing an enabled smoke application, binding and a fresh runtime owner must
+commit together. Failure to commit aborts application construction before listen.
+Only that original closure may admit new phases. Every fresh application or server
+finding previous runtime ownership (or legacy v8 smoke binding/evidence) is
+replay-only, even when the same item/window remains valid and no stop row could be
+written before a crash. No owner transfer, reset or recovery endpoint exists.
+An attempted new phase from a replay-only runtime also durably stops the smoke.
+Exact previously accepted receipt replay remains fact-free.
+
+Thus BEGIN/COMMIT failure followed by immediate restart cannot regain authority;
+this does not depend on a successful post-failure database write. The existing
+volatile latch additionally prevents the original still-running instance from
+resuming after an unavailable transaction. Authenticated query/decoded-path
+validation and mismatched command device identity now participate in the stop;
+unauthenticated callers cannot poison it. File-backed tests recreate a real server
+with the same environment before expiry after first-START and post-START COMPLETE
+BEGIN/COMMIT failures. Both v8 and earlier migration SQL remain unchanged.
 
 ## Validation and review
 

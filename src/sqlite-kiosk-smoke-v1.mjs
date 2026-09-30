@@ -1,7 +1,27 @@
+import { randomUUID } from 'node:crypto';
 import { PROD11_RESOURCE, PROD11_REQUEST, PROD11_DEVICE, requireKioskServiceBindingV1 } from './kiosk-service-context-v1.mjs';
 
 const uuid = prefix => new RegExp(`^${prefix}-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`, 'u');
 const denied = () => ({ ok: false, code: 'RUN_PREPARATION_REQUIRED' });
+
+// Invoked during construction, before an event can be attempted or a server listens.
+// Returning null means replay-only. Never adopt a prior runtime or legacy v8 evidence.
+export function claimKioskSmokeRuntimeInTransactionV1({ db, binding }) {
+  requireKioskServiceBindingV1(binding);
+  if (!db.isTransaction || binding.mode !== 'PROD11_SMOKE_ONLY') throw new Error('KIOSK_SMOKE_SESSION_REQUIRED');
+  const persisted = db.prepare('SELECT binding_json FROM kiosk_smoke_binding WHERE id = 1').get();
+  if (persisted && persisted.binding_json !== JSON.stringify(binding)) throw new Error('KIOSK_SMOKE_BINDING_MISMATCH');
+  const session = db.prepare('SELECT session_id FROM kiosk_smoke_runtime_session WHERE id = 1').get();
+  if (session && !persisted) throw new Error('KIOSK_SMOKE_SESSION_INTEGRITY_ERROR');
+  if (session || persisted) return null;
+  for (const table of ['kiosk_smoke_phases', 'kiosk_smoke_stop', 'kiosk_smoke_outbox_isolation']) {
+    if (db.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get()) throw new Error('KIOSK_SMOKE_SESSION_INTEGRITY_ERROR');
+  }
+  const sessionId = randomUUID();
+  db.prepare('INSERT INTO kiosk_smoke_binding VALUES (1, ?)').run(JSON.stringify(binding));
+  db.prepare('INSERT INTO kiosk_smoke_runtime_session VALUES (1, ?)').run(sessionId);
+  return sessionId;
+}
 
 export function stopKioskSmokeInTransactionV1({ db, binding, principal }) {
   requireKioskServiceBindingV1(binding);
@@ -21,7 +41,7 @@ export function stopKioskSmokeInTransactionV1({ db, binding, principal }) {
 // Called only inside the event's BEGIN IMMEDIATE. A SAVEPOINT keeps denied smoke
 // attempts free of business/review/receipt/audit writes; the irreversible stop is
 // control evidence, and survives restart without expanding the mutation budget.
-export function withKioskSmokeAdmissionV1({ db, binding, command, digest, principal, clock, apply, validateReceipt }) {
+export function withKioskSmokeAdmissionV1({ db, binding, command, digest, principal, clock, apply, validateReceipt, smokeSession }) {
   requireKioskServiceBindingV1(binding);
   if (!db.isTransaction) throw new Error('KIOSK_SMOKE_TRANSACTION_REQUIRED');
   if (binding.mode === 'DISABLED') return denied();
@@ -32,8 +52,11 @@ export function withKioskSmokeAdmissionV1({ db, binding, command, digest, princi
     return apply(clock().toISOString());
   }
   if (principal.role !== 'operator' || principal.subjectId !== PROD11_DEVICE
-    || principal.resourceIds.length !== 1 || principal.resourceIds[0] !== PROD11_RESOURCE
-    || command.deviceId !== PROD11_DEVICE) return { ok: false, code: 'FORBIDDEN' };
+    || principal.resourceIds.length !== 1 || principal.resourceIds[0] !== PROD11_RESOURCE) return { ok: false, code: 'FORBIDDEN' };
+  if (command.deviceId !== PROD11_DEVICE) {
+    stopKioskSmokeInTransactionV1({ db, binding, principal });
+    return { ok: false, code: 'FORBIDDEN' };
+  }
   const bindingJson = JSON.stringify(binding);
   const persisted = db.prepare('SELECT binding_json FROM kiosk_smoke_binding WHERE id = 1').get();
   if (persisted && persisted.binding_json !== bindingJson) return denied();
@@ -73,6 +96,8 @@ export function withKioskSmokeAdmissionV1({ db, binding, command, digest, princi
     db.exec('RELEASE kiosk_smoke_event');
     return response;
   }
+  const owner = db.prepare('SELECT session_id FROM kiosk_smoke_runtime_session WHERE id = 1').get();
+  if (!smokeSession || owner?.session_id !== smokeSession) return stop();
   if (db.prepare('SELECT id FROM kiosk_smoke_stop WHERE id = 1').get() || phases.length === 2) return denied();
   let now;
   try { now = clock().toISOString(); } catch { return stop(); } // after acquiring the write boundary

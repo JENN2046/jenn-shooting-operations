@@ -1,3 +1,4 @@
+import { ScheduleStore } from '../src/store.mjs';
 import { createSqliteSchedulingAdminStoreV1 } from '../src/sqlite-scheduling-admin-store-v1.mjs';
 import { normalizeSchedulingConfigV1 } from '../src/scheduling-admin-contract-v1.mjs';
 import { Worker } from 'node:worker_threads';
@@ -38,8 +39,12 @@ function fixture(options = {}) {
     return createApplyKioskRunEvent({ serviceBinding, clock,
       store: store ?? createSqliteKioskRunEventStore({ db, businessTimeZone: 'Asia/Shanghai', allowedBriefHosts: ['brief.example'] }), ...rest });
   }
+  let application;
   return { ...f, item, binding, start, complete, makeApply,
-    apply(command, options) { return makeApply(options)({ command, principal }); } };
+    apply(command, options) {
+      const apply = options && application ? makeApply(options) : (application ??= makeApply(options));
+      return apply({ command, principal });
+    } };
 }
 function facts(db) {
   return Object.fromEntries(['requests_v2', 'production_runs', 'production_events', 'run_event_reviews', 'operations',
@@ -212,8 +217,8 @@ test('complete refuses a different run and an altered immutable binding cannot r
     f.setTime(f.complete.occurredAt);
     assertDenied(f, { ...f.complete, runId: `RUN-${randomUUID()}` });
     assertDenied(f, f.complete);
-    assertDenied(f, f.start, { serviceBinding: createKioskServiceBindingV1({ context: 'PROD11_PRODUCTION',
-      expectedItem: f.item, start: START, end: '2026-10-01T02:11:00.000Z' }) });
+    assert.throws(() => f.makeApply({ serviceBinding: createKioskServiceBindingV1({ context: 'PROD11_PRODUCTION',
+      expectedItem: f.item, start: START, end: '2026-10-01T02:11:00.000Z' }) }), /BINDING_MISMATCH/);
     const isolated = createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' });
     assertDenied(f, f.complete, { serviceBinding: isolated });
   } finally { f.db.close(); }
@@ -247,7 +252,7 @@ function smokeWorker(f, path, command, gate, time) {
   return { worker, ready, result };
 }
 
-test('two database connections serialize simultaneous exact start retries into one fact', async () => {
+test('competing runtime sessions cannot admit more than one start and a non-owner failure stops further writes', async () => {
   const root = mkdtempSync(join(tmpdir(), 'jso-smoke-concurrent-'));
   const path = join(root, 'test.sqlite');
   const f = fixture({ path });
@@ -258,9 +263,10 @@ test('two database connections serialize simultaneous exact start retries into o
     await Promise.all(workers.map(w => w.ready));
     Atomics.store(new Int32Array(gate), 0, 1); Atomics.notify(new Int32Array(gate), 0);
     const results = await Promise.all(workers.map(w => w.result));
-    assert.equal(results.every(r => r.result.ok), true, JSON.stringify(results));
-    assert.equal(results.filter(r => r.result.replayed === true).length, 1);
-    assert.equal(f.db.prepare('SELECT COUNT(*) n FROM production_events').get().n, 1);
+    const applied = results.filter(r => r.result.ok && !r.result.replayed).length;
+    assert.ok(applied <= 1, JSON.stringify(results));
+    assert.equal(results.every(r => r.result.ok || r.result.code === 'RUN_PREPARATION_REQUIRED'), true);
+    assert.equal(f.db.prepare('SELECT COUNT(*) n FROM production_events').get().n, applied);
   } finally { await Promise.all(workers.map(w => w.worker.terminate())); f.db.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -406,11 +412,12 @@ test('transaction admission failure cannot be retried into a new smoke phase in 
   const f = fixture();
   try {
     const base = createSqliteKioskRunEventStore({ db: f.db, businessTimeZone: 'Asia/Shanghai', allowedBriefHosts: ['brief.example'] });
-    let busy = true;
+    let busy = false;
     const apply = f.makeApply({ store: { withImmediateTransaction(action) {
       if (busy) { busy = false; throw Object.assign(new Error('locked'), { code: 'SQLITE_BUSY' }); }
       return base.withImmediateTransaction(action);
     } } });
+    busy = true;
     const before = facts(f.db);
     assert.equal(apply({ command: f.start, principal }).code, 'STORE_BUSY');
     assert.equal(apply({ command: f.start, principal }).ok, false);
@@ -422,4 +429,144 @@ test('transaction admission failure cannot be retried into a new smoke phase in 
 test('programmatic server composition requires context even with Kiosk auth absent', () => {
   assert.throws(() => createOperationsServer({}), /KIOSK_SERVICE_CONTEXT_REQUIRED/);
   assert.throws(() => createOperationsServer({ kioskServiceBinding: { context: 'WO03_ISOLATED_ACCEPTANCE' } }), /KIOSK_SERVICE_CONTEXT_REQUIRED/);
+});
+
+for (const phase of ['initial START', 'COMPLETE after START']) {
+  for (const failure of ['BEGIN IMMEDIATE', 'COMMIT']) {
+    test(`file-backed ${phase} ${failure} failure cannot resume after real server reconstruction`, async () => {
+      const root = mkdtempSync(join(tmpdir(), 'jso-smoke-runtime-restart-'));
+      const path = join(root, 'test.sqlite');
+      const f = fixture({ path });
+      // Establish the normal server storage baseline before fault injection.
+      const bootstrap = new ScheduleStore({ filename: path, uploadRoot: join(root, 'uploads'),
+        clock: f.now, orphanCleanupMode: 'disabled' });
+      bootstrap.close();
+      const configPath = join(root, 'test-auth.json');
+      authConfig(configPath);
+      const env = runtimeEnv(configPath, f.item);
+      let armed = false;
+      const dbPort = {
+        prepare: f.db.prepare.bind(f.db),
+        get isTransaction() { return f.db.isTransaction; },
+        exec(sql) {
+          if (armed && sql === failure) {
+            armed = false;
+            throw Object.assign(new Error('injected transaction failure'), { code: failure === 'BEGIN IMMEDIATE' ? 'SQLITE_BUSY' : 'SQLITE_IOERR' });
+          }
+          return f.db.exec(sql);
+        },
+      };
+      const options = createKioskRuntimeOptionsFromEnv(env);
+      const app = createKioskV2Application({ store: { db: dbPort,
+        writeAdmissionControl: { isDisabled: () => false, status: () => 'enabled' } },
+        authenticate: options.kioskAuthenticate, authorizeDeviceId: options.kioskAuthorizeDeviceId,
+        deviceId: options.kioskDeviceId, businessTimeZone: options.kioskBusinessTimeZone,
+        serviceBinding: options.kioskServiceBinding, allowedBriefHosts: options.kioskAllowedBriefHosts, clock: f.now });
+      let runtime;
+      try {
+        // Durable ownership exists before either the first event or its BEGIN can fail.
+        assert.equal(f.db.prepare('SELECT COUNT(*) n FROM kiosk_smoke_runtime_session').get().n, 1);
+        const command = phase === 'initial START' ? f.start : f.complete;
+        if (phase !== 'initial START') {
+          assert.equal(app.applyRunEvent({ command: f.start, principal }).ok, true);
+          f.setTime(f.complete.occurredAt);
+        }
+        const before = facts(f.db);
+        armed = true;
+        assert.equal(app.applyRunEvent({ command, principal }).code, failure === 'BEGIN IMMEDIATE' ? 'STORE_BUSY' : 'INTERNAL_ERROR');
+        assert.deepEqual(facts(f.db), before);
+        assert.equal(f.db.prepare('SELECT COUNT(*) n FROM kiosk_smoke_stop').get().n, 0);
+        f.db.close(); // no retry or opportunity to persist the volatile interruption
+        runtime = createOperationsServer({ databasePath: path, uploadRoot: join(root, 'uploads'), tokens: {},
+          orphanCleanupMode: 'disabled', cleanupIntervalMs: 0, clock: f.now, ...createKioskRuntimeOptionsFromEnv(env) });
+        await new Promise(resolve => runtime.server.listen(0, '127.0.0.1', resolve));
+        const url = `http://127.0.0.1:${runtime.server.address().port}/api/v2/schedule-items/${encodeURIComponent(f.item)}/events`;
+        const headers = { authorization: `Basic ${Buffer.from('jso-kiosk-prod-01:isolated-test-credential-only').toString('base64')}`, 'content-type': 'application/json' };
+        const post = command => fetch(url, { method: 'POST', headers, body: JSON.stringify(command) });
+        assert.equal((await post(command)).status, 409);
+        if (phase !== 'initial START') {
+          const replay = await post(f.start);
+          assert.equal(replay.status, 200);
+          assert.equal((await replay.json()).replayed, true);
+        }
+        assert.deepEqual(facts(runtime.store.db), before);
+      } finally {
+        if (runtime) await new Promise(resolve => runtime.server.close(resolve));
+        if (f.db.isOpen) f.db.close();
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
+}
+
+for (const failure of ['BEGIN IMMEDIATE', 'COMMIT']) {
+  test(`smoke application construction fails before enabling if session ${failure} fails`, () => {
+    const f = fixture();
+    try {
+      const store = createSqliteKioskRunEventStore({ businessTimeZone: 'Asia/Shanghai', db: {
+        prepare: f.db.prepare.bind(f.db), get isTransaction() { return f.db.isTransaction; },
+        exec(sql) { if (sql === failure) throw new Error('session persistence failed'); return f.db.exec(sql); },
+      } });
+      assert.throws(() => f.makeApply({ store }), /session persistence failed/);
+      for (const table of ['kiosk_smoke_binding', 'kiosk_smoke_runtime_session', 'kiosk_smoke_phases']) {
+        assert.equal(f.db.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n, 0);
+      }
+    } finally { f.db.close(); }
+  });
+}
+
+for (const invalidPath of ['?x=1', '/bad-percent', '/blank-id']) {
+  test(`authenticated HTTP ${invalidPath} stops smoke; unauthenticated request cannot`, async () => {
+    const root = mkdtempSync(join(tmpdir(), 'jso-smoke-route-stop-'));
+    const path = join(root, 'test.sqlite');
+    const f = fixture({ path });
+    const configPath = join(root, 'test-auth.json');
+    authConfig(configPath);
+    const runtime = createOperationsServer({ databasePath: path, uploadRoot: join(root, 'uploads'), tokens: {},
+      orphanCleanupMode: 'disabled', cleanupIntervalMs: 0, clock: f.now,
+      ...createKioskRuntimeOptionsFromEnv(runtimeEnv(configPath, f.item)) });
+    try {
+      await new Promise(resolve => runtime.server.listen(0, '127.0.0.1', resolve));
+      const origin = `http://127.0.0.1:${runtime.server.address().port}`;
+      const good = `${origin}/api/v2/schedule-items/${encodeURIComponent(f.item)}/events`;
+      const bad = invalidPath === '?x=1' ? good + invalidPath
+        : `${origin}/api/v2/schedule-items/${invalidPath === '/bad-percent' ? '%E0%A4%A' : '%20'}/events`;
+      const authorization = `Basic ${Buffer.from('jso-kiosk-prod-01:isolated-test-credential-only').toString('base64')}`;
+      const post = (url, authenticated) => fetch(url, { method: 'POST',
+        headers: { 'content-type': 'application/json', ...(authenticated ? { authorization } : {}) }, body: JSON.stringify(f.start) });
+      const before = facts(f.db);
+      assert.equal((await post(bad, false)).status, 401);
+      assert.equal(f.db.prepare('SELECT COUNT(*) n FROM kiosk_smoke_stop').get().n, 0);
+      assert.equal((await post(bad, true)).status, 400);
+      assert.equal((await post(good, true)).status, 409);
+      assert.deepEqual(facts(f.db), before);
+    } finally {
+      await new Promise(resolve => runtime.server.close(resolve));
+      f.db.close(); rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
+test('direct wrong device from the frozen principal durably stops new phases without accepting a fact', () => {
+  const f = fixture();
+  try {
+    const apply = f.makeApply();
+    const before = facts(f.db);
+    const stranger = createTrustedPrincipal({ subjectId: 'STRANGER', role: 'operator', resourceIds: ['STUDIO-PROD-01'] }).principal;
+    assert.equal(apply({ command: { ...f.start, deviceId: 'WRONG-DEVICE' }, principal: stranger }).code, 'FORBIDDEN');
+    assert.equal(f.db.prepare('SELECT COUNT(*) n FROM kiosk_smoke_stop').get().n, 0);
+    assert.equal(apply({ command: { ...f.start, deviceId: 'WRONG-DEVICE' }, principal }).code, 'FORBIDDEN');
+    assert.equal(apply({ command: f.start, principal }).ok, false);
+    assert.equal(f.makeApply()({ command: f.start, principal }).ok, false);
+    assert.deepEqual(facts(f.db), before);
+  } finally { f.db.close(); }
+});
+
+test('legacy v8 binding without runtime ownership never becomes fresh phase authority', () => {
+  const f = fixture();
+  try {
+    f.db.prepare('INSERT INTO kiosk_smoke_binding VALUES (1, ?)').run(JSON.stringify(f.binding));
+    assertDenied(f);
+    assert.equal(f.db.prepare('SELECT COUNT(*) n FROM kiosk_smoke_runtime_session').get().n, 0);
+  } finally { f.db.close(); }
 });

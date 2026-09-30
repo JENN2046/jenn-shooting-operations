@@ -287,6 +287,12 @@ export function createApplyKioskRunEvent({ store, clock, serviceBinding, eventTi
   requireKioskServiceBindingV1(serviceBinding);
   if (typeof eventTimePolicy !== 'function') throw new TypeError('eventTimePolicy is required');
 
+  // Ownership must commit before any smoke attempt. Failure aborts construction.
+  // A fresh closure can replay prior receipts but cannot inherit mutation authority.
+  const smokeSession = serviceBinding.mode === 'PROD11_SMOKE_ONLY'
+    ? store.withImmediateTransaction(tx => tx.claimKioskSmokeRuntime(serviceBinding))
+    : null;
+
   // If the transaction itself is unavailable, this instance cannot resume new smoke
   // phases. Persist the stop on the next acquired transaction; exact replay remains safe.
   let interrupted = false;
@@ -307,7 +313,7 @@ export function createApplyKioskRunEvent({ store, clock, serviceBinding, eventTi
 
     try {
       return withKioskAdmission(store, {
-        binding: serviceBinding, command, digest, principal, clock, interrupted,
+        binding: serviceBinding, command, digest, principal, clock, interrupted, smokeSession,
       }, (transaction, receivedAt) => {
         if (!validTimestamp(receivedAt)) return result('INTERNAL_ERROR');
         const receipt = transaction.getKioskReceipt(command.eventId);

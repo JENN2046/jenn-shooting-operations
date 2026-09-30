@@ -1,4 +1,4 @@
-import { withKioskSmokeAdmissionV1, stopKioskSmokeInTransactionV1 } from './sqlite-kiosk-smoke-v1.mjs';
+import { withKioskSmokeAdmissionV1, stopKioskSmokeInTransactionV1, claimKioskSmokeRuntimeInTransactionV1 } from './sqlite-kiosk-smoke-v1.mjs';
 import { createSqliteRunEventStore } from './sqlite-run-event-store-v2.mjs';
 
 function kioskReceipt(db, eventId) {
@@ -107,6 +107,9 @@ export function createSqliteKioskRunEventStore({
     withImmediateTransaction(action) {
       return baseStore.withImmediateTransaction(base => action({
         ...base,
+        claimKioskSmokeRuntime(binding) {
+          return claimKioskSmokeRuntimeInTransactionV1({ db, binding });
+        },
         stopKioskSmoke(options) {
           return stopKioskSmokeInTransactionV1({ db, ...options });
         },

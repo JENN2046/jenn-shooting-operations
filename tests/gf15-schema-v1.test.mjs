@@ -18,7 +18,7 @@ test('migration 7 preserves all six historical checksums and markers and adds on
     db.exec('PRAGMA foreign_keys = ON');
     initializeWritableSchema(db, { migrations: MIGRATIONS.slice(0, 6) });
     const markers = db.prepare('SELECT * FROM schema_migrations').all();
-    assert.deepEqual(initializeWritableSchema(db), { version: 8, latestVersion: 8 });
+    assert.deepEqual(initializeWritableSchema(db), { version: 9, latestVersion: 9 });
     assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version <= 6').all(), markers);
     for (const table of ['gf15_scheduling_leases', 'gf15_control_receipts', 'gf15_command_packets', 'gf15_outbox_isolation']) {
       assert.equal(db.prepare(`SELECT count(*) AS n FROM ${table}`).get().n, 0);
@@ -63,6 +63,6 @@ test('lease, packet, receipt and isolation identity cannot be replaced, edited o
     assert.throws(() => f.db.exec('INSERT OR REPLACE INTO gf15_scheduling_leases SELECT * FROM gf15_scheduling_leases'), /cannot replace/);
     assert.throws(() => f.db.exec("UPDATE gf15_scheduling_leases SET owner = 'forged'"), /immutable/);
     assert.deepEqual(f.db.prepare('SELECT * FROM gf15_scheduling_leases').all(), leases);
-    assert.equal(assertKnownSchema(f.db).version, 8);
+    assert.equal(assertKnownSchema(f.db).version, 9);
   } finally { f.db.close(); }
 });
