@@ -53,3 +53,18 @@
 ## 5. 放行边界
 
 WO-03D 可在“本地实现完成、浏览器与真机未执行”的边界上记为 `PASS_WITH_LIMITS`。在以上未执行项关闭、真实身份接入通过独立门禁、隔离环境验证完成之前，Kiosk 不得标记为 production-ready，也不得部署、切换或用于真实拍摄事实写入。
+
+## 6. PROD11 冻结契约下的隔离准备顺序
+
+后续 PROD11 工作必须先单独冻结隔离环境的准备授权，并在请求 PROD11 授权前完成
+该授权覆盖的 setup writes。需要明确测试 endpoint、数据库身份、测试身份 scope、
+single fixture digest、至少两个测试 request 的 grouped_unallocated fixture digest，
+以及 iPad/现场平板、Safari、mobile 和辅助技术的精确目标。服务必须显式使用
+`KIOSK_SERVICE_CONTEXT=WO03_ISOLATED_ACCEPTANCE`，绑定最终 replacement immutable image
+及其 source revision，禁止生产身份、凭据、数据卷或真实 provider delivery。
+
+目标、准备授权、fixture 或镜像绑定任一缺失时失败关闭，PROD11 不可请求。
+完整矩阵的执行仍在 PROD11 明确授权之后、生产 Kiosk 配置启用之前；准备完成不等于
+矩阵 PASS。GF15 生产排程准备和 PROD11 的两事件 production smoke 都不能代替
+`REAL_DEVICE_ACCEPTANCE` 或 `OFFLINE_REPLAY_RESULT`。本仓库的内存/临时数据库自动测试
+也不构成该真实隔离环境的准备或真机验收证据。

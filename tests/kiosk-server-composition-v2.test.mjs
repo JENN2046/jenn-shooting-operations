@@ -1,3 +1,5 @@
+import { createKioskServiceBindingV1 } from '../src/kiosk-service-context-v1.mjs';
+const isolatedBinding = createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' });
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -27,7 +29,7 @@ test('Kiosk V2 runtime composition is explicit, injected, and empty-resource saf
     const authorizeDeviceId = ({ principal, deviceId }) => (
       principal === created.principal && deviceId === 'DEVICE-KIOSK-LOCAL'
     );
-    const kiosk = createKioskV2Application({
+    const kiosk = createKioskV2Application({ serviceBinding: isolatedBinding,
       store,
       authenticate: () => created.principal,
       authenticationChallenge: 'Basic realm="Jenn Shooting Kiosk", charset="UTF-8"',
@@ -70,7 +72,7 @@ test('Kiosk V2 direct mutation is fenced by the bound ScheduleStore admission co
       resourceIds: ['STUDIO-A'],
     });
     assert.equal(created.ok, true);
-    const kiosk = createKioskV2Application({
+    const kiosk = createKioskV2Application({ serviceBinding: isolatedBinding,
       store,
       authenticate: () => created.principal,
       businessTimeZone: 'UTC',
@@ -117,7 +119,7 @@ test('Kiosk V2 wrapper keeps the admission control captured at construction', ()
       resourceIds: ['STUDIO-A'],
     });
     assert.equal(created.ok, true);
-    const kiosk = createKioskV2Application({
+    const kiosk = createKioskV2Application({ serviceBinding: isolatedBinding,
       store: mutableStore,
       authenticate: () => created.principal,
       businessTimeZone: 'UTC',
@@ -157,15 +159,15 @@ test('Kiosk V2 runtime composition refuses implicit authentication or time-zone 
   const store = new ScheduleStore({ filename: ':memory:' });
   try {
     assert.throws(
-      () => createKioskV2Application({ store, businessTimeZone: 'UTC' }),
+      () => createKioskV2Application({ serviceBinding: isolatedBinding, store, businessTimeZone: 'UTC' }),
       /authenticate port/u,
     );
     assert.throws(
-      () => createKioskV2Application({ store, authenticate: () => null }),
+      () => createKioskV2Application({ serviceBinding: isolatedBinding, store, authenticate: () => null }),
       /businessTimeZone/u,
     );
     assert.throws(
-      () => createKioskV2Application({
+      () => createKioskV2Application({ serviceBinding: isolatedBinding,
         store,
         authenticate: () => null,
         authenticationChallenge: '',
@@ -174,7 +176,7 @@ test('Kiosk V2 runtime composition refuses implicit authentication or time-zone 
       /authentication challenge/u,
     );
     assert.throws(
-      () => createKioskV2Application({
+      () => createKioskV2Application({ serviceBinding: isolatedBinding,
         store,
         authenticate: () => null,
         authorizeDeviceId: true,
@@ -184,7 +186,7 @@ test('Kiosk V2 runtime composition refuses implicit authentication or time-zone 
       /device authorization port/u,
     );
     assert.throws(
-      () => createKioskV2Application({
+      () => createKioskV2Application({ serviceBinding: isolatedBinding,
         store,
         authenticate: () => null,
         authorizeDeviceId: () => true,

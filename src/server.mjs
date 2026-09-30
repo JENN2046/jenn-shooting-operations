@@ -1,3 +1,4 @@
+import { createKioskServiceBindingV1, requireKioskServiceBindingV1, assertKioskContextIdentityV1 } from './kiosk-service-context-v1.mjs';
 import { createServer } from 'node:http';
 import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +22,7 @@ export function createKioskV2Application({
   authorizeDeviceId,
   deviceId,
   businessTimeZone,
+  serviceBinding,
   clock = () => new Date(),
   allowedBriefHosts = [],
 } = {}) {
@@ -50,18 +52,13 @@ export function createKioskV2Application({
   if (typeof businessTimeZone !== 'string' || businessTimeZone.length === 0) {
     throw new TypeError('Kiosk businessTimeZone is required');
   }
+  assertKioskContextIdentityV1(serviceBinding, { deviceId, businessTimeZone });
   const readCurrent = createReadKioskCurrent({
     store: createSqliteKioskCurrentStore({ db: store.db }),
     clock,
   });
-  const applyRunEvent = createApplyKioskRunEvent({
-    store: createSqliteKioskRunEventStore({
-      db: store.db,
-      businessTimeZone,
-      allowedBriefHosts,
-    }),
-    clock,
-  });
+  const eventStore = createSqliteKioskRunEventStore({ db: store.db, businessTimeZone, allowedBriefHosts });
+  const applyRunEvent = createApplyKioskRunEvent({ serviceBinding, store: eventStore, clock });
   return Object.freeze({
     authenticate,
     authenticationChallenge,
@@ -69,6 +66,10 @@ export function createKioskV2Application({
     deviceId,
     writeAdmissionControl,
     readCurrent,
+    rejectRunEvent({ principal }) {
+      if (writeAdmissionControl.isDisabled()) return;
+      return applyRunEvent({ command: null, principal });
+    },
     applyRunEvent(input) {
       if (writeAdmissionControl.isDisabled()) {
         return Object.freeze({ ok: false, code: 'WRITE_ADMISSION_DISABLED' });
@@ -167,11 +168,16 @@ export function createOperationsServer({
   kioskAuthorizeDeviceId,
   kioskDeviceId,
   kioskBusinessTimeZone,
+  kioskServiceBinding,
   kioskAllowedBriefHosts = [],
   schedulingAuthenticate,
   schedulingAllowedBriefHosts = [],
   writeAdmissionMode = 'enabled',
 }) {
+  requireKioskServiceBindingV1(kioskServiceBinding);
+  if (kioskAuthenticate === undefined && kioskServiceBinding.mode === 'PROD11_SMOKE_ONLY') {
+    throw new Error('KIOSK_SMOKE_CONFIG_REQUIRED');
+  }
   const initialWriteAdmissionMode = normalizeWriteAdmissionMode(writeAdmissionMode);
   if (initialWriteAdmissionMode === 'disabled'
       && String(orphanCleanupMode || 'inherit').trim().toLowerCase() !== 'disabled') {
@@ -202,6 +208,7 @@ export function createOperationsServer({
         authorizeDeviceId: kioskAuthorizeDeviceId,
         deviceId: kioskDeviceId,
         businessTimeZone: kioskBusinessTimeZone,
+        serviceBinding: kioskServiceBinding,
         clock: effectiveClock,
         allowedBriefHosts: kioskAllowedBriefHosts,
       });
@@ -250,10 +257,19 @@ export function createOperationsServer({
 }
 
 export function createKioskRuntimeOptionsFromEnv(env = process.env) {
+  const serviceBinding = createKioskServiceBindingV1({
+    context: env.KIOSK_SERVICE_CONTEXT,
+    expectedItem: env.KIOSK_SMOKE_EXPECTED_SCHEDULE_ITEM_ID,
+    start: env.KIOSK_SMOKE_ACCEPTANCE_RUN_START,
+    end: env.KIOSK_SMOKE_ACCEPTANCE_RUN_END,
+  });
   const configPath = typeof env.KIOSK_AUTH_CONFIG_PATH === 'string'
     ? env.KIOSK_AUTH_CONFIG_PATH.trim()
     : '';
-  if (configPath === '') return Object.freeze({});
+  if (configPath === '') {
+    if (serviceBinding.mode === 'PROD11_SMOKE_ONLY') throw new Error('KIOSK_SMOKE_CONFIG_REQUIRED');
+    return Object.freeze({ kioskServiceBinding: serviceBinding });
+  }
   if (!isAbsolute(configPath)) throw new Error('KIOSK_AUTH_CONFIG_PATH_NOT_ABSOLUTE');
   const forbiddenCredentialValues = [
     env.VIEWER_TOKEN,
@@ -265,7 +281,15 @@ export function createKioskRuntimeOptionsFromEnv(env = process.env) {
     configPath,
     forbiddenCredentialValues,
   });
+  if (serviceBinding.context === 'PROD11_PRODUCTION'
+    && (runtime.realm !== 'Jenn Shooting Operations Kiosk' || runtime.username !== 'jso-kiosk-prod-01')) {
+    throw new Error('KIOSK_PRODUCTION_IDENTITY_MISMATCH');
+  }
+  assertKioskContextIdentityV1(serviceBinding, runtime.principal ? {
+    deviceId: runtime.deviceId, resourceIds: runtime.principal.resourceIds, businessTimeZone: runtime.businessTimeZone,
+  } : {});
   return Object.freeze({
+    kioskServiceBinding: serviceBinding,
     kioskAuthenticate: runtime.authenticate,
     kioskAuthenticationChallenge: runtime.authenticationChallenge,
     kioskAuthorizeDeviceId: runtime.authorizeDeviceId,

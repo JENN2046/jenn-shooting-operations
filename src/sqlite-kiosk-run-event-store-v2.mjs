@@ -1,3 +1,4 @@
+import { withKioskSmokeAdmissionV1, stopKioskSmokeInTransactionV1, claimKioskSmokeRuntimeInTransactionV1 } from './sqlite-kiosk-smoke-v1.mjs';
 import { createSqliteRunEventStore } from './sqlite-run-event-store-v2.mjs';
 
 function kioskReceipt(db, eventId) {
@@ -106,6 +107,19 @@ export function createSqliteKioskRunEventStore({
     withImmediateTransaction(action) {
       return baseStore.withImmediateTransaction(base => action({
         ...base,
+        claimKioskSmokeRuntime(binding) {
+          return claimKioskSmokeRuntimeInTransactionV1({ db, binding });
+        },
+        stopKioskSmoke(options) {
+          return stopKioskSmokeInTransactionV1({ db, ...options });
+        },
+        withKioskAdmission(options) {
+          return withKioskSmokeAdmissionV1({ db, ...options });
+        },
+        isolateSmokeNotification(intent) {
+          db.prepare('INSERT INTO kiosk_smoke_outbox_isolation VALUES (?, ?, ?)')
+            .run(intent.outboxId, intent.intentType, intent.payloadDigest);
+        },
 
         getKioskReceipt(eventId) {
           return kioskReceipt(db, eventId);

@@ -1,3 +1,5 @@
+import { createKioskServiceBindingV1 } from '../src/kiosk-service-context-v1.mjs';
+const isolatedBinding = createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' });
 import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 import test from 'node:test';
@@ -203,7 +205,7 @@ test('Kiosk V2 application authority controls direct HTTP composition across dif
   const enabledStore = new ScheduleStore({ filename: ':memory:' });
   let applyCalls = 0;
   try {
-    const kiosk = createKioskV2Application({
+    const kiosk = createKioskV2Application({ serviceBinding: isolatedBinding,
       store: disabledStore,
       authenticate: async () => principal(),
       businessTimeZone: 'UTC',

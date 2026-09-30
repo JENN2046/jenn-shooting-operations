@@ -1,3 +1,4 @@
+import { createKioskServiceBindingV1 } from '../src/kiosk-service-context-v1.mjs';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
@@ -26,6 +27,7 @@ async function close(server) {
 
 async function verifyKioskBoundary(root) {
   const defaultRuntime = createOperationsServer({
+    kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
     databasePath: join(root, 'kiosk-default.sqlite'),
     uploadRoot: join(root, 'uploads-default'),
     tokens: {},
@@ -65,6 +67,7 @@ async function verifyKioskBoundary(root) {
     tokens: {},
     clock: () => new Date(FIXED_NOW),
     cleanupIntervalMs: 0,
+    kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
     kioskAuthenticate: () => principalResult.principal,
     kioskBusinessTimeZone: 'UTC',
   });

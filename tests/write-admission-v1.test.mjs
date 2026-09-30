@@ -1,3 +1,4 @@
+import { createKioskServiceBindingV1 } from '../src/kiosk-service-context-v1.mjs';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
@@ -39,7 +40,7 @@ function requestPayload(operationId = 'write-admission-request-0001') {
 }
 
 test('pre-activation fence stays closed until one in-process admission transition', async () => {
-  const service = createOperationsServer({
+  const service = createOperationsServer({ kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
     databasePath: ':memory:',
     tokens,
     writeAdmissionMode: 'disabled',
@@ -125,7 +126,7 @@ test('pre-activation fence stays closed until one in-process admission transitio
 });
 
 test('pre-activation HTTP fence blocks all mutating methods before dispatch', async () => {
-  const service = createOperationsServer({
+  const service = createOperationsServer({ kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
     databasePath: ':memory:',
     tokens,
     writeAdmissionMode: 'disabled',
@@ -586,7 +587,7 @@ test('ScheduleStore does not expose the raw rename capability', () => {
 
 test('pre-activation write admission cannot start with cleanup enabled', () => {
   assert.throws(
-    () => createOperationsServer({
+    () => createOperationsServer({ kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
       databasePath: ':memory:',
       tokens,
       writeAdmissionMode: 'disabled',

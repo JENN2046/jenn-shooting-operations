@@ -1,3 +1,5 @@
+import { createKioskServiceBindingV1 } from '../src/kiosk-service-context-v1.mjs';
+const isolatedBinding = createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' });
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -224,7 +226,7 @@ function makeApply(db, {
     allowedBriefHosts: [],
     ...(projectV2 ? { projectV2 } : {}),
   });
-  return createApplyKioskRunEvent({ store, clock: () => new Date(receivedAt) });
+  return createApplyKioskRunEvent({ serviceBinding: isolatedBinding, store, clock: () => new Date(receivedAt) });
 }
 
 function command({
@@ -608,7 +610,7 @@ if (!isMainThread && workerData?.mode === 'apply-kiosk-run-event') {
 
       store = new ScheduleStore({ filename });
       const trusted = principal();
-      const kiosk = createKioskV2Application({
+      const kiosk = createKioskV2Application({ serviceBinding: isolatedBinding,
         store,
         authenticate: () => trusted,
         businessTimeZone: 'UTC',
@@ -695,7 +697,7 @@ if (!isMainThread && workerData?.mode === 'apply-kiosk-run-event') {
           }));
         },
       };
-      const failed = createApplyKioskRunEvent({
+      const failed = createApplyKioskRunEvent({ serviceBinding: isolatedBinding,
         store: rejectingStore,
         clock: () => new Date('2026-09-22T12:01:00.000Z'),
       })({
@@ -780,11 +782,12 @@ if (!isMainThread && workerData?.mode === 'apply-kiosk-run-event') {
       scheduleId: 'SCHEDULE-ORPHAN-RECEIPT',
     });
     function applyWithReceipt(receipt) {
-      return createApplyKioskRunEvent({
+      return createApplyKioskRunEvent({ serviceBinding: isolatedBinding,
         clock: () => new Date(RECEIVED_AT),
         store: {
           withImmediateTransaction(action) {
-            return action({ getKioskReceipt: () => receipt });
+            return action({ getKioskReceipt: () => receipt,
+              withKioskAdmission: ({ apply, clock }) => apply(clock().toISOString()) });
           },
         },
       });
@@ -845,7 +848,7 @@ if (!isMainThread && workerData?.mode === 'apply-kiosk-run-event') {
         businessTimeZone: 'UTC',
         allowedBriefHosts: [],
       });
-      const apply = createApplyKioskRunEvent({
+      const apply = createApplyKioskRunEvent({ serviceBinding: isolatedBinding,
         clock: () => new Date(RECEIVED_AT),
         store: {
           withImmediateTransaction(action) {

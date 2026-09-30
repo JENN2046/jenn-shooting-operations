@@ -1,3 +1,5 @@
+import { KIOSK_SMOKE_SESSION_SCHEMA_SQL } from './sqlite-kiosk-smoke-session-schema-v1.mjs';
+import { KIOSK_SMOKE_SCHEMA_SQL } from './sqlite-kiosk-smoke-schema-v1.mjs';
 import { GF15_SCHEMA_SQL } from './sqlite-gf15-schema-v1.mjs';
 import { createHash } from 'node:crypto';
 import { SCHEDULING_SCHEMA_SQL } from './sqlite-scheduling-schema-v1.mjs';
@@ -789,6 +791,8 @@ const NOTIFICATION_OUTBOX_TABLE_DEFINITIONS = schemaDefinitions(NOTIFICATION_OUT
 const SCHEDULING_TABLE_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'table');
 const SCHEDULING_INDEX_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'index');
 const SCHEDULING_TRIGGER_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'trigger');
+const KIOSK_SMOKE_SESSION_DEFINITIONS = Object.fromEntries(['table', 'index', 'trigger'].map(type => [type, schemaDefinitions(KIOSK_SMOKE_SESSION_SCHEMA_SQL, type)]));
+const KIOSK_SMOKE_DEFINITIONS = Object.fromEntries(['table', 'index', 'trigger'].map(type => [type, schemaDefinitions(KIOSK_SMOKE_SCHEMA_SQL, type)]));
 const GF15_DEFINITIONS = Object.fromEntries(['table', 'index', 'trigger'].map(type => [type, schemaDefinitions(GF15_SCHEMA_SQL, type)]));
 const RUN_CONTEXT_CAPTURE_TABLE_DEFINITIONS = schemaDefinitions(RUN_CONTEXT_CAPTURE_SCHEMA_SQL, 'table');
 const RUN_CONTEXT_CAPTURE_TRIGGER_DEFINITIONS = schemaDefinitions(RUN_CONTEXT_CAPTURE_SCHEMA_SQL, 'trigger');
@@ -830,6 +834,8 @@ export const MIGRATIONS = Object.freeze([
   Object.freeze({ version: 5, name: 'scheduling_proposals', sql: SCHEDULING_SCHEMA_SQL, checksum: checksum(SCHEDULING_SCHEMA_SQL) }),
   Object.freeze({ version: 6, name: 'scheduling_run_context_capture', sql: RUN_CONTEXT_CAPTURE_SCHEMA_SQL, checksum: checksum(RUN_CONTEXT_CAPTURE_SCHEMA_SQL) }),
   Object.freeze({ version: 7, name: 'gf15_bounded_capabilities', sql: GF15_SCHEMA_SQL, checksum: checksum(GF15_SCHEMA_SQL) }),
+  Object.freeze({ version: 8, name: 'kiosk_bounded_smoke', sql: KIOSK_SMOKE_SCHEMA_SQL, checksum: checksum(KIOSK_SMOKE_SCHEMA_SQL) }),
+  Object.freeze({ version: 9, name: 'kiosk_smoke_runtime_ownership', sql: KIOSK_SMOKE_SESSION_SCHEMA_SQL, checksum: checksum(KIOSK_SMOKE_SESSION_SCHEMA_SQL) }),
 ]);
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1).version;
@@ -1244,6 +1250,16 @@ function assertNoUnknownSchemaObjects(db, version) {
       for (const name of Object.keys(definitions)) allowed.add(`${type}:${name}`);
     }
   }
+  if (version >= 8) {
+    for (const [type, definitions] of Object.entries(KIOSK_SMOKE_DEFINITIONS)) {
+      for (const name of Object.keys(definitions)) allowed.add(`${type}:${name}`);
+    }
+  }
+  if (version >= 9) {
+    for (const [type, definitions] of Object.entries(KIOSK_SMOKE_SESSION_DEFINITIONS)) {
+      for (const name of Object.keys(definitions)) allowed.add(`${type}:${name}`);
+    }
+  }
 
   const unknown = db.prepare(`
     SELECT type, name
@@ -1281,9 +1297,27 @@ function assertStructureForVersion(db, version) {
       for (const [name, sql] of Object.entries(definitions)) assertObjectDefinition(db, type, name, sql);
     }
   }
+  if (version >= 8) {
+    for (const [type, definitions] of Object.entries(KIOSK_SMOKE_DEFINITIONS)) {
+      for (const [name, sql] of Object.entries(definitions)) assertObjectDefinition(db, type, name, sql);
+    }
+  }
+  if (version >= 9) {
+    for (const [type, definitions] of Object.entries(KIOSK_SMOKE_SESSION_DEFINITIONS)) {
+      for (const [name, sql] of Object.entries(definitions)) assertObjectDefinition(db, type, name, sql);
+    }
+  }
 }
 
 function assertNoPendingArtifacts(db, nextVersion) {
+  if (nextVersion === 9 && Object.entries(KIOSK_SMOKE_SESSION_DEFINITIONS).some(([type, definitions]) =>
+    Object.keys(definitions).some(name => objectExists(db, type, name)))) {
+    throw schemaError('SCHEMA_PARTIAL_MIGRATION', 'unmarked Kiosk smoke runtime ownership objects are present');
+  }
+  if (nextVersion === 8 && Object.entries(KIOSK_SMOKE_DEFINITIONS).some(([type, definitions]) =>
+    Object.keys(definitions).some(name => objectExists(db, type, name)))) {
+    throw schemaError('SCHEMA_PARTIAL_MIGRATION', 'unmarked Kiosk smoke objects are present');
+  }
   if (nextVersion === 7 && Object.entries(GF15_DEFINITIONS).some(([type, definitions]) =>
     Object.keys(definitions).some(name => objectExists(db, type, name)))) {
     throw schemaError('SCHEMA_PARTIAL_MIGRATION', 'unmarked GF15 capability objects are present');

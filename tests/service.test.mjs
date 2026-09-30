@@ -1,3 +1,4 @@
+import { createKioskServiceBindingV1 } from '../src/kiosk-service-context-v1.mjs';
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { once } from 'node:events';
@@ -22,7 +23,7 @@ function auth(token) {
 
 before(async () => {
   let sequence = 0;
-  service = createOperationsServer({
+  service = createOperationsServer({ kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
     databasePath: ':memory:',
     tokens,
     clock: () => new Date('2026-09-22T08:00:00.000Z'),
@@ -320,7 +321,7 @@ test('expired orphan cleanup deletes only files without remaining references', (
     now = new Date(now.getTime() + 1001);
     store.close();
     activeStore = null;
-    const restarted = createOperationsServer({
+    const restarted = createOperationsServer({ kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
       databasePath,
       uploadRoot,
       clock: () => now,

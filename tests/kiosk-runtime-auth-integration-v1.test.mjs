@@ -57,7 +57,7 @@ function fixture() {
 
 async function withRuntime(action) {
   const f = fixture();
-  const options = createKioskRuntimeOptionsFromEnv({
+  const options = createKioskRuntimeOptionsFromEnv({ KIOSK_SERVICE_CONTEXT: 'WO03_ISOLATED_ACCEPTANCE',
     KIOSK_AUTH_CONFIG_PATH: f.configPath,
   });
   const runtime = createOperationsServer({
