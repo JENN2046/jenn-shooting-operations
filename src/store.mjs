@@ -1,3 +1,4 @@
+import { assertSchedulingQuiescenceV1 } from './sqlite-scheduling-quiescence-v1.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, realpathSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve } from 'node:path';
@@ -517,6 +518,7 @@ export class ScheduleStore {
     if (cached) return { ...cached, replayed: true };
 
     return transaction(this.db, () => {
+      assertSchedulingQuiescenceV1({ db: this.db, now: this.clock });
       const current = this.getSnapshot();
       if (current.revision !== expectedRevision) {
         return { ok: false, status: 409, code: 'REVISION_CONFLICT', revision: current.revision };
@@ -553,6 +555,7 @@ export class ScheduleStore {
 
     try {
       const result = transaction(this.db, () => {
+        assertSchedulingQuiescenceV1({ db: this.db, now: this.clock });
         const recovery = this.#recoverStagedUploadCleanupLocked({ allowDelete: false });
         if (!recovery.ok) {
           return { ok: false, status: 503, code: 'UPLOAD_RECOVERY_FAILED' };

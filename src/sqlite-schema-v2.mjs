@@ -1,3 +1,4 @@
+import { GF15_SCHEMA_SQL } from './sqlite-gf15-schema-v1.mjs';
 import { createHash } from 'node:crypto';
 import { SCHEDULING_SCHEMA_SQL } from './sqlite-scheduling-schema-v1.mjs';
 import { RUN_CONTEXT_CAPTURE_SCHEMA_SQL } from './sqlite-run-context-capture-schema-v1.mjs';
@@ -788,6 +789,7 @@ const NOTIFICATION_OUTBOX_TABLE_DEFINITIONS = schemaDefinitions(NOTIFICATION_OUT
 const SCHEDULING_TABLE_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'table');
 const SCHEDULING_INDEX_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'index');
 const SCHEDULING_TRIGGER_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'trigger');
+const GF15_DEFINITIONS = Object.fromEntries(['table', 'index', 'trigger'].map(type => [type, schemaDefinitions(GF15_SCHEMA_SQL, type)]));
 const RUN_CONTEXT_CAPTURE_TABLE_DEFINITIONS = schemaDefinitions(RUN_CONTEXT_CAPTURE_SCHEMA_SQL, 'table');
 const RUN_CONTEXT_CAPTURE_TRIGGER_DEFINITIONS = schemaDefinitions(RUN_CONTEXT_CAPTURE_SCHEMA_SQL, 'trigger');
 const V2_COMPAT_TABLE_DEFINITIONS = Object.freeze({
@@ -827,6 +829,7 @@ export const MIGRATIONS = Object.freeze([
   Object.freeze({ version: 4, name: 'notification_outbox', sql: NOTIFICATION_OUTBOX_SQL, checksum: checksum(NOTIFICATION_OUTBOX_SQL) }),
   Object.freeze({ version: 5, name: 'scheduling_proposals', sql: SCHEDULING_SCHEMA_SQL, checksum: checksum(SCHEDULING_SCHEMA_SQL) }),
   Object.freeze({ version: 6, name: 'scheduling_run_context_capture', sql: RUN_CONTEXT_CAPTURE_SCHEMA_SQL, checksum: checksum(RUN_CONTEXT_CAPTURE_SCHEMA_SQL) }),
+  Object.freeze({ version: 7, name: 'gf15_bounded_capabilities', sql: GF15_SCHEMA_SQL, checksum: checksum(GF15_SCHEMA_SQL) }),
 ]);
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1).version;
@@ -1236,6 +1239,12 @@ function assertNoUnknownSchemaObjects(db, version) {
     for (const name of RUN_CONTEXT_CAPTURE_TRIGGERS) allowed.add(`trigger:${name}`);
   }
 
+  if (version >= 7) {
+    for (const [type, definitions] of Object.entries(GF15_DEFINITIONS)) {
+      for (const name of Object.keys(definitions)) allowed.add(`${type}:${name}`);
+    }
+  }
+
   const unknown = db.prepare(`
     SELECT type, name
     FROM sqlite_schema
@@ -1267,9 +1276,18 @@ function assertStructureForVersion(db, version) {
   if (version >= 4) assertNotificationOutboxStructure(db);
   if (version >= 5) assertSchedulingStructure(db);
   if (version >= 6) assertRunContextCaptureStructure(db);
+  if (version >= 7) {
+    for (const [type, definitions] of Object.entries(GF15_DEFINITIONS)) {
+      for (const [name, sql] of Object.entries(definitions)) assertObjectDefinition(db, type, name, sql);
+    }
+  }
 }
 
 function assertNoPendingArtifacts(db, nextVersion) {
+  if (nextVersion === 7 && Object.entries(GF15_DEFINITIONS).some(([type, definitions]) =>
+    Object.keys(definitions).some(name => objectExists(db, type, name)))) {
+    throw schemaError('SCHEMA_PARTIAL_MIGRATION', 'unmarked GF15 capability objects are present');
+  }
   if (nextVersion === 1 && V2_CORE_TABLES.some(table => objectExists(db, 'table', table))) {
     throw schemaError('SCHEMA_PARTIAL_MIGRATION', 'unmarked V2 core schema objects are present');
   }

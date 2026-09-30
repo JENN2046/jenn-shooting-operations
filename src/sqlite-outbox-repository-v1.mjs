@@ -82,7 +82,7 @@ function intentFromRow(row) {
   };
 }
 
-function recordFromRow(row) {
+function recordFromRow(row, isolation = null) {
   if (!row) return null;
   return Object.freeze({
     outboxId: row.outbox_id,
@@ -110,6 +110,9 @@ function recordFromRow(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     sentAt: row.sent_at,
+    ...(isolation ? { isolation: Object.freeze({ reason: 'GF15_ACCEPTANCE',
+      proposalId: isolation.proposal_id, decisionId: isolation.decision_id,
+      isolatedAt: isolation.created_at }) } : {}),
   });
 }
 
@@ -157,6 +160,8 @@ export function createSqliteOutboxRepositoryV1({
     const validation = validateNotificationIntentV1(intent);
     if (!validation.ok) return result(validation.code);
     try {
+      const isolation = db.prepare('SELECT intent_type, payload_digest FROM gf15_outbox_isolation WHERE outbox_id = ?').get(intent.outboxId);
+      if (isolation && (isolation.intent_type !== intent.intentType || isolation.payload_digest !== intent.payloadDigest)) return result('OUTBOX_ISOLATION_MISMATCH');
       const existingDedupe = byDedupe.get(intent.dedupeKey);
       if (existingDedupe) {
         const comparison = compareNotificationIntentV1(intentFromRow(existingDedupe), intent);
@@ -225,10 +230,11 @@ export function createSqliteOutboxRepositoryV1({
       const eligible = db.prepare(`
         SELECT ${OUTBOX_ROW_COLUMNS}
         FROM notification_outbox
-        WHERE
+        WHERE NOT EXISTS (SELECT 1 FROM gf15_outbox_isolation AS isolation
+          WHERE isolation.outbox_id = notification_outbox.outbox_id) AND (
           (status = 'pending' AND attempt_count = 0 AND available_at <= ?)
           OR (status = 'retryableFailed' AND attempt_count BETWEEN 1 AND ? AND available_at <= ?)
-          OR (status = 'leased' AND attempt_count BETWEEN 1 AND ? AND lease_expires_at <= ?)
+          OR (status = 'leased' AND attempt_count BETWEEN 1 AND ? AND lease_expires_at <= ?))
         ORDER BY
           CASE WHEN status = 'leased' THEN lease_expires_at ELSE available_at END,
           created_at,
@@ -429,8 +435,9 @@ export function createSqliteOutboxRepositoryV1({
     if (!validOpaque(id, 160)) return result('OUTBOX_ID_INVALID');
     try {
       const row = byId.get(id);
+      const isolation = row ? db.prepare('SELECT * FROM gf15_outbox_isolation WHERE outbox_id = ?').get(id) : null;
       return row
-        ? success('OUTBOX_FOUND', { record: recordFromRow(row) })
+        ? success('OUTBOX_FOUND', { record: recordFromRow(row, isolation) })
         : result('OUTBOX_NOT_FOUND');
     } catch (error) {
       return isBusy(error) ? result('STORE_BUSY') : result('OUTBOX_STORE_ERROR');
