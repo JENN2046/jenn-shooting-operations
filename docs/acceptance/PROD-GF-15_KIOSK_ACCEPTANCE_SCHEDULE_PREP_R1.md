@@ -47,25 +47,67 @@ The exact acceptance date, planning window, and calendar window are not standing
 
 ## Frozen acceptance request semantics
 
-The bounded request materialization capability must create exactly one canonical requests_v2 acceptance request with:
+The bounded request materialization capability must materialize **one exact request command and one complete `requests_v2` row**. The contract leaves no unspecified persisted column for a future implementation to choose.
 
+Canonical command fixed fields:
+
+- schemaVersion: 2
+- operationId: PRODGF15-REQUEST-R1
+- productionType: 平面
 - sku: GF15-ACCEPT-PROD-01
 - name: PROD-11 Kiosk 真机验收
-- client: internal-acceptance
-- kind: 细节
-- lifecycle: open / domain_command
-- source: submission
-- productionType: 平面
-- shootingSubtype: 细节
-
+- kind / shootingSubtype: 细节 / 细节
 - aspectRatio: 1:1
-- deliverableCount: 1
+- deliverables: flat / count 1
+- requestedBy: internal-acceptance
+- note: empty string
+- coreBriefSummary: PROD-11 Kiosk 真机验收
 - sampleStatus: arrivedVerified
 - lightingPreset: GF15-ACCEPT-NEUTRAL
 - reflectivity: low
 - priority: p0
-- briefUrl: null
-- desiredDate: exact authorization-bound local date
+- uploadIds: empty
+- briefUrl / heroAssetId / sampleShelfId: omitted
+- desiredDate: exact authorization-bound future Asia/Shanghai local date
+
+The persisted-row contract covers **all 36 `requests_v2` columns**.
+
+Fixed persisted values:
+
+- id: REQ-GF15-ACCEPT-PROD-01
+- sku: GF15-ACCEPT-PROD-01
+- name / legacy_deliver_text / core_brief_summary: PROD-11 Kiosk 真机验收
+- client / requested_by: internal-acceptance
+- kind: 细节
+- legacy_v1_status: null
+- v1_status_mode: canonical
+- request_lifecycle / lifecycle_provenance: open / domain_command
+- source: submission
+- v1_assets_present / v1_request_present: 0 / 1
+- production_type / shooting_subtype: 平面 / 细节
+- deliverable_count / aspect_ratio: 1 / 1:1
+- duration_seconds / audio_requirement: null / null
+- note: empty string
+- source_operation_id: PRODGF15-REQUEST-R1
+- brief_url / hero_asset_id / sample_shelf_id: null
+- sample_status: arrivedVerified
+- lighting_preset: GF15-ACCEPT-NEUTRAL
+- reflectivity: low
+- priority: p0
+- migration_batch_id: null
+
+Only these persisted values are derived or authorization-bound later:
+
+- source_ordinal: next available canonical ordinal selected inside the materialization transaction
+- business_created_at: trusted server time inside that transaction
+- business_updated_at: exactly the same value as business_created_at
+- imported_at: exactly the same value as business_created_at
+- desired_date: exact authorization-bound future Asia/Shanghai date
+
+The target packet must carry the exact command with bound desiredDate. The materialization receipt must attest the complete `requests_v2` row. No other persisted field may be omitted, inferred differently, or populated by implementation discretion.
+
+Required Scheduling facts remain:
+
 - requiredCapabilityIds: FLAT
 - durationEstimate: 900000 ms, explicit, sourceVersion prod-gf15-r1
 
@@ -128,7 +170,7 @@ Canonical proposal acceptance creates a schedule.confirmed.v1 Notification Outbo
 
 Scheduling resource changes, config activation, request-requirements changes, and final proposal acceptance can stale stored draft proposals globally. GF-15 must therefore acquire a bounded Scheduling quiescence lease before the first mutation and hold it through the final proposal decision.
 
-Before the lease is acquired, the production database must show zero draft scheduling proposals. While the lease is held, unrelated proposal generation and Scheduling-admin writes are forbidden. After GF-15 generates its proposal, the stored draft set must contain exactly that GF-15 proposal and no other draft. The lease is released only after the exact decision and post-decision verification complete.
+The lease must be acquired **before** the prewrite draft-proposal gate is evaluated. While that same lease is held, the production database must show zero draft scheduling proposals before the first GF-15 mutation. Unrelated proposal generation and Scheduling-admin writes are forbidden while the lease is held. After GF-15 generates its proposal, the stored draft set must contain exactly that GF-15 proposal and no other draft. The lease is released only after the exact decision and post-decision verification complete.
 
 Current fresh baseline: draft scheduling proposals = 0.
 
@@ -147,7 +189,10 @@ Rollback is containment, not deletion:
 - if a prior active config existed, reactivate exactly that config;
 - if no prior config existed, retain the acceptance config but keep the acceptance resource inactive because the current domain has no delete-or-clear-active-config command;
 - contain the acceptance outbox intent using the preverified isolation capability;
-- if the bounded GF15 Scheduling quiescence lease was acquired, keep it held through containment/post-state verification, then release it and record the release receipt; if it was never acquired, prove no GF15 lease is held;
+- before any rollback Scheduling resource/config mutation, continue the still-held forward GF15 quiescence lease or reacquire a bounded rollback lease tied to the exact GF15 source receipts;
+- while that lease is held, fail closed unless the stored draft set is empty or contains only the exact source-bound GF15 proposal and no unrelated draft;
+- only after that gate passes may rollback deactivate STUDIO-PROD-01 or reactivate the exact prior config; if lease acquisition or the draft gate fails, perform no Scheduling rollback mutation;
+- keep the lease through containment/post-state verification, then release it and record the release receipt;
 - preserve request/resource/config/proposal/decision/schedule/outbox/audit history;
 - prove unrelated scheduling facts, storage identity, and VCP are unchanged.
 
