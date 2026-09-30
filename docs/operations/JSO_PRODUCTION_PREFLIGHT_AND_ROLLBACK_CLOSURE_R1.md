@@ -143,7 +143,7 @@ v7/v8/v9 rejection probes remain applicable.
 Reproduce locally using the exact frozen image, existing read-only old-source
 export, a **new empty** output directory containing a copy of
 [`production-preflight-synthetic-restore.r1.mjs`](../acceptance/production-preflight-synthetic-restore.r1.mjs),
-mounted at `/out`, and the old export at `/old`. Run `node /out/probe.mjs` in a
+mounted at `/out`, and the old export at `/old`. Run `node /out/production-preflight-synthetic-restore.r1.mjs` in a
 `docker run --rm --network none --read-only --tmpfs /tmp:rw,nosuid,nodev` container;
 never mount production storage. Paths `/tmp/synthetic-*.sqlite` exist only inside
 the disposable container. The probe writes its receipt to `/out/restore-evidence.json`.

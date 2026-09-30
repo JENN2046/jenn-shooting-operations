@@ -136,7 +136,12 @@ action arrays empty. This proposal has no effects on that authority.
 The later [production preflight and rollback closure](JSO_PRODUCTION_PREFLIGHT_AND_ROLLBACK_CLOSURE_R1.md)
 records fresh read-only production metadata, denied live DB/protected-backup access,
 and a migration-only held-fence v6-restore recovery proposal. Its production-readiness
-verdict is BLOCKED. It supersedes the generic preferred-fallback choice only for
-that bounded pre-release phase; direct old-image restart on v7–v9 remains prohibited.
+verdict is BLOCKED. Its proposed execution, stop and recovery sequence supersedes
+steps 2–6 of the bounded forward proposal above: stop the exact application container
+under a held/drained writer fence before the consistent backup; start the candidate
+with write admission and cleanup disabled; require a separately bound operation-release
+receipt before resuming ordinary writers or cleanup. It also supersedes the generic
+preferred-fallback choice for that bounded pre-release phase; direct old-image restart
+on v7–v9 remains prohibited.
 The observations above describe the original preparation task; the addendum owns
 new live observations. Neither document authorizes replacement or restore.
