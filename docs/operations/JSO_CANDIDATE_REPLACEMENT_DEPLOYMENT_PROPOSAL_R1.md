@@ -145,3 +145,12 @@ preferred-fallback choice for that bounded pre-release phase; direct old-image r
 on v7–v9 remains prohibited.
 The observations above describe the original preparation task; the addendum owns
 new live observations. Neither document authorizes replacement or restore.
+
+## User-selected empty-database route supersession
+
+The later [empty-production rollout proposal](JSO_EMPTY_PRODUCTION_DATABASE_ROLLOUT_PROPOSAL_R1.md)
+supersedes this document's in-place forward upgrade and pre-upgrade-v6 recovery
+strategy. New production uses separately bound new empty storage with no old-record
+import; old system/data are retained. Historical evidence and the no-old-image-on-v9
+rule remain valid. This route requires its own new-target, no-split-brain, new-data
+backup/recovery and release approvals; it does not change frozen action authority.

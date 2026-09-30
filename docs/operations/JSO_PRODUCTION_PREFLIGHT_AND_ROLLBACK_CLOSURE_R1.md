@@ -1,5 +1,11 @@
 # Production preflight and rollback closure R1
 
+**Historical in-place route report.** The user subsequently chose a separate empty
+production DB with no old-record import. The [empty-production rollout proposal](JSO_EMPTY_PRODUCTION_DATABASE_ROLLOUT_PROPOSAL_R1.md)
+supersedes this document's upgrade/v6-restore execution strategy; its timestamped
+observations and denials remain evidence. Its old-upgrade readiness gaps are not
+automatically prerequisites for creating distinct new empty storage.
+
 **Verdict: BLOCKED FOR DEPLOYMENT.** This closes the bounded recovery design for
 review; it does not close production readiness or authorize any execution.
 The initial read-only inspection took place on 2026-09-30, 17:51–17:56 UTC.
