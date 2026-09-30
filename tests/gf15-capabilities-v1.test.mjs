@@ -174,7 +174,9 @@ test('partial forward retry stays freshness-gated until the decision completes',
     assert.throws(() => f.service.forward(lease, f.principal), /GF15_DATE_NOT_FUTURE|GF15_WINDOW_NOT_FUTURE/);
     assert.deepEqual(facts(f.db), before);
     assert.deepEqual(f.db.prepare('SELECT * FROM gf15_command_packets ORDER BY packet_id').all(), packets);
-    assert.equal(f.service.rollback(lease, f.principal).ok, true);
+    const rollback = f.service.rollback(lease, f.principal);
+    assert.equal(rollback.ok, true);
+    assert.equal(f.db.prepare('SELECT status FROM scheduling_resources WHERE resource_id = ?').get(ids.resource)?.status ?? null, null);
   } finally { f.db.close(); }
 });
 

@@ -55,7 +55,8 @@ export function createSqliteGf15CapabilitiesV1({ db, now, refreshProjections, al
   }
   function packet(id, lease, principal, make) {
     return immediateGf15(db, () => {
-      if (lease.purpose === 'forward') assertForwardFreshInTransaction(lease, principal);
+      const rollbackPacket = id === ids.rollbackResource || id === ids.rollbackConfig;
+      if (lease.purpose === 'forward' && !rollbackPacket) assertForwardFreshInTransaction(lease, principal);
       else gate(lease, principal);
       return readGf15Packet(db, id) ?? bindGf15PacketInTransaction(db, id, make(), now().toISOString());
     });
