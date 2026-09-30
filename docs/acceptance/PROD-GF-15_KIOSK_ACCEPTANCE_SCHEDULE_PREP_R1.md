@@ -1,10 +1,10 @@
-# PROD-GF-15 Kiosk Acceptance Schedule Preparation R1
+# PROD-GF-15 Kiosk Production Smoke Schedule Preparation R1
 
 Status: ACTION FROZEN / NOT REQUESTABLE / NO PRODUCTION WRITE AUTHORIZED
 
-PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE is a separate explicit production action used only to prepare the minimum schedulable context required by the frozen WO-03 / PROD-11 real-device checklist.
+PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE is a separate explicit production action used only to prepare the bounded production Scheduling fixture required by the later PROD-11 production smoke.
 
-It is not PROD-11, grants no standing scheduling authority, and does not enable Kiosk authentication.
+It is **not** the WO-03 dataset or execution environment, cannot satisfy or replace WO-03 REAL_DEVICE_ACCEPTANCE / OFFLINE_REPLAY_RESULT evidence, is not PROD-11 itself, grants no standing scheduling authority, and does not enable Kiosk authentication.
 
 ## Why this action exists
 
@@ -17,9 +17,9 @@ Fresh production inspection showed:
 - requests_v2 = 0
 - non-empty requests_v2.brief_url = 0
 
-The real-device checklist requires concurrent start / 409 conflict, 202 reviewRequired, and offline start -> block -> resume -> complete replay. Those checks cannot be truthfully executed against an empty scheduling domain.
+The isolated WO-03 matrix owns concurrent start / 409 conflict, 202 reviewRequired, offline replay, grouped-session, accessibility and device-handoff evidence on isolated test identity/data. GF-15 does not prepare or mutate that environment.
 
-Preparing the acceptance schedule is therefore a separate production write with separate authority.
+The later bounded PROD-11 production smoke, after isolated WO-03 passes and production Kiosk activation becomes authorized, needs one exact production schedule item so the two-event START -> COMPLETE smoke can bind to a real production scheduling fact. Preparing that production-smoke schedule is therefore a separate production write with separate authority.
 
 ## Exact Action
 
@@ -55,13 +55,13 @@ Canonical command fixed fields:
 - operationId: PRODGF15-REQUEST-R1
 - productionType: 平面
 - sku: GF15-ACCEPT-PROD-01
-- name: PROD-11 Kiosk 真机验收
+- name: PROD-11 Kiosk Production Smoke
 - kind / shootingSubtype: 细节 / 细节
 - aspectRatio: 1:1
 - deliverables: flat / count 1
 - requestedBy: internal-acceptance
 - note: empty string
-- coreBriefSummary: PROD-11 Kiosk 真机验收
+- coreBriefSummary: PROD-11 Kiosk Production Smoke
 - sampleStatus: arrivedVerified
 - lightingPreset: GF15-ACCEPT-NEUTRAL
 - reflectivity: low
@@ -76,7 +76,7 @@ Fixed persisted values:
 
 - id: REQ-GF15-ACCEPT-PROD-01
 - sku: GF15-ACCEPT-PROD-01
-- name / legacy_deliver_text / core_brief_summary: PROD-11 Kiosk 真机验收
+- name / legacy_deliver_text / core_brief_summary: PROD-11 Kiosk Production Smoke
 - client / requested_by: internal-acceptance
 - kind: 细节
 - legacy_v1_status: null
@@ -149,6 +149,7 @@ bounded canonical requests_v2 materialization
 -> ActivateSchedulingConfigV1
 -> SetRequestRequirements
 -> deterministic proposal generation
+-> pre-arm exact Outbox isolation or bind atomic acceptance-time isolation
 -> canonical proposal accept decision
 -> derived schedule item and schedule_item_tasks
 
@@ -164,7 +165,7 @@ Current POST /api/v1/requests updates the V1 snapshot but does not create a cano
 
 2. KIOSK_ACCEPTANCE_OUTBOX_ISOLATION_CAPABILITY
 
-Canonical proposal acceptance creates a schedule.confirmed.v1 Notification Outbox intent. The acceptance-only intent must be permanently isolated from future real-provider delivery without deleting or rewriting unrelated outbox facts.
+Canonical proposal acceptance creates a schedule.confirmed.v1 Notification Outbox intent. Isolation must be pre-armed for the exact proposal/decision before acceptance, or installed atomically inside the same acceptance transaction. From the instant the enqueue commits, the exact production-smoke intent must already be excluded from dispatcher claiming. A post-commit pending/claimable interval is forbidden. The intent remains permanently isolated from real-provider delivery without deleting or rewriting unrelated outbox facts.
 
 3. KIOSK_ACCEPTANCE_SCHEDULING_QUIESCENCE_CAPABILITY
 
@@ -188,7 +189,7 @@ Rollback is containment, not deletion:
 - if GF-15 activated STUDIO-PROD-01, replace only that resource to inactive with the same capability digest;
 - if a prior active config existed, reactivate exactly that config;
 - if no prior config existed, retain the acceptance config but keep the acceptance resource inactive because the current domain has no delete-or-clear-active-config command;
-- contain the acceptance outbox intent using the preverified isolation capability;
+- contain the production-smoke outbox intent using the preverified isolation capability; isolation remains in force from enqueue commit and must never rely on post-commit catch-up;
 - before any rollback Scheduling resource/config mutation, continue the still-held forward GF15 quiescence lease or reacquire a bounded rollback lease tied to the exact GF15 source receipts;
 - while that lease is held, fail closed unless the stored draft set is empty or contains only the exact source-bound GF15 proposal and no unrelated draft;
 - only after that gate passes may rollback deactivate STUDIO-PROD-01 or reactivate the exact prior config; if lease acquisition or the draft gate fails, perform no Scheduling rollback mutation;
