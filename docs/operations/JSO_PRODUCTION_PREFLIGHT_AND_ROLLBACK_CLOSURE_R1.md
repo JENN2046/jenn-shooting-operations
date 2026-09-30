@@ -2,7 +2,9 @@
 
 **Verdict: BLOCKED FOR DEPLOYMENT.** This closes the bounded recovery design for
 review; it does not close production readiness or authorize any execution.
-The read-only inspection took place on 2026-09-30, 17:51–17:56 UTC. Receipts and
+The initial read-only inspection took place on 2026-09-30, 17:51–17:56 UTC.
+A user-authorized backup-directory permission follow-up occurred at 18:18–18:22 UTC;
+it resolved directory listing access but not JSO recovery readiness. Receipts and
 explicit limits are in
 [`production-readonly-preflight.r1.json`](../acceptance/production-readonly-preflight.r1.json).
 The current authority branch was freshly verified at
@@ -59,11 +61,50 @@ production data copy occurred.
 | --- | --- | --- |
 | `state-at-cutover-20260919215939.tar.gz` (20,851,070 bytes) | `bd2f18706ca5cca79199caf35cb8181ed1c69dcf2f85fabbab423f2490bcc308`; 56 headers, 52 regular files, 5 SQLite-named files | Zero JSO-named members, zero `shooting-operations.sqlite` names, zero uploads names and zero manifest/checksum-named files. No SHA256 sidecar. Header names do not prove semantic DB identity; not accepted as a JSO backup |
 | `vcptoolbox-release-2f8fd1ff.tar.gz` (289,752,909 bytes) | `3fd78ac05427242ff1aa26eebfd151306e578936081c4a62d0a6b8ba74e12be4`; matches existing `.sha256` sidecar | VCP release packaging evidence, no JSO DB-named members; not a JSO DB/attachment recovery proof |
-| `/mnt/datadisk0/backups/docker-volumes` | Listing denied `PermissionError` | Contents, freshness, consistency and restore evidence unknown; no privileged retry |
+| `/mnt/datadisk0/backups/docker-volumes` | Initial listing denied `PermissionError`; user-authorized ordinary retry later succeeded | Follow-up below found MySQL artifacts; no verified JSO recovery backup. No privileged retry |
+
+### Backup-directory permission follow-up (18:18–18:22 UTC)
+
+The user reported increased read permission for the same backup directory at
+18:17 UTC. The same ordinary `ubuntu` SSH directory read succeeded at 18:18:50 UTC
+on `VM-0-12-ubuntu`, without `sudo`, permission changes or an alternate access route.
+Exactly one child directory was listed: `photo_studio_vcp_mysql_data`. Its ordinary
+listing and bounded `daily`/`encrypted` metadata inventories also succeeded. This
+closes the **backup-directory listing access gap**; the earlier denial remains
+historical evidence. Live JSO DB/volume permission was not inferred or retried.
+
+Each of `daily` and `encrypted` contains 32 entries: 16 metadata files and 16
+SQL-gzip or encrypted SQL-gzip artifacts, dated by filename September 10–25.
+`latest.metadata.json` resolves within that directory to
+`daily/JENNDB-20260925-032952.metadata.json`; the encrypted metadata link resolves to
+`encrypted/JENNDB-20260925-032952.metadata.json`. The plain metadata explicitly binds
+`docker_volume=photo_studio_vcp_mysql_data`, not the JSO SQLite volume. The corresponding
+latest-named payloads are 1,296 bytes (`.sql.gz`) and 1,328 bytes (`.sql.gz.enc`).
+Only metadata-link targets were resolved; SQL/encrypted latest-link targets were
+not independently resolved or opened.
+
+Both metadata JSON files were read with stable descriptor/final-path identity;
+their SHA256 values are respectively
+`48da429fa33ed28ca7cfb19d20bc05f5f13deca65629602d26f788f7092cceeb` and
+`d4033fae913695dfc77178b214db22d60bcae2fb29941712ab5004dca8de7b68`.
+Only allowlisted volume/cipher/checksum values were emitted remotely; other values
+were redacted. The manifests record plain/source SHA256
+`e28e318394eafce4049ca06da74ef8ab91b2b1160de4e0eb5cda92fb3309c979` and encrypted SHA256
+`a0ba50b62ec4b4ef26e28a73db54cce1c1eea8d18f40f266297f0dd8288186ff`.
+These are **recorded checksum claims**, not recomputed payload-integrity evidence.
+The unrelated MySQL SQL/encrypted payloads were not opened, decompressed, decrypted,
+extracted or restored. No JSO archive was discovered for header inspection.
+
+Latest metadata mtimes are `2026-09-24T19:29:54Z` and `19:29:55Z` (filename date
+September 25). Permission-change ctime does not establish a new backup time. These
+historical MySQL artifacts do not prove current backup-job operation, JSO backup
+freshness, SQLite/WAL consistency, attachment parity or recoverability. No JSO-named
+backup or JSO recovery manifest was found in the enumerated scope; this does not
+claim absence elsewhere. **The JSO-consistent backup/recovery gate stays blocked.**
 
 There is **no verified eligible JSO recovery backup in the accessible evidence**.
-This does not assert that no backup exists elsewhere. No production recovery
-manifest or recovery drill could be verified. Historical WO06B recovery PASS and
+This does not assert that no backup exists elsewhere. No eligible JSO production recovery
+manifest or JSO recovery drill could be verified. Historical WO06B recovery PASS and
 PR39's isolated probes cover synthetic fixtures; they do not prove restorability
 of this live volume or these existing archives.
 
@@ -214,8 +255,8 @@ repair. This task does not implement that runtime or grant recovery authority.
 
 ## Remaining closure inputs
 
-Production DB identity/version/checksums and consistent fact baseline; protected
-backup evidence or an approved new consistent JSO backup/drill; exact fencing and
+Production DB identity/version/checksums and consistent fact baseline; eligible
+JSO backup evidence or an approved new consistent JSO backup/drill; exact fencing and
 cleanup lifecycle; bounded restore target/ownership/approval; maintenance owner,
 window, RTO/RPO; externally usable health verification; VCP/provider continuity;
 candidate transport; disposition of the two inherited Alpine timestamp test failures;

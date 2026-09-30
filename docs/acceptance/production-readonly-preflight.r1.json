@@ -443,7 +443,7 @@
   },
   "limitations": [
     "Live database family metadata/schema/checksums/integrity/control counts were not inspected: host path PermissionError; no alternate route attempted.",
-    "Protected docker-volumes backup directory was not listed: PermissionError.",
+    "Protected docker-volumes directory denial is historical; explicitly authorized ordinary retry later succeeded. Follow-up discovered MySQL artifacts, not a verified JSO backup.",
     "Accessible archives do not establish a JSO-consistent backup or recovery drill. Archive header naming classification is not a semantic DB inspection.",
     "Public health403 Cloudflare response is an external-path limitation, not proven application failure.",
     "Docker OCI label is a revision claim; production runtime-byte inventory was not compared.",
@@ -477,7 +477,12 @@
     "production-readonly-kiosk.py": "sha256:c2491a305233740a732cda219e2f6490e27d843e442c42c31c8b827dbe95a0ed",
     "production-readonly-kiosk.json": "sha256:d563626e0c84e488fbc0caab98a68b91533bf0183c2558f761f8b74aa4b9696f",
     "preflight-synthetic/restore-probe.mjs": "sha256:479edba5ba7665677618094099c35ef42ddabed41c15d1e61a98f21b92bf3506",
-    "preflight-synthetic/restore-evidence.json": "sha256:710a183c2d976a9a163e1f7990e1518f19213705584fcbfd49d3d694da654658"
+    "preflight-synthetic/restore-evidence.json": "sha256:710a183c2d976a9a163e1f7990e1518f19213705584fcbfd49d3d694da654658",
+    "production-backup-directory-retry.json": "sha256:3e1a6aa0fc355a0ca8c5ebe5255be5f5677d0f203311ad2e4acbb7c5d2536b51",
+    "production-backup-permission-followup.py": "sha256:f49d4563fa193a68f73464e5b5827e3bc80346ed467b3bf7bfab4dd777b1299a",
+    "production-backup-permission-followup.json": "sha256:6d512b1a78aa1f91de582ca0a9c265659d6219d1d54f48b5b8a03648bee7cba2",
+    "production-backup-manifest-followup.py": "sha256:918f0ea99d5df03b2e353cc5a2e550ab0bd38e1aa6abf8a948a4710d99f787b1",
+    "production-backup-manifest-followup.json": "sha256:84d89078cdd301d9f03d77d5fd3026dd69ef56b8dba3d228e343fb6a02bc948c"
   },
   "localValidation": {
     "completedAt": "2026-09-30T18:04:28.709230+00:00",
@@ -492,5 +497,257 @@
     "logSha256": "sha256:53aa7c92190a8fb80b379445aaf4a87767e00faadaf10b20af08e5d7195b583a",
     "fullSuiteRerun": false,
     "reason": "Documentation/evidence-only scope; candidate runtime unchanged; retained PR39 test limits apply"
+  },
+  "backupPermissionFollowup": {
+    "authorizationContext": "User explicitly reported increased read permission for /mnt/datadisk0/backups/docker-volumes at18:17UTC and requested same ordinary read retry; unrelated live DB/volume access not expanded.",
+    "rootListing": {
+      "observedAt": "2026-09-30T18:18:50.320164+00:00",
+      "hostname": "VM-0-12-ubuntu",
+      "path": "/mnt/datadisk0/backups/docker-volumes",
+      "scope": "SAME_ORDINARY_READ_RETRY_AFTER_USER_PERMISSION_CHANGE",
+      "entries": [
+        {
+          "name": "photo_studio_vcp_mysql_data",
+          "directory": true,
+          "symlink": false,
+          "size": 4096,
+          "dev": 64784,
+          "ino": 2359299,
+          "mtimeNs": 1790278195310629755,
+          "ctimeNs": 1790792138995494498,
+          "mode": "0o750"
+        }
+      ],
+      "status": "LIST_SUCCEEDED"
+    },
+    "childListing": {
+      "observedAt": "2026-09-30T18:20:15.907286+00:00",
+      "hostname": "VM-0-12-ubuntu",
+      "scope": "ORDINARY_READ_EXISTING_DISCOVERED_BACKUP_METADATA_ONLY",
+      "path": "/mnt/datadisk0/backups/docker-volumes/photo_studio_vcp_mysql_data",
+      "entries": [
+        {
+          "name": "README.restore.md",
+          "directory": false,
+          "symlink": false,
+          "size": 2032,
+          "dev": 64784,
+          "ino": 2359301,
+          "mtimeNs": 1782098178202002677,
+          "ctimeNs": 1790792138987494486,
+          "mode": "0o650"
+        },
+        {
+          "name": "daily",
+          "directory": true,
+          "symlink": false,
+          "size": 4096,
+          "dev": 64784,
+          "ino": 2359300,
+          "mtimeNs": 1790278194287628727,
+          "ctimeNs": 1790792138995494498,
+          "mode": "0o750"
+        },
+        {
+          "name": "encrypted",
+          "directory": true,
+          "symlink": false,
+          "size": 4096,
+          "dev": 64784,
+          "ino": 2359306,
+          "mtimeNs": 1790278195299629744,
+          "ctimeNs": 1790792138995494498,
+          "mode": "0o750"
+        },
+        {
+          "name": "latest.encrypted.metadata.json",
+          "directory": false,
+          "symlink": true,
+          "size": 46,
+          "dev": 64784,
+          "ino": 2359338,
+          "mtimeNs": 1790278195310629755,
+          "ctimeNs": 1790278195310629755,
+          "mode": "0o777"
+        },
+        {
+          "name": "latest.metadata.json",
+          "directory": false,
+          "symlink": true,
+          "size": 42,
+          "dev": 64784,
+          "ino": 2359335,
+          "mtimeNs": 1790278195307629753,
+          "ctimeNs": 1790278195307629753,
+          "mode": "0o777"
+        },
+        {
+          "name": "latest.sql.gz",
+          "directory": false,
+          "symlink": true,
+          "size": 35,
+          "dev": 64784,
+          "ino": 2359331,
+          "mtimeNs": 1790278195305629750,
+          "ctimeNs": 1790278195305629750,
+          "mode": "0o777"
+        },
+        {
+          "name": "latest.sql.gz.enc",
+          "directory": false,
+          "symlink": true,
+          "size": 43,
+          "dev": 64784,
+          "ino": 2359337,
+          "mtimeNs": 1790278195308629753,
+          "ctimeNs": 1790278195308629753,
+          "mode": "0o777"
+        }
+      ],
+      "payloadRead": false,
+      "archiveExtracted": false,
+      "status": "LIST_SUCCEEDED"
+    },
+    "manifestInspectionAt": "2026-09-30T18:22:01.062985+00:00",
+    "inventories": {
+      "daily": {
+        "status": "LIST_SUCCEEDED",
+        "entryCount": 32,
+        "metadataFileCount": 16,
+        "payloadFileCount": 16,
+        "firstFilename": "JENNDB-20260910-033330.metadata.json",
+        "lastFilename": "JENNDB-20260925-032952.sql.gz",
+        "latestMtimeUtc": "2026-09-24T19:29:54.289629+00:00",
+        "latestPayloadMetadata": [
+          {
+            "name": "JENNDB-20260925-032952.metadata.json",
+            "regularFile": true,
+            "directory": false,
+            "symlink": false,
+            "dev": 64784,
+            "ino": 2359328,
+            "size": 528,
+            "mtimeNs": 1790278194289628729,
+            "ctimeNs": 1790792138987494486
+          },
+          {
+            "name": "JENNDB-20260925-032952.sql.gz",
+            "regularFile": true,
+            "directory": false,
+            "symlink": false,
+            "dev": 64784,
+            "ino": 2359327,
+            "size": 1296,
+            "mtimeNs": 1790278194231628670,
+            "ctimeNs": 1790792138987494486
+          }
+        ]
+      },
+      "encrypted": {
+        "status": "LIST_SUCCEEDED",
+        "entryCount": 32,
+        "metadataFileCount": 16,
+        "payloadFileCount": 16,
+        "firstFilename": "JENNDB-20260910-033330.metadata.json",
+        "lastFilename": "JENNDB-20260925-032952.sql.gz.enc",
+        "latestMtimeUtc": "2026-09-24T19:29:55.301630+00:00",
+        "latestPayloadMetadata": [
+          {
+            "name": "JENNDB-20260925-032952.metadata.json",
+            "regularFile": true,
+            "directory": false,
+            "symlink": false,
+            "dev": 64784,
+            "ino": 2359330,
+            "size": 682,
+            "mtimeNs": 1790278195301629746,
+            "ctimeNs": 1790792138988494488
+          },
+          {
+            "name": "JENNDB-20260925-032952.sql.gz.enc",
+            "regularFile": true,
+            "directory": false,
+            "symlink": false,
+            "dev": 64784,
+            "ino": 2359329,
+            "size": 1328,
+            "mtimeNs": 1790278194797629240,
+            "ctimeNs": 1790792138988494488
+          }
+        ]
+      }
+    },
+    "allowlistedMetadata": [
+      {
+        "linkName": "latest.metadata.json",
+        "resolvedRelativePath": "daily/JENNDB-20260925-032952.metadata.json",
+        "identity": {
+          "dev": 64784,
+          "ino": 2359328,
+          "size": 528,
+          "mtimeNs": 1790278194289628729,
+          "ctimeNs": 1790792138987494486
+        },
+        "stableRead": true,
+        "metadataSha256": "48da429fa33ed28ca7cfb19d20bc05f5f13deca65629602d26f788f7092cceeb",
+        "allowlistedFields": [
+          {
+            "field": "docker_volume",
+            "value": "photo_studio_vcp_mysql_data"
+          },
+          {
+            "field": "sha256",
+            "value": "e28e318394eafce4049ca06da74ef8ab91b2b1160de4e0eb5cda92fb3309c979"
+          }
+        ],
+        "otherValuesRedacted": true
+      },
+      {
+        "linkName": "latest.encrypted.metadata.json",
+        "resolvedRelativePath": "encrypted/JENNDB-20260925-032952.metadata.json",
+        "identity": {
+          "dev": 64784,
+          "ino": 2359330,
+          "size": 682,
+          "mtimeNs": 1790278195301629746,
+          "ctimeNs": 1790792138988494488
+        },
+        "stableRead": true,
+        "metadataSha256": "d4033fae913695dfc77178b214db22d60bcae2fb29941712ab5004dca8de7b68",
+        "allowlistedFields": [
+          {
+            "field": "encryption.cipher",
+            "value": "aes-256-cbc"
+          },
+          {
+            "field": "source_sha256",
+            "value": "e28e318394eafce4049ca06da74ef8ab91b2b1160de4e0eb5cda92fb3309c979"
+          },
+          {
+            "field": "encrypted_sha256",
+            "value": "a0ba50b62ec4b4ef26e28a73db54cce1c1eea8d18f40f266297f0dd8288186ff"
+          }
+        ],
+        "otherValuesRedacted": true
+      }
+    ],
+    "closedEvidenceGap": "Ordinary directory/metadata listing of the previously denied backup root and its discovered child succeeded.",
+    "jsoBackupReadinessClosed": false,
+    "productionRecoveryProven": false,
+    "sqlPayloadOpened": false,
+    "encryptedPayloadOpened": false,
+    "sqlPayloadChecksumRecomputed": false,
+    "gzipPayloadIntegrityChecked": false,
+    "archiveExtracted": false,
+    "restoreAttempted": false,
+    "liveDatabaseAccessRetried": false,
+    "classification": "Discovered metadata explicitly identifies unrelated photo_studio_vcp_mysql_data. No JSO-named backup or JSO recovery manifest found in enumerated scope.",
+    "freshnessLimit": "Latest discovered MySQL artifact names are Sep25; latest metadata file mtimes are Sep24 19:29UTC. This does not establish JSO backup freshness or current backup-job operation. Permission-change ctime is not backup creation time.",
+    "checksumLimit": "Metadata JSON descriptor/path stability and SHA256 verified. Recorded SQL/encrypted SHA256 fields are manifest claims only; payloads were not opened or compared. Metadata link resolution was checked; SQL/encrypted latest-link targets were not independently resolved.",
+    "remainingGaps": [
+      "Existing live DB/volume identity/schema/consistency denial unchanged; no retry",
+      "Verified JSO-consistent DB/attachment/control backup and separately approved recovery drill",
+      "Fencing/maintenance/recovery approval and all other unchanged readiness gates"
+    ]
   }
 }
