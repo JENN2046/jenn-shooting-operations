@@ -1013,7 +1013,7 @@ test('GF15 freezes the complete canonical request command and all requests_v2 pe
   assert.equal(contract.requestOperationId, 'PRODGF15-REQUEST-R1');
   assert.equal(contract.commandContract.submissionSchemaVersion, 2);
   assert.equal(contract.commandContract.fixedFields.operationId, 'PRODGF15-REQUEST-R1');
-  assert.equal(contract.commandContract.fixedFields.coreBriefSummary, 'PROD-11 Kiosk 真机验收');
+  assert.equal(contract.commandContract.fixedFields.coreBriefSummary, 'PROD-11 Kiosk Production Smoke');
   assert.deepEqual(contract.commandContract.fixedFields.uploadIds, []);
   assert.deepEqual(contract.commandContract.omittedOptionalFields, ['briefUrl', 'heroAssetId', 'sampleShelfId']);
   assert.equal(contract.commandContract.dynamicFields.desiredDate, 'AUTHORIZATION_BOUND_FUTURE_ASIA_SHANGHAI_DATE');
@@ -1062,13 +1062,13 @@ test('GF15 freezes the complete canonical request command and all requests_v2 pe
     [...new Set([...Object.keys(contract.fixedPersistedFields), ...Object.keys(contract.derivedPersistedFields)])].sort(),
     [...contract.completePersistedColumns].sort(),
   );
-  assert.equal(contract.fixedPersistedFields.legacy_deliver_text, 'PROD-11 Kiosk 真机验收');
+  assert.equal(contract.fixedPersistedFields.legacy_deliver_text, 'PROD-11 Kiosk Production Smoke');
   assert.equal(contract.fixedPersistedFields.v1_status_mode, 'canonical');
   assert.equal(contract.fixedPersistedFields.v1_assets_present, 0);
   assert.equal(contract.fixedPersistedFields.v1_request_present, 1);
   assert.equal(contract.fixedPersistedFields.requested_by, 'internal-acceptance');
   assert.equal(contract.fixedPersistedFields.note, '');
-  assert.equal(contract.fixedPersistedFields.core_brief_summary, 'PROD-11 Kiosk 真机验收');
+  assert.equal(contract.fixedPersistedFields.core_brief_summary, 'PROD-11 Kiosk Production Smoke');
   assert.equal(contract.fixedPersistedFields.hero_asset_id, null);
   assert.equal(contract.fixedPersistedFields.sample_shelf_id, null);
   assert.equal(
@@ -1126,6 +1126,22 @@ test('GF15 freezes one bounded irreversible Kiosk acceptance scheduling preparat
     action.effects.some(effect => /decision selects exactly that item/u.test(effect)),
     true,
   );
+  assert.match(action.title, /production-smoke/u);
+  assert.match(action.authorityTarget, /production-smoke-only/u);
+  assert.equal(
+    action.effects.some(effect => /before submitting the decision, pre-arm Outbox isolation/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    action.effects.some(effect => /no post-commit claimable window/u.test(effect)),
+    true,
+  );
+  for (const proof of [
+    'GF15_OUTBOX_ISOLATION_PREARM_OR_ATOMIC_BINDING_PROOF',
+    'GF15_OUTBOX_NEVER_CLAIMABLE_PROOF',
+  ]) {
+    assert.equal(action.evidenceRequired.includes(proof), true, proof);
+  }
   assert.equal(
     action.effects.some(effect => /zero stored draft scheduling proposals/u.test(effect)),
     true,
