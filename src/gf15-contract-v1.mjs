@@ -36,11 +36,34 @@ export function gf15LocalDate(instant) {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
-export function assertGf15FutureDate(date, now) {
+function gf15TrustedNow(now) {
+  if (typeof now !== 'function') gf15Fail('GF15_TRUSTED_TIME_INVALID');
+  const instant = now();
+  if (!(instant instanceof Date) || !Number.isFinite(instant.getTime())) gf15Fail('GF15_TRUSTED_TIME_INVALID');
+  return instant;
+}
+
+function assertGf15FutureDateAt(date, instant) {
   if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(date)
     || !Number.isFinite(Date.parse(`${date}T00:00:00+08:00`))
     || gf15LocalDate(new Date(`${date}T00:00:00+08:00`)) !== date
-    || date <= gf15LocalDate(now())) gf15Fail('GF15_DATE_NOT_FUTURE');
+    || date <= gf15LocalDate(instant)) gf15Fail('GF15_DATE_NOT_FUTURE');
+}
+
+export function assertGf15FutureDate(date, now) {
+  assertGf15FutureDateAt(date, gf15TrustedNow(now));
+}
+
+export function assertGf15FreshWindowV1(binding, now) {
+  assertGf15Binding(binding);
+  const instant = gf15TrustedNow(now);
+  assertGf15FutureDateAt(binding.desiredDate, instant);
+  const start = Date.parse(binding.planningWindowStart);
+  const end = Date.parse(binding.planningWindowEnd);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start <= instant.getTime() || end <= start) {
+    gf15Fail('GF15_WINDOW_NOT_FUTURE');
+  }
+  return instant;
 }
 
 /** Pure packet compiler; creates no authorization, execution route or persistent facts. */

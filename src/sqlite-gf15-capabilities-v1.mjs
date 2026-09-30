@@ -1,5 +1,6 @@
 import { GF15_IDS as ids, GF15_RESOURCE as resource, GF15_CONFIG, GF15_ROLLBACK,
-  assertGf15Binding, assertGf15FutureDate, assertGf15OneItem, gf15Equal, preflightGf15V1 } from './gf15-contract-v1.mjs';
+  assertGf15Binding, assertGf15FreshWindowV1, assertGf15FutureDate, assertGf15OneItem,
+  gf15Equal, preflightGf15V1 } from './gf15-contract-v1.mjs';
 import { validateV2Submission } from './contract-validator.mjs';
 import { authorizeCapability } from './authorization-v2.mjs';
 import { normalizeRegisterSchedulingResourceV1, normalizeReplaceSchedulingResourceV1,
@@ -228,9 +229,15 @@ export function createSqliteGf15CapabilitiesV1({ db, now, refreshProjections, al
         return state.base;
       });
       const binding = base.binding;
-      const requestPacket = packet(ids.requestOperation, lease, principal, () => ({ command: binding.requestCommand,
-        commandDigest: binding.requestDigest, desiredDate: binding.desiredDate,
-        expectedProjectionRevision: counters(db).expectedProjectionRevision }));
+      const requestPacket = immediateGf15(db, () => {
+        gate(lease, principal);
+        const materialized = db.prepare('SELECT 1 FROM operations WHERE operation_id = ?').get(ids.requestOperation);
+        const observedAt = materialized ? null : assertGf15FreshWindowV1(binding, now);
+        return readGf15Packet(db, ids.requestOperation) ?? bindGf15PacketInTransaction(db, ids.requestOperation, {
+          command: binding.requestCommand, commandDigest: binding.requestDigest, desiredDate: binding.desiredDate,
+          expectedProjectionRevision: counters(db).expectedProjectionRevision,
+        }, (observedAt ?? now()).toISOString());
+      });
       const requestResult = createSqliteGf15RequestStoreV1({ db, now, refreshProjections, schedulingLease: lease })
         .materialize(requestPacket, principal);
       checkpoint('after-request');

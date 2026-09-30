@@ -1,7 +1,7 @@
 import { validateV2Submission } from './contract-validator.mjs';
 import { authorizeCapability } from './authorization-v2.mjs';
 import { digestCanonicalJsonSchedulingV1, canonicalJsonSchedulingV1 } from './scheduling-contract-v1.mjs';
-import { GF15_REQUEST, GF15_IDS, gf15Equal, assertGf15FutureDate } from './gf15-contract-v1.mjs';
+import { GF15_REQUEST, GF15_IDS, gf15Equal, assertGf15FreshWindowV1 } from './gf15-contract-v1.mjs';
 import { assertSchedulingQuiescenceV1, gf15Fail, immediateGf15, readGf15Packet } from './sqlite-scheduling-quiescence-v1.mjs';
 
 /** Bounded domain command. The only request INSERT is here, under the canonical transaction,
@@ -30,7 +30,7 @@ export function createSqliteGf15RequestStoreV1({ db, now, refreshProjections, sc
         }
         if (db.prepare('SELECT 1 FROM requests_v2 WHERE id = ?').get(GF15_IDS.request)) gf15Fail('GF15_REQUEST_EXISTS');
         if (db.prepare("SELECT 1 FROM scheduling_proposals WHERE status = 'draft' LIMIT 1").get()) gf15Fail('GF15_DRAFT_GATE_FAILED');
-        assertGf15FutureDate(desiredDate, now);
+        assertGf15FreshWindowV1(baseline.binding, now);
         const current = db.prepare('SELECT * FROM revision_counters WHERE id = 1').get();
         if (!current || current.projection_revision !== expectedProjectionRevision) gf15Fail('SCHEDULING_REVISION_CONFLICT');
         const sourceOrdinal = (db.prepare('SELECT max(source_ordinal) AS value FROM requests_v2').get().value ?? -1) + 1;

@@ -136,6 +136,26 @@ test('future date follows Asia/Shanghai and preflight rejects short/cross-day wi
   } finally { f.db.close(); }
 });
 
+test('forward creates no GF15 domain facts when the bound future window becomes stale after begin', () => {
+  const f = gf15Fixture();
+  try {
+    f.quiescence.release(f.lease);
+    f.setTime('2026-09-30T15:59:30.000Z'); // Asia/Shanghai 23:59:30.
+    const lease = f.quiescence.acquire({ leaseId: 'freshness-forward', owner: f.principal.subjectId });
+    f.service.begin(f.binding, lease, f.principal);
+    const before = facts(f.db);
+    const revisions = { ...f.db.prepare('SELECT * FROM revision_counters WHERE id = 1').get() };
+    assert.equal(readGf15Packet(f.db, ids.requestOperation), null);
+
+    f.setTime('2026-09-30T16:00:00.000Z'); // Asia/Shanghai desired date is no longer future.
+    assert.throws(() => f.service.forward(lease, f.principal), /GF15_DATE_NOT_FUTURE|GF15_WINDOW_NOT_FUTURE/);
+
+    assert.equal(readGf15Packet(f.db, ids.requestOperation), null);
+    assert.deepEqual(facts(f.db), before);
+    assert.deepEqual({ ...f.db.prepare('SELECT * FROM revision_counters WHERE id = 1').get() }, revisions);
+  } finally { f.db.close(); }
+});
+
 for (const prior of [false, true]) {
   for (const stop of ['before-forward', 'after-request', 'after-resource', 'before-config', 'after-config', 'after-proposal', 'after-decision']) {
     test(`rollback after ${stop}, prior=${prior}, preserves facts and retries exact commands`, () => {
