@@ -603,93 +603,6 @@ const EXPECTED_KIOSK_ACCEPTANCE_PREPARATION = Object.freeze({
   ]),
 });
 
-const EXPECTED_KIOSK_ACCEPTANCE_PREPARATION_ROLLBACK_COMMAND_CONTRACT =
-  Object.freeze({
-  "schemaVersion": 1,
-  "resourceContainment": {
-    "operationId": "PRODGF15-ROLLBACK-RESOURCE-R1",
-    "commandType": "ReplaceSchedulingResourceV1",
-    "executeOnlyWhen": "RESOURCE_FORWARD_APPLIED",
-    "expectedRevisionsSource": "GF15_ROLLBACK_STATE_SNAPSHOT_CAPTURED_UNDER_QUIESCENCE_BEFORE_FIRST_RESOURCE_ROLLBACK_ATTEMPT",
-    "resource": {
-      "resourceId": "STUDIO-PROD-01",
-      "v1DisplayPlace": "Studio PROD 01 Kiosk Acceptance",
-      "status": "inactive",
-      "capabilityJson": {
-        "schemaVersion": 1,
-        "capabilityIds": [
-          "FLAT"
-        ]
-      },
-      "capabilityDigest": "sha256:d32c7c24657ca59e09348cb394471525bdefee9777b51d498eb3b2ba16782068"
-    },
-    "firstAttemptBinding": "PERSIST_EXACT_COMMAND_JSON_AND_COMMAND_DIGEST_BEFORE_OR_WITH_FIRST_ATTEMPT",
-    "replayPolicy": "IF_OPERATION_EXISTS_REUSE_EXACT_PERSISTED_COMMAND_JSON_AND_DIGEST_NEVER_REBIND_REVISIONS"
-  },
-  "priorConfigReactivation": {
-    "operationId": "PRODGF15-ROLLBACK-CONFIG-ACTIVATE-R1",
-    "commandType": "ActivateSchedulingConfigV1",
-    "executeOnlyWhen": "CONFIG_FORWARD_APPLIED_AND_PRE_GF15_ACTIVE_CONFIG_EXISTS",
-    "configVersionSource": "GF15_PREWRITE_SCHEDULING_BASELINE.EXACT_PRIOR_ACTIVE_CONFIG_VERSION",
-    "expectedProjectionRevisionSource": "POST_RESOURCE_CONTAINMENT_PROJECTION_REVISION_CAPTURED_UNDER_SAME_QUIESCENCE_BEFORE_FIRST_CONFIG_ROLLBACK_ATTEMPT",
-    "firstAttemptBinding": "PERSIST_EXACT_COMMAND_JSON_AND_COMMAND_DIGEST_BEFORE_OR_WITH_FIRST_ATTEMPT",
-    "replayPolicy": "IF_OPERATION_EXISTS_REUSE_EXACT_PERSISTED_COMMAND_JSON_AND_DIGEST_NEVER_REBIND_REVISIONS"
-  },
-  "noPriorConfigRule": "IF_NO_PRE_GF15_ACTIVE_CONFIG_EXISTS_NEVER_INVENT_A_CONFIG_REACTIVATION_COMMAND"
-});
-
-const EXPECTED_KIOSK_ACCEPTANCE_PREPARATION_ROLLBACK_STATE_MACHINE =
-  Object.freeze({
-  "schemaVersion": 1,
-  "resourceStates": {
-    "RESOURCE_FORWARD_NOT_REACHED": {
-      "match": "STUDIO-PROD-01_ABSENT_AND_PRODGF15_RESOURCE_R1_HAS_NO_SUCCESS_RECEIPT",
-      "next": "NO_RESOURCE_MUTATION"
-    },
-    "RESOURCE_FORWARD_APPLIED": {
-      "match": "STUDIO-PROD-01_ACTIVE_WITH_EXACT_GF15_CAPABILITY_DIGEST_AND_SOURCE_OPERATION_PRODGF15_RESOURCE_R1_PLUS_SUCCESS_RECEIPT",
-      "next": "RUN_EXACT_RESOURCE_CONTAINMENT_COMMAND"
-    },
-    "RESOURCE_ROLLBACK_APPLIED": {
-      "match": "STUDIO-PROD-01_INACTIVE_WITH_EXACT_GF15_CAPABILITY_DIGEST_AND_SOURCE_OPERATION_PRODGF15_ROLLBACK_RESOURCE_R1_PLUS_EXACT_ROLLBACK_OPERATION_RECEIPT",
-      "next": "RESOURCE_STEP_EXACT_REPLAY_NO_NEW_MUTATION"
-    }
-  },
-  "configStates": {
-    "CONFIG_FORWARD_NOT_REACHED_PRIOR_PRESENT": {
-      "match": "CURRENT_ACTIVE_CONFIG_EQUALS_EXACT_PRE_GF15_CONFIG_VERSION_AND_ACTIVATION_OPERATION_FROM_BASELINE_AND_PRODGF15_CONFIG_ACTIVATE_R1_HAS_NO_SUCCESS_RECEIPT",
-      "next": "NO_CONFIG_MUTATION"
-    },
-    "CONFIG_FORWARD_NOT_REACHED_NO_PRIOR": {
-      "match": "NO_ACTIVE_CONFIG_AND_PRE_GF15_BASELINE_HAD_NO_ACTIVE_CONFIG_AND_PRODGF15_CONFIG_ACTIVATE_R1_HAS_NO_SUCCESS_RECEIPT",
-      "next": "NO_CONFIG_MUTATION"
-    },
-    "CONFIG_FORWARD_APPLIED": {
-      "match": "CURRENT_ACTIVE_CONFIG_IS_GF15_ACCEPT_CONFIG_R1_WITH_ACTIVATION_OPERATION_PRODGF15_CONFIG_ACTIVATE_R1_PLUS_SUCCESS_RECEIPT",
-      "next": "REACTIVATE_EXACT_PRIOR_CONFIG_IF_PRIOR_EXISTS_OTHERWISE_RETAIN_GF15_CONFIG_WITH_CONTAINED_INACTIVE_RESOURCE"
-    },
-    "CONFIG_ROLLBACK_APPLIED_PRIOR_PRESENT": {
-      "match": "CURRENT_ACTIVE_CONFIG_EQUALS_EXACT_PRE_GF15_CONFIG_VERSION_WITH_ACTIVATION_OPERATION_PRODGF15_ROLLBACK_CONFIG_ACTIVATE_R1_PLUS_EXACT_ROLLBACK_OPERATION_RECEIPT",
-      "next": "CONFIG_STEP_EXACT_REPLAY_NO_NEW_MUTATION"
-    },
-    "CONFIG_CONTAINED_NO_PRIOR": {
-      "match": "PRE_GF15_BASELINE_HAD_NO_ACTIVE_CONFIG_AND_CURRENT_ACTIVE_CONFIG_IS_GF15_ACCEPT_CONFIG_R1_WITH_FORWARD_ACTIVATION_OPERATION_AND_RESOURCE_STATE_IS_RESOURCE_ROLLBACK_APPLIED",
-      "next": "NO_CONFIG_MUTATION"
-    }
-  },
-  "validStatePairs": [
-    "RESOURCE_FORWARD_NOT_REACHED + CONFIG_FORWARD_NOT_REACHED_PRIOR_PRESENT",
-    "RESOURCE_FORWARD_NOT_REACHED + CONFIG_FORWARD_NOT_REACHED_NO_PRIOR",
-    "RESOURCE_FORWARD_APPLIED + CONFIG_FORWARD_NOT_REACHED_PRIOR_PRESENT",
-    "RESOURCE_FORWARD_APPLIED + CONFIG_FORWARD_NOT_REACHED_NO_PRIOR",
-    "RESOURCE_FORWARD_APPLIED + CONFIG_FORWARD_APPLIED",
-    "RESOURCE_ROLLBACK_APPLIED + CONFIG_FORWARD_APPLIED",
-    "RESOURCE_ROLLBACK_APPLIED + CONFIG_ROLLBACK_APPLIED_PRIOR_PRESENT",
-    "RESOURCE_ROLLBACK_APPLIED + CONFIG_CONTAINED_NO_PRIOR"
-  ],
-  "rejectionRule": "ANY_UNENUMERATED_STATE_OR_PAIR_OR_RECEIPT_MISMATCH_FAILS_CLOSED_WITH_NO_SCHEDULING_ROLLBACK_MUTATION"
-});
-
 const EXPECTED_KIOSK_ACCEPTANCE_PREPARATION_ROLLBACK = Object.freeze({
   "id": "ROLLBACK-GF-13-CONTAIN-DEVICE-ACCEPTANCE-SCHEDULE",
   "title": "Contain the PROD-GF-15 Kiosk production-smoke scheduling fixture",
@@ -703,7 +616,7 @@ const EXPECTED_KIOSK_ACCEPTANCE_PREPARATION_ROLLBACK = Object.freeze({
   ],
   "effects": [
     "Immediately block progression to PROD-11 and keep Kiosk authentication/configuration disabled while binding containment to the exact PROD-GF-15 forward receipts, pre-GF15 Scheduling baseline, any durable rollback operation receipts and current scheduling revisions",
-    "Before any rollback Scheduling resource/config mutation, continue the still-held forward GF15 Scheduling quiescence lease or reacquire a bounded rollback lease; while that lease is held fail closed unless the draft-proposal gate passes, then classify the current resource/config pair through rollbackStateMachine using exact forward/rollback operation receipts and the pre-GF15 baseline; any unenumerated state, invalid state pair, later unrelated owner/value change or receipt mismatch performs no Scheduling rollback mutation",
+    "Before any rollback Scheduling resource/config mutation, continue the still-held forward GF15 Scheduling quiescence lease or reacquire a bounded rollback lease; while that lease is held fail closed unless the stored draft-proposal set is empty or contains only the exact source-bound GF15 proposal and contains no unrelated draft; then revalidate ownership of the mutable GF15 post-state in a state-aware way by classifying the current resource/config pair through rollbackStateMachine using exact forward/rollback operation receipts and the pre-GF15 baseline, including the enumerated partial-forward and partial-rollback states; if either mutable value/source operation is changed by any later Scheduling action, perform no rollback mutation; any unenumerated state, invalid state pair or receipt mismatch also fails closed with no Scheduling rollback mutation",
     "For RESOURCE_FORWARD_APPLIED only, execute rollbackCommandContract.resourceContainment with fixed operationId PRODGF15-ROLLBACK-RESOURCE-R1 and persist its exact first-attempt command JSON/digest; on retry, if that operation already exists, reuse the persisted command/digest unchanged rather than rebinding revisions; RESOURCE_FORWARD_NOT_REACHED is a no-op and RESOURCE_ROLLBACK_APPLIED is exact replay/no-new-mutation",
     "For CONFIG_FORWARD_APPLIED only, if the pre-GF15 baseline had an active config, execute rollbackCommandContract.priorConfigReactivation with fixed operationId PRODGF15-ROLLBACK-CONFIG-ACTIVATE-R1 against that exact prior config and persist the exact first-attempt command JSON/digest after the resource step; retries reuse that exact command/digest unchanged; if forward config activation never happened, leave the exact prior/absent config untouched; if there was no prior config, retain GF15-ACCEPT-CONFIG-R1 with the resource contained inactive because the domain has no delete-or-clear-active-config command",
     "Contain the production-smoke schedule-confirmed Outbox intent through the preverified isolation capability and preserve the acceptance request, resource/config history, proposal, decision, schedule item, outbox and audit facts rather than deleting or rewriting immutable production history",
