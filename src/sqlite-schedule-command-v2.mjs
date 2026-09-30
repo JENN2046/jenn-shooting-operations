@@ -1,3 +1,5 @@
+import { isolateGf15OutboxInTransactionV1 } from './sqlite-gf15-outbox-isolation-v1.mjs';
+import { assertSchedulingQuiescenceV1 } from './sqlite-scheduling-quiescence-v1.mjs';
 import { buildScheduleConfirmedCardV1 } from './dingtalk-card-builders-v1.mjs';
 import { buildNotificationIntentV1 } from './outbox-contract-v1.mjs';
 import { createSqliteOutboxRepositoryV1 } from './sqlite-outbox-repository-v1.mjs';
@@ -15,8 +17,9 @@ function fail(code) {
 /** Canonical V2 schedule mutation kernel. The caller owns one BEGIN IMMEDIATE transaction. */
 export function applyCanonicalScheduleAcceptanceInTransactionV2({ db, proposal, selectedItems,
   decisionId, currentScheduleRevision, currentProjectionRevision, at, refreshProjections,
-  routeKey = SCHEDULE_CONFIRMED_ROUTE_KEY_V1 } = {}) {
+  routeKey = SCHEDULE_CONFIRMED_ROUTE_KEY_V1, schedulingLease = null } = {}) {
   if (!db?.isTransaction || typeof refreshProjections !== 'function') fail('SCHEDULE_TRANSACTION_REQUIRED');
+  assertSchedulingQuiescenceV1({ db, lease: schedulingLease, now: () => new Date(at) });
   if (!Array.isArray(selectedItems) || selectedItems.length === 0) fail('SCHEDULE_SELECTION_EMPTY');
   if (currentScheduleRevision >= MAX_SAFE || currentProjectionRevision >= MAX_SAFE) {
     fail('SCHEDULE_REVISION_EXHAUSTED');
@@ -99,6 +102,7 @@ export function applyCanonicalScheduleAcceptanceInTransactionV2({ db, proposal, 
       aggregateRevision: nextScheduleRevision, cardSchemaVersion: card.cardSchemaVersion,
       payload: card.card, createdAt: at });
     if (!intent.ok) fail(intent.code);
+    isolateGf15OutboxInTransactionV1({ db, proposal, selectedItems, decisionId, intent: intent.intent, schedulingLease, at });
     const queued = outbox.enqueue(intent.intent);
     if (!queued.ok || queued.code !== 'OUTBOX_ENQUEUED') fail(queued.code);
   }

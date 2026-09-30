@@ -1,3 +1,4 @@
+import { assertSchedulingQuiescenceV1 } from './sqlite-scheduling-quiescence-v1.mjs';
 import {
   MigrationError,
   canonicalJson,
@@ -345,6 +346,7 @@ export function materializeMigrationPlan({
     runFaultInjector(faultInjector, 'after_begin');
     const schema = assertKnownSchema(db);
     if (schema.version !== schema.latestVersion) fail('TARGET_SCHEMA_UNSUPPORTED');
+    assertSchedulingQuiescenceV1({ db });
     assertEmptyNormalizedTarget(db);
     assertV1Facts(db, plan);
     runFaultInjector(faultInjector, 'after_preflight');

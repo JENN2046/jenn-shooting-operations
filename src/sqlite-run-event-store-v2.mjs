@@ -1,3 +1,4 @@
+import { assertSchedulingQuiescenceV1 } from './sqlite-scheduling-quiescence-v1.mjs';
 import {
   projectV1CompatibilitySnapshot,
   projectV2Snapshot,
@@ -311,6 +312,7 @@ export function createSqliteRunEventStore({
     withImmediateTransaction(action) {
       db.exec('BEGIN IMMEDIATE');
       try {
+        assertSchedulingQuiescenceV1({ db });
         const result = action(transaction);
         db.exec('COMMIT');
         return result;

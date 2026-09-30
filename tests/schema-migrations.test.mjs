@@ -131,7 +131,7 @@ test('fresh schema applies the continuous migration prefix and known tables', ()
   try {
     const result = initializeWritableSchema(db, { now: () => new Date('2026-09-22T08:00:00.000Z') });
     assert.deepEqual(result, { version: LATEST_SCHEMA_VERSION, latestVersion: LATEST_SCHEMA_VERSION });
-    assert.equal(LATEST_SCHEMA_VERSION, 6);
+    assert.equal(LATEST_SCHEMA_VERSION, 7);
     assert.deepEqual(
       db.prepare('SELECT version, name, checksum FROM schema_migrations ORDER BY version').all().map(row => ({ ...row })),
       MIGRATIONS.map(({ version, name, checksum }) => ({ version, name, checksum })),
@@ -261,7 +261,7 @@ test('migration v6 upgrades v5 with immutable run-context snapshot storage', () 
       FROM schema_migrations ORDER BY version`).all().map(row => ({ ...row }));
     assert.equal(tableNames(db).includes('scheduling_run_context_snapshots'), false);
 
-    assert.deepEqual(initializeWritableSchema(db), { version: 6, latestVersion: 6 });
+    assert.deepEqual(initializeWritableSchema(db, { migrations: MIGRATIONS.slice(0, 6) }), { version: 6, latestVersion: 6 });
     const after = db.prepare(`SELECT version, name, checksum, applied_at
       FROM schema_migrations ORDER BY version`).all().map(row => ({ ...row }));
     assert.deepEqual(after.slice(0, 5), before);

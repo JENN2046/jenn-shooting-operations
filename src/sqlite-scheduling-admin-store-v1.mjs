@@ -1,3 +1,4 @@
+import { assertSchedulingQuiescenceV1, assertGf15CommandPacketV1 } from './sqlite-scheduling-quiescence-v1.mjs';
 import {
   canonicalJsonSchedulingV1, digestCanonicalJsonSchedulingV1,
   isSchedulingIdentifierV1,
@@ -22,7 +23,7 @@ function codePointCompare(left, right) {
   return a.length - b.length;
 }
 
-function admitRequestRequirements(input) {
+export function normalizeSchedulingRequestRequirementsV1(input) {
   try {
     if (!input || Object.getPrototypeOf(input) !== Object.prototype
       || Reflect.ownKeys(input).length !== 6
@@ -119,12 +120,13 @@ function advanceRevisions(db, current, { schedule, projection, at }) {
 }
 
 /** Internal-only canonical admin commands. Projection refresh is an injected same-transaction port. */
-export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections } = {}) {
+export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections, schedulingLease = null } = {}) {
   if (!db || typeof db.exec !== 'function' || typeof db.prepare !== 'function'
     || typeof now !== 'function') throw new TypeError('SQLite db and injected clock required');
 
   function trusted(actor) {
-    return isSchedulingIdentifierV1(actor) && actor !== 'system:scheduling-invalidation-v1';
+    return isSchedulingIdentifierV1(actor) && actor !== 'system:scheduling-invalidation-v1'
+      && (!schedulingLease || actor === schedulingLease.owner);
   }
 
   function refresh(next, at) {
@@ -141,6 +143,8 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
     if (typeof refreshProjections !== 'function') return denied('SCHEDULING_PROJECTION_NOT_CONFIGURED');
     const { command, commandDigest } = admitted;
     return transaction(db, () => {
+      assertSchedulingQuiescenceV1({ db, now, lease: schedulingLease });
+      assertGf15CommandPacketV1(db, command, schedulingLease);
       const prior = replay(db, command.operationId, commandDigest);
       if (prior) return prior;
       const current = counters(db);
@@ -191,7 +195,7 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
       });
       if (!next) throw new Error('SCHEDULING_REVISION_ADVANCE_FAILED');
       staleDraftProposalsInTransactionV1({ db, triggerOperationId: command.operationId,
-        reasonCode: 'RESOURCE_CHANGED', now,
+        reasonCode: 'RESOURCE_CHANGED', now, schedulingLease,
         resourceId: changedCapacity ? null : command.resource.resourceId,
       });
       refresh(next, at);
@@ -210,12 +214,14 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
     replaceResource(input, actor) { return resourceCommand(input, actor, true); },
 
     setRequestRequirements(input, actor) {
-      const admitted = admitRequestRequirements(input);
+      const admitted = normalizeSchedulingRequestRequirementsV1(input);
       if (!admitted.ok) return admitted;
       if (!trusted(actor)) return denied('TRUSTED_ADMIN_REQUIRED');
       if (typeof refreshProjections !== 'function') return denied('SCHEDULING_PROJECTION_NOT_CONFIGURED');
       const { command, commandDigest } = admitted;
       return transaction(db, () => {
+        assertSchedulingQuiescenceV1({ db, now, lease: schedulingLease });
+        assertGf15CommandPacketV1(db, command, schedulingLease);
         const prior = replay(db, command.operationId, commandDigest);
         if (prior) return prior;
         const current = counters(db);
@@ -254,7 +260,7 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
         const next = advanceRevisions(db, current, { schedule: 0, projection: 1, at });
         if (!next) throw new Error('SCHEDULING_REVISION_ADVANCE_FAILED');
         staleDraftProposalsInTransactionV1({ db, triggerOperationId: command.operationId,
-          reasonCode: 'REQUEST_FACTS_CHANGED', now });
+          reasonCode: 'REQUEST_FACTS_CHANGED', now, schedulingLease });
         refresh(next, at);
         return saveOperation(db, { operationId: command.operationId, commandDigest,
           kind: 'setRequestRequirements', response: { requestId: command.requestId,
@@ -271,6 +277,8 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
       if (!trusted(actor)) return denied('TRUSTED_ADMIN_REQUIRED');
       const { command, commandDigest } = admitted;
       return transaction(db, () => {
+        assertSchedulingQuiescenceV1({ db, now, lease: schedulingLease });
+        assertGf15CommandPacketV1(db, command, schedulingLease);
         const prior = replay(db, command.operationId, commandDigest);
         if (prior) return prior;
         if (db.prepare(`SELECT 1 FROM scheduling_config_versions
@@ -306,6 +314,8 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
       if (typeof refreshProjections !== 'function') return denied('SCHEDULING_PROJECTION_NOT_CONFIGURED');
       const { command, commandDigest } = admitted;
       return transaction(db, () => {
+        assertSchedulingQuiescenceV1({ db, now, lease: schedulingLease });
+        assertGf15CommandPacketV1(db, command, schedulingLease);
         const prior = replay(db, command.operationId, commandDigest);
         if (prior) return prior;
         const current = counters(db);
@@ -336,7 +346,7 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
              next.projectionRevision, at, actor,
            );
         staleDraftProposalsInTransactionV1({ db, triggerOperationId: command.operationId,
-          reasonCode: 'SCHEDULING_CONFIG_CHANGED', now });
+          reasonCode: 'SCHEDULING_CONFIG_CHANGED', now, schedulingLease });
         refresh(next, at);
         return saveOperation(db, { operationId: command.operationId, commandDigest,
           kind: 'activateConfig', response: { configVersion: command.configVersion,
