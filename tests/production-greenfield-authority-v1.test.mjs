@@ -1357,7 +1357,13 @@ test('GF15 rollback is containment-only and cannot pretend immutable scheduling 
   ]) {
     assert.equal(typeof rollback.rollbackStateMachine.configStates[state], 'object', state);
   }
-  assert.equal(rollback.rollbackStateMachine.validStatePairs.length, 8);
+  assert.equal(rollback.rollbackStateMachine.validStatePairs.length, 10);
+  for (const pair of [
+    'RESOURCE_ROLLBACK_APPLIED + CONFIG_FORWARD_NOT_REACHED_PRIOR_PRESENT',
+    'RESOURCE_ROLLBACK_APPLIED + CONFIG_FORWARD_NOT_REACHED_NO_PRIOR',
+  ]) {
+    assert.equal(rollback.rollbackStateMachine.validStatePairs.includes(pair), true, pair);
+  }
   assert.match(rollback.rollbackStateMachine.rejectionRule, /FAILS_CLOSED/u);
   assert.equal(
     rollback.effects.some(effect => /classifying the current resource\/config pair through rollbackStateMachine/u.test(effect)),
