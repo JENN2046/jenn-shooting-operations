@@ -1360,7 +1360,7 @@ test('GF15 rollback is containment-only and cannot pretend immutable scheduling 
   assert.equal(rollback.rollbackStateMachine.validStatePairs.length, 8);
   assert.match(rollback.rollbackStateMachine.rejectionRule, /FAILS_CLOSED/u);
   assert.equal(
-    rollback.effects.some(effect => /classify the current resource\/config pair through rollbackStateMachine/u.test(effect)),
+    rollback.effects.some(effect => /classifying the current resource\/config pair through rollbackStateMachine/u.test(effect)),
     true,
   );
   assert.equal(
