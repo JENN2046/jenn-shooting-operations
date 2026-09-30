@@ -1,0 +1,521 @@
+{
+  "schemaVersion": 1,
+  "evidenceId": "JSO_LOCAL_CANDIDATE_RELEASE_PREPARATION_R1",
+  "status": "LOCAL_CANDIDATE_FROZEN_FOR_REVIEW_NOT_PRODUCTION_AUTHORITY",
+  "recordedAt": "2026-09-30T17:00:21.879357+00:00",
+  "executionHost": "jenn-System-Product-Name",
+  "workspace": "/home/jenn/Documents/Codex/2026-09-30/task/jso-preparation",
+  "authority": {
+    "repository": "JENN2046/jenn-shooting-operations",
+    "branch": "codex/v2-1-architecture-freeze",
+    "freshRemoteRevision": "302c7224f92eab79989fe53d259056519ff1832d",
+    "pr37Source": "6f2274436f2bfefa43bcaa9a713b0e5cb55b84ce",
+    "pr37Merge": "302c7224f92eab79989fe53d259056519ff1832d",
+    "mergeShaWorkflowRuns": 0,
+    "authorityFileDigest": "sha256:efc8ede6f2f8cd64dcd1919aac7b061b9b5c1ce79f54287aa766002487dbee07",
+    "prod11ContractFileDigest": "sha256:f5814f8a8ff37bd6508e42640f6586605fc2e2f826517617c5f412506733228f",
+    "authorizationUnchanged": {
+      "status": "FROZEN_NOT_REQUESTED",
+      "approvalModel": "EXACT_ACTION_IDS_AND_TARGETS_ONLY",
+      "humanApprovalRequired": true,
+      "blanketApprovalAllowed": false,
+      "requestedActionIds": [],
+      "approvedActionIds": [],
+      "requestableActionIds": [],
+      "nextActionId": "PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE",
+      "nextActionRequiresExplicitAuthorization": true
+    }
+  },
+  "candidate": {
+    "sourceRevision": "37ee97d5726d990e8f7178938eeb9b6c5f8b5424",
+    "sourceTree": "7db893e73cf89ca3107c5a1a68cc25ce19094dd6",
+    "immutableLocalImageId": "sha256:fd8a2fb03c86901e26c64389138bbc494491e8bf6025af1e22eec9e1f11113e7",
+    "ociManifestDigest": "sha256:fd8a2fb03c86901e26c64389138bbc494491e8bf6025af1e22eec9e1f11113e7",
+    "ociConfigDigest": "sha256:59f489a623cb6d6cc007d8dd139584f039ad7ebb9c0578df02aa11cd382ac46a",
+    "localRepoDigests": [
+      "jenn-shooting-operations@sha256:fd8a2fb03c86901e26c64389138bbc494491e8bf6025af1e22eec9e1f11113e7"
+    ],
+    "diagnosticTag": "jenn-shooting-operations:prod-37ee97d5726d990e8f7178938eeb9b6c5f8b5424",
+    "ociRevisionLabel": "37ee97d5726d990e8f7178938eeb9b6c5f8b5424",
+    "platform": "linux/amd64",
+    "nodeVersion": "24.21.0",
+    "imageUser": "node",
+    "baseImage": "node@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1",
+    "sourceDateEpoch": 1790786684,
+    "sourceArchiveDigest": "sha256:6af5dc5ac8be3caec28b15a691c3c883b9535c9c0f155cbc7b7cd544fea4bf21",
+    "derivedDockerfileDigest": "sha256:f29c95b2c1a66b0c091becd85bc26d88e6149827adc42c5d0c19e84f8b621e3e",
+    "repeatBuildImmutableId": "sha256:fd8a2fb03c86901e26c64389138bbc494491e8bf6025af1e22eec9e1f11113e7",
+    "reproducibilityScope": "Two same-input builds on existing local builder/cache; not independent uncached reproducibility",
+    "runtimeInputCount": 112,
+    "runtimeInputInventoryDigest": "sha256:41cdc985031f64068da6f22f773dee530ad65254280588c2c628d481d0e97301",
+    "runtimeBytesMatchSource": true,
+    "laterEvidenceOnlyCommitsAreImageSource": false,
+    "registryPublication": false,
+    "productionDeployment": false,
+    "normalOperationSupported": false
+  },
+  "archive": {
+    "localPath": "/home/jenn/Documents/Codex/2026-09-30/task/evidence/jso-candidate-37ee97d.tar",
+    "sha256": "sha256:86d9d5a1066776533aa47204b553463847cb7df583ab76416fd5c24e5db0582c",
+    "sizeBytes": 63390208,
+    "transported": false
+  },
+  "tests": {
+    "mergeSource": {
+      "sourceRevision": "302c7224f92eab79989fe53d259056519ff1832d",
+      "targeted": {
+        "tests": 284,
+        "pass": 284,
+        "fail": 0,
+        "skipped": 0
+      },
+      "full": {
+        "tests": 897,
+        "pass": 896,
+        "fail": 0,
+        "skipped": 1
+      }
+    },
+    "candidateSource": {
+      "sourceRevision": "37ee97d5726d990e8f7178938eeb9b6c5f8b5424",
+      "testRuntime": "node@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 (24.21.0 Debian)",
+      "command": "npm run check && node scripts/verify-migration-recovery-acceptance.mjs && node scripts/verify-external-readiness-boundaries.mjs",
+      "full": {
+        "tests": 897,
+        "pass": 896,
+        "fail": 0,
+        "skipped": 1
+      },
+      "exitCode": 0,
+      "validatorAndHarnessVerdicts": [
+        {
+          "status": "WO_06D_MANIFEST_VALID",
+          "manifestDigest": "sha256:e84bc05f9351773316e2f4c33eab77b67743d44c39689276aea67412294d514a",
+          "authorizationPacket": "FROZEN_NOT_REQUESTED",
+          "deploymentAuthorizationRequest": "BLOCKED_PREREQUISITES",
+          "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
+          "requestableActionIds": [],
+          "blockingGateIds": [
+            "WO06C_VCP_EXTERNAL",
+            "VCP_DEPLOYABLE_ADAPTER_WIRING",
+            "WO06C_KIOSK_DEVICE",
+            "DINGTALK_TARGET_BINDING",
+            "DINGTALK_DEPLOYABLE_ADAPTER_WIRING",
+            "CUTOVER_FORWARD_CHAIN",
+            "CUTOVER_SWITCH_RECOVERY",
+            "CUTOVER_SOURCE_CONSISTENCY",
+            "CUTOVER_LIVE_SERVICE_READINESS",
+            "TARGET_HOST_BINDING",
+            "CONTAINER_START_READINESS",
+            "PRE_CUTOVER_ORPHAN_CLEANUP_CONTROL",
+            "HEALTH_SMOKE_READINESS",
+            "PROXY_BACKEND_READINESS",
+            "PRE_CUTOVER_ROUTE_WRITE_RESTRICTION",
+            "PRODUCTION_IMPORT_STORAGE_READINESS",
+            "PRODUCTION_IMPORT_TARGET_ABSENCE",
+            "PRODUCTION_IMPORT_SOURCE_CONSISTENCY",
+            "PRODUCTION_ATTACHMENT_COPY_CAPABILITY",
+            "INTEGRATION_DEPLOYMENT_READINESS",
+            "PRODUCTION_TARGET_FACTS",
+            "PRODUCTION_DATA_MIGRATION",
+            "POST_CUTOVER_ORPHAN_CLEANUP_RESTORATION",
+            "CUTOVER_TARGET_WRITE_FENCE_CAPABILITY",
+            "RESTORED_CLEANUP_DISABLE_CAPABILITY",
+            "PRODUCTION_DEPLOYMENT_GATE"
+          ],
+          "deploymentBlockingGateIds": [
+            "VCP_DEPLOYABLE_ADAPTER_WIRING",
+            "PRODUCTION_TARGET_FACTS",
+            "PRODUCTION_DATA_MIGRATION",
+            "PRODUCTION_DEPLOYMENT_GATE"
+          ]
+        },
+        {
+          "status": "WO_06D_GREENFIELD_AUTHORITY_VALID",
+          "authorityDigest": "sha256:ffdeda5e9a271004018b5c26f06c067b92191d970d6fc2a1b367b65f3e2fb220",
+          "baseManifestDigest": "sha256:e84bc05f9351773316e2f4c33eab77b67743d44c39689276aea67412294d514a",
+          "deploymentMode": "GREENFIELD_NO_EXISTING_SOURCE",
+          "instanceId": "ins-mi85f3my",
+          "completedAcceptanceIds": [
+            "PROD-01-TARGET-READONLY-PREFLIGHT",
+            "PROD-02-CREATE-ISOLATED-APP-STORAGE",
+            "PHASE-B-TARGET-VOLUME-ACCEPTANCE",
+            "PROD-03-GENERATE-INSTALL-TOKENS",
+            "PROD-04-BUILD-IMAGE",
+            "PROD-05-START-ISOLATED-CONTAINER",
+            "PROD-06-LOOPBACK-HEALTH-SMOKE",
+            "PROD-07-CONFIGURE-REVERSE-PROXY-TLS",
+            "PROD-GF-13R-RECONCILE-DURABLE-ACTIVATION",
+            "PROD-GF-13-ACTIVATE",
+            "PROD-GF-14L-RESTORE-CLEANUP-RUNTIME-LIFECYCLE",
+            "PROD-10-ENABLE-VCP-REMOTE-SYNC"
+          ],
+          "authorization": "FROZEN_NOT_REQUESTED",
+          "requestableActionIds": [],
+          "nextActionId": "PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE"
+        },
+        {
+          "status": "WO_06B_FRESH_ACCEPTANCE_PASS",
+          "dryRunResult": "PASS",
+          "applyResult": "APPLIED_VERIFIED",
+          "backupStatus": "BACKUP_VERIFIED",
+          "rollbackStatus": "ROLLBACK_VERIFIED",
+          "targetStatus": "ALREADY_APPLIED_VERIFIED",
+          "replayResult": "ALREADY_APPLIED_VERIFIED",
+          "switchReadiness": "BLOCKED",
+          "sourceUnchanged": true,
+          "artifactsStableOnReplay": true
+        },
+        {
+          "status": "WO_06C_LOCAL_EXTERNAL_BOUNDARY_PASS",
+          "vcp": {
+            "sourceAdapterPresent": false,
+            "sourceIdentityVerified": false,
+            "architectureOwner": "VCPTOOLBOX_JENN_EXTENSIONS",
+            "verifiedAdapterOwner": null,
+            "externalAdapterPresent": false,
+            "sourceCompatibility": "BLOCKED_ADAPTER_SOURCE",
+            "compatibility": "BLOCKED_EXTERNAL_RUNTIME"
+          },
+          "kiosk": {
+            "localHttpBoundary": "PASS",
+            "defaultAuth": "AUTH_NOT_CONFIGURED",
+            "explicitTrustedPrincipal": "PASS",
+            "realBrowserDevice": "BLOCKED_DEVICE"
+          },
+          "dingtalk": {
+            "localBoundary": "PASS",
+            "readinessCode": "DINGTALK_NOT_CONFIGURED",
+            "networkCalls": 0,
+            "providerIntegration": "READY_FOR_EXTERNAL_INTEGRATION_AUTHORIZATION",
+            "callbackRuntime": "NOT_WIRED"
+          },
+          "deploymentGate": "BLOCKED_BY_PRODUCTION_DEPLOYMENT_GATE",
+          "overallExternalClosure": "PENDING"
+        }
+      ]
+    },
+    "candidateImageTargeted": {
+      "imageId": "sha256:fd8a2fb03c86901e26c64389138bbc494491e8bf6025af1e22eec9e1f11113e7",
+      "command": "node --test tests/kiosk-*.test.mjs tests/*outbox*.test.mjs tests/gf15-*.test.mjs",
+      "counts": {
+        "tests": 284,
+        "pass": 284,
+        "fail": 0,
+        "skipped": 0
+      },
+      "exitCode": 0,
+      "mounts": [
+        "read-only exact-source tests",
+        "read-only prod11-kiosk-deployment-contract.r1.json test input"
+      ],
+      "runtimeCodeAndRuntimeAuthorityMounted": false
+    },
+    "candidateImageFull": {
+      "command": "npm run check",
+      "counts": {
+        "tests": 897,
+        "pass": 894,
+        "fail": 2,
+        "skipped": 1
+      },
+      "exitCode": 1,
+      "status": "FAIL_TWO_INHERITED_ALPINE_TEST_SETUP_LIMITS",
+      "mounts": [
+        "read-only exact-source tests/docs/fixtures/.github/Dockerfile"
+      ],
+      "knownFailures": [
+        {
+          "test": "backup verification detects WAL content rewrite with restored mtime",
+          "file": "tests/migration-recovery-v2.test.mjs:414",
+          "cause": "BusyBox touch invalid date @<nanosecond timestamp>"
+        },
+        {
+          "test": "WAL content digest detects in-place rewrite even when mtime is restored",
+          "file": "tests/migration-v2.test.mjs:379",
+          "cause": "BusyBox touch invalid date @<nanosecond timestamp>"
+        }
+      ],
+      "fullPassClaimed": false
+    },
+    "bareImageStartup": {
+      "status": "LOCAL_BARE_IMAGE_STARTUP_AND_REOPEN_PASS",
+      "serviceContext": "PROD11_PRODUCTION",
+      "credentialsCreated": false,
+      "hostPortPublished": false,
+      "deviceAcceptance": "NOT_RUN",
+      "starts": [
+        {
+          "health": 200,
+          "disabledReadStatus": 401,
+          "disabledWriteStatus": 401,
+          "kioskCode": "AUTH_NOT_CONFIGURED",
+          "versions": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          "eventCount": 0,
+          "smokeOwnerCount": 0,
+          "databaseDevice": "141",
+          "databaseInode": "9"
+        },
+        {
+          "health": 200,
+          "disabledReadStatus": 401,
+          "disabledWriteStatus": 401,
+          "kioskCode": "AUTH_NOT_CONFIGURED",
+          "versions": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9
+          ],
+          "eventCount": 0,
+          "smokeOwnerCount": 0,
+          "databaseDevice": "141",
+          "databaseInode": "9"
+        }
+      ],
+      "databaseIdentityPreservedAcrossProcessReopen": true
+    },
+    "initialTargetedHarnessMistake": {
+      "result": "10 ENOENT test-input failures; corrected by supplying frozen non-runtime prod11 JSON fixture",
+      "replacedBy": "candidateImageTargeted"
+    },
+    "physicalDeviceAcceptance": "NOT_RUN",
+    "remoteCiClaimed": false
+  },
+  "localFixtures": {
+    "status": "LOCAL_SYNTHETIC_FIXTURES_PREPARED_NOT_WO03_ACCEPTANCE",
+    "serviceContextProposal": "WO03_ISOLATED_ACCEPTANCE",
+    "resourceId": "STUDIO-WO03-LOCAL-01",
+    "subjectId": "KIOSK-WO03-LOCAL-01",
+    "credentialCreated": false,
+    "listenerCreated": false,
+    "deviceAcceptance": "NOT_RUN",
+    "fixtures": {
+      "single": {
+        "inputByteDigest": "sha256:b675353040592b046518296c86aac1855d1dbfa857867d414789ff206cdb1351",
+        "normalizedRowDigest": "sha256:1f0816e941f5a3291ec74c4732699dec89927e722116f34d622d4a34aed3d740",
+        "databaseFileDigest": "sha256:59509bd1be060abd0ec1eb3a72ea54f193938ba1b40b75f0723778967e87a2cd",
+        "databasePath": "/out/release-wo03-local/single.sqlite",
+        "databaseDevice": "66315",
+        "databaseInode": "10235498",
+        "schema": {
+          "version": 9,
+          "latestVersion": 9
+        },
+        "scheduleItemId": "ITEM-WO03-SINGLE-01",
+        "requestIds": [
+          "REQ-WO03-SINGLE-01"
+        ],
+        "allocationMode": "single",
+        "currentReadAtSyntheticClock": "2026-10-15T01:30:00.000Z",
+        "currentReadDigest": "sha256:10c16dc0c37133eb5e252244f55cccc29e358bdf0a4c7f299f87a61c5a2e9fdc",
+        "plannedStart": "2026-10-15T01:00:00.000Z",
+        "plannedEnd": "2026-10-15T03:00:00.000Z",
+        "localHostPath": "/home/jenn/Documents/Codex/2026-09-30/task/evidence/release-wo03-local/single.sqlite",
+        "localHostDevice": "66315",
+        "localHostInode": "10235498"
+      },
+      "grouped": {
+        "inputByteDigest": "sha256:a64d8fc8127cec06f969a60e3f6bacd5a71e5bd2922261e440c456b0ead72559",
+        "normalizedRowDigest": "sha256:6b4fdd8696a25c22db1bc2be082d4692e9dacd07cd714b62e1b4faf88c86d2d1",
+        "databaseFileDigest": "sha256:e99b9e05bb088e653c688451771ad02a70b4fbd62b96b97f9f997081ba6882fe",
+        "databasePath": "/out/release-wo03-local/grouped.sqlite",
+        "databaseDevice": "66315",
+        "databaseInode": "10235500",
+        "schema": {
+          "version": 9,
+          "latestVersion": 9
+        },
+        "scheduleItemId": "ITEM-WO03-GROUPED-01",
+        "requestIds": [
+          "REQ-WO03-GROUPED-01",
+          "REQ-WO03-GROUPED-02"
+        ],
+        "allocationMode": "grouped_unallocated",
+        "currentReadAtSyntheticClock": "2026-10-15T01:30:00.000Z",
+        "currentReadDigest": "sha256:aba606915895aecd880b94a5cc395f8bd643a9b63ce93cc25fb1e157cf47602d",
+        "plannedStart": "2026-10-15T01:00:00.000Z",
+        "plannedEnd": "2026-10-15T03:00:00.000Z",
+        "localHostPath": "/home/jenn/Documents/Codex/2026-09-30/task/evidence/release-wo03-local/grouped.sqlite",
+        "localHostDevice": "66315",
+        "localHostInode": "10235500"
+      }
+    },
+    "observer": "candidate container; programmatic reader at synthetic clock",
+    "runtimeImmutableImageId": "sha256:fd8a2fb03c86901e26c64389138bbc494491e8bf6025af1e22eec9e1f11113e7",
+    "runtimeSourceRevision": "37ee97d5726d990e8f7178938eeb9b6c5f8b5424",
+    "runtimeHarness": "image-bundled scripts/prepare-wo03-local-fixtures.mjs"
+  },
+  "schemaCompatibility": {
+    "status": "LOCAL_SCHEMA_COMPATIBILITY_PROBE_PASS",
+    "productionDatabaseAccessed": false,
+    "oldSourceRevision": "92b7137211bf807f178901e878a8c3d6e335cec4",
+    "oldLatestVersion": 6,
+    "unchangedMigrationPrefix": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "stages": [
+      {
+        "version": 7,
+        "candidateCompatible": true,
+        "oldRuntimeResult": "SCHEMA_VERSION_TOO_NEW"
+      },
+      {
+        "version": 8,
+        "candidateCompatible": true,
+        "oldRuntimeResult": "SCHEMA_VERSION_TOO_NEW"
+      },
+      {
+        "version": 9,
+        "candidateCompatible": true,
+        "oldRuntimeResult": "SCHEMA_VERSION_TOO_NEW"
+      }
+    ],
+    "currentImageReopenPreservesRuntimeOwner": true,
+    "oldImageOnlyRollbackAfterMigration": "INCOMPATIBLE",
+    "migrations": [
+      {
+        "version": 1,
+        "name": "v2_normalized_core",
+        "checksum": "sha256:b77dcddc0284a94a1dbc1e1a981fb7cbf3e4f2d41f8d6ccc999d37a298d1a3b5"
+      },
+      {
+        "version": 2,
+        "name": "v1_compatibility_columns",
+        "checksum": "sha256:b944e3ed4d77774e77aa378a3e04cce7a07ae744dd867d7b89aa4ac704d94670"
+      },
+      {
+        "version": 3,
+        "name": "kiosk_run_event_review_ownership",
+        "checksum": "sha256:20cbd2b8a992a888120fdaad41ddb7ec7f8aa4de65a2d7388c018c382e4e9476"
+      },
+      {
+        "version": 4,
+        "name": "notification_outbox",
+        "checksum": "sha256:f5d409d12418e71f2f90709488b0354cf0f0fc39cd6543888b7c7e4268be5fae"
+      },
+      {
+        "version": 5,
+        "name": "scheduling_proposals",
+        "checksum": "sha256:9a2c749d55ced03953b24d50331cf4565cd253612207973865c95505510ac1a7"
+      },
+      {
+        "version": 6,
+        "name": "scheduling_run_context_capture",
+        "checksum": "sha256:15b0462915aa0cc12f3d0c06020f557cbaf2d1db22015d79aeb015f93abe5a5b"
+      },
+      {
+        "version": 7,
+        "name": "gf15_bounded_capabilities",
+        "checksum": "sha256:b9e8bed840ee71a300977e2e89039c96e1a5270e5ca4edbc98e41b27b7909b19"
+      },
+      {
+        "version": 8,
+        "name": "kiosk_bounded_smoke",
+        "checksum": "sha256:44e999a608bd257ffb9db7ee0f10d7b42932afdccf0463757cf333443e02c448"
+      },
+      {
+        "version": 9,
+        "name": "kiosk_smoke_runtime_ownership",
+        "checksum": "sha256:ab2ac08cfb8510124d9ac64fe38353e0117e754d0266e8d1f150d34f3929c88e"
+      }
+    ]
+  },
+  "proposedWo03Bindings": {
+    "exactExternalEndpoint": null,
+    "exactExternalDatabaseIdentity": null,
+    "localEndpointProposal": "http://127.0.0.1:<reserved-port>/kiosk?resourceId=STUDIO-WO03-LOCAL-01",
+    "serviceContext": "WO03_ISOLATED_ACCEPTANCE",
+    "runtimeImageId": "sha256:fd8a2fb03c86901e26c64389138bbc494491e8bf6025af1e22eec9e1f11113e7",
+    "runtimeSourceRevision": "37ee97d5726d990e8f7178938eeb9b6c5f8b5424",
+    "identityScope": {
+      "status": "PROPOSED_NO_AUTHENTICATED_LISTENER_OR_CREDENTIAL",
+      "deviceId": "KIOSK-WO03-LOCAL-01",
+      "subjectId": "KIOSK-WO03-LOCAL-01",
+      "role": "operator",
+      "resourceIds": [
+        "STUDIO-WO03-LOCAL-01"
+      ]
+    },
+    "externalSetupAuthority": "NOT_AUTHORIZED_OR_EXECUTED",
+    "externalSetupComplete": false,
+    "deviceTargets": {
+      "status": "USER_DEFERRED_PENDING_CONFIRMATION",
+      "onSiteTabletOrIpad": null,
+      "safariDeviceAndVersion": null,
+      "mobileDeviceAndBrowser": null,
+      "screenReaderAndKeyboard": null
+    },
+    "realDeviceAcceptance": "NOT_RUN",
+    "offlineReplayAcceptance": "NOT_RUN"
+  },
+  "proposals": {
+    "deployment": "docs/operations/JSO_CANDIDATE_REPLACEMENT_DEPLOYMENT_PROPOSAL_R1.md",
+    "wo03": "docs/acceptance/WO03_ISOLATED_PREPARATION_PROPOSAL_R1.md",
+    "postSmokeTransition": "docs/operations/KIOSK_POST_SMOKE_NORMAL_OPERATION_CONTRACT_PROPOSAL_R1.md",
+    "ratified": false,
+    "authorityGrants": []
+  },
+  "rawLocalLogs": [
+    {
+      "path": "/home/jenn/Documents/Codex/2026-09-30/task/evidence/source-targeted.log",
+      "digest": "sha256:12f2d7206fb812f2bcaa512ec4f3a966cba1b2186af65bb9ffaa1e01b9504cd1"
+    },
+    {
+      "path": "/home/jenn/Documents/Codex/2026-09-30/task/evidence/source-check.log",
+      "digest": "sha256:174914f73d29f86a6808994a8bc140aae5aa13b9bab917f4209d1014dc932cfe"
+    },
+    {
+      "path": "/home/jenn/Documents/Codex/2026-09-30/task/evidence/release-source-check.log",
+      "digest": "sha256:6adb80ca7333b13e7f0f6ab562e14dcaca8c32313bd90f231ada753ec7c8aada"
+    },
+    {
+      "path": "/home/jenn/Documents/Codex/2026-09-30/task/evidence/release-image-check.log",
+      "digest": "sha256:76d807ad20b3cc64de681acb3a6d9888c56b49e10816586489ded11c4f07a9ad"
+    },
+    {
+      "path": "/home/jenn/Documents/Codex/2026-09-30/task/evidence/release-image-targeted-final.log",
+      "digest": "sha256:7a171c6e6a7da16c6a639ce6fe258d58a17e7ae4048db48e10f89b087407b921"
+    },
+    {
+      "path": "/home/jenn/Documents/Codex/2026-09-30/task/evidence/release-bare-startup.log",
+      "digest": "sha256:cfa491d0f6ff47fc6061d21ef3c94f97a24651bb340c0bb003c6ab3a93188dc7"
+    },
+    {
+      "path": "/home/jenn/Documents/Codex/2026-09-30/task/evidence/release-fixture-schema.log",
+      "digest": "sha256:ccb26ac8c146df59597bc81beeb7c59fc82efb988c4547fce75baf1a09e617f4"
+    }
+  ],
+  "remainingGates": [
+    "Exact device/browser/assistive targets pending confirmation",
+    "Separate external WO03 setup authority, endpoint/database/auth binding and completed setup",
+    "Separate production replacement approval and fresh target/storage/VCP facts",
+    "Compatible v9 rollback image or explicitly bounded no-new-facts restore decision",
+    "Review of two inherited Alpine full-runtime test limits",
+    "Separate GF15 fresh Asia/Shanghai target window/packet",
+    "Whole-database brief-host scan and all seven fresh PROD11 checks",
+    "Current Greenfield authority explicitly admitting action, then separate PROD11 authorization",
+    "Post-authorization WO03 matrix before production Kiosk activation",
+    "Ratified normal transition contract, reviewed normal-mode runtime and explicit operation-release authority"
+  ]
+}
