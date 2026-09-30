@@ -1311,6 +1311,86 @@ test('GF15 rollback is containment-only and cannot pretend immutable scheduling 
     true,
   );
 
+  assert.equal(rollback.rollbackCommandContract.schemaVersion, 1);
+  assert.equal(
+    rollback.rollbackCommandContract.resourceContainment.operationId,
+    'PRODGF15-ROLLBACK-RESOURCE-R1',
+  );
+  assert.equal(
+    rollback.rollbackCommandContract.resourceContainment.commandType,
+    'ReplaceSchedulingResourceV1',
+  );
+  assert.equal(
+    rollback.rollbackCommandContract.resourceContainment.resource.status,
+    'inactive',
+  );
+  assert.equal(
+    rollback.rollbackCommandContract.priorConfigReactivation.operationId,
+    'PRODGF15-ROLLBACK-CONFIG-ACTIVATE-R1',
+  );
+  assert.equal(
+    rollback.rollbackCommandContract.priorConfigReactivation.commandType,
+    'ActivateSchedulingConfigV1',
+  );
+  assert.match(
+    rollback.rollbackCommandContract.resourceContainment.replayPolicy,
+    /REUSE_EXACT_PERSISTED_COMMAND_JSON_AND_DIGEST_NEVER_REBIND_REVISIONS/u,
+  );
+  assert.match(
+    rollback.rollbackCommandContract.priorConfigReactivation.replayPolicy,
+    /REUSE_EXACT_PERSISTED_COMMAND_JSON_AND_DIGEST_NEVER_REBIND_REVISIONS/u,
+  );
+  assert.equal(rollback.rollbackStateMachine.schemaVersion, 1);
+  for (const state of [
+    'RESOURCE_FORWARD_NOT_REACHED',
+    'RESOURCE_FORWARD_APPLIED',
+    'RESOURCE_ROLLBACK_APPLIED',
+  ]) {
+    assert.equal(typeof rollback.rollbackStateMachine.resourceStates[state], 'object', state);
+  }
+  for (const state of [
+    'CONFIG_FORWARD_NOT_REACHED_PRIOR_PRESENT',
+    'CONFIG_FORWARD_NOT_REACHED_NO_PRIOR',
+    'CONFIG_FORWARD_APPLIED',
+    'CONFIG_ROLLBACK_APPLIED_PRIOR_PRESENT',
+    'CONFIG_CONTAINED_NO_PRIOR',
+  ]) {
+    assert.equal(typeof rollback.rollbackStateMachine.configStates[state], 'object', state);
+  }
+  assert.equal(rollback.rollbackStateMachine.validStatePairs.length, 8);
+  assert.match(rollback.rollbackStateMachine.rejectionRule, /FAILS_CLOSED/u);
+  assert.equal(
+    rollback.effects.some(effect => /classify the current resource\/config pair through rollbackStateMachine/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    rollback.effects.some(effect => /RESOURCE_FORWARD_NOT_REACHED is a no-op/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    rollback.effects.some(effect => /CONFIG_FORWARD_APPLIED only/u.test(effect)),
+    true,
+  );
+  for (const proof of [
+    'GF15_ROLLBACK_STATE_MACHINE_CLASSIFICATION',
+    'GF15_ROLLBACK_FORWARD_AND_ROLLBACK_RECEIPT_CONSISTENCY_GATE',
+    'GF15_ROLLBACK_RESOURCE_COMMAND_PACKET_OR_NOT_REQUIRED',
+    'GF15_ROLLBACK_CONFIG_COMMAND_PACKET_OR_NOT_REQUIRED',
+    'GF15_ROLLBACK_EXACT_REPLAY_OR_FIRST_ATTEMPT_PROOF',
+  ]) {
+    assert.equal(rollback.evidenceRequired.includes(proof), true, proof);
+  }
+
+  rejected(value => {
+    value.greenfieldKioskAcceptancePreparationRollbackAction.rollbackCommandContract
+      .resourceContainment.operationId = 'OTHER';
+  }, 'GREENFIELD_KIOSK_ACCEPTANCE_PREPARATION_ROLLBACK_INVALID');
+
+  rejected(value => {
+    value.greenfieldKioskAcceptancePreparationRollbackAction.rollbackStateMachine.validStatePairs =
+      ['ANYTHING'];
+  }, 'GREENFIELD_KIOSK_ACCEPTANCE_PREPARATION_ROLLBACK_INVALID');
+
   rejected(value => {
     value.greenfieldKioskAcceptancePreparationRollbackAction.effects =
       ['delete all acceptance facts'];
