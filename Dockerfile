@@ -7,6 +7,8 @@ COPY contracts ./contracts
 COPY public ./public
 COPY scripts ./scripts
 COPY src ./src
+# gf15-contract-v1 imports this immutable contract during server startup.
+COPY docs/operations/production-greenfield-authority.v1.json ./docs/operations/production-greenfield-authority.v1.json
 
 RUN mkdir -p /app/data && chown -R node:node /app
 USER node

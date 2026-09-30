@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "revision": 0,
+  "updatedAt": "2026-10-15T00:00:00.000Z",
+  "products": [
+    [
+      "SKU-WO03-SINGLE-01",
+      "WO03 TEST ONLY single task 1 — long title for wrapping / 仅测试"
+    ]
+  ],
+  "tasks": [
+    {
+      "id": "REQ-WO03-SINGLE-01",
+      "sku": "SKU-WO03-SINGLE-01",
+      "name": "WO03 TEST ONLY single task 1 — long title for wrapping / 仅测试",
+      "client": "WO03 synthetic acceptance",
+      "deliver": "白底主图 4 张",
+      "kind": "细节",
+      "status": "scheduled",
+      "source": "import",
+      "createdAt": "2026-10-15T00:00:00.000Z",
+      "updatedAt": "2026-10-15T00:00:00.000Z"
+    }
+  ],
+  "sessions": [
+    {
+      "id": "ITEM-WO03-SINGLE-01",
+      "ids": [
+        "REQ-WO03-SINGLE-01"
+      ],
+      "date": "2026-10-15",
+      "start": "09:00",
+      "end": "11:00",
+      "place": "WO03 TEST ONLY",
+      "note": "Synthetic disposable fixture; no production authority",
+      "updatedAt": "2026-10-15T00:00:00.000Z"
+    }
+  ]
+}
