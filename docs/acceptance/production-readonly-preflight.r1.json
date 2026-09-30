@@ -1,0 +1,496 @@
+{
+  "schemaVersion": 1,
+  "evidenceId": "JSO_PRODUCTION_READONLY_PREFLIGHT_R1",
+  "status": "BLOCKED_FOR_DEPLOYMENT",
+  "recordedAt": "2026-09-30T17:58:42.187135+00:00",
+  "authorityRevision": "259506955b6fe41bb008de65a305691f9e2810ee",
+  "authorityBranch": "codex/v2-1-architecture-freeze",
+  "productionMutationsPerformed": false,
+  "privilegedFallbackAttemptedAfterDenial": false,
+  "productionPayloadDownloaded": false,
+  "productionRestorePerformed": false,
+  "candidate": {
+    "sourceRevision": "37ee97d5726d990e8f7178938eeb9b6c5f8b5424",
+    "immutableImageId": "sha256:fd8a2fb03c86901e26c64389138bbc494491e8bf6025af1e22eec9e1f11113e7",
+    "ociConfigDigest": "sha256:59f489a623cb6d6cc007d8dd139584f039ad7ebb9c0578df02aa11cd382ac46a",
+    "evidenceHead": "093bb5dcadb017319da578f72148bdf8270cabad",
+    "authorityMerge": "259506955b6fe41bb008de65a305691f9e2810ee",
+    "newImageBuilt": false,
+    "normalOperationSupported": false
+  },
+  "observations": {
+    "metadata": {
+      "observedAt": "2026-09-30T17:51:13.499517+00:00",
+      "hostname": "VM-0-12-ubuntu",
+      "inspection": "READ_ONLY_METADATA",
+      "container": {
+        "id": "b29798598ac043794420599c23f735c19038744a76f1b490b3e8c5a58e28e6be",
+        "image": "sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545",
+        "name": "/jenn-shooting-operations-prod",
+        "state": {
+          "Status": "running",
+          "Running": true,
+          "Restarting": false,
+          "StartedAt": "2026-09-28T05:15:44.792470451Z",
+          "RestartCount": null
+        },
+        "healthStatus": "healthy",
+        "mounts": [
+          {
+            "Type": "volume",
+            "Name": "jenn-shooting-operations_shooting_data",
+            "Source": "/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data",
+            "Destination": "/app/data",
+            "RW": true
+          }
+        ],
+        "ports": {
+          "3800/tcp": [
+            {
+              "HostIp": "127.0.0.1",
+              "HostPort": "3800"
+            }
+          ]
+        },
+        "readonlyRootfs": true,
+        "tmpfs": {
+          "/tmp": ""
+        },
+        "securityOpt": [
+          "no-new-privileges:true"
+        ],
+        "restartPolicy": {
+          "Name": "unless-stopped",
+          "MaximumRetryCount": 0
+        }
+      },
+      "startupControls": {
+        "WRITE_ADMISSION_MODE": "enabled",
+        "ORPHAN_CLEANUP_MODE": "enabled",
+        "KIOSK_SERVICE_CONTEXT": "ABSENT"
+      },
+      "sensitiveConfigPresence": {
+        "VIEWER_TOKEN": true,
+        "SUBMITTER_TOKEN": true,
+        "SCHEDULER_TOKEN": true,
+        "ADMIN_TOKEN": true
+      },
+      "image": {
+        "Id": "sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545",
+        "RepoDigests": [
+          "jenn-shooting-operations@sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545"
+        ],
+        "Architecture": "amd64",
+        "Os": "linux",
+        "Created": "2026-09-28T00:47:20.588579028+08:00",
+        "oci": {
+          "org.opencontainers.image.revision": "92b7137211bf807f178901e878a8c3d6e335cec4",
+          "org.opencontainers.image.source": null,
+          "org.opencontainers.image.version": null
+        }
+      },
+      "volumeContainerOwners": [
+        {
+          "id": "b29798598ac043794420599c23f735c19038744a76f1b490b3e8c5a58e28e6be",
+          "name": "/jenn-shooting-operations-prod",
+          "running": true,
+          "destination": "/app/data",
+          "rw": true
+        }
+      ],
+      "loopbackHealth": {
+        "httpStatus": 200,
+        "fields": {
+          "ok": true,
+          "service": "jenn-shooting-operations"
+        }
+      },
+      "publicHealth": {
+        "errorType": "HTTPError"
+      },
+      "files": {
+        "/mnt/datadisk0/apps/jenn-shooting-operations": {
+          "dev": 64784,
+          "ino": 443281,
+          "size": 4096,
+          "mtime_ns": 1790572596943786523,
+          "ctime_ns": 1790572596943786523,
+          "uid": 1000,
+          "gid": 1001,
+          "mode": "0o750",
+          "symlink": false
+        },
+        "/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data": {
+          "errorType": "PermissionError"
+        },
+        "/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data/shooting-operations.sqlite": {
+          "errorType": "PermissionError"
+        },
+        "/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data/shooting-operations.sqlite-wal": {
+          "errorType": "PermissionError"
+        },
+        "/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data/shooting-operations.sqlite-shm": {
+          "errorType": "PermissionError"
+        },
+        "/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data/uploads": {
+          "errorType": "PermissionError"
+        },
+        "/etc/nginx/conf.d/jso-shooting-operations.conf": {
+          "dev": 64770,
+          "ino": 1320682,
+          "size": 1118,
+          "mtime_ns": 1790549469935653764,
+          "ctime_ns": 1790549469955653780,
+          "uid": 0,
+          "gid": 0,
+          "mode": "0o644",
+          "symlink": false,
+          "sha256": "35ea9acd80ba600e88d8c594a3a2558ec4cb57dd078c61d6832f5798c2eabc33"
+        }
+      },
+      "topLevelDirectoryNames": {
+        "/mnt/datadisk0/apps/jenn-shooting-operations": [
+          {
+            "name": "prod-gf14l-lifecycle-evidence.txt",
+            "directory": false,
+            "symlink": false
+          },
+          {
+            "name": "prod04-build-evidence.txt",
+            "directory": false,
+            "symlink": false
+          },
+          {
+            "name": "prod07-route-evidence.txt",
+            "directory": false,
+            "symlink": false
+          },
+          {
+            "name": ".env.runtime",
+            "directory": false,
+            "symlink": false
+          },
+          {
+            "name": "prod-gf14l-rollback-gf12.sh",
+            "directory": false,
+            "symlink": false
+          },
+          {
+            "name": "prod05-start-evidence.txt",
+            "directory": false,
+            "symlink": false
+          },
+          {
+            "name": ".env.runtime.pre-gf14",
+            "directory": false,
+            "symlink": false
+          },
+          {
+            "name": ".env.tokens",
+            "directory": false,
+            "symlink": false
+          },
+          {
+            "name": "prod-gf14-cleanup-evidence.txt",
+            "directory": false,
+            "symlink": false
+          },
+          {
+            "name": "prod-gf14-rollback-12.sh",
+            "directory": false,
+            "symlink": false
+          },
+          {
+            "name": "prod-gf13-activation-evidence.txt",
+            "directory": false,
+            "symlink": false
+          },
+          {
+            "name": "prod-gf13-durability-remediation.sh",
+            "directory": false,
+            "symlink": false
+          }
+        ],
+        "/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data": {
+          "errorType": "PermissionError"
+        },
+        "/mnt/datadisk0": [
+          {
+            "name": "backups",
+            "directory": true,
+            "symlink": false
+          },
+          {
+            "name": "dev-cache",
+            "directory": true,
+            "symlink": false
+          },
+          {
+            "name": "lost+found",
+            "directory": true,
+            "symlink": false
+          },
+          {
+            "name": "apps",
+            "directory": true,
+            "symlink": false
+          },
+          {
+            "name": "maintenance",
+            "directory": true,
+            "symlink": false
+          },
+          {
+            "name": ".Trash-1000",
+            "directory": true,
+            "symlink": false
+          },
+          {
+            "name": "docker",
+            "directory": true,
+            "symlink": false
+          }
+        ]
+      }
+    },
+    "backupInventory": {
+      "observedAt": "2026-09-30T17:52:22.632634+00:00",
+      "scope": "EXISTING_BACKUP_METADATA_ONLY",
+      "entries": [
+        {
+          "path": "/mnt/datadisk0/backups/cutover-r1",
+          "directory": true,
+          "symlink": false,
+          "dev": 64784,
+          "ino": 2359352,
+          "size": 4096,
+          "mtimeNs": 1789826396398636046,
+          "ctimeNs": 1789826396398636046,
+          "mode": "0o755"
+        },
+        {
+          "path": "/mnt/datadisk0/backups/cutover-r1/prod-admin.log",
+          "directory": false,
+          "symlink": false,
+          "dev": 64784,
+          "ino": 2359375,
+          "size": 8639,
+          "mtimeNs": 1789905744372990637,
+          "ctimeNs": 1789905744372990637,
+          "mode": "0o664"
+        },
+        {
+          "path": "/mnt/datadisk0/backups/cutover-r1/prod-server.log",
+          "directory": false,
+          "symlink": false,
+          "dev": 64784,
+          "ino": 2359376,
+          "size": 138180,
+          "mtimeNs": 1789883053699110840,
+          "ctimeNs": 1789883053699110840,
+          "mode": "0o664"
+        },
+        {
+          "path": "/mnt/datadisk0/backups/cutover-r1/state-at-cutover-20260919215939.tar.gz",
+          "directory": false,
+          "symlink": false,
+          "dev": 64784,
+          "ino": 2359371,
+          "size": 20851070,
+          "mtimeNs": 1789826381323593105,
+          "ctimeNs": 1789826381323593105,
+          "mode": "0o664"
+        },
+        {
+          "path": "/mnt/datadisk0/backups/cutover-r1/vcptoolbox-release-2f8fd1ff.tar.gz",
+          "directory": false,
+          "symlink": false,
+          "dev": 64784,
+          "ino": 2359369,
+          "size": 289752909,
+          "mtimeNs": 1789825473649007675,
+          "ctimeNs": 1789825474550010242,
+          "mode": "0o644"
+        },
+        {
+          "path": "/mnt/datadisk0/backups/cutover-r1/vcptoolbox-release-2f8fd1ff.tar.gz.sha256",
+          "directory": false,
+          "symlink": false,
+          "dev": 64784,
+          "ino": 2359370,
+          "size": 101,
+          "mtimeNs": 1789825474106008977,
+          "ctimeNs": 1789825474128009040,
+          "mode": "0o644"
+        },
+        {
+          "path": "/mnt/datadisk0/backups/docker-volumes",
+          "directory": true,
+          "symlink": false,
+          "dev": 64784,
+          "ino": 2359298,
+          "size": 4096,
+          "mtimeNs": 1782096250687090160,
+          "ctimeNs": 1782096250695090134,
+          "mode": "0o700"
+        },
+        {
+          "path": "/mnt/datadisk0/backups/docker-volumes",
+          "errorType": "PermissionError"
+        }
+      ],
+      "publicHealth": {
+        "status": 403
+      }
+    },
+    "backupChecks": {
+      "observedAt": "2026-09-30T17:54:05.809082+00:00",
+      "scope": "EXISTING_ARCHIVE_CHECKSUM_AND_HEADER_CLASSIFICATION_NO_EXTRACTION",
+      "archives": [
+        {
+          "basename": "state-at-cutover-20260919215939.tar.gz",
+          "sha256": "bd2f18706ca5cca79199caf35cb8181ed1c69dcf2f85fabbab423f2490bcc308",
+          "stableDescriptorAndPath": true,
+          "identity": {
+            "dev": 64784,
+            "ino": 2359371,
+            "size": 20851070,
+            "mtimeNs": 1789826381323593105,
+            "ctimeNs": 1789826381323593105
+          },
+          "headerCounts": {
+            "members": 56,
+            "regularFiles": 52,
+            "sqliteNamedFiles": 5,
+            "jsoDatabaseNamedFiles": 0,
+            "jsoNamedMembers": 0,
+            "uploadNamedMembers": 0,
+            "manifestNamedFiles": 0,
+            "checksumNamedFiles": 0,
+            "symlinks": 0
+          },
+          "payloadExtracted": false,
+          "existingSidecarPresent": false
+        },
+        {
+          "basename": "vcptoolbox-release-2f8fd1ff.tar.gz",
+          "sha256": "3fd78ac05427242ff1aa26eebfd151306e578936081c4a62d0a6b8ba74e12be4",
+          "stableDescriptorAndPath": true,
+          "identity": {
+            "dev": 64784,
+            "ino": 2359369,
+            "size": 289752909,
+            "mtimeNs": 1789825473649007675,
+            "ctimeNs": 1789825474550010242
+          },
+          "headerCounts": {
+            "members": 24982,
+            "regularFiles": 22092,
+            "sqliteNamedFiles": 0,
+            "jsoDatabaseNamedFiles": 0,
+            "jsoNamedMembers": 0,
+            "uploadNamedMembers": 0,
+            "manifestNamedFiles": 100,
+            "checksumNamedFiles": 0,
+            "symlinks": 34
+          },
+          "payloadExtracted": false,
+          "existingSidecarDigestMatches": true
+        }
+      ],
+      "public": {
+        "status": 403,
+        "contentType": "text/plain; charset=UTF-8",
+        "server": "cloudflare",
+        "authenticationChallengePresent": false
+      },
+      "loopbackKiosk": {
+        "status": 400,
+        "contentType": "application/json; charset=utf-8",
+        "server": null,
+        "authenticationChallengePresent": false,
+        "safeErrorCode": null
+      }
+    },
+    "kioskDisabledRead": {
+      "observedAt": "2026-09-30T17:56:03.855820+00:00",
+      "route": "/api/v2/kiosk/current?resourceId=STUDIO-PROD-01",
+      "authorizationHeaderSent": false,
+      "writeRequestSent": false,
+      "status": 401,
+      "safeErrorCodes": [
+        "AUTH_NOT_CONFIGURED"
+      ]
+    }
+  },
+  "syntheticCompatibility": {
+    "status": "SYNTHETIC_V6_BACKUP_NEW_PATH_RESTORE_PASS",
+    "productionDatabaseAccessed": false,
+    "actualProductionBackupRestored": false,
+    "sourceRevision": "37ee97d5726d990e8f7178938eeb9b6c5f8b5424",
+    "oldSourceRevision": "92b7137211bf807f178901e878a8c3d6e335cec4",
+    "backupSha256": "a8f75301794417e440aae993c608c7a484752fce35f2edcb01f214d973412e27",
+    "restoredBytesMatchBackup": true,
+    "restoredInodeDifferent": true,
+    "restoredOldSchemaVersion": 6,
+    "syntheticRevisionCountersPreserved": true,
+    "candidateSchemaVersion": 9,
+    "oldRejectsUpgradedSchema": true,
+    "schemaOnlyUpgradeControlsEmpty": true,
+    "laterDurableOwnerMakesRestoreIneligible": true,
+    "laterFactsPreservedInUpgradedSyntheticDatabase": true,
+    "actualOldProductionImageExecuted": false
+  },
+  "limitations": [
+    "Live database family metadata/schema/checksums/integrity/control counts were not inspected: host path PermissionError; no alternate route attempted.",
+    "Protected docker-volumes backup directory was not listed: PermissionError.",
+    "Accessible archives do not establish a JSO-consistent backup or recovery drill. Archive header naming classification is not a semantic DB inspection.",
+    "Public health403 Cloudflare response is an external-path limitation, not proven application failure.",
+    "Docker OCI label is a revision claim; production runtime-byte inventory was not compared.",
+    "WRITE_ADMISSION_MODE enabled is startup configuration, not a live transaction/drain attestation.",
+    "One Docker volume owner does not exclude host processes or non-Docker writers.",
+    "Synthetic tests do not execute the actual prior production image or restore production data."
+  ],
+  "readinessGaps": [
+    "Live DB family identity/schema/prefix/sidecar consistency, attachment parity and logical fact/revision baseline",
+    "Verified JSO backup manifest, checksums, consistency method, retention and separately approved production-local recovery drill",
+    "Exact writer/cleanup fence and held zero-fact rollback eligibility proof",
+    "Maintenance owner/window/RTO/RPO and bounded restore approval",
+    "Approved external health verification access path",
+    "Candidate transport and immutable destination identity, VCP/provider continuity acceptance and Alpine failure disposition",
+    "Explicit replacement execution authorization"
+  ],
+  "authorizationUnchanged": {
+    "status": "FROZEN_NOT_REQUESTED",
+    "requestedActionIds": [],
+    "approvedActionIds": [],
+    "requestableActionIds": [],
+    "nextActionId": "PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE"
+  },
+  "rawReceiptDigests": {
+    "production-readonly-metadata.py": "sha256:369a290cb6bff919fd206a540a6725c5d832ebceb3a3200cab00c9014d4dd3b1",
+    "production-readonly-metadata.json": "sha256:416e88c3ccbe1e7a19d3fde406860dc1966eb68744b2782606409f1ca9668ae1",
+    "production-readonly-backup-inventory.py": "sha256:e309a826575d34eac33b959883924bb49519c77c35bfae683c29721a948b05df",
+    "production-readonly-backup-inventory.json": "sha256:ad00f13f6e78e1a0b522263f3e5ce54832d05f7a34787f97acb559ac1382abf2",
+    "production-readonly-backup-checks.py": "sha256:75da27d52e6c31f3175a8ffb5c19c1ff3af02b7c1dbf9e88eb34d67503554d5a",
+    "production-readonly-backup-checks.json": "sha256:a04999c28367c330c43f4693ee75e2d414e8c0cb6f08f34d96a52a4a8e0d3213",
+    "production-readonly-kiosk.py": "sha256:c2491a305233740a732cda219e2f6490e27d843e442c42c31c8b827dbe95a0ed",
+    "production-readonly-kiosk.json": "sha256:d563626e0c84e488fbc0caab98a68b91533bf0183c2558f761f8b74aa4b9696f",
+    "preflight-synthetic/restore-probe.mjs": "sha256:479edba5ba7665677618094099c35ef42ddabed41c15d1e61a98f21b92bf3506",
+    "preflight-synthetic/restore-evidence.json": "sha256:710a183c2d976a9a163e1f7990e1518f19213705584fcbfd49d3d694da654658"
+  },
+  "localValidation": {
+    "completedAt": "2026-09-30T18:04:28.709230+00:00",
+    "runtime": "Frozen candidate image, Node24.21.0, no network, read-only review tree",
+    "contracts": "PASS",
+    "shadowLowDisclosure": "PASS_SYNTHETIC_BLOCKED_DATA",
+    "productionManifest": "WO_06D_MANIFEST_VALID",
+    "greenfieldAuthority": "WO_06D_GREENFIELD_AUTHORITY_VALID",
+    "authorityFileByteIdentity": "UNCHANGED",
+    "prod11ContractByteIdentity": "UNCHANGED",
+    "gitDiffCheck": "PASS",
+    "logSha256": "sha256:53aa7c92190a8fb80b379445aaf4a87767e00faadaf10b20af08e5d7195b583a",
+    "fullSuiteRerun": false,
+    "reason": "Documentation/evidence-only scope; candidate runtime unchanged; retained PR39 test limits apply"
+  }
+}

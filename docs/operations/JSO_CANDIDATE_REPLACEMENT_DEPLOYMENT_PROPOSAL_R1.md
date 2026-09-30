@@ -130,3 +130,13 @@ authorization. The actual Alpine runtime full-suite timestamp failures must be
 reviewed as documented limits; do not describe them as a full-suite PASS.
 The Greenfield authority remains GF15-next, `FROZEN_NOT_REQUESTED`, with all three
 action arrays empty. This proposal has no effects on that authority.
+
+## Read-only preflight and bounded recovery addendum (2026-09-30)
+
+The later [production preflight and rollback closure](JSO_PRODUCTION_PREFLIGHT_AND_ROLLBACK_CLOSURE_R1.md)
+records fresh read-only production metadata, denied live DB/protected-backup access,
+and a migration-only held-fence v6-restore recovery proposal. Its production-readiness
+verdict is BLOCKED. It supersedes the generic preferred-fallback choice only for
+that bounded pre-release phase; direct old-image restart on v7–v9 remains prohibited.
+The observations above describe the original preparation task; the addendum owns
+new live observations. Neither document authorizes replacement or restore.
