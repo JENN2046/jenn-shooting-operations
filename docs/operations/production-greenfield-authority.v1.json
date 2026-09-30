@@ -692,6 +692,381 @@
       "DELETION_IRREVERSIBILITY_ACKNOWLEDGED"
     ]
   },
+  "greenfieldKioskAcceptancePreparationConfigContract": {
+    "schemaVersion": 1,
+    "configVersion": "GF15-ACCEPT-CONFIG-R1",
+    "algorithmVersion": "deterministic-scheduler-v1",
+    "calendarCompilerVersion": "calendar-compiler-v1",
+    "estimatePolicyVersion": "estimate-policy-v1",
+    "businessTimeZone": "Asia/Shanghai",
+    "resourceCalendarStatic": {
+      "resourceId": "STUDIO-PROD-01",
+      "capabilityDigest": "sha256:d32c7c24657ca59e09348cb394471525bdefee9777b51d498eb3b2ba16782068",
+      "weeklyWindows": []
+    },
+    "dateOverrideContract": {
+      "status": "custom",
+      "dateSource": "AUTHORIZATION_BOUND_FUTURE_ASIA_SHANGHAI_DATE",
+      "windowSource": "AUTHORIZATION_BOUND_SINGLE_LOCAL_WINDOW"
+    },
+    "durationFallbackRules": [
+      {
+        "ruleId": "GF15-DURATION-FLAT-DETAIL",
+        "productionType": "平面",
+        "shootingSubtype": "细节",
+        "durationMs": 900000
+      }
+    ],
+    "bufferRules": [
+      {
+        "ruleId": "GF15-BUFFER-FLAT-DETAIL",
+        "productionType": "平面",
+        "shootingSubtype": "细节",
+        "bufferAfterMinutes": 5
+      }
+    ],
+    "softScoringWeights": {
+      "LIGHTING_SWITCH": 0,
+      "REFLECTIVITY_SEQUENCE": 0,
+      "IDLE_GAP": 0,
+      "EXPECTED_OVERRUN": 0,
+      "DESIRED_DATE_MISS": 0
+    },
+    "compatibleAlgorithmVersions": [
+      "deterministic-scheduler-v1"
+    ],
+    "finalBindingRequirements": [
+      "TARGET_PACKET_CONTAINS_COMPLETE_NORMALIZED_CONFIG_JSON",
+      "TARGET_PACKET_CONTAINS_CONFIG_DIGEST",
+      "ONLY_DATE_OVERRIDE_DATE_START_END_MAY_VARY",
+      "CONFIG_DIGEST_MUST_EQUAL_DIGEST_SCHEDULING_CONFIG_V1",
+      "TARGET_PACKET_WINDOW_MINIMUM_CONTIGUOUS_CAPACITY_MS_1200000",
+      "TARGET_PACKET_DETERMINISTIC_PROPOSAL_PREFLIGHT_EXACTLY_ONE_ITEM_PASS"
+    ]
+  },
+  "greenfieldKioskAcceptancePreparationAction": {
+    "id": "PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE",
+    "title": "Prepare bounded Kiosk production-smoke schedule",
+    "category": "DATA",
+    "risk": "HIGH",
+    "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+    "requiresExplicitAuthorization": true,
+    "authorityTarget": "Only the exact production-smoke-only scheduling fixture resourceId STUDIO-PROD-01, requestId REQ-GF15-ACCEPT-PROD-01, requestOperationId PRODGF15-REQUEST-R1, resourceOperationId PRODGF15-RESOURCE-R1, configVersion GF15-ACCEPT-CONFIG-R1, configPublishOperationId PRODGF15-CONFIG-PUBLISH-R1, configActivateOperationId PRODGF15-CONFIG-ACTIVATE-R1, requestRequirementsOperationId PRODGF15-REQS-R1, proposalOperationId PRODGF15-PROPOSAL-R1, decisionId PRODGF15-DECISION-R1 and one derived scheduleItemId within one authorization-bound future Asia/Shanghai window; no general scheduling rollout",
+    "preconditions": [
+      "GREENFIELD_ACTIVATION_COMPLETION",
+      "PROD_10_COMPLETION",
+      "KIOSK_DEPLOYABLE_AUTH_WIRING",
+      "PROD11_DEPLOYMENT_CONTRACT_FREEZE",
+      "PRODUCTION_TARGET_FACTS",
+      "PRODUCTION_DEPLOYMENT_GATE",
+      "DATABASE_WIDE_BRIEF_HOST_COMPATIBILITY",
+      "KIOSK_ACCEPTANCE_TARGET_PACKET",
+      "GF15_ACCEPTANCE_CANDIDATE_ISOLATION",
+      "KIOSK_ACCEPTANCE_SCHEDULING_QUIESCENCE_CAPABILITY",
+      "KIOSK_ACCEPTANCE_REQUEST_MATERIALIZATION_CAPABILITY",
+      "KIOSK_ACCEPTANCE_OUTBOX_ISOLATION_CAPABILITY"
+    ],
+    "effects": [
+      "Revalidate the exact production host, container, image, volume, database, Kiosk-disabled state and whole-database requests_v2 brief-host compatibility; acquire the bounded GF15 Scheduling quiescence capability before reading the prewrite draft-proposal gate; while that same lease is held revalidate current Scheduling revisions, prove zero stored draft scheduling proposals and absence-or-exact-replay state of every frozen acceptance identifier, then prove the authorization-bound local window and planning range contain at least 1200000 ms of contiguous capacity for the frozen 900000 ms duration plus 5-minute buffer and run a pure deterministic-scheduler-v1 preflight from the frozen target packet that yields exactly one proposed item for REQ-GF15-ACCEPT-PROD-01 on STUDIO-PROD-01; only after that preflight passes may the first GF15 mutation occur; retain the lease through the final proposal decision so unrelated proposal or scheduling-admin writes cannot race the preparation chain",
+      "Materialize exactly one canonical production-smoke-only requests_v2 request through the dedicated bounded domain capability and require its exact command plus all 36 persisted requests_v2 fields to match requestContract, register only STUDIO-PROD-01 with the frozen FLAT capability digest, publish and activate only the frozen acceptance scheduling config, and record only the exact request requirements required by the acceptance fixture",
+      "Generate one deterministic scheduling proposal scoped only to STUDIO-PROD-01 and the exact authorization-bound production-smoke window while the Scheduling quiescence capability remains held; fail closed unless the assembled candidate set contains exactly one candidate whose requestId is REQ-GF15-ACCEPT-PROD-01, the proposal contains exactly one proposed item for that request, the stored draft-proposal set contains exactly that GF15 proposal and no other draft, and the decision selects exactly that item; before submitting the decision, pre-arm Outbox isolation for the exact proposal/decision or require the same acceptance transaction to atomically install isolation, and prove that the resulting schedule.confirmed.v1 intent is never dispatcher-claimable from enqueue commit with no post-commit claimable window; only then accept the exact item, capture the derived schedule item ID, and release quiescence after post-decision verification",
+      "Perform no raw SQL bypass, no unrelated scheduling mutation, no general scheduling rollout, no Kiosk credential/config/profile enablement, and no production run event; preserve VCP state unchanged",
+      "Acknowledge that request/resource/config/proposal/decision/schedule/outbox facts are persistent production facts; rollback is containment-only and never deletes or rewrites those immutable facts"
+    ],
+    "rollbackActionIds": [
+      "ROLLBACK-GF-13-CONTAIN-DEVICE-ACCEPTANCE-SCHEDULE"
+    ],
+    "evidenceRequired": [
+      "GF15_EXACT_TARGET_ATTESTATION",
+      "PROD10_COMPLETION_PROOF",
+      "PROD11_DEPLOYMENT_CONTRACT_FREEZE_PROOF",
+      "GF15_REQUEST_MATERIALIZATION_CAPABILITY_PROOF",
+      "GF15_OUTBOX_ISOLATION_CAPABILITY_PROOF",
+      "GF15_SCHEDULING_QUIESCENCE_CAPABILITY_PROOF",
+      "GF15_ACCEPTANCE_TARGET_PACKET",
+      "GF15_BOUND_CONFIG_JSON",
+      "GF15_BOUND_CONFIG_DIGEST",
+      "GF15_PREWRITE_SCHEDULING_BASELINE",
+      "GF15_PREWRITE_DRAFT_PROPOSAL_COUNT_ZERO",
+      "GF15_TARGET_PACKET_MINIMUM_1200000MS_CONTIGUOUS_CAPACITY_PROOF",
+      "GF15_PREWRITE_DETERMINISTIC_PROPOSAL_PREFLIGHT_ONE_ITEM_PASS",
+      "GF15_CANDIDATE_ISOLATION_PROOF",
+      "GF15_POST_GENERATION_ONLY_ACCEPTANCE_DRAFT_PROOF",
+      "DATABASE_WIDE_BRIEF_HOST_SCAN",
+      "GF15_SCHEDULING_QUIESCENCE_ACQUIRE_RECEIPT",
+      "GF15_BOUND_REQUEST_COMMAND",
+      "GF15_BOUND_REQUEST_ROW_CONTRACT",
+      "GF15_MATERIALIZED_REQUEST_ROW_ATTESTATION",
+      "GF15_ACCEPTANCE_REQUEST_MATERIALIZATION_RECEIPT",
+      "GF15_RESOURCE_REGISTRATION_RECEIPT",
+      "GF15_RESOURCE_CAPABILITY_DIGEST",
+      "GF15_CONFIG_PUBLISH_RECEIPT",
+      "GF15_CONFIG_ACTIVATION_RECEIPT",
+      "GF15_REQUEST_REQUIREMENTS_RECEIPT",
+      "GF15_PROPOSAL_GENERATION_RECEIPT",
+      "GF15_PROPOSAL_INPUT_DIGEST",
+      "GF15_PROPOSAL_RESULT_DIGEST",
+      "GF15_SELECTED_REQUEST_BINDING_PROOF",
+      "GF15_DECISION_RECEIPT",
+      "GF15_DERIVED_SCHEDULE_ITEM_ID",
+      "GF15_OUTBOX_ISOLATION_PREARM_OR_ATOMIC_BINDING_PROOF",
+      "GF15_OUTBOX_NEVER_CLAIMABLE_PROOF",
+      "GF15_OUTBOX_ISOLATION_PROOF",
+      "GF15_UNRELATED_SCHEDULING_FACTS_UNCHANGED",
+      "GF15_KIOSK_REMAINS_DISABLED",
+      "GF15_VCP_UNCHANGED",
+      "GF15_SCHEDULING_QUIESCENCE_RELEASE_RECEIPT",
+      "GF15_ROLLBACK_CONTAINMENT_BINDING"
+    ],
+    "requestContract": {
+      "schemaVersion": 1,
+      "requestId": "REQ-GF15-ACCEPT-PROD-01",
+      "requestOperationId": "PRODGF15-REQUEST-R1",
+      "commandContract": {
+        "submissionSchemaVersion": 2,
+        "fixedFields": {
+          "operationId": "PRODGF15-REQUEST-R1",
+          "productionType": "平面",
+          "sku": "GF15-ACCEPT-PROD-01",
+          "name": "PROD-11 Kiosk Production Smoke",
+          "kind": "细节",
+          "shootingSubtype": "细节",
+          "aspectRatio": "1:1",
+          "deliverables": {
+            "type": "flat",
+            "count": 1
+          },
+          "requestedBy": "internal-acceptance",
+          "note": "",
+          "coreBriefSummary": "PROD-11 Kiosk Production Smoke",
+          "sampleStatus": "arrivedVerified",
+          "lightingPreset": "GF15-ACCEPT-NEUTRAL",
+          "reflectivity": "low",
+          "priority": "p0",
+          "uploadIds": []
+        },
+        "dynamicFields": {
+          "desiredDate": "AUTHORIZATION_BOUND_FUTURE_ASIA_SHANGHAI_DATE"
+        },
+        "omittedOptionalFields": [
+          "briefUrl",
+          "heroAssetId",
+          "sampleShelfId"
+        ]
+      },
+      "completePersistedColumns": [
+        "id",
+        "source_ordinal",
+        "sku",
+        "name",
+        "client",
+        "legacy_deliver_text",
+        "kind",
+        "legacy_v1_status",
+        "v1_status_mode",
+        "request_lifecycle",
+        "lifecycle_provenance",
+        "source",
+        "business_created_at",
+        "business_updated_at",
+        "imported_at",
+        "v1_assets_present",
+        "v1_request_present",
+        "production_type",
+        "shooting_subtype",
+        "deliverable_count",
+        "aspect_ratio",
+        "duration_seconds",
+        "audio_requirement",
+        "requested_by",
+        "desired_date",
+        "note",
+        "source_operation_id",
+        "core_brief_summary",
+        "brief_url",
+        "hero_asset_id",
+        "sample_status",
+        "sample_shelf_id",
+        "lighting_preset",
+        "reflectivity",
+        "priority",
+        "migration_batch_id"
+      ],
+      "fixedPersistedFields": {
+        "id": "REQ-GF15-ACCEPT-PROD-01",
+        "sku": "GF15-ACCEPT-PROD-01",
+        "name": "PROD-11 Kiosk Production Smoke",
+        "client": "internal-acceptance",
+        "legacy_deliver_text": "PROD-11 Kiosk Production Smoke",
+        "kind": "细节",
+        "legacy_v1_status": null,
+        "v1_status_mode": "canonical",
+        "request_lifecycle": "open",
+        "lifecycle_provenance": "domain_command",
+        "source": "submission",
+        "v1_assets_present": 0,
+        "v1_request_present": 1,
+        "production_type": "平面",
+        "shooting_subtype": "细节",
+        "deliverable_count": 1,
+        "aspect_ratio": "1:1",
+        "duration_seconds": null,
+        "audio_requirement": null,
+        "requested_by": "internal-acceptance",
+        "note": "",
+        "source_operation_id": "PRODGF15-REQUEST-R1",
+        "core_brief_summary": "PROD-11 Kiosk Production Smoke",
+        "brief_url": null,
+        "hero_asset_id": null,
+        "sample_status": "arrivedVerified",
+        "sample_shelf_id": null,
+        "lighting_preset": "GF15-ACCEPT-NEUTRAL",
+        "reflectivity": "low",
+        "priority": "p0",
+        "migration_batch_id": null
+      },
+      "derivedPersistedFields": {
+        "source_ordinal": "NEXT_AVAILABLE_CANONICAL_SOURCE_ORDINAL_IN_MATERIALIZATION_TRANSACTION",
+        "business_created_at": "TRUSTED_SERVER_TIME_IN_MATERIALIZATION_TRANSACTION",
+        "business_updated_at": "SAME_AS_BUSINESS_CREATED_AT",
+        "imported_at": "SAME_AS_BUSINESS_CREATED_AT",
+        "desired_date": "AUTHORIZATION_BOUND_FUTURE_ASIA_SHANGHAI_DATE"
+      },
+      "finalBindingRequirements": [
+        "TARGET_PACKET_CONTAINS_EXACT_REQUEST_COMMAND_WITH_BOUND_DESIRED_DATE",
+        "MATERIALIZATION_RECEIPT_CONTAINS_COMPLETE_REQUESTS_V2_ROW",
+        "MATERIALIZED_ROW_MATCHES_ALL_FIXED_AND_DERIVED_FIELDS",
+        "NO_UNLISTED_OR_UNBOUND_REQUESTS_V2_FIELD"
+      ]
+    }
+  },
+  "greenfieldKioskAcceptancePreparationRollbackAction": {
+    "id": "ROLLBACK-GF-13-CONTAIN-DEVICE-ACCEPTANCE-SCHEDULE",
+    "title": "Contain the PROD-GF-15 Kiosk production-smoke scheduling fixture",
+    "category": "ROLLBACK",
+    "risk": "HIGH",
+    "sideEffect": "IRREVERSIBLE_OR_EXTERNAL",
+    "requiresExplicitAuthorization": false,
+    "authorityTarget": "Only the exact STUDIO-PROD-01 production-smoke fixture and scheduling state introduced by PROD-GF-15, using rollback operationIds PRODGF15-ROLLBACK-RESOURCE-R1 and conditional PRODGF15-ROLLBACK-CONFIG-ACTIVATE-R1; never unrelated production scheduling, VCP, Kiosk configuration or DingTalk configuration",
+    "preconditions": [
+      "KIOSK_ACCEPTANCE_SCHEDULING_QUIESCENCE_CAPABILITY"
+    ],
+    "effects": [
+      "Immediately block progression to PROD-11 and keep Kiosk authentication/configuration disabled while binding containment to the exact PROD-GF-15 forward receipts, pre-GF15 Scheduling baseline, any durable rollback operation receipts and current scheduling revisions",
+      "Before any rollback Scheduling resource/config mutation, continue the still-held forward GF15 Scheduling quiescence lease or reacquire a bounded rollback lease; while that lease is held fail closed unless the stored draft-proposal set is empty or contains only the exact source-bound GF15 proposal and contains no unrelated draft; then revalidate ownership of the mutable GF15 post-state in a state-aware way by classifying the current resource/config pair through rollbackStateMachine using exact forward/rollback operation receipts and the pre-GF15 baseline, including the enumerated partial-forward and partial-rollback states; if either mutable value/source operation is changed by any later Scheduling action, perform no rollback mutation; any unenumerated state, invalid state pair or receipt mismatch also fails closed with no Scheduling rollback mutation",
+      "For RESOURCE_FORWARD_APPLIED only, execute rollbackCommandContract.resourceContainment with fixed operationId PRODGF15-ROLLBACK-RESOURCE-R1 and persist its exact first-attempt command JSON/digest; on retry, if that operation already exists, reuse the persisted command/digest unchanged rather than rebinding revisions; RESOURCE_FORWARD_NOT_REACHED is a no-op and RESOURCE_ROLLBACK_APPLIED is exact replay/no-new-mutation",
+      "For CONFIG_FORWARD_APPLIED only, if the pre-GF15 baseline had an active config, execute rollbackCommandContract.priorConfigReactivation with fixed operationId PRODGF15-ROLLBACK-CONFIG-ACTIVATE-R1 against that exact prior config and persist the exact first-attempt command JSON/digest after the resource step; retries reuse that exact command/digest unchanged; if forward config activation never happened, leave the exact prior/absent config untouched; if there was no prior config, retain GF15-ACCEPT-CONFIG-R1 with the resource contained inactive because the domain has no delete-or-clear-active-config command",
+      "Contain the production-smoke schedule-confirmed Outbox intent through the preverified isolation capability and preserve the acceptance request, resource/config history, proposal, decision, schedule item, outbox and audit facts rather than deleting or rewriting immutable production history",
+      "Verify the terminal contained state is one of the exact terminal/replay states defined by rollbackStateMachine, unrelated scheduling facts, production volume/database identity and VCP state are unchanged, confirm PROD-11 remains unauthorized, then release the rollback/continued quiescence lease and record the release receipt"
+    ],
+    "rollbackActionIds": [],
+    "evidenceRequired": [
+      "GF15_ROLLBACK_SOURCE_BINDING",
+      "GF15_ROLLBACK_PREMUTATION_DRAFT_PROPOSAL_GATE",
+      "GF15_ROLLBACK_SCHEDULING_QUIESCENCE_ACQUIRE_OR_CONTINUE_RECEIPT",
+      "GF15_ROLLBACK_POSTSTATE_OWNERSHIP_GATE",
+      "GF15_ROLLBACK_NO_POST_GF15_SCHEDULING_OVERWRITE_PROOF",
+      "GF15_ROLLBACK_STATE_MACHINE_CLASSIFICATION",
+      "GF15_ROLLBACK_FORWARD_AND_ROLLBACK_RECEIPT_CONSISTENCY_GATE",
+      "GF15_ROLLBACK_RESOURCE_COMMAND_PACKET_OR_NOT_REQUIRED",
+      "GF15_ROLLBACK_CONFIG_COMMAND_PACKET_OR_NOT_REQUIRED",
+      "GF15_ROLLBACK_EXACT_REPLAY_OR_FIRST_ATTEMPT_PROOF",
+      "GF15_ACCEPTANCE_RESOURCE_INACTIVE_OR_UNCHANGED",
+      "GF15_PRIOR_CONFIG_RESTORED_OR_NO_PRIOR_CONFIG_ACKNOWLEDGED",
+      "GF15_OUTBOX_CONTAINED",
+      "GF15_KIOSK_DISABLED",
+      "GF15_SCHEDULING_QUIESCENCE_RELEASE_RECEIPT",
+      "GF15_IMMUTABLE_FACTS_PRESERVED",
+      "GF15_UNRELATED_SCHEDULING_FACTS_UNCHANGED",
+      "GF15_PRODUCTION_STORAGE_IDENTITY_PRESERVED",
+      "GF15_VCP_UNCHANGED"
+    ],
+    "rollbackCommandContract": {
+      "schemaVersion": 1,
+      "resourceContainment": {
+        "operationId": "PRODGF15-ROLLBACK-RESOURCE-R1",
+        "commandType": "ReplaceSchedulingResourceV1",
+        "executeOnlyWhen": "RESOURCE_FORWARD_APPLIED",
+        "expectedRevisionsSource": "GF15_ROLLBACK_STATE_SNAPSHOT_CAPTURED_UNDER_QUIESCENCE_BEFORE_FIRST_RESOURCE_ROLLBACK_ATTEMPT",
+        "resource": {
+          "resourceId": "STUDIO-PROD-01",
+          "v1DisplayPlace": "Studio PROD 01 Kiosk Acceptance",
+          "status": "inactive",
+          "capabilityJson": {
+            "schemaVersion": 1,
+            "capabilityIds": [
+              "FLAT"
+            ]
+          },
+          "capabilityDigest": "sha256:d32c7c24657ca59e09348cb394471525bdefee9777b51d498eb3b2ba16782068"
+        },
+        "firstAttemptBinding": "PERSIST_EXACT_COMMAND_JSON_AND_COMMAND_DIGEST_BEFORE_OR_WITH_FIRST_ATTEMPT",
+        "replayPolicy": "IF_OPERATION_EXISTS_REUSE_EXACT_PERSISTED_COMMAND_JSON_AND_DIGEST_NEVER_REBIND_REVISIONS"
+      },
+      "priorConfigReactivation": {
+        "operationId": "PRODGF15-ROLLBACK-CONFIG-ACTIVATE-R1",
+        "commandType": "ActivateSchedulingConfigV1",
+        "executeOnlyWhen": "CONFIG_FORWARD_APPLIED_AND_PRE_GF15_ACTIVE_CONFIG_EXISTS",
+        "configVersionSource": "GF15_PREWRITE_SCHEDULING_BASELINE.EXACT_PRIOR_ACTIVE_CONFIG_VERSION",
+        "expectedProjectionRevisionSource": "POST_RESOURCE_CONTAINMENT_PROJECTION_REVISION_CAPTURED_UNDER_SAME_QUIESCENCE_BEFORE_FIRST_CONFIG_ROLLBACK_ATTEMPT",
+        "firstAttemptBinding": "PERSIST_EXACT_COMMAND_JSON_AND_COMMAND_DIGEST_BEFORE_OR_WITH_FIRST_ATTEMPT",
+        "replayPolicy": "IF_OPERATION_EXISTS_REUSE_EXACT_PERSISTED_COMMAND_JSON_AND_DIGEST_NEVER_REBIND_REVISIONS"
+      },
+      "noPriorConfigRule": "IF_NO_PRE_GF15_ACTIVE_CONFIG_EXISTS_NEVER_INVENT_A_CONFIG_REACTIVATION_COMMAND"
+    },
+    "rollbackStateMachine": {
+      "schemaVersion": 1,
+      "resourceStates": {
+        "RESOURCE_FORWARD_NOT_REACHED": {
+          "match": "STUDIO-PROD-01_ABSENT_AND_PRODGF15_RESOURCE_R1_HAS_NO_SUCCESS_RECEIPT",
+          "next": "NO_RESOURCE_MUTATION"
+        },
+        "RESOURCE_FORWARD_APPLIED": {
+          "match": "STUDIO-PROD-01_ACTIVE_WITH_EXACT_GF15_CAPABILITY_DIGEST_AND_SOURCE_OPERATION_PRODGF15_RESOURCE_R1_PLUS_SUCCESS_RECEIPT",
+          "next": "RUN_EXACT_RESOURCE_CONTAINMENT_COMMAND"
+        },
+        "RESOURCE_ROLLBACK_APPLIED": {
+          "match": "STUDIO-PROD-01_INACTIVE_WITH_EXACT_GF15_CAPABILITY_DIGEST_AND_SOURCE_OPERATION_PRODGF15_ROLLBACK_RESOURCE_R1_PLUS_EXACT_ROLLBACK_OPERATION_RECEIPT",
+          "next": "RESOURCE_STEP_EXACT_REPLAY_NO_NEW_MUTATION"
+        }
+      },
+      "configStates": {
+        "CONFIG_FORWARD_NOT_REACHED_PRIOR_PRESENT": {
+          "match": "CURRENT_ACTIVE_CONFIG_EQUALS_EXACT_PRE_GF15_CONFIG_VERSION_AND_ACTIVATION_OPERATION_FROM_BASELINE_AND_PRODGF15_CONFIG_ACTIVATE_R1_HAS_NO_SUCCESS_RECEIPT",
+          "next": "NO_CONFIG_MUTATION"
+        },
+        "CONFIG_FORWARD_NOT_REACHED_NO_PRIOR": {
+          "match": "NO_ACTIVE_CONFIG_AND_PRE_GF15_BASELINE_HAD_NO_ACTIVE_CONFIG_AND_PRODGF15_CONFIG_ACTIVATE_R1_HAS_NO_SUCCESS_RECEIPT",
+          "next": "NO_CONFIG_MUTATION"
+        },
+        "CONFIG_FORWARD_APPLIED": {
+          "match": "CURRENT_ACTIVE_CONFIG_IS_GF15_ACCEPT_CONFIG_R1_WITH_ACTIVATION_OPERATION_PRODGF15_CONFIG_ACTIVATE_R1_PLUS_SUCCESS_RECEIPT",
+          "next": "REACTIVATE_EXACT_PRIOR_CONFIG_IF_PRIOR_EXISTS_OTHERWISE_RETAIN_GF15_CONFIG_WITH_CONTAINED_INACTIVE_RESOURCE"
+        },
+        "CONFIG_ROLLBACK_APPLIED_PRIOR_PRESENT": {
+          "match": "CURRENT_ACTIVE_CONFIG_EQUALS_EXACT_PRE_GF15_CONFIG_VERSION_WITH_ACTIVATION_OPERATION_PRODGF15_ROLLBACK_CONFIG_ACTIVATE_R1_PLUS_EXACT_ROLLBACK_OPERATION_RECEIPT",
+          "next": "CONFIG_STEP_EXACT_REPLAY_NO_NEW_MUTATION"
+        },
+        "CONFIG_CONTAINED_NO_PRIOR": {
+          "match": "PRE_GF15_BASELINE_HAD_NO_ACTIVE_CONFIG_AND_CURRENT_ACTIVE_CONFIG_IS_GF15_ACCEPT_CONFIG_R1_WITH_FORWARD_ACTIVATION_OPERATION_AND_RESOURCE_STATE_IS_RESOURCE_ROLLBACK_APPLIED",
+          "next": "NO_CONFIG_MUTATION"
+        }
+      },
+      "validStatePairs": [
+        "RESOURCE_FORWARD_APPLIED + CONFIG_FORWARD_APPLIED",
+        "RESOURCE_FORWARD_APPLIED + CONFIG_FORWARD_NOT_REACHED_NO_PRIOR",
+        "RESOURCE_FORWARD_APPLIED + CONFIG_FORWARD_NOT_REACHED_PRIOR_PRESENT",
+        "RESOURCE_FORWARD_NOT_REACHED + CONFIG_FORWARD_NOT_REACHED_NO_PRIOR",
+        "RESOURCE_FORWARD_NOT_REACHED + CONFIG_FORWARD_NOT_REACHED_PRIOR_PRESENT",
+        "RESOURCE_ROLLBACK_APPLIED + CONFIG_CONTAINED_NO_PRIOR",
+        "RESOURCE_ROLLBACK_APPLIED + CONFIG_FORWARD_APPLIED",
+        "RESOURCE_ROLLBACK_APPLIED + CONFIG_FORWARD_NOT_REACHED_NO_PRIOR",
+        "RESOURCE_ROLLBACK_APPLIED + CONFIG_FORWARD_NOT_REACHED_PRIOR_PRESENT",
+        "RESOURCE_ROLLBACK_APPLIED + CONFIG_ROLLBACK_APPLIED_PRIOR_PRESENT"
+      ],
+      "rejectionRule": "ANY_UNENUMERATED_STATE_OR_PAIR_OR_RECEIPT_MISMATCH_FAILS_CLOSED_WITH_NO_SCHEDULING_ROLLBACK_MUTATION"
+    }
+  },
   "authorization": {
     "status": "FROZEN_NOT_REQUESTED",
     "approvalModel": "EXACT_ACTION_IDS_AND_TARGETS_ONLY",
@@ -700,7 +1075,7 @@
     "requestedActionIds": [],
     "approvedActionIds": [],
     "requestableActionIds": [],
-    "nextActionId": "PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE",
+    "nextActionId": "PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE",
     "nextActionRequiresExplicitAuthorization": true
   },
   "greenfieldConditionalActionIds": [

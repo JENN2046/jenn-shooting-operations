@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { createProductionChangeManifestValidator } from '../src/production-change-manifest-v1.mjs';
 import { validateProductionGreenfieldAuthority } from '../src/production-greenfield-authority-v1.mjs';
+import { normalizeSchedulingConfigV1 } from '../src/scheduling-admin-contract-v1.mjs';
 
 const schema = JSON.parse(readFileSync(new URL('../contracts/production-change-manifest.v1.schema.json', import.meta.url), 'utf8'));
 const base = JSON.parse(readFileSync(new URL('../docs/operations/production-change-manifest.v1.json', import.meta.url), 'utf8'));
@@ -31,7 +32,7 @@ test('greenfield authority binds the frozen parent and grants no production muta
   assert.deepEqual(authority.authorization.requestedActionIds, []);
   assert.deepEqual(authority.authorization.approvedActionIds, []);
   assert.deepEqual(authority.authorization.requestableActionIds, []);
-  assert.equal(authority.authorization.nextActionId, 'PROD-11-ENABLE-KIOSK-IDENTITY-DEVICE');
+  assert.equal(authority.authorization.nextActionId, 'PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE');
   assert.equal(authority.authorization.nextActionRequiresExplicitAuthorization, true);
 });
 
@@ -663,6 +664,8 @@ test('greenfield authority rejects malformed nested shapes without throwing', ()
   for (const mutate of [
     value => { value.greenfieldForwardChain = null; },
     value => { value.greenfieldActivationAction = null; },
+    value => { value.greenfieldKioskAcceptancePreparationAction = null; },
+    value => { value.greenfieldKioskAcceptancePreparationConfigContract = null; },
     value => { value.greenfieldPreActivationWriteFence = null; },
     value => { value.authorization.requestableActionIds = null; },
   ]) {
@@ -926,6 +929,478 @@ test('greenfield cleanup cannot bypass activation or disable-and-drain recovery'
   rejected(value => {
     value.greenfieldCleanupAction.rollbackActionIds = [];
   }, 'GREENFIELD_CLEANUP_ACTION_INVALID');
+});
+
+
+test('GF15 freezes every scheduling config field except the one authorization-bound local window', () => {
+  const config = authority.greenfieldKioskAcceptancePreparationConfigContract;
+  assert.equal(config.schemaVersion, 1);
+  assert.equal(config.configVersion, 'GF15-ACCEPT-CONFIG-R1');
+  assert.equal(config.algorithmVersion, 'deterministic-scheduler-v1');
+  assert.equal(config.calendarCompilerVersion, 'calendar-compiler-v1');
+  assert.equal(config.estimatePolicyVersion, 'estimate-policy-v1');
+  assert.equal(config.businessTimeZone, 'Asia/Shanghai');
+  assert.deepEqual(config.resourceCalendarStatic, {
+    resourceId: 'STUDIO-PROD-01',
+    capabilityDigest: 'sha256:d32c7c24657ca59e09348cb394471525bdefee9777b51d498eb3b2ba16782068',
+    weeklyWindows: [],
+  });
+  assert.deepEqual(config.durationFallbackRules, [{
+    ruleId: 'GF15-DURATION-FLAT-DETAIL',
+    productionType: '平面',
+    shootingSubtype: '细节',
+    durationMs: 900000,
+  }]);
+  assert.deepEqual(config.bufferRules, [{
+    ruleId: 'GF15-BUFFER-FLAT-DETAIL',
+    productionType: '平面',
+    shootingSubtype: '细节',
+    bufferAfterMinutes: 5,
+  }]);
+  assert.deepEqual(config.softScoringWeights, {
+    LIGHTING_SWITCH: 0,
+    REFLECTIVITY_SEQUENCE: 0,
+    IDLE_GAP: 0,
+    EXPECTED_OVERRUN: 0,
+    DESIRED_DATE_MISS: 0,
+  });
+  assert.deepEqual(config.compatibleAlgorithmVersions, ['deterministic-scheduler-v1']);
+  assert.deepEqual(config.dateOverrideContract, {
+    status: 'custom',
+    dateSource: 'AUTHORIZATION_BOUND_FUTURE_ASIA_SHANGHAI_DATE',
+    windowSource: 'AUTHORIZATION_BOUND_SINGLE_LOCAL_WINDOW',
+  });
+  assert.equal(
+    config.finalBindingRequirements.includes('TARGET_PACKET_CONTAINS_COMPLETE_NORMALIZED_CONFIG_JSON'),
+    true,
+  );
+  assert.equal(
+    config.finalBindingRequirements.includes('CONFIG_DIGEST_MUST_EQUAL_DIGEST_SCHEDULING_CONFIG_V1'),
+    true,
+  );
+  assert.equal(
+    config.finalBindingRequirements.includes('TARGET_PACKET_WINDOW_MINIMUM_CONTIGUOUS_CAPACITY_MS_1200000'),
+    true,
+  );
+  assert.equal(
+    config.finalBindingRequirements.includes('TARGET_PACKET_DETERMINISTIC_PROPOSAL_PREFLIGHT_EXACTLY_ONE_ITEM_PASS'),
+    true,
+  );
+
+  const bound = normalizeSchedulingConfigV1({
+    schemaVersion: config.schemaVersion,
+    businessTimeZone: config.businessTimeZone,
+    resourceCalendars: [{
+      ...config.resourceCalendarStatic,
+      dateOverrides: [{
+        date: '2026-10-01',
+        status: config.dateOverrideContract.status,
+        windows: [{ start: '10:00', end: '12:00' }],
+      }],
+    }],
+    durationFallbackRules: config.durationFallbackRules,
+    bufferRules: config.bufferRules,
+    softScoringWeights: config.softScoringWeights,
+    compatibleAlgorithmVersions: config.compatibleAlgorithmVersions,
+  });
+  assert.equal(bound.ok, true);
+  assert.equal(
+    bound.configDigest,
+    'sha256:0755a61402931e756cf68a1360e8dfcb6f58820b518ed920df73096a1b6c0ef8',
+  );
+
+  rejected(value => {
+    value.greenfieldKioskAcceptancePreparationConfigContract.bufferRules[0].bufferAfterMinutes = 20;
+  }, 'GREENFIELD_KIOSK_ACCEPTANCE_PREPARATION_CONFIG_INVALID');
+});
+
+test('GF15 freezes the complete canonical request command and all requests_v2 persisted columns', () => {
+  const contract = authority.greenfieldKioskAcceptancePreparationAction.requestContract;
+  assert.equal(contract.schemaVersion, 1);
+  assert.equal(contract.requestId, 'REQ-GF15-ACCEPT-PROD-01');
+  assert.equal(contract.requestOperationId, 'PRODGF15-REQUEST-R1');
+  assert.equal(contract.commandContract.submissionSchemaVersion, 2);
+  assert.equal(contract.commandContract.fixedFields.operationId, 'PRODGF15-REQUEST-R1');
+  assert.equal(contract.commandContract.fixedFields.coreBriefSummary, 'PROD-11 Kiosk Production Smoke');
+  assert.deepEqual(contract.commandContract.fixedFields.uploadIds, []);
+  assert.deepEqual(contract.commandContract.omittedOptionalFields, ['briefUrl', 'heroAssetId', 'sampleShelfId']);
+  assert.equal(contract.commandContract.dynamicFields.desiredDate, 'AUTHORIZATION_BOUND_FUTURE_ASIA_SHANGHAI_DATE');
+
+  const expectedColumns = [
+  "id",
+  "source_ordinal",
+  "sku",
+  "name",
+  "client",
+  "legacy_deliver_text",
+  "kind",
+  "legacy_v1_status",
+  "v1_status_mode",
+  "request_lifecycle",
+  "lifecycle_provenance",
+  "source",
+  "business_created_at",
+  "business_updated_at",
+  "imported_at",
+  "v1_assets_present",
+  "v1_request_present",
+  "production_type",
+  "shooting_subtype",
+  "deliverable_count",
+  "aspect_ratio",
+  "duration_seconds",
+  "audio_requirement",
+  "requested_by",
+  "desired_date",
+  "note",
+  "source_operation_id",
+  "core_brief_summary",
+  "brief_url",
+  "hero_asset_id",
+  "sample_status",
+  "sample_shelf_id",
+  "lighting_preset",
+  "reflectivity",
+  "priority",
+  "migration_batch_id"
+];
+  assert.deepEqual(contract.completePersistedColumns, expectedColumns);
+  assert.equal(new Set(contract.completePersistedColumns).size, 36);
+  assert.deepEqual(
+    [...new Set([...Object.keys(contract.fixedPersistedFields), ...Object.keys(contract.derivedPersistedFields)])].sort(),
+    [...contract.completePersistedColumns].sort(),
+  );
+  assert.equal(contract.fixedPersistedFields.legacy_deliver_text, 'PROD-11 Kiosk Production Smoke');
+  assert.equal(contract.fixedPersistedFields.v1_status_mode, 'canonical');
+  assert.equal(contract.fixedPersistedFields.v1_assets_present, 0);
+  assert.equal(contract.fixedPersistedFields.v1_request_present, 1);
+  assert.equal(contract.fixedPersistedFields.requested_by, 'internal-acceptance');
+  assert.equal(contract.fixedPersistedFields.note, '');
+  assert.equal(contract.fixedPersistedFields.core_brief_summary, 'PROD-11 Kiosk Production Smoke');
+  assert.equal(contract.fixedPersistedFields.hero_asset_id, null);
+  assert.equal(contract.fixedPersistedFields.sample_shelf_id, null);
+  assert.equal(
+    contract.derivedPersistedFields.source_ordinal,
+    'NEXT_AVAILABLE_CANONICAL_SOURCE_ORDINAL_IN_MATERIALIZATION_TRANSACTION',
+  );
+  assert.equal(contract.finalBindingRequirements.includes('NO_UNLISTED_OR_UNBOUND_REQUESTS_V2_FIELD'), true);
+
+  rejected(value => {
+    value.greenfieldKioskAcceptancePreparationAction.requestContract.fixedPersistedFields.core_brief_summary =
+      'implementation-chosen';
+  }, 'GREENFIELD_KIOSK_ACCEPTANCE_PREPARATION_ACTION_INVALID');
+});
+
+test('GF15 freezes one bounded irreversible Kiosk acceptance scheduling preparation action', () => {
+  const action = authority.greenfieldKioskAcceptancePreparationAction;
+  assert.equal(action.id, 'PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE');
+  assert.equal(action.category, 'DATA');
+  assert.equal(action.risk, 'HIGH');
+  assert.equal(action.sideEffect, 'IRREVERSIBLE_OR_EXTERNAL');
+  assert.equal(action.requiresExplicitAuthorization, true);
+  assert.match(action.authorityTarget, /STUDIO-PROD-01/u);
+  assert.match(action.authorityTarget, /requestId REQ-GF15-ACCEPT-PROD-01/u);
+  assert.match(action.authorityTarget, /configVersion GF15-ACCEPT-CONFIG-R1/u);
+  assert.match(action.authorityTarget, /decisionId PRODGF15-DECISION-R1/u);
+  assert.equal(
+    action.preconditions.includes('KIOSK_ACCEPTANCE_REQUEST_MATERIALIZATION_CAPABILITY'),
+    true,
+  );
+  assert.equal(
+    action.preconditions.includes('KIOSK_ACCEPTANCE_OUTBOX_ISOLATION_CAPABILITY'),
+    true,
+  );
+  assert.equal(
+    action.preconditions.includes('DATABASE_WIDE_BRIEF_HOST_COMPATIBILITY'),
+    true,
+  );
+  assert.equal(
+    action.preconditions.includes('GF15_ACCEPTANCE_CANDIDATE_ISOLATION'),
+    true,
+  );
+  assert.equal(
+    action.preconditions.includes('KIOSK_ACCEPTANCE_SCHEDULING_QUIESCENCE_CAPABILITY'),
+    true,
+  );
+  assert.equal(
+    action.effects.some(effect => /no raw SQL bypass/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    action.effects.some(effect => /contains exactly one candidate whose requestId is REQ-GF15-ACCEPT-PROD-01/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    action.effects.some(effect => /decision selects exactly that item/u.test(effect)),
+    true,
+  );
+  assert.match(action.title, /production-smoke/u);
+  assert.match(action.authorityTarget, /production-smoke-only/u);
+  assert.equal(
+    action.effects.some(effect => /before submitting the decision, pre-arm Outbox isolation/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    action.effects.some(effect => /no post-commit claimable window/u.test(effect)),
+    true,
+  );
+  for (const proof of [
+    'GF15_OUTBOX_ISOLATION_PREARM_OR_ATOMIC_BINDING_PROOF',
+    'GF15_OUTBOX_NEVER_CLAIMABLE_PROOF',
+  ]) {
+    assert.equal(action.evidenceRequired.includes(proof), true, proof);
+  }
+  assert.equal(
+    action.effects.some(effect => /zero stored draft scheduling proposals/u.test(effect)),
+    true,
+  );
+  const prewriteEffect = action.effects.find(effect => /prewrite draft-proposal gate/u.test(effect));
+  assert.equal(typeof prewriteEffect, 'string');
+  assert.equal(
+    prewriteEffect.indexOf('acquire the bounded GF15 Scheduling quiescence capability')
+      < prewriteEffect.indexOf('prove zero stored draft scheduling proposals'),
+    true,
+  );
+  assert.equal(
+    action.effects.some(effect => /stored draft-proposal set contains exactly that GF15 proposal and no other draft/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    action.effects.some(effect => /persistent production facts/u.test(effect)),
+    true,
+  );
+  assert.deepEqual(
+    action.rollbackActionIds,
+    ['ROLLBACK-GF-13-CONTAIN-DEVICE-ACCEPTANCE-SCHEDULE'],
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_BOUND_CONFIG_JSON'),
+    true,
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_BOUND_CONFIG_DIGEST'),
+    true,
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_PREWRITE_DRAFT_PROPOSAL_COUNT_ZERO'),
+    true,
+  );
+  assert.equal(
+    action.effects.some(effect => /at least 1200000 ms of contiguous capacity/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    action.effects.some(effect => /pure deterministic-scheduler-v1 preflight/u.test(effect)),
+    true,
+  );
+  for (const proof of [
+    'GF15_TARGET_PACKET_MINIMUM_1200000MS_CONTIGUOUS_CAPACITY_PROOF',
+    'GF15_PREWRITE_DETERMINISTIC_PROPOSAL_PREFLIGHT_ONE_ITEM_PASS',
+  ]) {
+    assert.equal(action.evidenceRequired.includes(proof), true, proof);
+  }
+  assert.equal(
+    action.evidenceRequired.includes('GF15_CANDIDATE_ISOLATION_PROOF'),
+    true,
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_POST_GENERATION_ONLY_ACCEPTANCE_DRAFT_PROOF'),
+    true,
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_SCHEDULING_QUIESCENCE_CAPABILITY_PROOF'),
+    true,
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_SCHEDULING_QUIESCENCE_ACQUIRE_RECEIPT'),
+    true,
+  );
+  for (const proof of [
+    'GF15_BOUND_REQUEST_COMMAND',
+    'GF15_BOUND_REQUEST_ROW_CONTRACT',
+    'GF15_MATERIALIZED_REQUEST_ROW_ATTESTATION',
+  ]) {
+    assert.equal(action.evidenceRequired.includes(proof), true, proof);
+  }
+  assert.equal(
+    action.evidenceRequired.includes('GF15_SELECTED_REQUEST_BINDING_PROOF'),
+    true,
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_REQUEST_MATERIALIZATION_CAPABILITY_PROOF'),
+    true,
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_OUTBOX_ISOLATION_CAPABILITY_PROOF'),
+    true,
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_DERIVED_SCHEDULE_ITEM_ID'),
+    true,
+  );
+  assert.equal(
+    action.evidenceRequired.includes('GF15_OUTBOX_ISOLATION_PROOF'),
+    true,
+  );
+
+  rejected(value => {
+    value.greenfieldKioskAcceptancePreparationAction.preconditions =
+      value.greenfieldKioskAcceptancePreparationAction.preconditions
+        .filter(id => id !== 'KIOSK_ACCEPTANCE_REQUEST_MATERIALIZATION_CAPABILITY');
+  }, 'GREENFIELD_KIOSK_ACCEPTANCE_PREPARATION_ACTION_INVALID');
+  rejected(value => {
+    value.greenfieldKioskAcceptancePreparationAction.effects =
+      ['directly insert a schedule row'];
+  }, 'GREENFIELD_KIOSK_ACCEPTANCE_PREPARATION_ACTION_INVALID');
+});
+
+test('GF15 rollback is containment-only and cannot pretend immutable scheduling facts disappear', () => {
+  const rollback = authority.greenfieldKioskAcceptancePreparationRollbackAction;
+  assert.equal(rollback.id, 'ROLLBACK-GF-13-CONTAIN-DEVICE-ACCEPTANCE-SCHEDULE');
+  assert.equal(rollback.category, 'ROLLBACK');
+  assert.equal(rollback.requiresExplicitAuthorization, false);
+  assert.equal(rollback.sideEffect, 'IRREVERSIBLE_OR_EXTERNAL');
+  assert.match(rollback.authorityTarget, /STUDIO-PROD-01/u);
+  assert.equal(
+    rollback.effects.some(effect => /preserve the acceptance request/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    rollback.effects.some(effect => /no delete-or-clear-active-config command/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    rollback.preconditions.includes('KIOSK_ACCEPTANCE_SCHEDULING_QUIESCENCE_CAPABILITY'),
+    true,
+  );
+  assert.equal(
+    rollback.effects.some(effect => /reacquire a bounded rollback lease/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    rollback.effects.some(effect => /empty or contains only the exact source-bound GF15 proposal/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    rollback.effects.some(effect => /contains no unrelated draft/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    rollback.effects.some(effect => /revalidate ownership of the mutable GF15 post-state/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    rollback.effects.some(effect => /changed by any later Scheduling action, perform no rollback mutation/u.test(effect)),
+    true,
+  );
+  for (const proof of [
+    'GF15_ROLLBACK_POSTSTATE_OWNERSHIP_GATE',
+    'GF15_ROLLBACK_NO_POST_GF15_SCHEDULING_OVERWRITE_PROOF',
+  ]) {
+    assert.equal(rollback.evidenceRequired.includes(proof), true, proof);
+  }
+  for (const proof of [
+    'GF15_ROLLBACK_SCHEDULING_QUIESCENCE_ACQUIRE_OR_CONTINUE_RECEIPT',
+    'GF15_ROLLBACK_PREMUTATION_DRAFT_PROPOSAL_GATE',
+    'GF15_SCHEDULING_QUIESCENCE_RELEASE_RECEIPT',
+  ]) {
+    assert.equal(rollback.evidenceRequired.includes(proof), true, proof);
+  }
+  assert.equal(
+    rollback.evidenceRequired.includes('GF15_IMMUTABLE_FACTS_PRESERVED'),
+    true,
+  );
+
+  assert.equal(rollback.rollbackCommandContract.schemaVersion, 1);
+  assert.equal(
+    rollback.rollbackCommandContract.resourceContainment.operationId,
+    'PRODGF15-ROLLBACK-RESOURCE-R1',
+  );
+  assert.equal(
+    rollback.rollbackCommandContract.resourceContainment.commandType,
+    'ReplaceSchedulingResourceV1',
+  );
+  assert.equal(
+    rollback.rollbackCommandContract.resourceContainment.resource.status,
+    'inactive',
+  );
+  assert.equal(
+    rollback.rollbackCommandContract.priorConfigReactivation.operationId,
+    'PRODGF15-ROLLBACK-CONFIG-ACTIVATE-R1',
+  );
+  assert.equal(
+    rollback.rollbackCommandContract.priorConfigReactivation.commandType,
+    'ActivateSchedulingConfigV1',
+  );
+  assert.match(
+    rollback.rollbackCommandContract.resourceContainment.replayPolicy,
+    /REUSE_EXACT_PERSISTED_COMMAND_JSON_AND_DIGEST_NEVER_REBIND_REVISIONS/u,
+  );
+  assert.match(
+    rollback.rollbackCommandContract.priorConfigReactivation.replayPolicy,
+    /REUSE_EXACT_PERSISTED_COMMAND_JSON_AND_DIGEST_NEVER_REBIND_REVISIONS/u,
+  );
+  assert.equal(rollback.rollbackStateMachine.schemaVersion, 1);
+  for (const state of [
+    'RESOURCE_FORWARD_NOT_REACHED',
+    'RESOURCE_FORWARD_APPLIED',
+    'RESOURCE_ROLLBACK_APPLIED',
+  ]) {
+    assert.equal(typeof rollback.rollbackStateMachine.resourceStates[state], 'object', state);
+  }
+  for (const state of [
+    'CONFIG_FORWARD_NOT_REACHED_PRIOR_PRESENT',
+    'CONFIG_FORWARD_NOT_REACHED_NO_PRIOR',
+    'CONFIG_FORWARD_APPLIED',
+    'CONFIG_ROLLBACK_APPLIED_PRIOR_PRESENT',
+    'CONFIG_CONTAINED_NO_PRIOR',
+  ]) {
+    assert.equal(typeof rollback.rollbackStateMachine.configStates[state], 'object', state);
+  }
+  assert.equal(rollback.rollbackStateMachine.validStatePairs.length, 10);
+  for (const pair of [
+    'RESOURCE_ROLLBACK_APPLIED + CONFIG_FORWARD_NOT_REACHED_PRIOR_PRESENT',
+    'RESOURCE_ROLLBACK_APPLIED + CONFIG_FORWARD_NOT_REACHED_NO_PRIOR',
+  ]) {
+    assert.equal(rollback.rollbackStateMachine.validStatePairs.includes(pair), true, pair);
+  }
+  assert.match(rollback.rollbackStateMachine.rejectionRule, /FAILS_CLOSED/u);
+  assert.equal(
+    rollback.effects.some(effect => /classifying the current resource\/config pair through rollbackStateMachine/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    rollback.effects.some(effect => /RESOURCE_FORWARD_NOT_REACHED is a no-op/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    rollback.effects.some(effect => /CONFIG_FORWARD_APPLIED only/u.test(effect)),
+    true,
+  );
+  for (const proof of [
+    'GF15_ROLLBACK_STATE_MACHINE_CLASSIFICATION',
+    'GF15_ROLLBACK_FORWARD_AND_ROLLBACK_RECEIPT_CONSISTENCY_GATE',
+    'GF15_ROLLBACK_RESOURCE_COMMAND_PACKET_OR_NOT_REQUIRED',
+    'GF15_ROLLBACK_CONFIG_COMMAND_PACKET_OR_NOT_REQUIRED',
+    'GF15_ROLLBACK_EXACT_REPLAY_OR_FIRST_ATTEMPT_PROOF',
+  ]) {
+    assert.equal(rollback.evidenceRequired.includes(proof), true, proof);
+  }
+
+  rejected(value => {
+    value.greenfieldKioskAcceptancePreparationRollbackAction.rollbackCommandContract
+      .resourceContainment.operationId = 'OTHER';
+  }, 'GREENFIELD_KIOSK_ACCEPTANCE_PREPARATION_ROLLBACK_INVALID');
+
+  rejected(value => {
+    value.greenfieldKioskAcceptancePreparationRollbackAction.rollbackStateMachine.validStatePairs =
+      ['ANYTHING'];
+  }, 'GREENFIELD_KIOSK_ACCEPTANCE_PREPARATION_ROLLBACK_INVALID');
+
+  rejected(value => {
+    value.greenfieldKioskAcceptancePreparationRollbackAction.effects =
+      ['delete all acceptance facts'];
+  }, 'GREENFIELD_KIOSK_ACCEPTANCE_PREPARATION_ROLLBACK_INVALID');
 });
 
 test('greenfield authority cannot self-authorize the next production action', () => {
