@@ -978,6 +978,14 @@ test('GF15 freezes every scheduling config field except the one authorization-bo
     config.finalBindingRequirements.includes('CONFIG_DIGEST_MUST_EQUAL_DIGEST_SCHEDULING_CONFIG_V1'),
     true,
   );
+  assert.equal(
+    config.finalBindingRequirements.includes('TARGET_PACKET_WINDOW_MINIMUM_CONTIGUOUS_CAPACITY_MS_1200000'),
+    true,
+  );
+  assert.equal(
+    config.finalBindingRequirements.includes('TARGET_PACKET_DETERMINISTIC_PROPOSAL_PREFLIGHT_EXACTLY_ONE_ITEM_PASS'),
+    true,
+  );
 
   const bound = normalizeSchedulingConfigV1({
     schemaVersion: config.schemaVersion,
@@ -1178,6 +1186,20 @@ test('GF15 freezes one bounded irreversible Kiosk acceptance scheduling preparat
     true,
   );
   assert.equal(
+    action.effects.some(effect => /at least 1200000 ms of contiguous capacity/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    action.effects.some(effect => /pure deterministic-scheduler-v1 preflight/u.test(effect)),
+    true,
+  );
+  for (const proof of [
+    'GF15_TARGET_PACKET_MINIMUM_1200000MS_CONTIGUOUS_CAPACITY_PROOF',
+    'GF15_PREWRITE_DETERMINISTIC_PROPOSAL_PREFLIGHT_ONE_ITEM_PASS',
+  ]) {
+    assert.equal(action.evidenceRequired.includes(proof), true, proof);
+  }
+  assert.equal(
     action.evidenceRequired.includes('GF15_CANDIDATE_ISOLATION_PROOF'),
     true,
   );
@@ -1263,6 +1285,20 @@ test('GF15 rollback is containment-only and cannot pretend immutable scheduling 
     rollback.effects.some(effect => /contains no unrelated draft/u.test(effect)),
     true,
   );
+  assert.equal(
+    rollback.effects.some(effect => /revalidate ownership of the mutable GF15 post-state/u.test(effect)),
+    true,
+  );
+  assert.equal(
+    rollback.effects.some(effect => /changed by any later Scheduling action, perform no rollback mutation/u.test(effect)),
+    true,
+  );
+  for (const proof of [
+    'GF15_ROLLBACK_POSTSTATE_OWNERSHIP_GATE',
+    'GF15_ROLLBACK_NO_POST_GF15_SCHEDULING_OVERWRITE_PROOF',
+  ]) {
+    assert.equal(rollback.evidenceRequired.includes(proof), true, proof);
+  }
   for (const proof of [
     'GF15_ROLLBACK_SCHEDULING_QUIESCENCE_ACQUIRE_OR_CONTINUE_RECEIPT',
     'GF15_ROLLBACK_PREMUTATION_DRAFT_PROPOSAL_GATE',
