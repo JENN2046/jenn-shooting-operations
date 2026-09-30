@@ -135,9 +135,9 @@ Static config contract:
 - softScoringWeights: LIGHTING_SWITCH 0, REFLECTIVITY_SEQUENCE 0, IDLE_GAP 0, EXPECTED_OVERRUN 0, DESIRED_DATE_MISS 0
 - compatibleAlgorithmVersions: deterministic-scheduler-v1
 
-The authorization-bound target packet must supply the one future Asia/Shanghai date and exactly one local start/end window, then carry the complete normalized config JSON and its canonical config digest. The digest must equal digestSchedulingConfigV1 for that exact final config. No other config field may vary at authorization or execution time.
+The authorization-bound target packet must supply the one future Asia/Shanghai date and exactly one local start/end window, then carry the complete normalized config JSON and its canonical config digest. The digest must equal digestSchedulingConfigV1 for that exact final config. No other config field may vary at authorization or execution time. The bound local window and planning range must provide at least 1,200,000 ms (20 minutes) of contiguous capacity for the frozen 900,000 ms duration plus 5-minute buffer.
 
-The deterministic proposal must use resourceScope STUDIO-PROD-01 and exactly the authorization-bound planning window. Before accepting anything, the assembled candidate set must contain exactly one candidate, its requestId must be REQ-GF15-ACCEPT-PROD-01, the proposal must contain exactly one proposed item for that request, and the decision must select exactly that item. Any unrelated open candidate blocks GF-15.
+Before the first GF-15 mutation, while the same Scheduling quiescence lease is already held, a **pure deterministic-scheduler-v1 preflight** must be run from the frozen target packet, exact resource/config, empty occupied set and the exact synthetic candidate represented by the frozen request contract. It must yield exactly one proposed item for REQ-GF15-ACCEPT-PROD-01 on STUDIO-PROD-01 inside the bound planning window; zero or multiple items fail closed before any persistent fact is created. The later live deterministic proposal must use the same resourceScope and exactly the authorization-bound planning window. Before accepting anything, the assembled candidate set must contain exactly one candidate, its requestId must be REQ-GF15-ACCEPT-PROD-01, the proposal must contain exactly one proposed item for that request, and the decision must select exactly that item. Any unrelated open candidate blocks GF-15.
 
 ## Canonical path only
 
@@ -192,7 +192,8 @@ Rollback is containment, not deletion:
 - contain the production-smoke outbox intent using the preverified isolation capability; isolation remains in force from enqueue commit and must never rely on post-commit catch-up;
 - before any rollback Scheduling resource/config mutation, continue the still-held forward GF15 quiescence lease or reacquire a bounded rollback lease tied to the exact GF15 source receipts;
 - while that lease is held, fail closed unless the stored draft set is empty or contains only the exact source-bound GF15 proposal and no unrelated draft;
-- only after that gate passes may rollback deactivate STUDIO-PROD-01 or reactivate the exact prior config; if lease acquisition or the draft gate fails, perform no Scheduling rollback mutation;
+- while the same lease is held, revalidate that STUDIO-PROD-01 still has the exact GF15 active value/capability digest/source operation from the forward receipts and that the active config still has GF15-ACCEPT-CONFIG-R1 plus the exact GF15 activation operation; any later Scheduling owner/value change blocks rollback;
+- only after both the draft gate and mutable-post-state ownership gate pass may rollback deactivate STUDIO-PROD-01 or reactivate the exact prior config; an already-contained state is accepted only as an exact rollback replay bound to the same GF15 source receipts; if any gate fails, perform no Scheduling rollback mutation;
 - keep the lease through containment/post-state verification, then release it and record the release receipt;
 - preserve request/resource/config/proposal/decision/schedule/outbox/audit history;
 - prove unrelated scheduling facts, storage identity, and VCP are unchanged.
