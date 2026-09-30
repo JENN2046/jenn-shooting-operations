@@ -206,7 +206,7 @@ if (phase === 'create') {
       sourceFactsAndIdentityUnchanged: true, restoredV9FactsReceiptsAndPendingOutboxPreserved: true, restoredExactReplayFactFree: true,
       restoredDatabaseIdentityDifferent: true, productionBackupOrRestore: false, attachmentRestoreCoverage: 'NO_ATTACHMENTS_IN_SYNTHETIC_FIXTURE' };
   }
-} 
+}
 
 writeFileSync(join(root, `acceptance-${phase}.json`), JSON.stringify(result, null, 2) + '\n');
 console.log(JSON.stringify(result, null, 2));

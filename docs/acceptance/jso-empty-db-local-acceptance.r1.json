@@ -14,7 +14,9 @@
     "newCandidateBuilt": false,
     "acceptanceHarnessIsInFrozenImage": false,
     "harnessMountedReadOnly": "/probe.mjs; runtime imports/server from /app",
-    "harnessSha256": "sha256:f0396cbeab752dd8e04548c636d37f39ec10ef989328d60c84c2583b09abe903"
+    "executedHarnessSha256": "sha256:f0396cbeab752dd8e04548c636d37f39ec10ef989328d60c84c2583b09abe903",
+    "reviewHarnessSha256": "sha256:323eda9d17690c218d3ec44572f28e49c38476aff85fb00d5aecc4fb165cc031",
+    "postExecutionHarnessEdit": "Removed one trailing space after staged diff check; no executable behavior change. Executed bytes retained locally as executed-harness.mjs."
   },
   "isolation": {
     "executionHost": "jenn-System-Product-Name",
@@ -955,7 +957,8 @@
     "frozen-export-byte-check.json": "sha256:318a5195bf775bcb6e0f7dad2dbc931b45508e47e3c511cdaf00e0af3224cbf0",
     "initial-harness-failure.json": "sha256:46cf658b66f04e9b0f7537b254fb9c4f1247b4a55b7731d6c3b1439c2f427bbf",
     "second-harness-failure.json": "sha256:572f3608298a3b22c9bc95f42f7d7d11ed51dacc68e4f28ce32232a02b8c2405",
-    "backup-harness-syntax-failure.json": "sha256:599a79a5ae8659763037b39cfa223f5f637890cc8d0b39055e8c7d811a9fa877"
+    "backup-harness-syntax-failure.json": "sha256:599a79a5ae8659763037b39cfa223f5f637890cc8d0b39055e8c7d811a9fa877",
+    "executed-harness.mjs": "sha256:f0396cbeab752dd8e04548c636d37f39ec10ef989328d60c84c2583b09abe903"
   },
   "disabledContainerRecreation": {
     "before": {
