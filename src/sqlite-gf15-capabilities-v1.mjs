@@ -46,13 +46,17 @@ export function createSqliteGf15CapabilitiesV1({ db, now, refreshProjections, al
     assertGf15Binding(value.binding);
     return value;
   }
+  function assertForwardFreshInTransaction(lease, principal) {
+    gate(lease, principal);
+    if (lease.purpose !== 'forward') gf15Fail('GF15_FORWARD_LEASE_REQUIRED');
+    const state = classify(lease);
+    if (!state.decisionComplete) assertGf15FreshWindowV1(state.base.binding, now);
+    return state;
+  }
   function packet(id, lease, principal, make) {
     return immediateGf15(db, () => {
-      gate(lease, principal);
-      if (lease.purpose === 'forward') {
-        const state = classify(lease);
-        if (!state.decisionComplete) assertGf15FreshWindowV1(state.base.binding, now);
-      }
+      if (lease.purpose === 'forward') assertForwardFreshInTransaction(lease, principal);
+      else gate(lease, principal);
       return readGf15Packet(db, id) ?? bindGf15PacketInTransaction(db, id, make(), now().toISOString());
     });
   }
@@ -270,6 +274,7 @@ export function createSqliteGf15CapabilitiesV1({ db, now, refreshProjections, al
         if (generated.lifecycle.status === 'draft' && (drafts.length !== 1 || drafts[0].proposal_id !== decision.proposalId)) gf15Fail('GF15_DRAFT_GATE_FAILED');
       });
       checkpoint('after-proposal');
+      immediateGf15(db, () => { assertForwardFreshInTransaction(lease, principal); });
       const accepted = requireOk(proposalStore.accept(decision, principal));
       checkpoint('after-decision');
       immediateGf15(db, () => {

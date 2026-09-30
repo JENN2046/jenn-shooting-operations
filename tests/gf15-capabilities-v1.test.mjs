@@ -201,6 +201,28 @@ test('fully completed decision replay may remain exact after the bound window be
 });
 
 
+test('first forward attempt rechecks freshness immediately before proposal acceptance', () => {
+  const f = gf15Fixture();
+  try {
+    f.quiescence.release(f.lease);
+    f.setTime('2026-09-30T15:59:30.000Z');
+    const lease = f.quiescence.acquire({ leaseId: 'pre-accept-freshness', owner: f.principal.subjectId, ttlMs: 900000 });
+    f.service.begin(f.binding, lease, f.principal);
+    const service = f.serviceWith({ checkpoint: step => {
+      if (step === 'after-proposal') f.setTime('2026-09-30T16:00:00.000Z');
+    } });
+    assert.throws(() => service.forward(lease, f.principal), /GF15_DATE_NOT_FUTURE|GF15_WINDOW_NOT_FUTURE/);
+    assert.equal(f.db.prepare('SELECT count(*) AS n FROM scheduling_proposal_decisions').get().n, 0);
+    assert.equal(f.db.prepare('SELECT count(*) AS n FROM schedule_items').get().n, 0);
+    assert.equal(f.db.prepare('SELECT count(*) AS n FROM schedule_item_tasks').get().n, 0);
+    assert.equal(f.db.prepare('SELECT count(*) AS n FROM notification_outbox').get().n, 0);
+    assert.equal(f.db.prepare('SELECT count(*) AS n FROM gf15_outbox_isolation').get().n, 0);
+    assert.equal(f.db.prepare("SELECT status FROM scheduling_proposals WHERE generation_operation_id = ?").get(ids.proposal).status, 'draft');
+    assert.equal(f.service.rollback(lease, f.principal).ok, true);
+  } finally { f.db.close(); }
+});
+
+
 for (const prior of [false, true]) {
   for (const stop of ['before-forward', 'after-request', 'after-resource', 'before-config', 'after-config', 'after-proposal', 'after-decision']) {
     test(`rollback after ${stop}, prior=${prior}, preserves facts and retries exact commands`, () => {
