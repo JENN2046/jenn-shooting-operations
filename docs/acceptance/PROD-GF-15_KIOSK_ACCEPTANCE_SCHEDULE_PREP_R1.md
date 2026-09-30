@@ -42,6 +42,8 @@ The canonical Scheduling path persists request/resource/config/proposal/decision
 - proposalOperationId: PRODGF15-PROPOSAL-R1
 - decisionId: PRODGF15-DECISION-R1
 - scheduleItemId: derived canonically from the accepted proposal item plus decisionId
+- rollbackResourceOperationId: PRODGF15-ROLLBACK-RESOURCE-R1
+- rollbackConfigActivateOperationId: PRODGF15-ROLLBACK-CONFIG-ACTIVATE-R1 (used only if GF15 activated its config and the pre-GF15 baseline had an active config)
 
 The exact acceptance date, planning window, and calendar window are not standing values. They must be future Asia/Shanghai times bound into the one-time authorization packet immediately before GF-15 can become requestable.
 
@@ -183,20 +185,47 @@ Before the first GF-15 write, the entire requests_v2 table must be rescanned. An
 
 Bound rollback: ROLLBACK-GF-13-CONTAIN-DEVICE-ACCEPTANCE-SCHEDULE.
 
-Rollback is containment, not deletion:
+Rollback is a **receipt-bound state machine**, not a delete/recreate script. It always acquires or continues Scheduling quiescence before classifying state.
 
-- keep PROD-11 blocked and Kiosk authentication disabled;
-- if GF-15 activated STUDIO-PROD-01, replace only that resource to inactive with the same capability digest;
-- if a prior active config existed, reactivate exactly that config;
-- if no prior config existed, retain the acceptance config but keep the acceptance resource inactive because the current domain has no delete-or-clear-active-config command;
-- contain the production-smoke outbox intent using the preverified isolation capability; isolation remains in force from enqueue commit and must never rely on post-commit catch-up;
-- before any rollback Scheduling resource/config mutation, continue the still-held forward GF15 quiescence lease or reacquire a bounded rollback lease tied to the exact GF15 source receipts;
-- while that lease is held, fail closed unless the stored draft set is empty or contains only the exact source-bound GF15 proposal and no unrelated draft;
-- while the same lease is held, revalidate that STUDIO-PROD-01 still has the exact GF15 active value/capability digest/source operation from the forward receipts and that the active config still has GF15-ACCEPT-CONFIG-R1 plus the exact GF15 activation operation; any later Scheduling owner/value change blocks rollback;
-- only after both the draft gate and mutable-post-state ownership gate pass may rollback deactivate STUDIO-PROD-01 or reactivate the exact prior config; an already-contained state is accepted only as an exact rollback replay bound to the same GF15 source receipts; if any gate fails, perform no Scheduling rollback mutation;
-- keep the lease through containment/post-state verification, then release it and record the release receipt;
-- preserve request/resource/config/proposal/decision/schedule/outbox/audit history;
-- prove unrelated scheduling facts, storage identity, and VCP are unchanged.
+Resource states admitted under the lease:
+
+- **RESOURCE_FORWARD_NOT_REACHED**: STUDIO-PROD-01 is absent and PRODGF15-RESOURCE-R1 has no success receipt. Resource rollback is a no-op.
+- **RESOURCE_FORWARD_APPLIED**: STUDIO-PROD-01 is active with the exact GF15 capability digest and source_operation_id = PRODGF15-RESOURCE-R1, backed by its success receipt. Run exactly one containment ReplaceSchedulingResourceV1 command.
+- **RESOURCE_ROLLBACK_APPLIED**: STUDIO-PROD-01 is already inactive with the exact GF15 capability digest and source_operation_id = PRODGF15-ROLLBACK-RESOURCE-R1, backed by the exact rollback operation receipt. Treat as exact replay; do not issue a new mutation.
+
+Config states admitted under the same lease:
+
+- **CONFIG_FORWARD_NOT_REACHED_PRIOR_PRESENT**: GF15 activation never succeeded and the exact pre-GF15 config version + activation operation from the baseline is still active. Config rollback is a no-op.
+- **CONFIG_FORWARD_NOT_REACHED_NO_PRIOR**: GF15 activation never succeeded and both baseline/current active config are absent. Config rollback is a no-op.
+- **CONFIG_FORWARD_APPLIED**: GF15-ACCEPT-CONFIG-R1 is active with activation_operation_id = PRODGF15-CONFIG-ACTIVATE-R1 and its forward success receipt. Restore the exact prior config only if one existed.
+- **CONFIG_ROLLBACK_APPLIED_PRIOR_PRESENT**: the exact pre-GF15 config is already active with activation_operation_id = PRODGF15-ROLLBACK-CONFIG-ACTIVATE-R1 and the rollback receipt. Treat as exact replay.
+- **CONFIG_CONTAINED_NO_PRIOR**: there was no pre-GF15 active config; GF15 config remains active only after the resource is already contained inactive. No config mutation is allowed because the domain has no delete-or-clear-active-config command.
+
+Only state pairs explicitly frozen in machine authority are valid. Any other resource/config owner, value, operation receipt, or combination means a later/unrelated Scheduling change or inconsistent partial state and **fails closed with zero Scheduling rollback mutation**.
+
+Exact rollback commands:
+
+- resource containment operationId = **PRODGF15-ROLLBACK-RESOURCE-R1**
+  - commandType = ReplaceSchedulingResourceV1
+  - exact target = STUDIO-PROD-01 / same display label / status inactive / same FLAT capability JSON + digest
+  - expected revisions are captured under the rollback quiescence lease on the first attempt
+  - the first-attempt command JSON + digest are durably bound; every retry must replay that exact command/digest and must never regenerate it from newer revisions
+- prior-config reactivation operationId = **PRODGF15-ROLLBACK-CONFIG-ACTIVATE-R1**
+  - commandType = ActivateSchedulingConfigV1
+  - only exists when GF15 config activation succeeded and the pre-GF15 baseline had an active config
+  - configVersion = exact prior version from GF15_PREWRITE_SCHEDULING_BASELINE
+  - expected projection revision is captured under the same lease after the resource containment step on the first config-rollback attempt
+  - the first-attempt command JSON + digest are durably bound; retries replay them exactly
+- if there was no pre-GF15 active config, the config-reactivation operation ID must remain unused.
+
+The rollback still:
+
+- keeps PROD-11 blocked and Kiosk authentication disabled;
+- requires the draft-proposal gate before mutable containment;
+- contains the production-smoke Outbox intent with the preverified isolation capability;
+- preserves request/resource/config/proposal/decision/schedule/outbox/audit history;
+- proves unrelated scheduling facts, storage identity, and VCP are unchanged;
+- releases quiescence only after an exact terminal/replay state is verified.
 
 ## Requestability
 
