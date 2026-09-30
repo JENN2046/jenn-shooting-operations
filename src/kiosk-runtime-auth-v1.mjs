@@ -200,6 +200,8 @@ export function loadKioskRuntimeAuthV1({
   let activeAuthenticationAttempts = 0;
 
   return Object.freeze({
+    realm: config.realm,
+    username: config.username,
     authenticationChallenge: challenge,
     businessTimeZone: config.businessTimeZone,
     allowedBriefHosts: config.allowedBriefHosts,

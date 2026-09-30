@@ -1,3 +1,4 @@
+import { requireKioskServiceBindingV1 } from './kiosk-service-context-v1.mjs';
 import { createHash } from 'node:crypto';
 
 import { authorizeCapability, validateTrustedPrincipal } from './authorization-v2.mjs';
@@ -265,31 +266,50 @@ function internalFailure(error) {
   return result('INTERNAL_ERROR');
 }
 
-export function createApplyKioskRunEvent({ store, clock, eventTimePolicy = evaluateKioskEventTime } = {}) {
+function withKioskAdmission(store, options, apply) {
+  return store.withImmediateTransaction(transaction => {
+    if (options.interrupted) {
+      transaction.stopKioskSmoke({ binding: options.binding, principal: options.principal });
+    }
+    return transaction.withKioskAdmission({
+      ...options,
+      validateReceipt: (command, digest) => parseReceipt(transaction.getKioskReceipt(command.eventId), command, digest),
+      apply: receivedAt => apply(transaction, receivedAt),
+    });
+  });
+}
+
+export function createApplyKioskRunEvent({ store, clock, serviceBinding, eventTimePolicy = evaluateKioskEventTime } = {}) {
   if (!store || typeof store.withImmediateTransaction !== 'function') {
     throw new TypeError('store with withImmediateTransaction is required');
   }
   if (typeof clock !== 'function') throw new TypeError('clock is required');
+  requireKioskServiceBindingV1(serviceBinding);
   if (typeof eventTimePolicy !== 'function') throw new TypeError('eventTimePolicy is required');
 
+  // If the transaction itself is unavailable, this instance cannot resume new smoke
+  // phases. Persist the stop on the next acquired transaction; exact replay remains safe.
+  let interrupted = false;
   return function applyKioskRunEvent({ command: input, principal } = {}) {
     const principalValidation = validateTrustedPrincipal(principal);
     if (!principalValidation.ok) return result('UNAUTHENTICATED');
     if (!principal.capabilities.submitRunEvent) return result('FORBIDDEN');
     const normalized = normalizeCommand(input, principal);
-    if (!normalized.ok) return normalized;
-    const command = normalized.command;
-    let receivedAt;
-    try {
-      receivedAt = clock()?.toISOString?.();
-    } catch {
-      return result('INTERNAL_ERROR');
+    if (!normalized.ok) {
+      if (serviceBinding.mode === 'PROD11_SMOKE_ONLY') {
+        try { store.withImmediateTransaction(tx => tx.stopKioskSmoke({ binding: serviceBinding, principal })); }
+        catch (error) { interrupted = true; return internalFailure(error); }
+      }
+      return normalized;
     }
-    if (!validTimestamp(receivedAt)) return result('INTERNAL_ERROR');
+    const command = normalized.command;
     const digest = digestKioskRunEventCommand(command);
 
     try {
-      return store.withImmediateTransaction(transaction => {
+      return withKioskAdmission(store, {
+        binding: serviceBinding, command, digest, principal, clock, interrupted,
+      }, (transaction, receivedAt) => {
+        if (!validTimestamp(receivedAt)) return result('INTERNAL_ERROR');
         const receipt = transaction.getKioskReceipt(command.eventId);
         if (receipt.operation && ![ACCEPTED_RECEIPT_KIND, REVIEW_RECEIPT_KIND].includes(receipt.operation.kind)) {
           return result('IDEMPOTENCY_KEY_REUSE');
@@ -516,7 +536,9 @@ export function createApplyKioskRunEvent({ store, clock, eventTimePolicy = evalu
             createdAt: receivedAt,
           });
           if (!notification.ok) throw new Error(notification.code);
+          if (serviceBinding.mode === 'PROD11_SMOKE_ONLY') transaction.isolateSmokeNotification(notification.intent);
           const enqueued = transaction.enqueueNotification(notification.intent);
+          if (serviceBinding.mode === 'PROD11_SMOKE_ONLY' && enqueued?.code !== 'OUTBOX_ENQUEUED') throw new Error('SMOKE_OUTBOX_NOT_FRESH');
           if (!enqueued?.ok) throw new Error(enqueued?.code ?? 'OUTBOX_ENQUEUE_FAILED');
         }
         transaction.saveEventReceipt({
@@ -537,6 +559,7 @@ export function createApplyKioskRunEvent({ store, clock, eventTimePolicy = evalu
         return response;
       });
     } catch (error) {
+      if (serviceBinding.mode === 'PROD11_SMOKE_ONLY') interrupted = true;
       return internalFailure(error);
     }
   };

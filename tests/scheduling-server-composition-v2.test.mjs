@@ -1,3 +1,4 @@
+import { createKioskServiceBindingV1 } from '../src/kiosk-service-context-v1.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -160,7 +161,7 @@ test('Operations server accepts explicit scheduling composition inputs without e
     resourceIds: ['STUDIO-A'],
   });
   assert.equal(created.ok, true);
-  const { server, store } = createOperationsServer({
+  const { server, store } = createOperationsServer({ kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
     databasePath: ':memory:',
     cleanupIntervalMs: 0,
     schedulingAuthenticate: () => created.principal,

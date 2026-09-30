@@ -146,7 +146,7 @@ test('runtime auth fails closed on unsafe paths, permissions, links, and invalid
     /KIOSK_AUTH_CONFIG_PATH_NOT_ABSOLUTE/u,
   );
   assert.throws(
-    () => createKioskRuntimeOptionsFromEnv({ KIOSK_AUTH_CONFIG_PATH: 'relative-kiosk-auth.json' }),
+    () => createKioskRuntimeOptionsFromEnv({ KIOSK_SERVICE_CONTEXT: 'WO03_ISOLATED_ACCEPTANCE', KIOSK_AUTH_CONFIG_PATH: 'relative-kiosk-auth.json' }),
     /KIOSK_AUTH_CONFIG_PATH_NOT_ABSOLUTE/u,
   );
 
@@ -211,7 +211,7 @@ test('production entrypoint rejects Kiosk credential reuse across every existing
     const f = fixture(configFor({}, shared));
     try {
       assert.throws(
-        () => createKioskRuntimeOptionsFromEnv({
+        () => createKioskRuntimeOptionsFromEnv({ KIOSK_SERVICE_CONTEXT: 'WO03_ISOLATED_ACCEPTANCE',
           KIOSK_AUTH_CONFIG_PATH: f.path,
           [key]: shared,
         }),
@@ -225,11 +225,11 @@ test('production entrypoint rejects Kiosk credential reuse across every existing
 });
 
 test('production entrypoint remains disabled by default and injects only explicit Kiosk auth config', async () => {
-  assert.deepEqual(createKioskRuntimeOptionsFromEnv({}), {});
+  assert.equal(createKioskRuntimeOptionsFromEnv({ KIOSK_SERVICE_CONTEXT: 'WO03_ISOLATED_ACCEPTANCE' }).kioskServiceBinding.mode, 'WO03_ISOLATED_ACCEPTANCE');
 
   const f = fixture();
   try {
-    const options = createKioskRuntimeOptionsFromEnv({
+    const options = createKioskRuntimeOptionsFromEnv({ KIOSK_SERVICE_CONTEXT: 'WO03_ISOLATED_ACCEPTANCE',
       KIOSK_AUTH_CONFIG_PATH: f.path,
     });
     const principal = await options.kioskAuthenticate(request());

@@ -1,3 +1,4 @@
+import { createKioskServiceBindingV1 } from '../src/kiosk-service-context-v1.mjs';
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { once } from 'node:events';
@@ -96,7 +97,7 @@ let requestTrace = [];
 before(async () => {
   if (!syncAdapterAvailable) return;
   requestTrace = [];
-  operations = createOperationsServer({
+  operations = createOperationsServer({ kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
     databasePath: ':memory:',
     tokens: { scheduler: schedulerToken },
     clock: () => new Date('2026-09-22T09:00:00.000Z'),

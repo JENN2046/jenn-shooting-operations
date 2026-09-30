@@ -400,11 +400,13 @@ export function createHttpApp({
         try {
           command = await readJson(request);
         } catch (error) {
+          kiosk.rejectRunEvent?.({ principal: authenticated.principal });
           return sendMapped(response, kioskFailure(
             error?.message === 'invalid JSON' ? 'INVALID_JSON' : 'INVALID_REQUEST',
           ));
         }
         if (!validateKioskRunEvent(command).ok) {
+          kiosk.rejectRunEvent?.({ principal: authenticated.principal });
           return sendMapped(response, kioskFailure('INVALID_RUN_EVENT_COMMAND'));
         }
         if (typeof kiosk.authorizeDeviceId === 'function'
@@ -412,12 +414,15 @@ export function createHttpApp({
               principal: authenticated.principal,
               deviceId: command.deviceId,
             })) {
+          kiosk.rejectRunEvent?.({ principal: authenticated.principal });
           return sendMapped(response, kioskFailure('FORBIDDEN'));
         }
         if (command.scheduleItemId !== scheduleItemId) {
+          kiosk.rejectRunEvent?.({ principal: authenticated.principal });
           return sendMapped(response, kioskFailure('SCHEDULE_ITEM_ID_MISMATCH'));
         }
         if (typeof kiosk.applyRunEvent !== 'function') {
+          kiosk.rejectRunEvent?.({ principal: authenticated.principal });
           return sendMapped(response, kioskFailure('SERVICE_UNAVAILABLE'));
         }
         let result;

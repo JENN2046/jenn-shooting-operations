@@ -1,3 +1,4 @@
+import { createKioskServiceBindingV1 } from '../src/kiosk-service-context-v1.mjs';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { once } from 'node:events';
@@ -62,7 +63,7 @@ test('disabled cleanup protects startup periodic saveUpload and submitRequest ac
     seed.close();
     seed = null;
 
-    first = createOperationsServer({
+    first = createOperationsServer({ kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
       databasePath,
       uploadRoot,
       clock: () => laterTime,
@@ -107,7 +108,7 @@ test('disabled cleanup protects startup periodic saveUpload and submitRequest ac
     await closeService(first);
     first = null;
 
-    restarted = createOperationsServer({
+    restarted = createOperationsServer({ kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
       databasePath,
       uploadRoot,
       clock: () => laterTime,
@@ -337,7 +338,7 @@ test('explicit cleanup domain is wired into the server control namespace', () =>
   let service;
 
   try {
-    service = createOperationsServer({
+    service = createOperationsServer({ kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
       databasePath,
       uploadRoot,
       cleanupIntervalMs: 0,
@@ -452,7 +453,7 @@ test('disabled startup persists protection before upload path initialization can
   try {
     assert.equal(existsSync(databasePath), false);
     assert.throws(
-      () => createOperationsServer({
+      () => createOperationsServer({ kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
         databasePath,
         uploadRoot,
         cleanupIntervalMs: 0,
@@ -492,7 +493,7 @@ test('disabled startup drain failure occurs before SQLite is created', () => {
   try {
     assert.equal(existsSync(databasePath), false);
     assert.throws(
-      () => createOperationsServer({
+      () => createOperationsServer({ kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
         databasePath,
         uploadRoot,
         cleanupIntervalMs: 0,
@@ -672,7 +673,7 @@ test('disabled server startup fails until active cleanup markers are drained', (
     writeFileSync(activeRun, '{"runId":"rolling-peer-cleanup"}\n');
 
     assert.throws(
-      () => createOperationsServer({
+      () => createOperationsServer({ kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
         databasePath,
         uploadRoot,
         cleanupIntervalMs: 0,
@@ -686,7 +687,7 @@ test('disabled server startup fails until active cleanup markers are drained', (
 
     unlinkSync(activeRun);
 
-    const service = createOperationsServer({
+    const service = createOperationsServer({ kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
       databasePath,
       uploadRoot,
       cleanupIntervalMs: 0,
@@ -891,7 +892,7 @@ test('periodic cleanup retries after a startup-time transition lock clears', { t
     const lockPath = join(cleanupControlRootFor(databasePath), 'transition.lock');
     writeFileSync(lockPath, 'foreign-enable-transition\n', { flag: 'wx' });
 
-    service = createOperationsServer({
+    service = createOperationsServer({ kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
       databasePath,
       uploadRoot,
       clock: () => laterTime,
@@ -924,7 +925,7 @@ test('failed local disable does not strand the periodic cleanup timer', { timeou
   let service;
 
   try {
-    service = createOperationsServer({
+    service = createOperationsServer({ kioskServiceBinding: createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' }),
       databasePath,
       uploadRoot,
       clock: () => now,
