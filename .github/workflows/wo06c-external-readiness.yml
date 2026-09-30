@@ -1,0 +1,23 @@
+name: WO-06C External Readiness
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Discovery entry only: the default branch does not contain the readiness suite.
+# In Run workflow, select codex/prod11-bounded-kiosk-capabilities-r1.
+# GitHub then uses this workflow path from that branch, including its real tests.
+jobs:
+  readiness:
+    name: Select the readiness implementation branch
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - name: Reject discovery-only execution
+        shell: bash
+        run: |
+          echo '::error::This is the WO-06C discovery entry, not a readiness result. In Run workflow, select branch codex/prod11-bounded-kiosk-capabilities-r1 and run its existing workflow.'
+          echo 'No readiness checks ran. The default branch does not contain the readiness suite. In Run workflow, select codex/prod11-bounded-kiosk-capabilities-r1.' >> "$GITHUB_STEP_SUMMARY"
+          exit 1
