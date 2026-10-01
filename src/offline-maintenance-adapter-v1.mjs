@@ -65,6 +65,7 @@ function sharedFenceChallenge(path) {
 }
 /** Kernel lock, not a boolean token. Existing file only; never creates a fence. */
 export function acquireOfflineMaintenanceFenceV1(binding, scope) {
+  binding = { path: binding.path, device: binding.device, inode: binding.inode };
   if (scope) protectedFile(binding.path, scope); // Private helper uses a read-only bind already admitted by host.
   requireValue(same(observeFenceFileV1(binding.path), binding), 'MAINTENANCE_ADAPTER_FENCE_MISMATCH');
   const fd = openSync(binding.path, 'r');
@@ -124,7 +125,7 @@ export function observeOfflineDockerTargetV1({ imageId, volumeName, fencePath },
       dockerDaemonId: info.ID, dockerDaemonName: info.Name },
     storage: { name: volumeName, driver: volume.Driver, createdAt: volume.CreatedAt,
       mountpointDigest: hash(volume.Mountpoint), optionsDigest: digest(volume.Options ?? {}) },
-    fence: observeFenceFileV1(fencePath), runtime: { sourceRevision, imageId }, nodeVersion: `v${nodeVersion}`,
+    fence: { ...observeFenceFileV1(fencePath), coordinator: observeFenceFileV1(`${fencePath}.coordinator`) }, runtime: { sourceRevision, imageId }, nodeVersion: `v${nodeVersion}`,
     // Private observer detail used to detect aliases, never taken from packet assertions.
     mountpoint: volume.Mountpoint, syntheticVolume: volume.Labels?.['jso.synthetic'] === 'true',
   };
@@ -240,14 +241,20 @@ export async function executeOfflineMaintenanceAdapterV1({ packet, policyPath, a
     volumeName: packet.storage.name, fencePath: packet.fence.path }, read);
   let admitted = readOfflineMaintenanceApprovalV1({ packet, policyPath, approvalPath, observed });
   const policyDigest = digest(admitted.policy);
-  const lock = acquireOfflineMaintenanceFenceV1(packet.fence, packet.scope);
+  requireValue(packet.fence.coordinator && packet.fence.coordinator.path === `${packet.fence.path}.coordinator`
+    && packet.fence.coordinator.inode !== packet.fence.inode, 'MAINTENANCE_ADAPTER_FENCE_INVALID');
+  const coordinatorLock = acquireOfflineMaintenanceFenceV1(packet.fence.coordinator, packet.scope);
+  let lock;
+  try { lock = acquireOfflineMaintenanceFenceV1(packet.fence, packet.scope); }
+  catch (error) { coordinatorLock.close(); throw error; }
   const name = `jso-maintenance-helper-${randomUUID()}`;
   let child, result, failure, commitPermissionSent = false, ready = false, helperId;
   function revalidate() {
     protectedFile(packet.fence.path, packet.scope);
+    coordinatorLock.assertHeld();
     if (!ready) lock.assertHeld();
     else {
-      requireValue(same(observeFenceFileV1(packet.fence.path), packet.fence), 'MAINTENANCE_ADAPTER_FENCE_LOST');
+      requireValue(same(observeFenceFileV1(packet.fence.path), { path: packet.fence.path, device: packet.fence.device, inode: packet.fence.inode }), 'MAINTENANCE_ADAPTER_FENCE_LOST');
       const challenge = sharedFenceChallenge(packet.fence.path);
       requireValue(!challenge.error && challenge.status === 1, 'MAINTENANCE_ADAPTER_FENCE_LOST');
     }
@@ -313,5 +320,6 @@ export async function executeOfflineMaintenanceAdapterV1({ packet, policyPath, a
     // The helper owns its kernel fence until after commit/rollback, including coordinator loss.
     if (child && child.exitCode === null) child.stdin.end();
     lock.close();
+    coordinatorLock.close();
   }
 }

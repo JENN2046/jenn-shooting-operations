@@ -23,7 +23,9 @@ Root/daemon administrators and reviewed packaged code are the trust boundary;
 this is not protection against a malicious administrator.
 
 Continuous exclusion uses an existing protected host fence file and a kernel
-exclusive flock. The coordinator locks preflight; the helper then acquires and
+exclusive flock. An independently bound protected `${fencePath}.coordinator`
+file serializes coordinators until the helper exits. The coordinator also locks the
+runtime fence for preflight; the helper then acquires and
 retains its own lock before opening the DB through commit/rollback. No DB open
 occurs in the handoff gap; a competing shared writer causes helper refusal.
 The helper retains exclusion even if the coordinator is killed. Every permitted runtime
@@ -129,7 +131,7 @@ with injected result-channel loss followed by receipt-exact reconciliation.
 Synthetic setup changes ownership only inside its own disposable volume.
 
 Production requires exact host/boot/UID/daemon, new plain named-volume and filesystem
-bindings, existing protected fence and reviewed guarded writer roster, exact
+bindings, existing protected runtime/coordinator fences and reviewed guarded writer roster, exact
 source/image build receipts, protected scoped approval and separately accepted
 writer-start enforcement/new-data recovery records. Reboot/replacement or inode
 change invalidates those bindings; no automatic rebind/reset occurs. Actual

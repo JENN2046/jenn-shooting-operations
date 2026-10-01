@@ -19,6 +19,7 @@ const volumeName = `jso-adapter-test-${randomUUID()}`;
 const fencePath = join(root, 'fence.json'), policyPath = join(root, 'policy.json'), approvalPath = join(root, 'approval.json');
 const owned = []; const records = [];
 writeFileSync(fencePath, '{}', { mode: 0o600 });
+writeFileSync(`${fencePath}.coordinator`, '{}', { mode: 0o600 });
 const runArgs = ['--rm', '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
   '--no-healthcheck', '--mount', `type=volume,src=${volumeName},dst=/maintenance-data`,
   '--tmpfs', '/tmp:rw,noexec,nosuid,size=32m', '--tmpfs', '/app/data:ro,noexec,nosuid,size=1m'];
