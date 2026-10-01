@@ -161,3 +161,16 @@ back. Only an explicit successful rollback before any COMMIT attempt is returned
 as ROLLED_BACK_BEFORE_COMMIT; lost output or a commit-attempt error remains UNKNOWN.
 No rollback/reset/release is inferred from a missing response. Original evidence
 and the two inherited Alpine timestamp failures are retained.
+
+
+The Linux executor's default whole-daemon regression attempt correctly stopped on
+an existing, unrelated bind source whose metadata returned EACCES. No contents,
+permissions, service or mount was changed and no privileged fallback was used.
+For local fault regressions only, the acceptance driver can explicitly append
+`--owned-inventory`: it uses real Docker metadata but supplies only its owned
+synthetic containers/helpers through the existing test read port. Its receipt is
+OWNED_SYNTHETIC_ONLY_TEST_SEAM / hostWideObservation=NOT_CLAIMED. It proves neither
+complete host visibility nor production isolation. The production CLI/default
+observer has no such option and remains blocked on any unobservable bind source.
+The execution binding must therefore include sufficient existing ordinary metadata
+read access, or remain unresolved. No new access is granted here.

@@ -12,12 +12,25 @@ import { MIGRATIONS } from '../src/sqlite-schema-v2.mjs';
 const EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1 = digestOfflineMaintenanceV1(MIGRATIONS.map(({version,name,checksum})=>({version,name,checksum})));
 import { digestResourceCapabilitiesV1 } from '../src/scheduling-contract-v1.mjs';
 import { normalizeSchedulingConfigV1, SCHEDULING_CALENDAR_COMPILER_VERSION_V1 } from '../src/scheduling-admin-contract-v1.mjs';
-const [imageId, sourceRevision] = process.argv.slice(2);
-assert.equal(process.argv.length, 4); assert.match(imageId, /^sha256:[a-f0-9]{64}$/u); assert.match(sourceRevision, /^[a-f0-9]{40}$/u);
+const [imageId, sourceRevision, inventoryMode] = process.argv.slice(2);
+assert([4, 5].includes(process.argv.length)); assert([undefined, '--owned-inventory'].includes(inventoryMode)); assert.match(imageId, /^sha256:[a-f0-9]{64}$/u); assert.match(sourceRevision, /^[a-f0-9]{40}$/u);
 const root = mkdtempSync(join(tmpdir(), 'jso-adapter-test-'));
 const volumeName = `jso-adapter-test-${randomUUID()}`;
 const fencePath = join(root, 'fence.json'), policyPath = join(root, 'policy.json'), approvalPath = join(root, 'approval.json');
 const owned = []; const records = [];
+// Explicit test seam only: never used by the production CLI/default observer.
+// Every retained fixture/helper still comes from real Docker inspection; unrelated
+// existing services are excluded without touching their unreadable storage.
+const helperIds = new Set();
+const fixtureRead = args => {
+  const result = docker(args);
+  if (inventoryMode !== '--owned-inventory') return result;
+  if (args[0] === 'inspect' && args[1]?.startsWith('jso-maintenance-helper-')) {
+    for (const c of JSON.parse(result)) helperIds.add(c.Id);
+  }
+  if (args[0] === 'ps') return result.split(/\s+/u).filter(id => owned.includes(id) || helperIds.has(id)).join('\n');
+  return result;
+};
 writeFileSync(fencePath, '{}', { mode: 0o600 });
 writeFileSync(`${fencePath}.coordinator`, '{}', { mode: 0o600 });
 const runArgs = ['--rm', '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
@@ -63,7 +76,7 @@ try {
     writeFileSync(policyPath, JSON.stringify(policy), { mode: 0o600 });
     writeFileSync(approvalPath, JSON.stringify(approval), { mode: 0o600 });
   }
-  const execute = (value, read, spawnHelper) => executeOfflineMaintenanceAdapterV1({ packet: value, policyPath, approvalPath, ...(read ? { read } : {}), ...(spawnHelper ? { spawnHelper } : {}) });
+  const execute = (value, read, spawnHelper) => executeOfflineMaintenanceAdapterV1({ packet: value, policyPath, approvalPath, { read: read ?? fixtureRead }, ...(spawnHelper ? { spawnHelper } : {}) });
   const init = packet('initialize', 'SYNTHETIC-ADAPTER-INIT');
   approve(init);
   const lock = acquireOfflineMaintenanceFenceV1(observed.fence, scope);
@@ -95,7 +108,7 @@ try {
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0,
         Math.max(0, Date.parse(approval.expiresAt) - Date.now() + 150));
     }
-    return docker(args);
+    return fixtureRead(args);
   };
   await assert.rejects(execute(init, lateInventory), { code: 'MAINTENANCE_ADAPTER_APPROVAL_DENIED' });
   assert.equal(psCount, 3); assert.deepEqual(snapshot(), initial); approve(init);
@@ -121,7 +134,7 @@ try {
         '--mount', `type=volume,src=${volumeName},dst=/maintenance-data`, '--tmpfs', '/app/data:ro',
         '--entrypoint', 'node', imageId, '-e', 'setInterval(()=>{},1000)']); owned.push(rogue);
     }
-    return docker(args);
+    return fixtureRead(args);
   };
   await assert.rejects(execute(init, driftRead), { code: 'MAINTENANCE_ADAPTER_UNREGISTERED_WRITER' });
   assert.deepEqual(snapshot(), initial); docker(['rm', rogue]); owned.splice(owned.indexOf(rogue), 1);
@@ -192,6 +205,8 @@ try {
   console.log(JSON.stringify({ status: 'LOCAL_SYNTHETIC_OFFLINE_ADAPTER_PASS', recordedAt: new Date().toISOString(),
     sourceRevision, imageId, observedHost: observed.host, observedStorage: observed.storage,
     observedTarget: target, initial, final, cases: records, productionAccessed: false,
+    inventoryScope: inventoryMode === '--owned-inventory' ? 'OWNED_SYNTHETIC_ONLY_TEST_SEAM' : 'WHOLE_LOCAL_DAEMON',
+    hostWideObservation: inventoryMode === '--owned-inventory' ? 'NOT_CLAIMED' : 'OBSERVED',
     authenticationClass: 'SELF_AUTHORED_SYNTHETIC', productionFenceEnforcement: 'NOT_VERIFIED',
     productionBackupRecovery: 'NOT_VERIFIED', physicalDeviceAcceptance: 'NOT_RUN', externalAcceptance: 'NOT_RUN',
     productionAuthorization: 'NOT_GRANTED' }, null, 2));
