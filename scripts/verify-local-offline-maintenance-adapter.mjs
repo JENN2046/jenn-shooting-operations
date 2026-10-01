@@ -1,14 +1,15 @@
 // Host-side acceptance. Allocates and removes only its own labelled synthetic volume/containers.
 // Requires the existing local Docker socket. Never selects a production target or provider.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { dockerMaintenanceReadV1 as docker, observeOfflineDockerTargetV1, digestOfflineMaintenanceV1,
   executeOfflineMaintenanceAdapterV1, acquireOfflineMaintenanceFenceV1 } from '../src/offline-maintenance-adapter-v1.mjs';
-import { EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1 } from '../src/empty-db-maintenance-v1.mjs';
+import { MIGRATIONS } from '../src/sqlite-schema-v2.mjs';
+const EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1 = digestOfflineMaintenanceV1(MIGRATIONS.map(({version,name,checksum})=>({version,name,checksum})));
 import { digestResourceCapabilitiesV1 } from '../src/scheduling-contract-v1.mjs';
 import { normalizeSchedulingConfigV1, SCHEDULING_CALENDAR_COMPILER_VERSION_V1 } from '../src/scheduling-admin-contract-v1.mjs';
 const [imageId, sourceRevision] = process.argv.slice(2);
@@ -36,7 +37,7 @@ try {
   docker(['run', '--rm', '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--cap-add', 'CHOWN',
     '--user', '0', '--no-healthcheck', '--mount', `type=volume,src=${volumeName},dst=/maintenance-data`,
     '--tmpfs', '/app/data:ro', '--entrypoint', 'node', imageId, '-e',
-    "const fs=require('node:fs');fs.chownSync('/maintenance-data',1000,1000);fs.chmodSync('/maintenance-data',0o700)"]);
+    "const fs=require('node:fs');fs.chmodSync('/maintenance-data',0o700);fs.chownSync('/maintenance-data',1000,1000)"]);
   docker(['run', ...runArgs, '--entrypoint', 'node', imageId, '--input-type=module', '-e',
     "import{ScheduleStore}from'./src/store.mjs';const s=new ScheduleStore({filename:'/maintenance-data/shooting-operations.sqlite',uploadRoot:'/maintenance-data/uploads',writeAdmissionMode:'disabled',orphanCleanupMode:'disabled'});s.close()"]);
   const observed = observeOfflineDockerTargetV1({ imageId, volumeName, fencePath });
@@ -51,12 +52,13 @@ try {
     ({ schemaVersion: 1, scope, host: observed.host, storage: observed.storage, fence: observed.fence,
       operation: { schemaVersion: 1, operationId, kind, actor: `uid:${observed.host.operatorUid}`,
         approvalRef: 'synthetic:adapter-acceptance', target, runtime: observed.runtime,
-        schemaDigest: EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1, businessTimeZone: 'Asia/Shanghai', expected, command } });
+        schemaDigest: EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1, businessTimeZone: 'Asia/Shanghai', expected, command,
+        adapterBinding: { host: observed.host, storage: observed.storage, fence: observed.fence } } });
   function approve(value) {
     const approval = { schemaVersion: 1, scope, operatorUid: observed.host.operatorUid,
       approvalRef: value.operation.approvalRef, packetDigest: digestOfflineMaintenanceV1(value),
       policyDigest: digestOfflineMaintenanceV1(policy), notBefore: new Date(Date.now() - 10000).toISOString(),
-      expiresAt: new Date(Date.now() + 3600000).toISOString(), recoveryRef: 'synthetic:retain-reconcile-no-reset' };
+      expiresAt: new Date(Date.now() + 3600000).toISOString(), recoveryRef: 'synthetic:retain-reconcile-no-reset', prerequisiteDigest: null };
     writeFileSync(policyPath, JSON.stringify(policy), { mode: 0o600 });
     writeFileSync(approvalPath, JSON.stringify(approval), { mode: 0o600 });
   }
@@ -96,7 +98,8 @@ try {
   owned.push(writer);
   const exclusive = acquireOfflineMaintenanceFenceV1(observed.fence, scope);
   docker(['start', writer]); const exit = docker(['wait', writer]); assert.equal(exit, '1'); exclusive.close();
-  assert.match(docker(['logs', writer]), /MAINTENANCE_RUNTIME_FENCE_BUSY/u);
+  const guardLogs = spawnSync('/usr/bin/docker', ['--host', 'unix:///var/run/docker.sock', 'logs', writer], { encoding: 'utf8' });
+  assert.equal(guardLogs.status, 0); assert.match(guardLogs.stderr, /MAINTENANCE_RUNTIME_FENCE_BUSY/u);
   policy.writerContainerIds = [writer]; approve(init);
   assert.equal((await execute(init)).response.exactReplay, true);
   records.push('actual shared-lock runtime startup denied under exclusive lock; stopped guarded roster admitted');

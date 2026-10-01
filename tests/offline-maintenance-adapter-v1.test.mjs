@@ -20,12 +20,12 @@ function fixture(t) {
   const observed = { host, storage, fence: observeFenceFileV1(fencePath), runtime: { sourceRevision, imageId },
     mountpoint: '/synthetic/volumes/data', syntheticVolume: true };
   const packet = { schemaVersion: 1, scope: 'LOCAL_SYNTHETIC_ADAPTER', host, storage,
-    fence: observed.fence, operation: { actor: `uid:${process.getuid()}`, approvalRef: 'test:approval', runtime: observed.runtime } };
+    fence: observed.fence, operation: { actor: `uid:${process.getuid()}`, approvalRef: 'test:approval', runtime: observed.runtime, adapterBinding: { host, storage, fence: observed.fence } } };
   const policy = { schemaVersion: 1, scope: packet.scope, host, storage, fence: observed.fence,
     runtime: observed.runtime, writerContainerIds: [writerId] };
   const approval = { schemaVersion: 1, scope: packet.scope, operatorUid: process.getuid(), approvalRef: packet.operation.approvalRef,
     packetDigest: digestOfflineMaintenanceV1(packet), policyDigest: digestOfflineMaintenanceV1(policy),
-    notBefore: '2026-10-01T00:00:00Z', expiresAt: '2026-10-01T02:00:00Z', recoveryRef: 'synthetic:preserve-reconcile' };
+    notBefore: '2026-10-01T00:00:00Z', expiresAt: '2026-10-01T02:00:00Z', recoveryRef: 'synthetic:preserve-reconcile', prerequisiteDigest: null };
   const policyPath = join(root, 'policy.json'), approvalPath = join(root, 'approval.json');
   const save = () => { writeFileSync(policyPath, JSON.stringify(policy), { mode: 0o600 });
     writeFileSync(approvalPath, JSON.stringify(approval), { mode: 0o600 }); };
@@ -34,11 +34,13 @@ function fixture(t) {
     now: new Date('2026-10-01T01:00:00Z'), ...overrides });
   const writer = { Id: writerId, Image: imageId, Path: 'node',
     Args: ['scripts/guarded-offline-runtime.mjs', '/jso-maintenance-fence/guard.lock'],
-    State: { Running: false, Restarting: false, Paused: false }, HostConfig: { RestartPolicy: { Name: 'no' } },
+    Config: { User: 'node', Env: ['WRITE_ADMISSION_MODE=disabled', 'ORPHAN_CLEANUP_MODE=disabled', 'KIOSK_AUTH_CONFIG_PATH='] },
+    State: { Running: false, Restarting: false, Paused: false }, HostConfig: { Privileged: false, RestartPolicy: { Name: 'no' } },
     Mounts: [{ Type: 'volume', Name: storage.name, Source: observed.mountpoint, Destination: '/app/data', RW: true },
       { Type: 'bind', Source: fencePath, Destination: '/jso-maintenance-fence/guard.lock', RW: false }] };
   const helper = { Id: helperId, Image: imageId, Path: 'node', Args: ['scripts/offline-maintenance-helper.mjs', 'execute'],
-    State: { Running: true, Restarting: false }, HostConfig: { NetworkMode: 'none', ReadonlyRootfs: true,
+    Config: { User: 'node', Env: ['WRITE_ADMISSION_MODE=disabled', 'ORPHAN_CLEANUP_MODE=disabled', 'KIOSK_AUTH_CONFIG_PATH='] },
+    State: { Running: true, Restarting: false, Paused: false }, HostConfig: { Privileged: false, NetworkMode: 'none', ReadonlyRootfs: true,
       CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges'], RestartPolicy: { Name: 'no' }, PortBindings: {} },
     Mounts: [{ Type: 'volume', Name: storage.name, Source: observed.mountpoint, Destination: '/maintenance-data', RW: true },
       { Type: 'bind', Source: fencePath, Destination: '/jso-maintenance-fence/guard.lock', RW: false }] };
@@ -83,6 +85,11 @@ test('writable approvals, symlinks and hardlink aliases cannot supply authority 
   const symlink = f.fencePath + '.symlink'; symlinkSync(f.fencePath, symlink);
   assert.throws(() => observeFenceFileV1(symlink), { code: 'MAINTENANCE_ADAPTER_FENCE_INVALID' });
 });
+test('a substituted durable observation tuple is refused before admission', t => {
+  const f = fixture(t);
+  assert.throws(() => f.admit({ packet: { ...f.packet, operation: { ...f.packet.operation, adapterBinding: {} } } }),
+    { code: 'MAINTENANCE_ADAPTER_DURABLE_BINDING_MISMATCH' });
+});
 test('policy roster changes invalidate its independently approved digest', t => {
   const f = fixture(t); f.policy.writerContainerIds = []; f.save();
   assert.throws(f.admit, { code: 'MAINTENANCE_ADAPTER_APPROVAL_DENIED' });
@@ -92,6 +99,8 @@ test('exact stopped guarded roster and isolated helper are admitted; unrelated s
 });
 for (const [label, mutate, code] of [
   ['running writer', c => { c.State.Running = true; }, 'MAINTENANCE_ADAPTER_WRITER_NOT_STOPPED'],
+  ['enabled admission', c => { c.Config.Env[0] = 'WRITE_ADMISSION_MODE=enabled'; }, 'MAINTENANCE_ADAPTER_WRITER_GUARD_MISSING'],
+  ['privileged writer', c => { c.HostConfig.Privileged = true; }, 'MAINTENANCE_ADAPTER_WRITER_GUARD_MISSING'],
   ['automatic restart', c => { c.HostConfig.RestartPolicy.Name = 'always'; }, 'MAINTENANCE_ADAPTER_WRITER_NOT_STOPPED'],
   ['guard bypass', c => { c.Args = ['src/server.mjs']; }, 'MAINTENANCE_ADAPTER_WRITER_GUARD_MISSING'],
   ['mutable image mismatch', c => { c.Image = `sha256:${'0'.repeat(64)}`; }, 'MAINTENANCE_ADAPTER_WRITER_GUARD_MISSING'],

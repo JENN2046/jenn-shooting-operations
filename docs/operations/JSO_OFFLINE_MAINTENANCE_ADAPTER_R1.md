@@ -23,7 +23,10 @@ Root/daemon administrators and reviewed packaged code are the trust boundary;
 this is not protection against a malicious administrator.
 
 Continuous exclusion uses an existing protected host fence file and a kernel
-exclusive flock retained for the entire helper lifetime. Every permitted runtime
+exclusive flock. The coordinator locks preflight; the helper then acquires and
+retains its own lock before opening the DB through commit/rollback. No DB open
+occurs in the handoff gap; a competing shared writer causes helper refusal.
+The helper retains exclusion even if the coordinator is killed. Every permitted runtime
 must use the packaged shared-lock entry point; its exact image, command, read-only
 fence mount and disabled runtime configuration are checked against an independently
 read protected policy roster. Autorestart, unregistered containers, running users
@@ -47,20 +50,34 @@ does not use application startup to open a production database.
 ## Packet and approval
 
 The execution packet binds schemaVersion1, scope, observed host/storage/fence,
-and the existing operation packet. Its operation target uses the fixed helper
+and the existing operation packet with an additional `adapterBinding` containing
+the same host/storage/fence tuple. The transaction seals this tuple into bootstrap
+binding and packet receipts, so it cannot be substituted on later configuration
+or exact replay. Its operation target uses the fixed helper
 root `/maintenance-data`, filename `shooting-operations.sqlite`, root/DB/uploads
 device/inode and cleanup marker digest. Runtime is exact full sourceRevision and
 immutable imageId. Actor must equal the observed host `uid:<uid>`.
 
 Policy binds the same scope/host/storage/fence/runtime plus exact writer container
 IDs. Approval binds scope, observed operator UID, approvalRef, canonical packet
-digest, canonical policy digest, bounded validity window and recoveryRef. Production
+digest, canonical policy digest, bounded validity window, recoveryRef and
+prerequisiteDigest. Production
 approval/policy/fence files and ancestors must be root-owned and protected against
 group/other writes; files must be single-link regular files without symlinks.
 The CLI does not create any of these files or amend frozen action arrays.
 RecoveryRef identifies a separately reviewed recovery plan; it is not proof that
 a consistent backup exists. Production execution additionally requires separately
 accepted new-data backup/recovery evidence and writer-start enforcement evidence.
+For production, `${approvalPath}.prerequisites.json` must independently satisfy
+the same protected-file rules and match prerequisiteDigest. Its exact keys are
+schemaVersion1, approvalRef, targetDigest (canonical host/storage/fence/runtime),
+writerStartEnforcement=ACCEPTED_GUARDED_ADMINISTRATIVE_WINDOW,
+newDataRecovery=ACCEPTED_FACT_AWARE_RECOVERY and reviewRef. These are protected
+acceptance records of separately reviewed evidence, not observations or a claim
+that a reference string demonstrates recoverability. The adapter does not generate
+or accept them automatically. All production values and that reviewed evidence
+are presently pending; no production permission is granted by this contract.
+Synthetic approvals require prerequisiteDigest=null and cannot stand in for them.
 
 Local acceptance uses explicit LOCAL_SYNTHETIC_ADAPTER scope, private
 `/tmp/jso-adapter-test-*` approval storage and newly allocated, labelled
@@ -86,3 +103,34 @@ preserve the new data family and controls, and use separately approved reconcili
 repair or consistent restore with declared data-loss bounds. Physical device,
 external integration, GF15 fresh Asia/Shanghai window, PROD11 and post-smoke normal
 operation remain separate gates. Historical candidate receipts remain unchanged.
+
+## Reproduction and pending execution inputs
+
+The sole supported production entry is the reviewed host CLI:
+`node scripts/offline-empty-db-maintenance.mjs --execute-approved packet.json policy.json approval.json`.
+Library observer/transport seams are internal synthetic-test ports, not authenticated
+production APIs. The CLI exposes neither. Docker and flock use absolute system
+tool paths; remote Docker env/context and caller runtime files are not observation
+sources. The helper is a private port used only by that coordinator, with no socket
+or HTTP wiring. Normal `npm start` remains unchanged; the shared guard is opt-in
+and does not start or reconfigure an existing service.
+
+Focused checks: `node --test tests/empty-db-maintenance-v1.test.mjs tests/offline-maintenance-adapter-v1.test.mjs`.
+Full checks: `npm run check` on Node24.21. Actual Docker acceptance:
+`node scripts/verify-local-offline-maintenance-adapter.mjs <immutable-image-id> <full-source-revision>`.
+The host coordinator can use existing Node22 because it does not open SQLite;
+all transactions execute on independently checked Node24.21 in the candidate.
+The harness supplies synthetic startup/schema-only fixtures and real observed
+container/volume metadata, tests transactional inventory-drift rejection, kernel
+contention, guard refusal, separate configuration/activation and a real commit
+with injected result-channel loss followed by receipt-exact reconciliation.
+Synthetic setup changes ownership only inside its own disposable volume.
+
+Production requires exact host/boot/UID/daemon, new plain named-volume and filesystem
+bindings, existing protected fence and reviewed guarded writer roster, exact
+source/image build receipts, protected scoped approval and separately accepted
+writer-start enforcement/new-data recovery records. Reboot/replacement or inode
+change invalidates those bindings; no automatic rebind/reset occurs. Actual
+creation/maintenance/cutover/release still require separate user approval. Real
+device/assistive/browser targets remain deferred. Two inherited Alpine nanosecond
+`touch` full-suite failures must be disclosed separately from Debian success.

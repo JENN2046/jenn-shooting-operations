@@ -75,7 +75,8 @@ export function bindOfflineEmptyDbMaintenanceTargetV1() {
 }
 function validate(packet, authorization, runtime, offline = false) {
   exact(packet, ['schemaVersion', 'operationId', 'kind', 'actor', 'approvalRef', 'target',
-    'runtime', 'schemaDigest', 'businessTimeZone', 'expected', 'command']);
+    'runtime', 'schemaDigest', 'businessTimeZone', 'expected', 'command', ...(offline ? ['adapterBinding'] : [])]);
+  if (offline) exact(packet.adapterBinding, ['host', 'storage', 'fence']);
   exact(packet.runtime, ['sourceRevision', 'imageId']);
   exact(runtime, ['sourceRevision', 'imageId']);
   exact(packet.target, offline ? ['root', 'databaseName', 'storageRoot', 'database', 'uploads', 'cleanup']
@@ -128,7 +129,8 @@ function validate(packet, authorization, runtime, offline = false) {
 }
 function binding(packet) {
   return { target: packet.target, runtime: packet.runtime, schemaDigest: packet.schemaDigest,
-    businessTimeZone: packet.businessTimeZone, actor: packet.actor };
+    businessTimeZone: packet.businessTimeZone, actor: packet.actor,
+    ...(packet.adapterBinding ? { adapterBinding: packet.adapterBinding } : {}) };
 }
 function assertTarget(packet, offline = false) {
   requireValue(json(offline ? bindOfflineEmptyDbMaintenanceTargetV1() : bindLocalEmptyDbMaintenanceTargetV1(packet.target.root)) === json(packet.target),

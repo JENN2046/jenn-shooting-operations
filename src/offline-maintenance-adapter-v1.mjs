@@ -138,6 +138,8 @@ export function readOfflineMaintenanceApprovalV1({ packet, policyPath, approvalP
   requireValue(same(packet.host, observed.host) && same(packet.storage, observed.storage)
     && same(packet.fence, observed.fence) && same(packet.operation.runtime, observed.runtime),
   'MAINTENANCE_ADAPTER_OBSERVED_BINDING_MISMATCH');
+  requireValue(same(packet.operation.adapterBinding, { host: packet.host, storage: packet.storage, fence: packet.fence }),
+    'MAINTENANCE_ADAPTER_DURABLE_BINDING_MISMATCH');
   requireValue(packet.operation.actor === `uid:${observed.host.operatorUid}`,
     'MAINTENANCE_ADAPTER_OPERATOR_MISMATCH');
   const policy = protectedFile(policyPath, packet.scope);
@@ -151,7 +153,7 @@ export function readOfflineMaintenanceApprovalV1({ packet, policyPath, approvalP
   'MAINTENANCE_ADAPTER_POLICY_MISMATCH');
   const approval = protectedFile(approvalPath, packet.scope);
   exact(approval, ['schemaVersion', 'scope', 'operatorUid', 'approvalRef', 'packetDigest', 'policyDigest',
-    'notBefore', 'expiresAt', 'recoveryRef']);
+    'notBefore', 'expiresAt', 'recoveryRef', 'prerequisiteDigest']);
   const start = Date.parse(approval.notBefore), end = Date.parse(approval.expiresAt);
   requireValue(approval.schemaVersion === 1 && approval.scope === packet.scope
     && approval.operatorUid === observed.host.operatorUid && approval.approvalRef === packet.operation.approvalRef
@@ -160,7 +162,24 @@ export function readOfflineMaintenanceApprovalV1({ packet, policyPath, approvalP
     && end - start > 0 && end - start <= 6 * 3600000
     && typeof approval.recoveryRef === 'string' && /^[A-Za-z0-9][A-Za-z0-9:_.-]{0,127}$/u.test(approval.recoveryRef),
   'MAINTENANCE_ADAPTER_APPROVAL_DENIED');
+  if (packet.scope === 'OFFLINE_PRODUCTION_MAINTENANCE') {
+    const evidence = protectedFile(`${approvalPath}.prerequisites.json`, packet.scope);
+    exact(evidence, ['schemaVersion', 'approvalRef', 'targetDigest', 'writerStartEnforcement', 'newDataRecovery', 'reviewRef']);
+    requireValue(sha(approval.prerequisiteDigest) && digest(evidence) === approval.prerequisiteDigest
+      && evidence.schemaVersion === 1 && evidence.approvalRef === approval.approvalRef
+      && evidence.targetDigest === digest({ host: observed.host, storage: observed.storage,
+        fence: observed.fence, runtime: observed.runtime })
+      && evidence.writerStartEnforcement === 'ACCEPTED_GUARDED_ADMINISTRATIVE_WINDOW'
+      && evidence.newDataRecovery === 'ACCEPTED_FACT_AWARE_RECOVERY'
+      && typeof evidence.reviewRef === 'string' && /^[A-Za-z0-9][A-Za-z0-9:_.-]{0,127}$/u.test(evidence.reviewRef),
+    'MAINTENANCE_ADAPTER_PREREQUISITES_NOT_ACCEPTED');
+  } else requireValue(approval.prerequisiteDigest === null, 'MAINTENANCE_ADAPTER_SYNTHETIC_SCOPE_REQUIRED');
   return { policy, approval };
+}
+function disabledRuntime(c) {
+  const values = new Map((c.Config?.Env ?? []).map(value => { const i = value.indexOf('='); return [value.slice(0, i), value.slice(i + 1)]; }));
+  return c.Config?.User === 'node' && values.get('WRITE_ADMISSION_MODE') === 'disabled'
+    && values.get('ORPHAN_CLEANUP_MODE') === 'disabled' && values.get('KIOSK_AUTH_CONFIG_PATH') === '';
 }
 const overlaps = (a, b) => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
 export function assertOfflineDockerInventoryV1({ containers, observed, policy, helperId = null }) {
@@ -180,6 +199,7 @@ export function assertOfflineDockerInventoryV1({ containers, observed, policy, h
         && c.HostConfig.NetworkMode === 'none' && c.HostConfig.ReadonlyRootfs === true
         && same(c.HostConfig.CapDrop, ['ALL']) && c.HostConfig.SecurityOpt.includes('no-new-privileges')
         && c.HostConfig.RestartPolicy.Name === 'no' && c.State.Running && !c.State.Restarting
+        && !c.State.Paused && c.HostConfig.Privileged === false && disabledRuntime(c)
         && relevant[0].Destination === '/maintenance-data' && relevant[0].RW === true
         && !Object.keys(c.HostConfig.PortBindings ?? {}).length
         && mounts.some(m => m.Type === 'bind' && m.Source === observed.fence.path
@@ -193,6 +213,7 @@ export function assertOfflineDockerInventoryV1({ containers, observed, policy, h
       && c.HostConfig.RestartPolicy.Name === 'no', 'MAINTENANCE_ADAPTER_WRITER_NOT_STOPPED');
     requireValue(c.Image === observed.runtime.imageId && c.Path === 'node'
       && same(c.Args, ['scripts/guarded-offline-runtime.mjs', '/jso-maintenance-fence/guard.lock'])
+      && c.HostConfig.Privileged === false && disabledRuntime(c)
       && relevant[0].Destination === '/app/data' && relevant[0].RW === true
       && mounts.some(m => m.Type === 'bind' && m.Source === observed.fence.path
         && m.Destination === '/jso-maintenance-fence/guard.lock' && m.RW === false),
@@ -270,10 +291,10 @@ export async function executeOfflineMaintenanceAdapterV1({ packet, policyPath, a
                 revalidate(); commitPermissionSent = true;
                 child.stdin.end(JSON.stringify({ permitCommit: true }) + '\n');
               } else if (message.phase === 'result' && commitPermissionSent && !result && !failure) result = message.response;
-              else if (message.phase === 'refused') failure = maintenanceAdapterErrorV1(
+              else if (message.phase === 'refused') failure ??= maintenanceAdapterErrorV1(
                 /^MAINTENANCE_|^SCHEMA_/u.test(message.code) ? message.code : 'MAINTENANCE_ADAPTER_HELPER_REFUSED');
               else throw maintenanceAdapterErrorV1('MAINTENANCE_ADAPTER_PROTOCOL_INVALID');
-            } catch (error) { failure = error; child.stdin.end(); }
+            } catch (error) { failure ??= error; child.stdin.end(); }
           }
         });
         child.on('close', code => code === 0 && result && !failure ? resolvePromise() : reject(
