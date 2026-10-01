@@ -76,7 +76,7 @@ try {
     writeFileSync(policyPath, JSON.stringify(policy), { mode: 0o600 });
     writeFileSync(approvalPath, JSON.stringify(approval), { mode: 0o600 });
   }
-  const execute = (value, read, spawnHelper) => executeOfflineMaintenanceAdapterV1({ packet: value, policyPath, approvalPath, { read: read ?? fixtureRead }, ...(spawnHelper ? { spawnHelper } : {}) });
+  const execute = (value, read, spawnHelper) => executeOfflineMaintenanceAdapterV1({ packet: value, policyPath, approvalPath, read: read ?? fixtureRead, ...(spawnHelper ? { spawnHelper } : {}) });
   const init = packet('initialize', 'SYNTHETIC-ADAPTER-INIT');
   approve(init);
   const lock = acquireOfflineMaintenanceFenceV1(observed.fence, scope);
