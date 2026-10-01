@@ -205,3 +205,13 @@ real device/browser/assistive and external acceptance; full Alpine failure dispo
 maintenance/release/recovery approvals; GF15/PROD11 gates and normal-operation contract.
 Authority remains GF15-next, `FROZEN_NOT_REQUESTED`, all requested/approved/requestable
 arrays empty. No production creation, route switch, restart, grant or acceptance occurred.
+
+## Initialization/storage/cutover packet closure
+
+The [review packet](JSO_EMPTY_DB_INITIALIZATION_STORAGE_CUTOVER_PACKET_R1.md)
+now binds explicit proposed port3801, storage/container/route/backup names and
+separate approval stages. Its actual frozen-runtime diagnosis confirms missing
+normalized-counter bootstrap and trusted production executor; config publication
+alone can create control facts without activation. Plan delivery is complete for
+review, but implementation and production execution remain blocked on separate
+authorization. No synthetic fixture SQL is selected as a production procedure.
