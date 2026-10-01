@@ -237,11 +237,21 @@ export function assertCanonicalOfflineBindSourceV1(source) {
 }
 const overlaps = (a, b) => a === b || a.startsWith(b === '/' ? '/' : `${b}/`)
   || b.startsWith(a === '/' ? '/' : `${a}/`);
-export function assertOfflineDockerInventoryV1({ containers, observed, policy, helperId = null }) {
+export function assertOfflineDockerInventoryV1({ containers, observed, policy, helperId = null, volumeBackings = [] }) {
   requireValue(Array.isArray(containers), 'MAINTENANCE_ADAPTER_OBSERVATION_UNAVAILABLE');
   const found = new Set();
   for (const c of containers) {
     const mounts = c.Mounts ?? [];
+    // A distinct name/mountpoint does not exclude a local bind-backed volume.
+    // Only independently inspected plain local backing can be excluded here.
+    for (const m of mounts) if (m.Type === 'volume' && m.Name !== observed.storage.name) {
+      const backing = volumeBackings.filter(v => v.Name === m.Name);
+      requireValue(backing.length === 1 && backing[0].Driver === 'local'
+        && (!backing[0].Options || Object.keys(backing[0].Options).length === 0)
+        && typeof backing[0].Mountpoint === 'string' && isAbsolute(backing[0].Mountpoint)
+        && backing[0].Mountpoint === m.Source,
+      'MAINTENANCE_ADAPTER_STORAGE_BACKING_UNSUPPORTED');
+    }
     // Check nonlexical bind sources too; no inability-to-observe fallback may skip them.
     const canonical = new Map();
     for (const m of mounts) if (m.Type === 'bind' && m.Source !== observed.mountpoint) {
@@ -319,7 +329,13 @@ export async function executeOfflineMaintenanceAdapterV1({ packet, policyPath, a
       volumeName: packet.storage.name, fencePath: packet.fence.path }, read);
     admitted = readOfflineMaintenanceApprovalV1({ packet, policyPath, approvalPath, observed });
     requireValue(digest(admitted.policy) === policyDigest, 'MAINTENANCE_ADAPTER_POLICY_CHANGED');
-    assertOfflineDockerInventoryV1({ containers: inventory(read), observed, policy: admitted.policy, helperId });
+    const containers = inventory(read);
+    const names = [...new Set(containers.flatMap(c => (c.Mounts ?? [])
+      .filter(m => m.Type === 'volume' && m.Name !== observed.storage.name).map(m => m.Name)))];
+    requireValue(names.every(name => typeof name === 'string'
+      && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/u.test(name)), 'MAINTENANCE_ADAPTER_STORAGE_BACKING_UNSUPPORTED');
+    const volumeBackings = names.length ? JSON.parse(read(['volume', 'inspect', ...names])) : [];
+    assertOfflineDockerInventoryV1({ containers, observed, policy: admitted.policy, helperId, volumeBackings });
     // Inventory/path observation can be slow. Re-read admission at the actual permit decision.
     admitted = readOfflineMaintenanceApprovalV1({ packet, policyPath, approvalPath, observed });
     requireValue(digest(admitted.policy) === policyDigest, 'MAINTENANCE_ADAPTER_POLICY_CHANGED');

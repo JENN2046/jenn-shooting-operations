@@ -147,3 +147,18 @@ test('helper deadline is checked at actual decision and expiry boundary fails cl
     { ...permit, expiresAt: 6 * 3600000 + 1001 }]) assert.throws(() => assertOfflineMaintenancePermitDeadlineV1(bad, 1500),
     { code: 'MAINTENANCE_ADAPTER_APPROVAL_DENIED' });
 });
+test('distinct volume bind backing, unsupported driver and unresolved metadata fail closed', t => {
+  const f = fixture(t);
+  const alias = { Id: 'unfenced', State: { Running: true }, Mounts: [{ Type: 'volume',
+    Name: 'synthetic-alias', Source: '/synthetic/alias/_data', Destination: '/data', RW: true }] };
+  const backing = { Name: 'synthetic-alias', Driver: 'local', Mountpoint: '/synthetic/alias/_data', Options: null };
+  const check = volumeBackings => assertOfflineDockerInventoryV1({ containers: [f.writer, f.helper, alias],
+    observed: f.observed, policy: f.policy, helperId, volumeBackings });
+  // Independent fixture volume-inspect metadata, never a real backing mount.
+  for (const values of [[], [backing, backing], [{ ...backing, Driver: 'nfs' }],
+    [{ ...backing, Mountpoint: '/different' }],
+    [{ ...backing, Options: { type: 'none', o: 'bind', device: f.observed.mountpoint } }]]) {
+    assert.throws(() => check(values), { code: 'MAINTENANCE_ADAPTER_STORAGE_BACKING_UNSUPPORTED' });
+  }
+  check([backing]);
+});

@@ -157,6 +157,14 @@ ancestor comparison (`//` prefix). Containment now treats `/` as an ancestor of
 every absolute source. A pure synthetic inspection-entry regression rejects an
 unfenced writable root bind as STORAGE_ALIAS; no real host-root mount is created.
 
+A distinct Docker volume name/mountpoint also cannot exclude a bind-backed local
+volume. Each non-target mounted volume now requires independent safe volume-inspect
+metadata: plain local driver, no options, and matching mountpoint/source. Unsupported
+backing/driver or missing/mismatched metadata fails closed before exclusion. A pure
+inventory/backing fixture covers a local `type=none,o=bind,device=<target>` alias;
+no actual backing mount is created. Arbitrary host filesystem mount aliases remain
+part of separately accepted source-object preservation, not a generic closure claim.
+
 A second reproduction delayed final inventory beyond approval expiry and still
 committed. Admission is now reread after slow inventory/path observations at each
 permit decision. The coordinator passes the admitted numeric notBefore/expiresAt;
