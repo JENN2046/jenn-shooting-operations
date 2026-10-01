@@ -36,7 +36,7 @@ try {
       assert.equal((await read.json()).code, 'AUTH_NOT_CONFIGURED');
       const write = await fetch('http://127.0.0.1:3800/api/v2/schedule-items/LOCAL-UNAUTHORIZED/events',
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-      assert.equal((await write.json()).code, 'AUTH_NOT_CONFIGURED');
+      assert.equal((await write.json()).code, 'WRITE_ADMISSION_DISABLED');
       const db = new DatabaseSync(databasePath, { readOnly: true });
       const versions = db.prepare('SELECT version FROM schema_migrations ORDER BY version').all().map(r => r.version);
       assert.deepEqual(versions, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
@@ -49,7 +49,8 @@ try {
       db.close();
       const stat = statSync(databasePath, { bigint: true });
       result.starts.push({ health: 200, disabledReadStatus: read.status,
-        disabledWriteStatus: write.status, kioskCode: 'AUTH_NOT_CONFIGURED', versions,
+        disabledWriteStatus: write.status, kioskCode: 'AUTH_NOT_CONFIGURED',
+        writeCode: 'WRITE_ADMISSION_DISABLED', versions,
         eventCount, smokeOwnerCount, initializationCount, counterCount, databaseDevice: String(stat.dev), databaseInode: String(stat.ino) });
     } finally {
       child.kill('SIGTERM');
