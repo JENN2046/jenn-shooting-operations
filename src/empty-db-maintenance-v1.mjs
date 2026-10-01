@@ -188,7 +188,8 @@ function assertConfigOnly(db) {
     const admitted = normalizers[row.kind]?.(receipt.command);
     const admin = db.prepare('SELECT * FROM scheduling_admin_operations WHERE operation_id = ?').get(row.operation_id);
     requireValue(admitted?.ok && receipt.operationId === row.operation_id && receipt.kind === row.kind
-      && admin?.kind === row.kind && admin.command_digest === admitted.commandDigest,
+      && admin?.kind === row.kind && admin.command_digest === admitted.commandDigest
+      && admin.created_at === receipt.adminCreatedAt,
     'MAINTENANCE_UNBOUND_CONTROL_FACTS');
     const { ok, exactReplay, ...adminResult } = receipt.result;
     requireValue(ok === true && exactReplay === false && json(adminResult) === json(JSON.parse(admin.response_json)),
@@ -200,6 +201,28 @@ function assertConfigOnly(db) {
         && resource.v1_display_place === command.v1DisplayPlace && resource.status === command.status
         && resource.capability_digest === command.capabilityDigest
         && json(JSON.parse(resource.capability_json)) === json(command.capabilityJson),
+      'MAINTENANCE_UNBOUND_CONTROL_FACTS');
+    } else if (row.kind === 'publishConfig') {
+      const command = admitted.command;
+      const published = db.prepare('SELECT * FROM scheduling_config_versions WHERE config_version = ?')
+        .get(command.configVersion);
+      requireValue(published && published.schema_version === 1
+        && published.algorithm_version === command.algorithmVersion
+        && published.calendar_compiler_version === command.calendarCompilerVersion
+        && published.estimate_policy_version === command.estimatePolicyVersion
+        && published.config_digest === command.configDigest
+        && json(JSON.parse(published.config_json)) === json(command.configJson)
+        && published.published_by === actor && published.published_at === receipt.adminCreatedAt
+        && published.publish_operation_id === row.operation_id,
+      'MAINTENANCE_UNBOUND_CONTROL_FACTS');
+    } else if (row.kind === 'activateConfig') {
+      const activation = db.prepare('SELECT * FROM scheduling_config_activations WHERE operation_id = ?')
+        .get(row.operation_id);
+      requireValue(activation && activation.command_digest === admitted.commandDigest
+        && activation.previous_config_version === receipt.previousConfigVersion
+        && activation.config_version === admitted.command.configVersion
+        && activation.projection_revision === receipt.result.projectionRevision
+        && activation.activated_by === actor && activation.activated_at === receipt.adminCreatedAt,
       'MAINTENANCE_UNBOUND_CONTROL_FACTS');
     }
   }
@@ -297,10 +320,16 @@ export function executeLocalEmptyDbMaintenanceV1({ packet, authorization, runtim
               requireValue(connection.isTransaction, 'MAINTENANCE_TRANSACTION_REQUIRED'); return work();
             }, refreshProjections: args => refreshSqliteSnapshotProjectionsV2({ ...args,
               businessTimeZone: packet.businessTimeZone }) });
+          const previousConfigVersion = packet.kind === 'activateConfig'
+            ? db.prepare('SELECT config_version FROM scheduling_active_config WHERE id = 1').get()?.config_version ?? null
+            : null;
           const result = admin[packet.kind](packet.command, packet.actor);
           requireValue(result.ok && result.exactReplay === false, result.code ?? 'MAINTENANCE_ADMIN_REJECTED');
+          const adminCreatedAt = db.prepare('SELECT created_at FROM scheduling_admin_operations WHERE operation_id = ?')
+            .get(packet.operationId).created_at;
           response = { ok: true, kind: packet.kind, operationId: packet.operationId, packetDigest,
-            command: packet.command, result, completedAt: at };
+            command: packet.command, result, completedAt: at, adminCreatedAt,
+            ...(packet.kind === 'activateConfig' ? { previousConfigVersion } : {}) };
           db.prepare(`INSERT INTO empty_db_maintenance_operations
             (operation_id, initialization_id, packet_digest, kind, response_json, response_digest, created_at)
             VALUES (?, 1, ?, ?, ?, ?, ?)`).run(packet.operationId, packetDigest, packet.kind,

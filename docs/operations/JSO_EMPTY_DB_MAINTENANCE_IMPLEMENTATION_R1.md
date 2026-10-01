@@ -36,8 +36,18 @@ Each is a separate packet; publication does not imply activation. The service
 requires the same bootstrap target/runtime/timezone, exact current revisions and
 no business/GF15/smoke/provider facts, invokes the existing scheduling admin service
 within one outer transaction, and seals its own immutable packet receipt plus
-audit in that transaction. Rejections and faults roll back all effects. Repeated
-IDs with differing actor, bindings or command fail; exact replay never changes
+audit in that transaction. Rejections and faults roll back all effects.
+Publication/configuration records are reconciled field by field against sealed
+commands, including compiler/algorithm/estimate policy, content/digest, owner,
+publication operation and execution timestamp. Receipts seal the actual admin
+timestamp and, for activation, the preceding active version. Every activation
+history row is checked against its own sealed receipt, including previous/current
+versions, command digest, projection revision, actor and timestamp; matching row
+counts are insufficient. SQL replacement drift is refused without repair or new
+facts. Earlier receipt formats without those sealed fields are not silently
+ratified; runtime/target bindings must still match and new mutations with uncertain
+history fail closed. Repeated IDs with differing actor, bindings or command fail;
+exact replay never changes
 counters, configuration, budget or ownership. This entry does not prepare requests,
 requirements, schedules, GF15, identity budgets, Kiosk or normal operation.
 

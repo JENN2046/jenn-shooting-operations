@@ -8,6 +8,7 @@ import { ScheduleStore } from '../src/store.mjs';
 import { MIGRATIONS, initializeWritableSchema, assertKnownSchema } from '../src/sqlite-schema-v2.mjs';
 import { maintenanceFixture, registerCommand, publishCommand, authorizationFor } from './support/empty-db-maintenance-fixture.mjs';
 import { bindLocalEmptyDbMaintenanceTargetV1 } from '../src/empty-db-maintenance-v1.mjs';
+import { digestSchedulingConfigV1 } from '../src/scheduling-admin-contract-v1.mjs';
 
 function fixture(t) { const f = maintenanceFixture(); t.after(f.close); return f; }
 function worker(packet, mode) {
@@ -217,4 +218,86 @@ test('direct resource edits and unreceipted counters after bootstrap block new c
   other.write(db => db.exec('UPDATE revision_counters SET schedule_revision = 7, projection_revision = 8'));
   deniedWithoutLoss(other, other.packet('registerResource', registerCommand({ scheduleRevision: 7, projectionRevision: 8 }),
     { scheduleRevision: 7, projectionRevision: 8 }), 'MAINTENANCE_UNBOUND_CONTROL_FACTS');
+});
+
+function replaceSyntheticRow(db, table, row) {
+  const keys = Object.keys(row);
+  db.prepare(`INSERT OR REPLACE INTO ${table} (${keys.join(', ')}) VALUES (${keys.map(() => '?').join(', ')})`)
+    .run(...keys.map(key => row[key]));
+}
+for (const field of ['valid-config-content', 'estimate_policy_version', 'algorithm_version',
+  'calendar_compiler_version', 'published_by', 'published_at', 'publish_operation_id']) {
+  test(`same-version config replacement (${field}) is refused before activation without new facts`, t => {
+    const f = fixture(t); f.execute(); f.execute(f.packet('registerResource', registerCommand()));
+    const command = publishCommand();
+    f.execute(f.packet('publishConfig', command, { scheduleRevision: 1, projectionRevision: 1 }));
+    const journal = f.read(db => JSON.stringify(db.prepare('SELECT * FROM empty_db_maintenance_operations').all()));
+    f.write(db => {
+      const row = { ...db.prepare('SELECT * FROM scheduling_config_versions WHERE config_version = ?').get(command.configVersion) };
+      if (field === 'valid-config-content') {
+        const config = JSON.parse(row.config_json); config.softScoringWeights.IDLE_GAP = 7;
+        row.config_json = JSON.stringify(config); row.config_digest = digestSchedulingConfigV1(config);
+      } else row[field] = field === 'published_at' ? '2026-10-01T03:00:00.000Z' : 'unapproved-replacement';
+      replaceSyntheticRow(db, 'scheduling_config_versions', row);
+    });
+    assert.equal(f.read(db => JSON.stringify(db.prepare('SELECT * FROM empty_db_maintenance_operations').all())), journal);
+    const packet = f.packet('activateConfig', { operationId: 'LOCAL-ACTIVATE-REPLACED', configVersion: command.configVersion,
+      expectedProjectionRevision: 1 }, { scheduleRevision: 1, projectionRevision: 1 });
+    deniedWithoutLoss(f, packet, 'MAINTENANCE_UNBOUND_CONTROL_FACTS');
+    f.read(db => { assert.equal(db.prepare('SELECT COUNT(*) n FROM scheduling_config_activations').get().n, 0);
+      assert.equal(db.prepare('SELECT projection_revision FROM revision_counters').get().projection_revision, 1); });
+  });
+}
+for (const field of ['previous_config_version', 'config_version', 'command_digest',
+  'activated_by', 'activated_at', 'projection_revision']) {
+  test(`earlier activation-history replacement (${field}) is refused without new facts`, t => {
+    const f = fixture(t); f.execute(); f.execute(f.packet('registerResource', registerCommand()));
+    const first = publishCommand(), second = { ...publishCommand(), operationId: 'LOCAL-PUBLISH-02', configVersion: 'local-r2' };
+    for (const command of [first, second]) f.execute(f.packet('publishConfig', command,
+      { scheduleRevision: 1, projectionRevision: 1 }));
+    for (const [index, version] of ['local-r1', 'local-r2'].entries()) f.execute(f.packet('activateConfig', {
+      operationId: `LOCAL-ACTIVATE-0${index + 1}`, configVersion: version, expectedProjectionRevision: index + 1,
+    }, { scheduleRevision: 1, projectionRevision: index + 1 }));
+    f.write(db => {
+      const row = { ...db.prepare("SELECT * FROM scheduling_config_activations WHERE operation_id = 'LOCAL-ACTIVATE-01'").get() };
+      row[field] = field === 'previous_config_version' || field === 'config_version' ? 'local-r2'
+        : field === 'projection_revision' ? 0 : field === 'activated_at' ? '2026-10-01T03:00:00.000Z' : 'unapproved-replacement';
+      replaceSyntheticRow(db, 'scheduling_config_activations', row);
+    });
+    const next = { ...publishCommand(), operationId: 'LOCAL-PUBLISH-03', configVersion: 'local-r3' };
+    deniedWithoutLoss(f, f.packet('publishConfig', next, { scheduleRevision: 1, projectionRevision: 3 }),
+      'MAINTENANCE_UNBOUND_CONTROL_FACTS');
+  });
+}
+test('replacing admin and config timestamps together cannot rewrite the sealed execution time', t => {
+  const f = fixture(t); f.execute(); f.execute(f.packet('registerResource', registerCommand()));
+  f.execute(f.packet('publishConfig', publishCommand(), { scheduleRevision: 1, projectionRevision: 1 }));
+  f.write(db => {
+    const config = { ...db.prepare('SELECT * FROM scheduling_config_versions').get() };
+    config.published_at = '2026-10-01T03:00:00.000Z'; replaceSyntheticRow(db, 'scheduling_config_versions', config);
+    const admin = { ...db.prepare("SELECT * FROM scheduling_admin_operations WHERE operation_id = 'LOCAL-PUBLISH-01'").get() };
+    admin.created_at = config.published_at; replaceSyntheticRow(db, 'scheduling_admin_operations', admin);
+  });
+  deniedWithoutLoss(f, f.packet('activateConfig', { operationId: 'LOCAL-ACTIVATE-REPLACED', configVersion: 'local-r1', expectedProjectionRevision: 1 },
+    { scheduleRevision: 1, projectionRevision: 1 }), 'MAINTENANCE_UNBOUND_CONTROL_FACTS');
+});
+test('sealed admin timestamps support a ticking clock and exact replay across two activations', t => {
+  const f = fixture(t); let tick = Date.parse('2026-10-01T04:00:00.000Z');
+  const now = () => new Date(tick++);
+  f.execute(f.packet(), { now }); f.execute(f.packet('registerResource', registerCommand()), { now });
+  const first = publishCommand(), second = { ...publishCommand(), operationId: 'LOCAL-PUBLISH-02', configVersion: 'local-r2' };
+  for (const command of [first, second]) f.execute(f.packet('publishConfig', command,
+    { scheduleRevision: 1, projectionRevision: 1 }), { now });
+  const packets = ['local-r1', 'local-r2'].map((version, index) => f.packet('activateConfig', {
+    operationId: `LOCAL-ACTIVATE-0${index + 1}`, configVersion: version, expectedProjectionRevision: index + 1,
+  }, { scheduleRevision: 1, projectionRevision: index + 1 }));
+  const responses = packets.map(packet => f.execute(packet, { now }));
+  assert.equal(responses[0].previousConfigVersion, null);
+  assert.equal(responses[1].previousConfigVersion, 'local-r1');
+  assert.notEqual(responses[0].adminCreatedAt, responses[0].completedAt);
+  const next = { ...publishCommand(), operationId: 'LOCAL-PUBLISH-03', configVersion: 'local-r3' };
+  f.execute(f.packet('publishConfig', next, { scheduleRevision: 1, projectionRevision: 3 }), { now });
+  const before = f.state();
+  for (const packet of packets) assert.equal(f.execute(packet, { now }).exactReplay, true);
+  assert.equal(f.state(), before);
 });
