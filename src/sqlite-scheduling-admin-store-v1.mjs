@@ -119,10 +119,10 @@ function advanceRevisions(db, current, { schedule, projection, at }) {
   return changed === 1 ? next : null;
 }
 
-/** Internal-only canonical admin commands. Projection refresh is an injected same-transaction port. */
-export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections, schedulingLease = null } = {}) {
+/** Internal-only commands. An injected transactionRunner must retain same-transaction atomicity. */
+export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections, schedulingLease = null, transactionRunner = transaction } = {}) {
   if (!db || typeof db.exec !== 'function' || typeof db.prepare !== 'function'
-    || typeof now !== 'function') throw new TypeError('SQLite db and injected clock required');
+    || typeof now !== 'function' || typeof transactionRunner !== 'function') throw new TypeError('SQLite db and injected clock required');
 
   function trusted(actor) {
     return isSchedulingIdentifierV1(actor) && actor !== 'system:scheduling-invalidation-v1'
@@ -142,7 +142,7 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
     if (!trusted(actor)) return denied('TRUSTED_ADMIN_REQUIRED');
     if (typeof refreshProjections !== 'function') return denied('SCHEDULING_PROJECTION_NOT_CONFIGURED');
     const { command, commandDigest } = admitted;
-    return transaction(db, () => {
+    return transactionRunner(db, () => {
       assertSchedulingQuiescenceV1({ db, now, lease: schedulingLease });
       assertGf15CommandPacketV1(db, command, schedulingLease);
       const prior = replay(db, command.operationId, commandDigest);
@@ -219,7 +219,7 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
       if (!trusted(actor)) return denied('TRUSTED_ADMIN_REQUIRED');
       if (typeof refreshProjections !== 'function') return denied('SCHEDULING_PROJECTION_NOT_CONFIGURED');
       const { command, commandDigest } = admitted;
-      return transaction(db, () => {
+      return transactionRunner(db, () => {
         assertSchedulingQuiescenceV1({ db, now, lease: schedulingLease });
         assertGf15CommandPacketV1(db, command, schedulingLease);
         const prior = replay(db, command.operationId, commandDigest);
@@ -276,7 +276,7 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
       if (!admitted.ok) return admitted;
       if (!trusted(actor)) return denied('TRUSTED_ADMIN_REQUIRED');
       const { command, commandDigest } = admitted;
-      return transaction(db, () => {
+      return transactionRunner(db, () => {
         assertSchedulingQuiescenceV1({ db, now, lease: schedulingLease });
         assertGf15CommandPacketV1(db, command, schedulingLease);
         const prior = replay(db, command.operationId, commandDigest);
@@ -313,7 +313,7 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
       if (!trusted(actor)) return denied('TRUSTED_ADMIN_REQUIRED');
       if (typeof refreshProjections !== 'function') return denied('SCHEDULING_PROJECTION_NOT_CONFIGURED');
       const { command, commandDigest } = admitted;
-      return transaction(db, () => {
+      return transactionRunner(db, () => {
         assertSchedulingQuiescenceV1({ db, now, lease: schedulingLease });
         assertGf15CommandPacketV1(db, command, schedulingLease);
         const prior = replay(db, command.operationId, commandDigest);

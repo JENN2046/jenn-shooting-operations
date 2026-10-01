@@ -9,7 +9,7 @@ test('v8 preserves all v7 markers, upgrades idempotently and adds only empty con
     db.exec('PRAGMA foreign_keys = ON');
     initializeWritableSchema(db, { migrations: MIGRATIONS.slice(0, 7) });
     const previous = db.prepare('SELECT * FROM schema_migrations').all();
-    assert.equal(initializeWritableSchema(db).version, 9);
+    assert.equal(initializeWritableSchema(db).version, 10);
     assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version <= 7').all(), previous);
     for (const table of ['kiosk_smoke_binding', 'kiosk_smoke_phases', 'kiosk_smoke_stop', 'kiosk_smoke_outbox_isolation']) {
       assert.equal(db.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n, 0);
@@ -44,7 +44,7 @@ test('v9 runtime ownership preserves v8 markers and refuses deletion, replacemen
     db.exec('PRAGMA foreign_keys = ON');
     initializeWritableSchema(db, { migrations: MIGRATIONS.slice(0, 8) });
     const markers = db.prepare('SELECT * FROM schema_migrations').all();
-    assert.equal(initializeWritableSchema(db).version, 9);
+    assert.equal(initializeWritableSchema(db).version, 10);
     assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version <= 8').all(), markers);
     db.exec("INSERT INTO kiosk_smoke_runtime_session VALUES (1, 'test-runtime')");
     assert.throws(() => db.exec('DELETE FROM kiosk_smoke_runtime_session'), /permanent/);
