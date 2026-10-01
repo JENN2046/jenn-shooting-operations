@@ -42,7 +42,9 @@ storage security policy. No existing service is converted by this PR.
 
 The helper has no network, published port, Docker socket, credentials or HTTP
 server. Rootfs is read-only, capabilities are dropped and no-new-privileges is set.
-Its single writable storage mount is the bound volume; transient /tmp is private.
+Its single writable storage mount is a bind of the independently inspected local
+volume mountpoint; missing bind source fails instead of implicitly recreating a
+deleted named volume. Non-helper bind aliases remain forbidden. Transient /tmp is private.
 Write admission, cleanup and Kiosk remain disabled. The transaction core retains
 schema, emptiness, receipt/config reconciliation and quiescence checks. The helper
 does not use application startup to open a production database.
@@ -70,7 +72,7 @@ a consistent backup exists. Production execution additionally requires separatel
 accepted new-data backup/recovery evidence and writer-start enforcement evidence.
 For production, `${approvalPath}.prerequisites.json` must independently satisfy
 the same protected-file rules and match prerequisiteDigest. Its exact keys are
-schemaVersion1, approvalRef, targetDigest (canonical host/storage/fence/runtime),
+schemaVersion1, approvalRef, packetDigest (the same exact execution packet), targetDigest (canonical host/storage/fence/runtime),
 writerStartEnforcement=ACCEPTED_GUARDED_ADMINISTRATIVE_WINDOW,
 newDataRecovery=ACCEPTED_FACT_AWARE_RECOVERY and reviewRef. These are protected
 acceptance records of separately reviewed evidence, not observations or a claim

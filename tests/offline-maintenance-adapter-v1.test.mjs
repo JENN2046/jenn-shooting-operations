@@ -42,7 +42,7 @@ function fixture(t) {
     Config: { User: 'node', Env: ['WRITE_ADMISSION_MODE=disabled', 'ORPHAN_CLEANUP_MODE=disabled', 'KIOSK_AUTH_CONFIG_PATH='] },
     State: { Running: true, Restarting: false, Paused: false }, HostConfig: { Privileged: false, NetworkMode: 'none', ReadonlyRootfs: true,
       CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges'], RestartPolicy: { Name: 'no' }, PortBindings: {} },
-    Mounts: [{ Type: 'volume', Name: storage.name, Source: observed.mountpoint, Destination: '/maintenance-data', RW: true },
+    Mounts: [{ Type: 'bind', Source: observed.mountpoint, Destination: '/maintenance-data', RW: true },
       { Type: 'bind', Source: fencePath, Destination: '/jso-maintenance-fence/guard.lock', RW: false }] };
   const check = containers => assertOfflineDockerInventoryV1({ containers, observed, policy, helperId });
   return { packet, policy, approval, observed, approvalPath, policyPath, fencePath, save, admit, writer, helper, check };

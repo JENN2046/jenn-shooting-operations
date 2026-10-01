@@ -20,7 +20,7 @@ function exact(value, keys) {
 export const digestOfflineMaintenanceV1 = digest;
 export function observeFenceFileV1(path) {
   requireValue(typeof path === 'string' && isAbsolute(path) && resolve(path) === path
-    && realpathSync(path) === path, 'MAINTENANCE_ADAPTER_FENCE_INVALID');
+    && realpathSync(path) === path && !/[,\x00-\x1f]/u.test(path), 'MAINTENANCE_ADAPTER_FENCE_INVALID');
   const stat = lstatSync(path, { bigint: true });
   requireValue(stat.isFile() && stat.nlink === 1n, 'MAINTENANCE_ADAPTER_FENCE_INVALID');
   return { path, device: String(stat.dev), inode: String(stat.ino) };
@@ -110,7 +110,8 @@ export function observeOfflineDockerTargetV1({ imageId, volumeName, fencePath },
   'MAINTENANCE_ADAPTER_DAEMON_UNTRUSTED');
   requireValue(volume?.Name === volumeName && volume.Driver === 'local'
     && (!volume.Options || Object.keys(volume.Options).length === 0)
-    && typeof volume.CreatedAt === 'string' && isAbsolute(volume.Mountpoint),
+    && typeof volume.CreatedAt === 'string' && isAbsolute(volume.Mountpoint)
+    && !/[,\x00-\x1f]/u.test(volume.Mountpoint),
   'MAINTENANCE_ADAPTER_STORAGE_UNSUPPORTED');
   const sourceRevision = image?.Config?.Labels?.['org.opencontainers.image.revision'];
   const nodeVersion = image?.Config?.Env?.find(value => value.startsWith('NODE_VERSION='))?.slice(13);
@@ -164,9 +165,10 @@ export function readOfflineMaintenanceApprovalV1({ packet, policyPath, approvalP
   'MAINTENANCE_ADAPTER_APPROVAL_DENIED');
   if (packet.scope === 'OFFLINE_PRODUCTION_MAINTENANCE') {
     const evidence = protectedFile(`${approvalPath}.prerequisites.json`, packet.scope);
-    exact(evidence, ['schemaVersion', 'approvalRef', 'targetDigest', 'writerStartEnforcement', 'newDataRecovery', 'reviewRef']);
+    exact(evidence, ['schemaVersion', 'approvalRef', 'packetDigest', 'targetDigest', 'writerStartEnforcement', 'newDataRecovery', 'reviewRef']);
     requireValue(sha(approval.prerequisiteDigest) && digest(evidence) === approval.prerequisiteDigest
       && evidence.schemaVersion === 1 && evidence.approvalRef === approval.approvalRef
+      && evidence.packetDigest === approval.packetDigest
       && evidence.targetDigest === digest({ host: observed.host, storage: observed.storage,
         fence: observed.fence, runtime: observed.runtime })
       && evidence.writerStartEnforcement === 'ACCEPTED_GUARDED_ADMINISTRATIVE_WINDOW'
@@ -190,11 +192,9 @@ export function assertOfflineDockerInventoryV1({ containers, observed, policy, h
     const relevant = mounts.filter(m => m.Name === observed.storage.name
       || (typeof m.Source === 'string' && overlaps(m.Source, observed.mountpoint)));
     if (!relevant.length) continue;
-    requireValue(relevant.length === 1 && relevant[0].Type === 'volume'
-      && relevant[0].Name === observed.storage.name && relevant[0].Source === observed.mountpoint,
-    'MAINTENANCE_ADAPTER_STORAGE_ALIAS');
     if (c.Id === helperId) {
-      requireValue(c.Image === observed.runtime.imageId && c.Path === 'node'
+      requireValue(relevant.length === 1 && relevant[0].Type === 'bind'
+        && relevant[0].Source === observed.mountpoint && c.Image === observed.runtime.imageId && c.Path === 'node'
         && same(c.Args, ['scripts/offline-maintenance-helper.mjs', 'execute'])
         && c.HostConfig.NetworkMode === 'none' && c.HostConfig.ReadonlyRootfs === true
         && same(c.HostConfig.CapDrop, ['ALL']) && c.HostConfig.SecurityOpt.includes('no-new-privileges')
@@ -207,6 +207,9 @@ export function assertOfflineDockerInventoryV1({ containers, observed, policy, h
       'MAINTENANCE_ADAPTER_HELPER_MISMATCH');
       continue;
     }
+    requireValue(relevant.length === 1 && relevant[0].Type === 'volume'
+      && relevant[0].Name === observed.storage.name && relevant[0].Source === observed.mountpoint,
+    'MAINTENANCE_ADAPTER_STORAGE_ALIAS');
     requireValue(policy.writerContainerIds.includes(c.Id), 'MAINTENANCE_ADAPTER_UNREGISTERED_WRITER');
     found.add(c.Id);
     requireValue(!c.State.Running && !c.State.Restarting && !c.State.Paused
@@ -261,7 +264,7 @@ export async function executeOfflineMaintenanceAdapterV1({ packet, policyPath, a
     lock.close();
     child = spawnHelper('/usr/bin/docker', ['--host', SOCKET, 'run', '--rm', '--interactive', '--name', name,
       '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
-      '--restart', 'no', '--no-healthcheck', '--mount', `type=volume,src=${packet.storage.name},dst=/maintenance-data`,
+      '--restart', 'no', '--no-healthcheck', '--mount', `type=bind,src=${observed.mountpoint},dst=/maintenance-data`,
       '--mount', `type=bind,src=${packet.fence.path},dst=/jso-maintenance-fence/guard.lock,readonly`,
       '--tmpfs', '/tmp:rw,noexec,nosuid,size=32m', '--tmpfs', '/app/data:ro,noexec,nosuid,size=1m',
       '--env', 'WRITE_ADMISSION_MODE=disabled', '--env', 'ORPHAN_CLEANUP_MODE=disabled',
