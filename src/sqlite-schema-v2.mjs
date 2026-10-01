@@ -1,3 +1,4 @@
+import { EMPTY_DB_MAINTENANCE_SCHEMA_SQL } from './sqlite-empty-db-maintenance-schema-v1.mjs';
 import { KIOSK_SMOKE_SESSION_SCHEMA_SQL } from './sqlite-kiosk-smoke-session-schema-v1.mjs';
 import { KIOSK_SMOKE_SCHEMA_SQL } from './sqlite-kiosk-smoke-schema-v1.mjs';
 import { GF15_SCHEMA_SQL } from './sqlite-gf15-schema-v1.mjs';
@@ -793,6 +794,7 @@ const SCHEDULING_INDEX_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'i
 const SCHEDULING_TRIGGER_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'trigger');
 const KIOSK_SMOKE_SESSION_DEFINITIONS = Object.fromEntries(['table', 'index', 'trigger'].map(type => [type, schemaDefinitions(KIOSK_SMOKE_SESSION_SCHEMA_SQL, type)]));
 const KIOSK_SMOKE_DEFINITIONS = Object.fromEntries(['table', 'index', 'trigger'].map(type => [type, schemaDefinitions(KIOSK_SMOKE_SCHEMA_SQL, type)]));
+const EMPTY_DB_MAINTENANCE_DEFINITIONS = Object.fromEntries(['table', 'index', 'trigger'].map(type => [type, schemaDefinitions(EMPTY_DB_MAINTENANCE_SCHEMA_SQL, type)]));
 const GF15_DEFINITIONS = Object.fromEntries(['table', 'index', 'trigger'].map(type => [type, schemaDefinitions(GF15_SCHEMA_SQL, type)]));
 const RUN_CONTEXT_CAPTURE_TABLE_DEFINITIONS = schemaDefinitions(RUN_CONTEXT_CAPTURE_SCHEMA_SQL, 'table');
 const RUN_CONTEXT_CAPTURE_TRIGGER_DEFINITIONS = schemaDefinitions(RUN_CONTEXT_CAPTURE_SCHEMA_SQL, 'trigger');
@@ -836,6 +838,7 @@ export const MIGRATIONS = Object.freeze([
   Object.freeze({ version: 7, name: 'gf15_bounded_capabilities', sql: GF15_SCHEMA_SQL, checksum: checksum(GF15_SCHEMA_SQL) }),
   Object.freeze({ version: 8, name: 'kiosk_bounded_smoke', sql: KIOSK_SMOKE_SCHEMA_SQL, checksum: checksum(KIOSK_SMOKE_SCHEMA_SQL) }),
   Object.freeze({ version: 9, name: 'kiosk_smoke_runtime_ownership', sql: KIOSK_SMOKE_SESSION_SCHEMA_SQL, checksum: checksum(KIOSK_SMOKE_SESSION_SCHEMA_SQL) }),
+  Object.freeze({ version: 10, name: 'empty_db_maintenance_receipts', sql: EMPTY_DB_MAINTENANCE_SCHEMA_SQL, checksum: checksum(EMPTY_DB_MAINTENANCE_SCHEMA_SQL) }),
 ]);
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1).version;
@@ -1261,6 +1264,12 @@ function assertNoUnknownSchemaObjects(db, version) {
     }
   }
 
+  if (version >= 10) {
+    for (const [type, definitions] of Object.entries(EMPTY_DB_MAINTENANCE_DEFINITIONS)) {
+      for (const name of Object.keys(definitions)) allowed.add(`${type}:${name}`);
+    }
+  }
+
   const unknown = db.prepare(`
     SELECT type, name
     FROM sqlite_schema
@@ -1307,9 +1316,18 @@ function assertStructureForVersion(db, version) {
       for (const [name, sql] of Object.entries(definitions)) assertObjectDefinition(db, type, name, sql);
     }
   }
+  if (version >= 10) {
+    for (const [type, definitions] of Object.entries(EMPTY_DB_MAINTENANCE_DEFINITIONS)) {
+      for (const [name, sql] of Object.entries(definitions)) assertObjectDefinition(db, type, name, sql);
+    }
+  }
 }
 
 function assertNoPendingArtifacts(db, nextVersion) {
+  if (nextVersion === 10 && Object.entries(EMPTY_DB_MAINTENANCE_DEFINITIONS).some(([type, definitions]) =>
+    Object.keys(definitions).some(name => objectExists(db, type, name)))) {
+    throw schemaError('SCHEMA_PARTIAL_MIGRATION', 'unmarked empty DB maintenance objects are present');
+  }
   if (nextVersion === 9 && Object.entries(KIOSK_SMOKE_SESSION_DEFINITIONS).some(([type, definitions]) =>
     Object.keys(definitions).some(name => objectExists(db, type, name)))) {
     throw schemaError('SCHEMA_PARTIAL_MIGRATION', 'unmarked Kiosk smoke runtime ownership objects are present');

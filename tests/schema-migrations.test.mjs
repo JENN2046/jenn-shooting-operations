@@ -131,7 +131,7 @@ test('fresh schema applies the continuous migration prefix and known tables', ()
   try {
     const result = initializeWritableSchema(db, { now: () => new Date('2026-09-22T08:00:00.000Z') });
     assert.deepEqual(result, { version: LATEST_SCHEMA_VERSION, latestVersion: LATEST_SCHEMA_VERSION });
-    assert.equal(LATEST_SCHEMA_VERSION, 9);
+    assert.equal(LATEST_SCHEMA_VERSION, 10);
     assert.deepEqual(
       db.prepare('SELECT version, name, checksum FROM schema_migrations ORDER BY version').all().map(row => ({ ...row })),
       MIGRATIONS.map(({ version, name, checksum }) => ({ version, name, checksum })),
