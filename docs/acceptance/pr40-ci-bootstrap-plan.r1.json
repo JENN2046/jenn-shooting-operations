@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-01T02:09:32.256036+00:00",
+  "status": "PLAN_READY_FOR_REVIEW_BOOTSTRAP_IMPLEMENTATION_AND_PRODUCTION_EXECUTION_BLOCKED",
+  "authorityRevision": "259506955b6fe41bb008de65a305691f9e2810ee",
+  "candidateSource": "37ee97d5726d990e8f7178938eeb9b6c5f8b5424",
+  "candidateImage": "sha256:fd8a2fb03c86901e26c64389138bbc494491e8bf6025af1e22eec9e1f11113e7",
+  "initialCiHead": "055ef4d868c090ebe8b2c52f2b60688d5653f660",
+  "initialCi": [
+    {
+      "databaseId": 36803919575,
+      "headSha": "055ef4d868c090ebe8b2c52f2b60688d5653f660",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/JENN2046/jenn-shooting-operations/actions/runs/36803919575"
+    },
+    {
+      "databaseId": 36803922148,
+      "headSha": "055ef4d868c090ebe8b2c52f2b60688d5653f660",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/JENN2046/jenn-shooting-operations/actions/runs/36803922148"
+    }
+  ],
+  "bootstrapDiagnosis": {
+    "status": "EMPTY_DOMAIN_BOOTSTRAP_GAP_CONFIRMED_SYNTHETIC_ONLY",
+    "productionAccess": false,
+    "rawSeedSqlExecuted": false,
+    "sourceRevision": "37ee97d5726d990e8f7178938eeb9b6c5f8b5424",
+    "initial": {
+      "revision_counters": 0,
+      "requests_v2": 0,
+      "schedule_items": 0,
+      "migration_batches": 0,
+      "scheduling_resources": 0,
+      "scheduling_config_versions": 0,
+      "scheduling_active_config": 0,
+      "scheduling_admin_operations": 0
+    },
+    "registerResource": {
+      "ok": false,
+      "code": "SCHEDULING_REVISION_CONFLICT"
+    },
+    "publishConfig": {
+      "ok": true,
+      "controlFactsCreated": true
+    },
+    "activateConfig": {
+      "ok": false,
+      "code": "SCHEDULING_REVISION_CONFLICT"
+    },
+    "final": {
+      "revision_counters": 0,
+      "requests_v2": 0,
+      "schedule_items": 0,
+      "migration_batches": 0,
+      "scheduling_resources": 0,
+      "scheduling_config_versions": 1,
+      "scheduling_active_config": 0,
+      "scheduling_admin_operations": 1
+    },
+    "interpretation": "Supported admin library cannot create missing normalized counters. Publishing config can persist control facts without initializing or activating the domain. Production entrypoint exposes no bootstrap/admin executor."
+  },
+  "runtimeImplementationChanged": false,
+  "productionAccessPerformed": false,
+  "bootstrapExecutorImplemented": false,
+  "newResourcesProvisioned": false,
+  "bindingsClassification": "PROPOSED_UNVERIFIED_NOT_PROVISIONED",
+  "proposedBindings": {
+    "volume": "jenn-shooting-operations_empty_data_r1",
+    "expectedMountpoint": "/mnt/datadisk0/docker/volumes/jenn-shooting-operations_empty_data_r1/_data",
+    "appDirectory": "/mnt/datadisk0/apps/jenn-shooting-operations-empty-r1",
+    "container": "jenn-shooting-operations-empty-candidate-r1",
+    "privateBinding": "127.0.0.1:3801:3800",
+    "database": "/app/data/shooting-operations.sqlite",
+    "uploads": "/app/data/uploads",
+    "publicOrigin": "https://jso.skmt617.top",
+    "routeFile": "/etc/nginx/conf.d/jso-shooting-operations.conf",
+    "newBackupRoot": "/mnt/datadisk0/backups/jenn-shooting-operations-empty-r1",
+    "actualNewContainerId": null,
+    "databaseDevice": null,
+    "databaseInode": null,
+    "resourcesCreated": false
+  },
+  "missingImplementation": "Reviewed empty-domain normalized counter/projection initializer and bounded trusted maintenance/config executor; no test SQL substitute. Approval required before implementation.",
+  "authorizationUnchanged": {
+    "status": "FROZEN_NOT_REQUESTED",
+    "requestedActionIds": [],
+    "approvedActionIds": [],
+    "requestableActionIds": [],
+    "nextActionId": "PROD-GF-15-PREPARE-DEVICE-ACCEPTANCE-SCHEDULE"
+  },
+  "rawReceiptDigests": {
+    "initial-checkpoint.json": "sha256:480bd464010f15476ec06c52bfb8cfe7855323c92c353b2f41553e8f3e914889",
+    "initial-wo06c.json": "sha256:0f17ce70ece155186060fbaa2bbd477aa24a8d29bc0fb2cf2e3a55d10a0744a2",
+    "initial-wo06d.json": "sha256:bc7b12331a15750482d2cf17d4d7afffc1cfea76b54f9f4df1f704f79dc726e7",
+    "initial-wo06c.log": "sha256:d05fee178651600ca659bb63e3de466d0ed766bfac3e6573ec56b6d2fb8f41d6",
+    "initial-wo06d.log": "sha256:a07b17251c5c36fcb1ca725bd3ce2cd2e72a77fe73979f088eb8dbb3b31bcde6",
+    "bootstrap-gap.json": "sha256:6407294df18617540c3137bb0f9afcb4240a9c3a178d50dc93dae3d95e293faf",
+    "bootstrap-gap.stderr": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "inspect-empty-bootstrap.mjs": "sha256:153c1bc508515cc43fd60e5132b874a82e89b85852967282b884aef78b2e142a"
+  },
+  "finalHeadCiPolicy": "Rerun both workflows on final pushed head after scoped preparation changes; inspect terminal logs and record receipts in PR description/local handoff without another commit."
+}

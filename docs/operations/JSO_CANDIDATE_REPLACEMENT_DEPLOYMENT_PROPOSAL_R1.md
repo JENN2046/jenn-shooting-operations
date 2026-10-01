@@ -130,3 +130,27 @@ authorization. The actual Alpine runtime full-suite timestamp failures must be
 reviewed as documented limits; do not describe them as a full-suite PASS.
 The Greenfield authority remains GF15-next, `FROZEN_NOT_REQUESTED`, with all three
 action arrays empty. This proposal has no effects on that authority.
+
+## Read-only preflight and bounded recovery addendum (2026-09-30)
+
+The later [production preflight and rollback closure](JSO_PRODUCTION_PREFLIGHT_AND_ROLLBACK_CLOSURE_R1.md)
+records fresh read-only production metadata, denied live DB/protected-backup access,
+and a migration-only held-fence v6-restore recovery proposal. Its production-readiness
+verdict is BLOCKED. Its proposed execution, stop and recovery sequence supersedes
+steps 2–6 of the bounded forward proposal above: stop the exact application container
+under a held/drained writer fence before the consistent backup; start the candidate
+with write admission and cleanup disabled; require a separately bound operation-release
+receipt before resuming ordinary writers or cleanup. It also supersedes the generic
+preferred-fallback choice for that bounded pre-release phase; direct old-image restart
+on v7–v9 remains prohibited.
+The observations above describe the original preparation task; the addendum owns
+new live observations. Neither document authorizes replacement or restore.
+
+## User-selected empty-database route supersession
+
+The later [empty-production rollout proposal](JSO_EMPTY_PRODUCTION_DATABASE_ROLLOUT_PROPOSAL_R1.md)
+supersedes this document's in-place forward upgrade and pre-upgrade-v6 recovery
+strategy. New production uses separately bound new empty storage with no old-record
+import; old system/data are retained. Historical evidence and the no-old-image-on-v9
+rule remain valid. This route requires its own new-target, no-split-brain, new-data
+backup/recovery and release approvals; it does not change frozen action authority.
