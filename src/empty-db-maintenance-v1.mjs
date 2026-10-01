@@ -35,16 +35,20 @@ function metadata(path, directory) {
     && (directory || stat.nlink === 1n), 'MAINTENANCE_TARGET_AMBIGUOUS');
   return { device: String(stat.dev), inode: String(stat.ino) };
 }
-/** Synthetic-only path binding. This is deliberately not a production access adapter. */
-export function bindLocalEmptyDbMaintenanceTargetV1(root) {
-  requireValue(typeof root === 'string' && root === resolve(root)
+/** Filesystem checks shared by the synthetic port and the privately admitted offline helper. */
+function bindMaintenanceFiles(root, databaseName, offline = false) {
+  requireValue(!offline || (root === '/maintenance-data' && databaseName === 'shooting-operations.sqlite'
+    && realpathSync(root) === root), 'MAINTENANCE_OFFLINE_TARGET_REQUIRED');
+  if (!offline) {
+    requireValue(typeof root === 'string' && root === resolve(root)
     && dirname(root) === realpathSync(tmpdir()) && /^jso-empty-maintenance-[A-Za-z0-9_-]+$/u.test(basename(root))
     && realpathSync(root) === root, 'MAINTENANCE_LOCAL_TARGET_REQUIRED');
+  }
   const rootStat = lstatSync(root);
   requireValue(rootStat.isDirectory() && (rootStat.mode & 0o077) === 0
     && rootStat.uid === process.getuid(), 'MAINTENANCE_LOCAL_TARGET_REQUIRED');
-  const database = metadata(join(root, 'synthetic.sqlite'), false);
-  const cleanupRoot = resolveOrphanCleanupControlRoot({ filename: join(root, 'synthetic.sqlite') });
+  const database = metadata(join(root, databaseName), false);
+  const cleanupRoot = resolveOrphanCleanupControlRoot({ filename: join(root, databaseName) });
   const cleanupIdentity = metadata(cleanupRoot, true);
   const state = createOrphanCleanupControl({ controlRoot: cleanupRoot, writable: false }).status();
   requireValue(state.state === 'disabled' && state.markerValid && state.epoch
@@ -58,16 +62,26 @@ export function bindLocalEmptyDbMaintenanceTargetV1(root) {
   }
   const parent = dirname(cleanupRoot); metadata(parent, true);
   requireValue(readdirSync(parent).length === 1, 'MAINTENANCE_CLEANUP_NOT_FENCED');
-  return { root, database,
+  return { root, ...(offline ? { databaseName, storageRoot: metadata(root, true) } : {}), database,
     uploads: metadata(join(root, 'uploads'), true), cleanup: { ...cleanupIdentity,
       markerDigest: digest({ markerBytes: readFileSync(join(cleanupRoot, 'disabled.json'), 'utf8') }) } };
 }
-function validate(packet, authorization, runtime) {
+export function bindLocalEmptyDbMaintenanceTargetV1(root) {
+  return bindMaintenanceFiles(root, 'synthetic.sqlite');
+}
+/** Trusted offline helper port; independent admission belongs to the host adapter. */
+export function bindOfflineEmptyDbMaintenanceTargetV1() {
+  return bindMaintenanceFiles('/maintenance-data', 'shooting-operations.sqlite', true);
+}
+function validate(packet, authorization, runtime, offline = false) {
   exact(packet, ['schemaVersion', 'operationId', 'kind', 'actor', 'approvalRef', 'target',
-    'runtime', 'schemaDigest', 'businessTimeZone', 'expected', 'command']);
+    'runtime', 'schemaDigest', 'businessTimeZone', 'expected', 'command', ...(offline ? ['adapterBinding'] : [])]);
+  if (offline) exact(packet.adapterBinding, ['host', 'storage', 'fence']);
   exact(packet.runtime, ['sourceRevision', 'imageId']);
   exact(runtime, ['sourceRevision', 'imageId']);
-  exact(packet.target, ['root', 'database', 'uploads', 'cleanup']);
+  exact(packet.target, offline ? ['root', 'databaseName', 'storageRoot', 'database', 'uploads', 'cleanup']
+    : ['root', 'database', 'uploads', 'cleanup']);
+  if (offline) exact(packet.target.storageRoot, ['device', 'inode']);
   exact(packet.target.cleanup, ['device', 'inode', 'markerDigest']);
   requireValue(/^sha256:[a-f0-9]{64}$/u.test(packet.target.cleanup.markerDigest), 'MAINTENANCE_TARGET_INVALID');
   for (const binding of [packet.target.database, packet.target.uploads]) {
@@ -88,7 +102,7 @@ function validate(packet, authorization, runtime) {
     && /^[a-f0-9]{40}$/u.test(packet.runtime.sourceRevision)
     && /^sha256:[a-f0-9]{64}$/u.test(packet.runtime.imageId), 'MAINTENANCE_PACKET_INVALID');
   requireValue(json(packet.runtime) === json(runtime), 'MAINTENANCE_RUNTIME_MISMATCH');
-  requireValue(authorization.scope === 'LOCAL_SYNTHETIC'
+  requireValue(authorization.scope === (offline ? 'OFFLINE_ADAPTER_TRUST_PORT' : 'LOCAL_SYNTHETIC')
     && authorization.actor === packet.actor && authorization.approvalRef === packet.approvalRef
     && authorization.packetDigest === digest(packet)
     && authorization.writeAdmission === 'disabled' && authorization.cleanup === 'disabled'
@@ -115,19 +129,21 @@ function validate(packet, authorization, runtime) {
 }
 function binding(packet) {
   return { target: packet.target, runtime: packet.runtime, schemaDigest: packet.schemaDigest,
-    businessTimeZone: packet.businessTimeZone, actor: packet.actor };
+    businessTimeZone: packet.businessTimeZone, actor: packet.actor,
+    ...(packet.adapterBinding ? { adapterBinding: packet.adapterBinding } : {}) };
 }
-function assertTarget(packet) {
-  requireValue(json(bindLocalEmptyDbMaintenanceTargetV1(packet.target.root)) === json(packet.target),
+function assertTarget(packet, offline = false) {
+  requireValue(json(offline ? bindOfflineEmptyDbMaintenanceTargetV1() : bindLocalEmptyDbMaintenanceTargetV1(packet.target.root)) === json(packet.target),
     'MAINTENANCE_TARGET_MISMATCH');
   const uploads = join(packet.target.root, 'uploads');
   requireValue(readdirSync(uploads).length === 1 && readdirSync(uploads)[0] === '.cleanup', 'MAINTENANCE_UPLOADS_NOT_EMPTY');
   metadata(join(uploads, '.cleanup'), true);
   requireValue(readdirSync(join(uploads, '.cleanup')).length === 0, 'MAINTENANCE_UPLOADS_NOT_EMPTY');
-  const allowed = new Set(['synthetic.sqlite', 'synthetic.sqlite-wal', 'synthetic.sqlite-shm', 'uploads', '.orphan-cleanup-control']);
+  const name = offline ? 'shooting-operations.sqlite' : 'synthetic.sqlite';
+  const allowed = new Set([name, `${name}-wal`, `${name}-shm`, 'uploads', '.orphan-cleanup-control']);
   requireValue(readdirSync(packet.target.root).every(name => allowed.has(name)), 'MAINTENANCE_STORAGE_NOT_EMPTY');
   for (const suffix of ['-wal', '-shm']) {
-    const path = join(packet.target.root, `synthetic.sqlite${suffix}`);
+    const path = join(packet.target.root, `${name}${suffix}`);
     // SQLite may remove disposable sidecars when a concurrent last connection closes.
     // An absent sidecar is permitted; existing links or ambiguous files still fail.
     try { metadata(path, false); } catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -261,22 +277,23 @@ function audit(db, packet, at, revision) {
       revision, digest(packet), at);
 }
 /** Explicit local trust port. Caller must stop other writers/cleanup before invoking. */
-export function executeLocalEmptyDbMaintenanceV1({ packet, authorization, runtime,
-  now = () => new Date(), beforeCommit = () => {} } = {}) {
+function executeMaintenance({ packet, authorization, runtime,
+  now = () => new Date(), beforeCommit = () => {}, beforeCommitDecision = () => {} } = {}, offline = false) {
   // Seal caller objects before entering filesystem/SQLite code; never rewrite or infer fields.
-  validate(packet, authorization, runtime);
+  validate(packet, authorization, runtime, offline);
   packet = JSON.parse(json(packet));
   const packetDigest = digest(packet);
-  assertTarget(packet);
-  const databasePath = join(packet.target.root, 'synthetic.sqlite');
+  assertTarget(packet, offline);
+  const databasePath = join(packet.target.root, offline ? 'shooting-operations.sqlite' : 'synthetic.sqlite');
   const readonly = new DatabaseSync(databasePath, { readOnly: true });
   try { readonly.exec('PRAGMA busy_timeout = 5000'); assertSchema(readonly); } finally { readonly.close(); }
-  assertTarget(packet);
+  assertTarget(packet, offline);
   const db = new DatabaseSync(databasePath);
   try {
     db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; BEGIN IMMEDIATE;');
+    let commitAttempted = false;
     try {
-      assertTarget(packet); assertSchema(db);
+      assertTarget(packet, offline); assertSchema(db);
       assertSchedulingQuiescenceV1({ db, now });
       const initial = db.prepare('SELECT * FROM empty_db_initialization WHERE id = 1').get();
       const at = now().toISOString();
@@ -340,9 +357,22 @@ export function executeLocalEmptyDbMaintenanceV1({ packet, authorization, runtim
         }
       }
       beforeCommit({ db, response });
-      assertTarget(packet);
+      assertTarget(packet, offline);
+      // The offline helper performs a final local deadline check after all slow observations.
+      beforeCommitDecision();
+      commitAttempted = true;
       db.exec('COMMIT');
       return response;
-    } catch (error) { try { db.exec('ROLLBACK'); } catch {} throw error; }
+    } catch (error) {
+      let rolledBack = false; try { db.exec('ROLLBACK'); rolledBack = true; } catch {}
+      if (offline && rolledBack && !commitAttempted && Object.isExtensible(error)) {
+        error.transactionOutcome = 'ROLLED_BACK_BEFORE_COMMIT';
+      }
+      throw error;
+    }
   } finally { db.close(); }
 }
+
+export function executeLocalEmptyDbMaintenanceV1(options) { return executeMaintenance(options); }
+/** Internal trusted helper port. Never wire directly to HTTP/startup or a caller assertion. */
+export function executeOfflineEmptyDbMaintenanceTransactionV1(options) { return executeMaintenance(options, true); }

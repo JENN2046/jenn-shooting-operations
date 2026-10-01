@@ -301,3 +301,12 @@ test('sealed admin timestamps support a ticking clock and exact replay across tw
   for (const packet of packets) assert.equal(f.execute(packet, { now }).exactReplay, true);
   assert.equal(f.state(), before);
 });
+
+test('refusal at the final commit decision after target validation rolls back all effects', t => {
+  const f = fixture(t), before = f.state(); let prepared = false;
+  assert.throws(() => f.execute(f.packet(), {
+    beforeCommit: ({ db }) => { prepared = true; assert.equal(db.prepare('SELECT COUNT(*) n FROM empty_db_initialization').get().n, 1); },
+    beforeCommitDecision: () => { assert.equal(prepared, true); throw Object.assign(new Error(), { code: 'MAINTENANCE_ADAPTER_APPROVAL_DENIED' }); },
+  }), { code: 'MAINTENANCE_ADAPTER_APPROVAL_DENIED' });
+  assert.equal(f.state(), before); assert.equal(f.execute().exactReplay, false);
+});
