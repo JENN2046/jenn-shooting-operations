@@ -130,6 +130,14 @@ test('unobservable bind source cannot be silently excluded from the storage inve
   assert.throws(() => assertCanonicalOfflineBindSourceV1(f.fencePath + '.absent'),
     { code: 'MAINTENANCE_ADAPTER_STORAGE_OBSERVATION_UNAVAILABLE' });
 });
+test('pure inventory fixture refuses an unfenced root bind as a volume ancestor alias', t => {
+  const f = fixture(t);
+  // Synthetic inspection entry only. Never creates a host-root Docker bind.
+  const rootBind = { Id: 'unfenced', State: { Running: true },
+    Mounts: [{ Type: 'bind', Source: '/', Destination: '/host', RW: true }] };
+  assert.throws(() => f.check([f.writer, f.helper, rootBind]),
+    { code: 'MAINTENANCE_ADAPTER_STORAGE_ALIAS' });
+});
 test('helper deadline is checked at actual decision and expiry boundary fails closed', () => {
   const permit = { notBefore: 1000, expiresAt: 2000 };
   assertOfflineMaintenancePermitDeadlineV1(permit, 1999);

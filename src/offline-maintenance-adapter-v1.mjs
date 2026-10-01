@@ -235,7 +235,8 @@ export function assertCanonicalOfflineBindSourceV1(source) {
   }
   throw maintenanceAdapterErrorV1('MAINTENANCE_ADAPTER_STORAGE_ALIAS');
 }
-const overlaps = (a, b) => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+const overlaps = (a, b) => a === b || a.startsWith(b === '/' ? '/' : `${b}/`)
+  || b.startsWith(a === '/' ? '/' : `${a}/`);
 export function assertOfflineDockerInventoryV1({ containers, observed, policy, helperId = null }) {
   requireValue(Array.isArray(containers), 'MAINTENANCE_ADAPTER_OBSERVATION_UNAVAILABLE');
   const found = new Set();

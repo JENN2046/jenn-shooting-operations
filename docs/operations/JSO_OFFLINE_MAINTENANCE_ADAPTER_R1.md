@@ -152,6 +152,11 @@ fails closed; there is no privileged fallback or silent exclusion. The accepted
 administrative window must preserve source-object identities; path strings alone
 are not a proof of the historical object pinned by an old bind mount.
 
+Parent rereview also confirmed that the root path `/` was omitted by the lexical
+ancestor comparison (`//` prefix). Containment now treats `/` as an ancestor of
+every absolute source. A pure synthetic inspection-entry regression rejects an
+unfenced writable root bind as STORAGE_ALIAS; no real host-root mount is created.
+
 A second reproduction delayed final inventory beyond approval expiry and still
 committed. Admission is now reread after slow inventory/path observations at each
 permit decision. The coordinator passes the admitted numeric notBefore/expiresAt;
