@@ -278,7 +278,7 @@ function audit(db, packet, at, revision) {
 }
 /** Explicit local trust port. Caller must stop other writers/cleanup before invoking. */
 function executeMaintenance({ packet, authorization, runtime,
-  now = () => new Date(), beforeCommit = () => {} } = {}, offline = false) {
+  now = () => new Date(), beforeCommit = () => {}, beforeCommitDecision = () => {} } = {}, offline = false) {
   // Seal caller objects before entering filesystem/SQLite code; never rewrite or infer fields.
   validate(packet, authorization, runtime, offline);
   packet = JSON.parse(json(packet));
@@ -291,6 +291,7 @@ function executeMaintenance({ packet, authorization, runtime,
   const db = new DatabaseSync(databasePath);
   try {
     db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; BEGIN IMMEDIATE;');
+    let commitAttempted = false;
     try {
       assertTarget(packet, offline); assertSchema(db);
       assertSchedulingQuiescenceV1({ db, now });
@@ -357,9 +358,18 @@ function executeMaintenance({ packet, authorization, runtime,
       }
       beforeCommit({ db, response });
       assertTarget(packet, offline);
+      // The offline helper performs a final local deadline check after all slow observations.
+      beforeCommitDecision();
+      commitAttempted = true;
       db.exec('COMMIT');
       return response;
-    } catch (error) { try { db.exec('ROLLBACK'); } catch {} throw error; }
+    } catch (error) {
+      let rolledBack = false; try { db.exec('ROLLBACK'); rolledBack = true; } catch {}
+      if (offline && rolledBack && !commitAttempted && Object.isExtensible(error)) {
+        error.transactionOutcome = 'ROLLED_BACK_BEFORE_COMMIT';
+      }
+      throw error;
+    }
   } finally { db.close(); }
 }
 

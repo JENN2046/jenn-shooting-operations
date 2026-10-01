@@ -138,3 +138,26 @@ change invalidates those bindings; no automatic rebind/reset occurs. Actual
 creation/maintenance/cutover/release still require separate user approval. Real
 device/assistive/browser targets remain deferred. Two inherited Alpine nanosecond
 `touch` full-suite failures must be disclosed separately from Debian success.
+
+
+## Independent review corrections
+
+Original source8334369/imagec77552b remain historical receipts. Owned real Docker
+reproduction confirmed an unfenced bind through an operator-writable symlink was
+lexically excluded and initialization committed. Inventory now examines every bind
+source, including paths outside the volume prefix. Mutable symlink components are
+refused (even if retargeted); only root-owned links under protected ancestors are
+resolved and compared to the bound volume. Missing/inaccessible source metadata
+fails closed; there is no privileged fallback or silent exclusion. The accepted
+administrative window must preserve source-object identities; path strings alone
+are not a proof of the historical object pinned by an old bind mount.
+
+A second reproduction delayed final inventory beyond approval expiry and still
+committed. Admission is now reread after slow inventory/path observations at each
+permit decision. The coordinator passes the admitted numeric notBefore/expiresAt;
+the helper checks open permission and checks the clock again immediately after all
+transaction target checks, directly before issuing COMMIT. Deadline refusal rolls
+back. Only an explicit successful rollback before any COMMIT attempt is returned
+as ROLLED_BACK_BEFORE_COMMIT; lost output or a commit-attempt error remains UNKNOWN.
+No rollback/reset/release is inferred from a missing response. Original evidence
+and the two inherited Alpine timestamp failures are retained.

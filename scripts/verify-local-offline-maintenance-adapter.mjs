@@ -2,7 +2,7 @@
 // Requires the existing local Docker socket. Never selects a production target or provider.
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -72,6 +72,46 @@ try {
   await assert.rejects(execute({ ...init, host: { ...init.host, bootId: 'wrong' } }),
     { code: 'MAINTENANCE_ADAPTER_OBSERVED_BINDING_MISMATCH' });
   assert.deepEqual(snapshot(), initial); records.push('fresh host mismatch refusal; no DB facts');
+  // Parent review A: Docker preserves the supplied symlink path in Mounts.Source.
+  const alias = join(root, 'owned-volume-alias'); symlinkSync(observed.mountpoint, alias);
+  const aliasWriter = docker(['create', '--network', 'none', '--read-only', '--cap-drop', 'ALL',
+    '--security-opt', 'no-new-privileges', '--no-healthcheck', '--restart', 'no',
+    '--mount', `type=bind,src=${alias},dst=/maintenance-data`, '--tmpfs', '/app/data:ro',
+    '--entrypoint', 'node', imageId, '-e', 'setInterval(()=>{},1000)']);
+  owned.push(aliasWriter); docker(['start', aliasWriter]);
+  const [aliasContainer] = JSON.parse(docker(['inspect', aliasWriter]));
+  assert.equal(aliasContainer.Mounts.find(m => m.Destination === '/maintenance-data').Source, alias);
+  await assert.rejects(execute(init), { code: 'MAINTENANCE_ADAPTER_STORAGE_ALIAS' });
+  assert.deepEqual(snapshot(), initial); docker(['rm', '--force', aliasWriter]);
+  owned.splice(owned.indexOf(aliasWriter), 1); rmSync(alias);
+  records.push('pre-existing real unfenced symlink bind alias rejected without facts');
+  // Parent review B: approval was valid before the slow third/final inventory.
+  const approval = JSON.parse((await import('node:fs')).readFileSync(approvalPath, 'utf8'));
+  approval.expiresAt = new Date(Date.now() + 10000).toISOString();
+  writeFileSync(approvalPath, JSON.stringify(approval), { mode: 0o600 });
+  let psCount = 0;
+  const lateInventory = args => {
+    if (args[0] === 'ps' && ++psCount === 3) {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0,
+        Math.max(0, Date.parse(approval.expiresAt) - Date.now() + 150));
+    }
+    return docker(args);
+  };
+  await assert.rejects(execute(init, lateInventory), { code: 'MAINTENANCE_ADAPTER_APPROVAL_DENIED' });
+  assert.equal(psCount, 3); assert.deepEqual(snapshot(), initial); approve(init);
+  records.push('approval expiry during slow final inventory refuses COMMIT and rolls back all facts');
+  // Delivery fault: a stale commit permit must also be denied locally after target checks.
+  const lateProxy = join(root, 'expired-permit.mjs');
+  writeFileSync(lateProxy, `import{spawn}from'node:child_process';
+    const c=spawn('/usr/bin/docker',process.argv.slice(2),{stdio:['pipe','inherit','inherit']});
+    let b='';process.stdin.setEncoding('utf8');process.stdin.on('data',x=>{b+=x;while(b.includes('\\n')){
+      const i=b.indexOf('\\n'),line=b.slice(0,i);b=b.slice(i+1);const m=JSON.parse(line);
+      if(m.permitCommit)m.expiresAt=Date.now()-1;c.stdin.write(JSON.stringify(m)+'\\n')}});
+    process.stdin.on('end',()=>c.stdin.end());c.on('exit',code=>process.exitCode=code);`);
+  const expirePermit = (_binary, args, options) => spawn(process.execPath, [lateProxy, ...args], options);
+  await assert.rejects(execute(init, undefined, expirePermit), { code: 'MAINTENANCE_ADAPTER_APPROVAL_DENIED' });
+  assert.deepEqual(snapshot(), initial);
+  records.push('expired delivered permit is refused at helper commit decision with confirmed rollback');
   // Introduce a real, unregistered mounted container at the before-COMMIT observation.
   // It writes no data. Refusal exercises rollback after the core has written all init facts.
   let helperInspects = 0, rogue;

@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, rmSync, chmodSync, symlinkSync, linkSync } 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { acquireOfflineMaintenanceFenceV1, observeFenceFileV1, digestOfflineMaintenanceV1,
-  readOfflineMaintenanceApprovalV1, assertOfflineDockerInventoryV1 } from '../src/offline-maintenance-adapter-v1.mjs';
+  readOfflineMaintenanceApprovalV1, assertOfflineDockerInventoryV1, assertCanonicalOfflineBindSourceV1, assertOfflineMaintenancePermitDeadlineV1 } from '../src/offline-maintenance-adapter-v1.mjs';
 
 // Inventory/image tokens here are deliberately synthetic. Actual Docker acceptance is separate.
 const imageId = `sha256:${'a'.repeat(64)}`, sourceRevision = 'b'.repeat(40);
@@ -116,4 +116,26 @@ test('missing roster and helper network/port/rootfs/fence mismatch are refused',
     const helper = structuredClone(f.helper); mutate(helper);
     assert.throws(() => f.check([f.writer, helper]), { code: 'MAINTENANCE_ADAPTER_HELPER_MISMATCH' });
   }
+});
+
+test('nonlexical bind symlink and symlink directory ancestors are refused before exclusion', t => {
+  const f = fixture(t), alias = f.fencePath + '.volume-alias'; symlinkSync(f.observed.mountpoint, alias);
+  for (const source of [alias, alias + '/subdirectory']) {
+    assert.throws(() => f.check([f.writer, f.helper, { Id: 'unfenced', Mounts: [{ Type: 'bind', Source: source }] }]),
+      { code: 'MAINTENANCE_ADAPTER_STORAGE_ALIAS' });
+  }
+});
+test('unobservable bind source cannot be silently excluded from the storage inventory', t => {
+  const f = fixture(t);
+  assert.throws(() => assertCanonicalOfflineBindSourceV1(f.fencePath + '.absent'),
+    { code: 'MAINTENANCE_ADAPTER_STORAGE_OBSERVATION_UNAVAILABLE' });
+});
+test('helper deadline is checked at actual decision and expiry boundary fails closed', () => {
+  const permit = { notBefore: 1000, expiresAt: 2000 };
+  assertOfflineMaintenancePermitDeadlineV1(permit, 1999);
+  for (const now of [999, 2000, 2001]) assert.throws(() => assertOfflineMaintenancePermitDeadlineV1(permit, now),
+    { code: 'MAINTENANCE_ADAPTER_APPROVAL_DENIED' });
+  for (const bad of [{}, { ...permit, expiresAt: '2000' }, { ...permit, expiresAt: NaN },
+    { ...permit, expiresAt: 6 * 3600000 + 1001 }]) assert.throws(() => assertOfflineMaintenancePermitDeadlineV1(bad, 1500),
+    { code: 'MAINTENANCE_ADAPTER_APPROVAL_DENIED' });
 });

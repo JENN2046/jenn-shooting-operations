@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { openSync, closeSync, fstatSync, lstatSync, realpathSync, readFileSync } from 'node:fs';
-import { dirname, resolve, isAbsolute } from 'node:path';
+import { openSync, closeSync, fstatSync, lstatSync, realpathSync, readFileSync, readlinkSync } from 'node:fs';
+import { dirname, resolve, isAbsolute, join } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { hostname, tmpdir } from 'node:os';
 import { canonicalJsonSchedulingV1, digestCanonicalJsonSchedulingV1 } from './scheduling-contract-v1.mjs';
@@ -18,6 +18,12 @@ function exact(value, keys) {
   'MAINTENANCE_ADAPTER_PACKET_INVALID');
 }
 export const digestOfflineMaintenanceV1 = digest;
+export function assertOfflineMaintenancePermitDeadlineV1(permit, now = Date.now()) {
+  requireValue(Number.isSafeInteger(permit.notBefore) && Number.isSafeInteger(permit.expiresAt)
+    && permit.expiresAt > permit.notBefore && permit.expiresAt - permit.notBefore <= 6 * 3600000
+    && now >= permit.notBefore && now < permit.expiresAt, 'MAINTENANCE_ADAPTER_APPROVAL_DENIED');
+}
+
 export function observeFenceFileV1(path) {
   requireValue(typeof path === 'string' && isAbsolute(path) && resolve(path) === path
     && realpathSync(path) === path && !/[,\x00-\x1f]/u.test(path), 'MAINTENANCE_ADAPTER_FENCE_INVALID');
@@ -202,14 +208,46 @@ function disabledRuntime(c) {
     && c.Config?.User === 'node' && values.get('WRITE_ADMISSION_MODE') === 'disabled'
     && values.get('ORPHAN_CLEANUP_MODE') === 'disabled' && values.get('KIOSK_AUTH_CONFIG_PATH') === '';
 }
+/** Docker retains the supplied bind path. Operator-writable symlinks can be
+ * retargeted after mounting, so never use their current referent to exclude a
+ * bind. Only links under root-owned non-writable ancestors are resolvable here. */
+export function assertCanonicalOfflineBindSourceV1(source) {
+  requireValue(typeof source === 'string' && isAbsolute(source) && resolve(source) === source,
+    'MAINTENANCE_ADAPTER_STORAGE_ALIAS');
+  let candidate = source;
+  for (let links = 0; links <= 40; links++) {
+    let prefix = '/', protectedAncestors = true, redirected = false;
+    const parts = candidate.split('/').filter(Boolean);
+    for (let index = 0; index < parts.length; index++) {
+      prefix = join(prefix, parts[index]);
+      let stat;
+      try { stat = lstatSync(prefix); }
+      catch { throw maintenanceAdapterErrorV1('MAINTENANCE_ADAPTER_STORAGE_OBSERVATION_UNAVAILABLE'); }
+      if (stat.isSymbolicLink()) {
+        requireValue(protectedAncestors && stat.uid === 0, 'MAINTENANCE_ADAPTER_STORAGE_ALIAS');
+        try { candidate = resolve(dirname(prefix), readlinkSync(prefix), ...parts.slice(index + 1)); }
+        catch { throw maintenanceAdapterErrorV1('MAINTENANCE_ADAPTER_STORAGE_OBSERVATION_UNAVAILABLE'); }
+        redirected = true; break;
+      }
+      protectedAncestors &&= stat.uid === 0 && (stat.mode & 0o022) === 0;
+    }
+    if (!redirected) return candidate;
+  }
+  throw maintenanceAdapterErrorV1('MAINTENANCE_ADAPTER_STORAGE_ALIAS');
+}
 const overlaps = (a, b) => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
 export function assertOfflineDockerInventoryV1({ containers, observed, policy, helperId = null }) {
   requireValue(Array.isArray(containers), 'MAINTENANCE_ADAPTER_OBSERVATION_UNAVAILABLE');
   const found = new Set();
   for (const c of containers) {
     const mounts = c.Mounts ?? [];
+    // Check nonlexical bind sources too; no inability-to-observe fallback may skip them.
+    const canonical = new Map();
+    for (const m of mounts) if (m.Type === 'bind' && m.Source !== observed.mountpoint) {
+      canonical.set(m, assertCanonicalOfflineBindSourceV1(m.Source));
+    }
     const relevant = mounts.filter(m => m.Name === observed.storage.name
-      || (typeof m.Source === 'string' && overlaps(m.Source, observed.mountpoint)));
+      || (typeof m.Source === 'string' && overlaps(canonical.get(m) ?? m.Source, observed.mountpoint)));
     if (!relevant.length) continue;
     if (c.Id === helperId) {
       requireValue(relevant.length === 1 && relevant[0].Type === 'bind'
@@ -266,7 +304,7 @@ export async function executeOfflineMaintenanceAdapterV1({ packet, policyPath, a
   try { lock = acquireOfflineMaintenanceFenceV1(packet.fence, packet.scope); }
   catch (error) { coordinatorLock.close(); throw error; }
   const name = `jso-maintenance-helper-${randomUUID()}`;
-  let child, result, failure, commitPermissionSent = false, ready = false, helperId;
+  let child, result, failure, commitPermissionSent = false, ready = false, helperId, confirmedRollback = false;
   function revalidate() {
     protectedFile(packet.fence.path, packet.scope);
     coordinatorLock.assertHeld();
@@ -281,6 +319,10 @@ export async function executeOfflineMaintenanceAdapterV1({ packet, policyPath, a
     admitted = readOfflineMaintenanceApprovalV1({ packet, policyPath, approvalPath, observed });
     requireValue(digest(admitted.policy) === policyDigest, 'MAINTENANCE_ADAPTER_POLICY_CHANGED');
     assertOfflineDockerInventoryV1({ containers: inventory(read), observed, policy: admitted.policy, helperId });
+    // Inventory/path observation can be slow. Re-read admission at the actual permit decision.
+    admitted = readOfflineMaintenanceApprovalV1({ packet, policyPath, approvalPath, observed });
+    requireValue(digest(admitted.policy) === policyDigest, 'MAINTENANCE_ADAPTER_POLICY_CHANGED');
+    return { notBefore: Date.parse(admitted.approval.notBefore), expiresAt: Date.parse(admitted.approval.expiresAt) };
   }
   try {
     revalidate();
@@ -314,11 +356,11 @@ export async function executeOfflineMaintenanceAdapterV1({ packet, policyPath, a
               const message = JSON.parse(line);
               if (message.phase === 'ready' && !ready && !failure) {
                 [helperId] = JSON.parse(read(['inspect', name])).map(c => c.Id);
-                ready = true; revalidate(); child.stdin.write(JSON.stringify({ permitOpen: true }) + '\n');
+                ready = true; const deadline = revalidate(); child.stdin.write(JSON.stringify({ permitOpen: true, ...deadline }) + '\n');
               } else if (message.phase === 'beforeCommit' && ready && !commitPermissionSent && !failure) {
                 [helperId] = JSON.parse(read(['inspect', name])).map(c => c.Id);
-                revalidate(); commitPermissionSent = true;
-                child.stdin.end(JSON.stringify({ permitCommit: true }) + '\n');
+                const deadline = revalidate(); commitPermissionSent = true;
+                child.stdin.end(JSON.stringify({ permitCommit: true, ...deadline }) + '\n');
               } else if (message.phase === 'result' && commitPermissionSent && !result && !failure) {
                 requireValue(message.response?.ok === true && message.response.kind === packet.operation.kind
                   && message.response.operationId === packet.operation.operationId
@@ -326,14 +368,17 @@ export async function executeOfflineMaintenanceAdapterV1({ packet, policyPath, a
                   && typeof message.response.exactReplay === 'boolean', 'MAINTENANCE_ADAPTER_PROTOCOL_INVALID');
                 result = message.response;
               }
-              else if (message.phase === 'refused') failure ??= maintenanceAdapterErrorV1(
-                /^MAINTENANCE_|^SCHEMA_/u.test(message.code) ? message.code : 'MAINTENANCE_ADAPTER_HELPER_REFUSED');
+              else if (message.phase === 'refused' && !result) {
+                confirmedRollback = message.transactionOutcome === 'ROLLED_BACK_BEFORE_COMMIT';
+                failure ??= maintenanceAdapterErrorV1(/^MAINTENANCE_|^SCHEMA_/u.test(message.code)
+                  ? message.code : 'MAINTENANCE_ADAPTER_HELPER_REFUSED');
+              }
               else throw maintenanceAdapterErrorV1('MAINTENANCE_ADAPTER_PROTOCOL_INVALID');
             } catch (error) { failure ??= error; child.stdin.end(); }
           }
         });
         child.on('close', code => code === 0 && result && !failure ? resolvePromise() : reject(
-          commitPermissionSent ? maintenanceAdapterErrorV1('MAINTENANCE_ADAPTER_OUTCOME_UNKNOWN')
+          commitPermissionSent && !confirmedRollback ? maintenanceAdapterErrorV1('MAINTENANCE_ADAPTER_OUTCOME_UNKNOWN')
             : failure ?? maintenanceAdapterErrorV1('MAINTENANCE_ADAPTER_HELPER_REFUSED')));
       });
     } finally { clearTimeout(timeout); }
