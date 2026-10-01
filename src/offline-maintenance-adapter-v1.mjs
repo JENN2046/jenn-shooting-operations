@@ -90,12 +90,29 @@ export function acquireOfflineMaintenanceFenceV1(binding, scope) {
     };
   } catch (error) { closeSync(fd); throw error; }
 }
+// Project only the metadata used by admission. Never dump unrelated service env/argv.
+const SAFE_CONTAINER = `{"Id":{{json .Id}},"Image":{{json .Image}},"Path":{{if eq .Path "node"}}"node"{{else}}"OTHER"{{end}},
+"Args":{{if eq (join .Args "|") "scripts/offline-maintenance-helper.mjs|execute"}}["scripts/offline-maintenance-helper.mjs","execute"]{{else if eq (join .Args "|") "scripts/guarded-offline-runtime.mjs|/jso-maintenance-fence/guard.lock"}}["scripts/guarded-offline-runtime.mjs","/jso-maintenance-fence/guard.lock"]{{else}}["OTHER"]{{end}},
+"State":{"Running":{{json .State.Running}},"Restarting":{{json .State.Restarting}},"Paused":{{json .State.Paused}}},
+"Mounts":{{json .Mounts}},"HostConfig":{"NetworkMode":{{json .HostConfig.NetworkMode}},"ReadonlyRootfs":{{json .HostConfig.ReadonlyRootfs}},"CapDrop":{{json .HostConfig.CapDrop}},"SecurityOpt":{{json .HostConfig.SecurityOpt}},"Privileged":{{json .HostConfig.Privileged}},"RestartPolicy":{{json .HostConfig.RestartPolicy}},"PortBindings":{{json .HostConfig.PortBindings}}},
+"Config":{"User":{{json .Config.User}},"Env":[{{range .Config.Env}}{{if eq (index (split . "=") 0) "WRITE_ADMISSION_MODE"}}{{if eq . "WRITE_ADMISSION_MODE=disabled"}}"WRITE_ADMISSION_MODE=disabled",{{else}}"WRITE_ADMISSION_MODE=OTHER",{{end}}{{else if eq (index (split . "=") 0) "ORPHAN_CLEANUP_MODE"}}{{if eq . "ORPHAN_CLEANUP_MODE=disabled"}}"ORPHAN_CLEANUP_MODE=disabled",{{else}}"ORPHAN_CLEANUP_MODE=OTHER",{{end}}{{else if eq (index (split . "=") 0) "KIOSK_AUTH_CONFIG_PATH"}}{{if eq . "KIOSK_AUTH_CONFIG_PATH="}}"KIOSK_AUTH_CONFIG_PATH=",{{else}}"KIOSK_AUTH_CONFIG_PATH=CONFIGURED",{{end}}{{end}}{{end}}null]}}`;
+const SAFE_VOLUME = `{"Name":{{json .Name}},"Driver":{{json .Driver}},"CreatedAt":{{json .CreatedAt}},"Mountpoint":{{json .Mountpoint}},"Options":{{if .Options}}{"UNSUPPORTED":true}{{else}}null{{end}},"Labels":{"jso.synthetic":{{if eq (index .Labels "jso.synthetic") "true"}}"true"{{else}}"false"{{end}}}}`;
+const SAFE_IMAGE = `{"Id":{{json .Id}},"Os":{{json .Os}},"Architecture":{{json .Architecture}},"Config":{"Labels":{"org.opencontainers.image.revision":{{json (index .Config.Labels "org.opencontainers.image.revision")}}},"Env":[{{range .Config.Env}}{{if eq (index (split . "=") 0) "NODE_VERSION"}}{{json .}},{{end}}{{end}}null]}}`;
 export function dockerMaintenanceReadV1(args) {
+  let format;
+  if (args[0] === 'inspect') format = SAFE_CONTAINER;
+  else if (args[0] === 'volume' && args[1] === 'inspect') format = SAFE_VOLUME;
+  else if (args[0] === 'image' && args[1] === 'inspect') format = SAFE_IMAGE;
+  if (format) {
+    const offset = args[0] === 'inspect' ? 1 : 2;
+    args = [...args.slice(0, offset), '--format', format.replace(/\n/gu, ''), ...args.slice(offset)];
+  } else if (args[0] === 'info') args = ['info', '--format', '{"ID":{{json .ID}},"Name":{{json .Name}},"OSType":{{json .OSType}}}'];
   const result = spawnSync('/usr/bin/docker', ['--host', SOCKET, ...args], {
     encoding: 'utf8', timeout: 30000, maxBuffer: 16 * 1024 * 1024,
   });
   requireValue(!result.error && result.status === 0, 'MAINTENANCE_ADAPTER_OBSERVATION_UNAVAILABLE');
-  return result.stdout.trim();
+  const output = result.stdout.trim();
+  return format ? JSON.stringify(output.split('\n').filter(Boolean).map(line => JSON.parse(line))) : output;
 }
 export function observeOfflineDockerTargetV1({ imageId, volumeName, fencePath }, read = dockerMaintenanceReadV1) {
   requireValue(process.platform === 'linux' && sha(imageId)
@@ -115,7 +132,7 @@ export function observeOfflineDockerTargetV1({ imageId, volumeName, fencePath },
     && !/[,\x00-\x1f]/u.test(volume.Mountpoint),
   'MAINTENANCE_ADAPTER_STORAGE_UNSUPPORTED');
   const sourceRevision = image?.Config?.Labels?.['org.opencontainers.image.revision'];
-  const nodeVersion = image?.Config?.Env?.find(value => value.startsWith('NODE_VERSION='))?.slice(13);
+  const nodeVersion = image?.Config?.Env?.find(value => typeof value === 'string' && value.startsWith('NODE_VERSION='))?.slice(13);
   requireValue(image.Id === imageId && image.Os === 'linux' && image.Architecture === 'amd64'
     && /^[a-f0-9]{40}$/u.test(sourceRevision) && nodeVersion === '24.21.0',
   'MAINTENANCE_ADAPTER_RUNTIME_INVALID');
@@ -180,8 +197,9 @@ export function readOfflineMaintenanceApprovalV1({ packet, policyPath, approvalP
   return { policy, approval };
 }
 function disabledRuntime(c) {
-  const values = new Map((c.Config?.Env ?? []).map(value => { const i = value.indexOf('='); return [value.slice(0, i), value.slice(i + 1)]; }));
-  return c.Config?.User === 'node' && values.get('WRITE_ADMISSION_MODE') === 'disabled'
+  const values = new Map((c.Config?.Env ?? []).filter(value => typeof value === 'string').map(value => { const i = value.indexOf('='); return [value.slice(0, i), value.slice(i + 1)]; }));
+  return values.size === (c.Config?.Env ?? []).filter(value => typeof value === 'string').length
+    && c.Config?.User === 'node' && values.get('WRITE_ADMISSION_MODE') === 'disabled'
     && values.get('ORPHAN_CLEANUP_MODE') === 'disabled' && values.get('KIOSK_AUTH_CONFIG_PATH') === '';
 }
 const overlaps = (a, b) => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
@@ -280,6 +298,7 @@ export async function executeOfflineMaintenanceAdapterV1({ packet, policyPath, a
     child.stdin.on('error', () => {});
     // Do not forward raw Docker/SQLite errors or records into execution diagnostics.
     child.stderr.resume();
+    child.stdout.setEncoding('utf8');
     child.stdin.write(JSON.stringify({ operation: packet.operation, nodeVersion: observed.nodeVersion, fence: packet.fence }) + '\n');
     let buffer = '';
     const timeout = setTimeout(() => { failure = maintenanceAdapterErrorV1('MAINTENANCE_ADAPTER_OUTCOME_UNKNOWN'); child.stdin.end(); }, 60000);
@@ -300,7 +319,13 @@ export async function executeOfflineMaintenanceAdapterV1({ packet, policyPath, a
                 [helperId] = JSON.parse(read(['inspect', name])).map(c => c.Id);
                 revalidate(); commitPermissionSent = true;
                 child.stdin.end(JSON.stringify({ permitCommit: true }) + '\n');
-              } else if (message.phase === 'result' && commitPermissionSent && !result && !failure) result = message.response;
+              } else if (message.phase === 'result' && commitPermissionSent && !result && !failure) {
+                requireValue(message.response?.ok === true && message.response.kind === packet.operation.kind
+                  && message.response.operationId === packet.operation.operationId
+                  && message.response.packetDigest === digest(packet.operation)
+                  && typeof message.response.exactReplay === 'boolean', 'MAINTENANCE_ADAPTER_PROTOCOL_INVALID');
+                result = message.response;
+              }
               else if (message.phase === 'refused') failure ??= maintenanceAdapterErrorV1(
                 /^MAINTENANCE_|^SCHEMA_/u.test(message.code) ? message.code : 'MAINTENANCE_ADAPTER_HELPER_REFUSED');
               else throw maintenanceAdapterErrorV1('MAINTENANCE_ADAPTER_PROTOCOL_INVALID');

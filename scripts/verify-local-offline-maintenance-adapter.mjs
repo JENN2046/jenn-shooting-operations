@@ -134,7 +134,7 @@ try {
   const proxy = join(root, 'drop-result.mjs');
   writeFileSync(proxy, `import{spawn}from'node:child_process';
     const c=spawn('/usr/bin/docker',process.argv.slice(2),{stdio:['inherit','pipe','inherit']});
-    let b='',dropped=false;c.stdout.on('data',x=>{b+=x;while(b.includes('\\n')){const i=b.indexOf('\\n'),l=b.slice(0,i);b=b.slice(i+1);
+    let b='',dropped=false;c.stdout.setEncoding('utf8');c.stdout.on('data',x=>{b+=x;while(b.includes('\\n')){const i=b.indexOf('\\n'),l=b.slice(0,i);b=b.slice(i+1);
       let result=false;try{result=JSON.parse(l).phase==='result'}catch{};
       if(result)dropped=true;else process.stdout.write(l+'\\n')}});
     c.on('exit',code=>{if(b)process.stdout.write(b);process.exitCode=dropped?75:code});`);
