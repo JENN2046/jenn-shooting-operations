@@ -195,6 +195,8 @@ test('execution boundary freezes physical target and non-Docker drain verificati
   assert.deepEqual(boundary.finalDrainVerification, {
     dockerVolumeUsersRequired: 0,
     dockerMountSourceAncestryChecked: true,
+    dockerMountFilesystemIdentityChecked: true,
+    dockerMountInfoNamespace: 'dockerd',
     lsofOpenUsersRequired: 0,
     fuserPidsRequired: 0,
     walRequiredAbsent: true,

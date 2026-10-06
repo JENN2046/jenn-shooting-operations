@@ -84,7 +84,7 @@
   "executionBoundaryEvidence": {
     "boundaryId": "G3_SCHEMA11_ATOMIC_EXCHANGE_R1",
     "executorPath": "scripts/g3-schema11-cutover-executor.py",
-    "executorSha256": "sha256:2c1a5d7baf52b165ed15d7efc4a7b9397e3908415ebb11866cc9df9e6ae43602",
+    "executorSha256": "sha256:5d6a37fa2bf2e91e1df138537fa5822ce50d73a9f51b3bf34e1aa309fe27ed71",
     "imageArchiveSha256": "sha256:7e6e707d11fab6c317851ad21fbc1a4ccdde0ff1dda4d6dba7535b3b37303dff",
     "imageArchiveSize": 63533056,
     "exactImageDigest": "sha256:581e9fa25e04b582aa39c2fdaa291f6db3e80fc3f3ac15a8a4afa06622442144",
@@ -163,10 +163,12 @@
       "walRequiredAbsent": true,
       "shmRequiredAbsent": true,
       "checkedImmediatelyBeforeExchange": true,
-      "dockerMountSourceAncestryChecked": true
+      "dockerMountSourceAncestryChecked": true,
+      "dockerMountFilesystemIdentityChecked": true,
+      "dockerMountInfoNamespace": "dockerd"
     }
   },
-  "executionBoundaryProofDigest": "sha256:df36498b6ee32430290582f4b5f5d30866b1d5796e3460aa1db3b5c194f11fea",
+  "executionBoundaryProofDigest": "sha256:75754ff148e2fcfadf7cb143af63033db25e5ced80e0b47e5d93e637f63175e2",
   "authorityTarget": {
     "authorityHead": "a4199fdb14808ebb866943148a222b0d4300d66e",
     "artifact": {
@@ -195,7 +197,7 @@
       "inFlightWriterCount": 0,
       "drainProofDigest": "sha256:7d4de65434606b1c4557536deee386ed25fc6f26c05919bc5e18f7bad1e7081f",
       "processLifetimeIsAuthority": false,
-      "executionBoundaryProofDigest": "sha256:df36498b6ee32430290582f4b5f5d30866b1d5796e3460aa1db3b5c194f11fea",
+      "executionBoundaryProofDigest": "sha256:75754ff148e2fcfadf7cb143af63033db25e5ced80e0b47e5d93e637f63175e2",
       "unknownExecutorHasAuthoritativeWriteCapability": false,
       "nonDatabaseProductionMutationAllowed": false
     },
@@ -205,7 +207,7 @@
       "automaticRetryAllowed": false
     }
   },
-  "authorityTargetDigest": "sha256:ff621429caaf4a41f97ddc5925ee634ce43719adbaad5fd42dfb40932ee480d5",
+  "authorityTargetDigest": "sha256:9d502475b7bdbae953c57ba0a922243d4518c6deb79904a9bdc31900187ee2f9",
   "humanApproval": {
     "status": "NOT_REQUESTED",
     "humanApprovalRequired": true,

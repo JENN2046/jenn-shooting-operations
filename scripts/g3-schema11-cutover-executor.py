@@ -356,7 +356,68 @@ def inspect_db(path: Path):
 def docker_json(args):
     return subprocess.check_output(["docker", *args], text=True).strip()
 
-def mount_source_can_access_active_db(source):
+def _mountinfo_unescape(value):
+    return re.sub(r"\\([0-7]{3})", lambda match: chr(int(match.group(1), 8)), value)
+
+def parse_mountinfo(text):
+    entries = []
+    for raw in text.splitlines():
+        if not raw.strip():
+            continue
+        fields = raw.split()
+        try:
+            separator = fields.index("-")
+        except ValueError as exc:
+            raise RuntimeError("G3_MOUNTINFO_INVALID") from exc
+        if separator < 6:
+            raise RuntimeError("G3_MOUNTINFO_INVALID")
+        root = Path(_mountinfo_unescape(fields[3]))
+        mountpoint = Path(_mountinfo_unescape(fields[4]))
+        if not root.is_absolute() or not mountpoint.is_absolute():
+            raise RuntimeError("G3_MOUNTINFO_INVALID")
+        entries.append({
+            "majorMinor": fields[2],
+            "root": root,
+            "mountpoint": mountpoint,
+        })
+    if not entries:
+        raise RuntimeError("G3_MOUNTINFO_EMPTY")
+    return entries
+
+def _path_within(path, parent):
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+def mount_identity_for_path(path, mountinfo_text):
+    try:
+        resolved = Path(path).resolve(strict=False)
+    except OSError as exc:
+        raise RuntimeError("G3_DOCKER_MOUNT_SOURCE_UNRESOLVABLE") from exc
+    candidates = [
+        entry for entry in parse_mountinfo(mountinfo_text)
+        if _path_within(resolved, entry["mountpoint"])
+    ]
+    if not candidates:
+        raise RuntimeError("G3_MOUNTINFO_PATH_UNMAPPED")
+    entry = max(candidates, key=lambda item: len(item["mountpoint"].parts))
+    relative = resolved.relative_to(entry["mountpoint"])
+    filesystem_path = entry["root"].joinpath(relative)
+    return entry["majorMinor"], filesystem_path
+
+def docker_daemon_mountinfo_text():
+    pids = subprocess.check_output(["pgrep", "-x", "dockerd"], text=True).split()
+    if len(pids) != 1 or not pids[0].isdigit():
+        raise RuntimeError("G3_DOCKER_DAEMON_IDENTITY_UNAVAILABLE")
+    path = Path(f"/proc/{pids[0]}/mountinfo")
+    try:
+        return path.read_text()
+    except OSError as exc:
+        raise RuntimeError("G3_DOCKER_MOUNTINFO_UNAVAILABLE") from exc
+
+def mount_source_can_access_active_db(source, mountinfo_text=None):
     if not isinstance(source, str) or not source.startswith("/"):
         return False
     try:
@@ -364,16 +425,24 @@ def mount_source_can_access_active_db(source):
         resolved_db = ACTIVE_DB.resolve(strict=False)
     except OSError as exc:
         raise RuntimeError("G3_DOCKER_MOUNT_SOURCE_UNRESOLVABLE") from exc
-    return resolved_source == resolved_db or resolved_source in resolved_db.parents
+    if resolved_source == resolved_db or resolved_source in resolved_db.parents:
+        return True
+
+    mountinfo = mountinfo_text if mountinfo_text is not None else docker_daemon_mountinfo_text()
+    source_device, source_fs_path = mount_identity_for_path(resolved_source, mountinfo)
+    db_device, db_fs_path = mount_identity_for_path(resolved_db, mountinfo)
+    return source_device == db_device \
+      and (source_fs_path == db_fs_path or source_fs_path in db_fs_path.parents)
 
 def verify_no_running_volume_users():
     ids = subprocess.check_output(["docker", "ps", "-q"], text=True).split()
     users = []
+    mountinfo = docker_daemon_mountinfo_text()
     for cid in ids:
         mounts = json.loads(docker_json(["inspect", cid, "--format", "{{json .Mounts}}"]))
         for mount in mounts:
             if mount.get("Name") == VOLUME_NAME \
-              or mount_source_can_access_active_db(mount.get("Source")):
+              or mount_source_can_access_active_db(mount.get("Source"), mountinfo):
                 users.append(cid)
                 break
     if users:
@@ -533,13 +602,33 @@ def execute(packet_path: Path, approval_path: Path, preparation_path: Path):
         raise
 
 def self_test_mount_source():
-    if not mount_source_can_access_active_db(str(EXPECTED_VOLUME_MOUNTPOINT)):
+    volume_root = "/docker/volumes/jenn-shooting-operations_shooting_data/_data"
+    synthetic_mountinfo = "\n".join([
+        "10 1 252:16 / /mnt/datadisk0 rw,relatime - ext4 /dev/vdb rw",
+        f"11 1 252:16 {volume_root} /srv/db-alias rw,relatime - ext4 /dev/vdb rw",
+        f"12 1 252:16 {volume_root}/shooting-operations.sqlite /srv/db-file rw,relatime - ext4 /dev/vdb rw",
+        "13 1 252:16 /docker /srv/docker-alias rw,relatime - ext4 /dev/vdb rw",
+        "14 1 252:16 /unrelated /srv/unrelated rw,relatime - ext4 /dev/vdb rw",
+        "15 1 0:99 / /tmp rw,relatime - tmpfs tmpfs rw",
+    ])
+    if not mount_source_can_access_active_db(str(EXPECTED_VOLUME_MOUNTPOINT), synthetic_mountinfo):
         raise RuntimeError("G3_MOUNT_SOURCE_SELF_TEST_PARENT_FAILED")
-    if not mount_source_can_access_active_db(str(ACTIVE_DB)):
+    if not mount_source_can_access_active_db(str(ACTIVE_DB), synthetic_mountinfo):
         raise RuntimeError("G3_MOUNT_SOURCE_SELF_TEST_FILE_FAILED")
-    if mount_source_can_access_active_db(str(EXPECTED_VOLUME_MOUNTPOINT / "uploads")):
+    if not mount_source_can_access_active_db("/srv/db-alias", synthetic_mountinfo):
+        raise RuntimeError("G3_MOUNT_SOURCE_SELF_TEST_ALIAS_DIR_FAILED")
+    if not mount_source_can_access_active_db("/srv/db-file", synthetic_mountinfo):
+        raise RuntimeError("G3_MOUNT_SOURCE_SELF_TEST_ALIAS_FILE_FAILED")
+    if not mount_source_can_access_active_db(
+      "/srv/docker-alias/volumes/jenn-shooting-operations_shooting_data/_data",
+      synthetic_mountinfo,
+    ):
+        raise RuntimeError("G3_MOUNT_SOURCE_SELF_TEST_ALIAS_PARENT_FAILED")
+    if mount_source_can_access_active_db(str(EXPECTED_VOLUME_MOUNTPOINT / "uploads"), synthetic_mountinfo):
         raise RuntimeError("G3_MOUNT_SOURCE_SELF_TEST_CHILD_FALSE_POSITIVE")
-    if mount_source_can_access_active_db("/tmp"):
+    if mount_source_can_access_active_db("/srv/unrelated", synthetic_mountinfo):
+        raise RuntimeError("G3_MOUNT_SOURCE_SELF_TEST_SAME_FS_FALSE_POSITIVE")
+    if mount_source_can_access_active_db("/tmp", synthetic_mountinfo):
         raise RuntimeError("G3_MOUNT_SOURCE_SELF_TEST_UNRELATED_FALSE_POSITIVE")
     print(json.dumps({"status": "G3_MOUNT_SOURCE_SELF_TEST_PASS"}))
 
