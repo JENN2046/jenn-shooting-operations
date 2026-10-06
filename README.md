@@ -19,13 +19,18 @@ Jenn Shooting Operations 是 `jenn-shooting-planner` 的独立协作服务边界
 
 ## 当前阶段
 
-本地服务、SQLite 存储、只读看板、需求表单、VCP 主进程同步客户端、测试闭环和
-本地容器预检已经实现。云同步配置保持关闭，尚未部署到腾讯云，也没有修改安全组、
-域名、证书或生产凭据。
+当前源码以 `b781fef9e4717263d42ec0d5d14d1249b8603723` 为已合并基线，并正在收敛
+**JSO Core Canonical R1**：Schema 11 业务日历、工作安排、单场改期和 JSO 侧 Agent
+服务边界。仓库内保留既有生产部署与 PROD-10 证据，但这些历史记录不能替代当前线上事实；
+任何生产动作前仍必须重新核验 live runtime。本候选本身未部署，也不授权 Schema 11 cutover。
+
+当前收官只使用 G0-G4 五个 Gate。历史 PROD/GF 编号继续作为 provenance，不自动成为当前
+next action。VCPToolBox transport/plugin 由其独立 owner 维护，不进入 JSO Core。
 
 ## 入口
 
-- [执行计划](docs/EXECUTION_PLAN.md)
+- [JSO Core Canonical R1](docs/JSO_CORE_CANONICAL_R1.md)
+- [执行计划（历史初始阶段计划）](docs/EXECUTION_PLAN.md)
 - [部署前检清单](docs/DEPLOYMENT_PREFLIGHT.md)
 - [同步协议](contracts/SYNC_PROTOCOL.md)
 - [排班快照 Schema](contracts/schedule-snapshot.schema.json)

@@ -1,3 +1,5 @@
+import { SCHEDULING_CALENDAR_SCHEMA_V2_SQL, SCHEDULING_CONFIG_TABLE_V2_SQL } from './sqlite-scheduling-calendar-schema-v2.mjs';
+import { SCHEDULE_RESCHEDULE_SCHEMA_SQL } from './sqlite-schedule-reschedule-schema-v1.mjs';
 import { EMPTY_DB_MAINTENANCE_SCHEMA_SQL } from './sqlite-empty-db-maintenance-schema-v1.mjs';
 import { KIOSK_SMOKE_SESSION_SCHEMA_SQL } from './sqlite-kiosk-smoke-session-schema-v1.mjs';
 import { KIOSK_SMOKE_SCHEMA_SQL } from './sqlite-kiosk-smoke-schema-v1.mjs';
@@ -7,6 +9,7 @@ import { SCHEDULING_SCHEMA_SQL } from './sqlite-scheduling-schema-v1.mjs';
 import { RUN_CONTEXT_CAPTURE_SCHEMA_SQL } from './sqlite-run-context-capture-schema-v1.mjs';
 
 const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
+const BUSINESS_SCHEDULING_SQL = SCHEDULING_CALENDAR_SCHEMA_V2_SQL + '\n' + SCHEDULE_RESCHEDULE_SCHEMA_SQL;
 
 export const V1_SCHEMA_SQL = `
   CREATE TABLE schedule_state (
@@ -789,6 +792,7 @@ const KIOSK_REVIEW_TABLE_DEFINITIONS = schemaDefinitions(KIOSK_REVIEW_SQL, 'tabl
 const NOTIFICATION_OUTBOX_INDEX_DEFINITIONS = schemaDefinitions(NOTIFICATION_OUTBOX_SQL, 'index');
 const NOTIFICATION_OUTBOX_TRIGGER_DEFINITIONS = schemaDefinitions(NOTIFICATION_OUTBOX_SQL, 'trigger');
 const NOTIFICATION_OUTBOX_TABLE_DEFINITIONS = schemaDefinitions(NOTIFICATION_OUTBOX_SQL, 'table');
+const BUSINESS_SCHEDULING_DEFINITIONS = Object.fromEntries(['table', 'index', 'trigger'].map(type => [type, schemaDefinitions(SCHEDULE_RESCHEDULE_SCHEMA_SQL, type)]));
 const SCHEDULING_TABLE_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'table');
 const SCHEDULING_INDEX_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'index');
 const SCHEDULING_TRIGGER_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'trigger');
@@ -839,6 +843,7 @@ export const MIGRATIONS = Object.freeze([
   Object.freeze({ version: 8, name: 'kiosk_bounded_smoke', sql: KIOSK_SMOKE_SCHEMA_SQL, checksum: checksum(KIOSK_SMOKE_SCHEMA_SQL) }),
   Object.freeze({ version: 9, name: 'kiosk_smoke_runtime_ownership', sql: KIOSK_SMOKE_SESSION_SCHEMA_SQL, checksum: checksum(KIOSK_SMOKE_SESSION_SCHEMA_SQL) }),
   Object.freeze({ version: 10, name: 'empty_db_maintenance_receipts', sql: EMPTY_DB_MAINTENANCE_SCHEMA_SQL, checksum: checksum(EMPTY_DB_MAINTENANCE_SCHEMA_SQL) }),
+  Object.freeze({ version: 11, name: 'business_calendar_and_reschedule', sql: BUSINESS_SCHEDULING_SQL, checksum: checksum(BUSINESS_SCHEDULING_SQL) }),
 ]);
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1).version;
@@ -1190,9 +1195,10 @@ function assertNotificationOutboxStructure(db) {
   }
 }
 
-function assertSchedulingStructure(db) {
+function assertSchedulingStructure(db, version) {
   for (const table of SCHEDULING_TABLES) {
-    assertObjectDefinition(db, 'table', table, SCHEDULING_TABLE_DEFINITIONS[table]);
+    assertObjectDefinition(db, 'table', table, version >= 11 && table === 'scheduling_config_versions'
+      ? normalizeSchemaSql(SCHEDULING_CONFIG_TABLE_V2_SQL) : SCHEDULING_TABLE_DEFINITIONS[table]);
   }
   for (const index of SCHEDULING_INDEXES) {
     assertObjectDefinition(db, 'index', index, SCHEDULING_INDEX_DEFINITIONS[index]);
@@ -1270,6 +1276,12 @@ function assertNoUnknownSchemaObjects(db, version) {
     }
   }
 
+  if (version >= 11) {
+    for (const [type, definitions] of Object.entries(BUSINESS_SCHEDULING_DEFINITIONS)) {
+      for (const name of Object.keys(definitions)) allowed.add(`${type}:${name}`);
+    }
+  }
+
   const unknown = db.prepare(`
     SELECT type, name
     FROM sqlite_schema
@@ -1299,7 +1311,7 @@ function assertStructureForVersion(db, version) {
   if (version >= 2) assertCompatibilityStructure(db);
   if (version >= 3) assertKioskReviewStructure(db);
   if (version >= 4) assertNotificationOutboxStructure(db);
-  if (version >= 5) assertSchedulingStructure(db);
+  if (version >= 5) assertSchedulingStructure(db, version);
   if (version >= 6) assertRunContextCaptureStructure(db);
   if (version >= 7) {
     for (const [type, definitions] of Object.entries(GF15_DEFINITIONS)) {
@@ -1321,9 +1333,18 @@ function assertStructureForVersion(db, version) {
       for (const [name, sql] of Object.entries(definitions)) assertObjectDefinition(db, type, name, sql);
     }
   }
+  if (version >= 11) {
+    for (const [type, definitions] of Object.entries(BUSINESS_SCHEDULING_DEFINITIONS)) {
+      for (const [name, sql] of Object.entries(definitions)) assertObjectDefinition(db, type, name, sql);
+    }
+  }
 }
 
 function assertNoPendingArtifacts(db, nextVersion) {
+  if (nextVersion === 11 && Object.entries(BUSINESS_SCHEDULING_DEFINITIONS).some(([type, definitions]) =>
+    Object.keys(definitions).some(name => objectExists(db, type, name)))) {
+    throw schemaError('SCHEMA_PARTIAL_MIGRATION', 'unmarked business scheduling objects are present');
+  }
   if (nextVersion === 10 && Object.entries(EMPTY_DB_MAINTENANCE_DEFINITIONS).some(([type, definitions]) =>
     Object.keys(definitions).some(name => objectExists(db, type, name)))) {
     throw schemaError('SCHEMA_PARTIAL_MIGRATION', 'unmarked empty DB maintenance objects are present');
@@ -1402,39 +1423,48 @@ export function applySchemaMigrations(db, { now = () => new Date(), migrations =
   ensureMigrationMarker(db);
 
   for (const migration of migrations) {
-    db.exec('BEGIN IMMEDIATE');
+    // SQLite parent-table rebuild requires FK OFF outside the transaction. Validate all
+    // references before COMMIT and restore the original connection setting on every path.
+    const rebuild = migration.version === 11;
+    const foreignKeys = rebuild ? db.prepare('PRAGMA foreign_keys').get().foreign_keys : null;
+    if (rebuild) db.exec('PRAGMA foreign_keys = OFF');
     try {
-      const applied = appliedMigrations(db);
-      assertAppliedPrefix(applied, migrations);
-      assertStructureForVersion(db, applied.length);
-      if (applied.length >= migration.version) {
-        if (applied.length === migrations.length) {
-          assertNoUnknownSchemaObjects(db, applied.length);
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const applied = appliedMigrations(db);
+        assertAppliedPrefix(applied, migrations);
+        assertStructureForVersion(db, applied.length);
+        if (applied.length >= migration.version) {
+          if (applied.length === migrations.length) {
+            assertNoUnknownSchemaObjects(db, applied.length);
+          }
+          db.exec('COMMIT');
+          continue;
         }
+        if (applied.length !== migration.version - 1) {
+          throw schemaError('SCHEMA_MIGRATION_HOLE', 'schema_migrations is not a continuous prefix');
+        }
+        assertNoPendingArtifacts(db, migration.version);
+        assertNoUnknownSchemaObjects(db, applied.length);
+        db.exec(migration.sql);
+        assertStructureForVersion(db, migration.version);
+        assertNoUnknownSchemaObjects(db, migration.version);
+        const foreignKeyFailures = db.prepare('PRAGMA foreign_key_check').all();
+        if (foreignKeyFailures.length) {
+          throw schemaError('SCHEMA_FOREIGN_KEY_CHECK_FAILED', 'foreign key validation failed');
+        }
+        db.prepare(`
+          INSERT INTO schema_migrations (version, name, checksum, applied_at)
+          VALUES (?, ?, ?, ?)
+        `).run(migration.version, migration.name, migration.checksum, now().toISOString());
         db.exec('COMMIT');
-        continue;
+      } catch (error) {
+        try { db.exec('ROLLBACK'); } catch {}
+        if (error?.code?.startsWith?.('SCHEMA_')) throw error;
+        throw schemaError('SCHEMA_MIGRATION_FAILED', `schema migration ${migration.version} failed`, error);
       }
-      if (applied.length !== migration.version - 1) {
-        throw schemaError('SCHEMA_MIGRATION_HOLE', 'schema_migrations is not a continuous prefix');
-      }
-      assertNoPendingArtifacts(db, migration.version);
-      assertNoUnknownSchemaObjects(db, applied.length);
-      db.exec(migration.sql);
-      assertStructureForVersion(db, migration.version);
-      assertNoUnknownSchemaObjects(db, migration.version);
-      const foreignKeyFailures = db.prepare('PRAGMA foreign_key_check').all();
-      if (foreignKeyFailures.length) {
-        throw schemaError('SCHEMA_FOREIGN_KEY_CHECK_FAILED', 'foreign key validation failed');
-      }
-      db.prepare(`
-        INSERT INTO schema_migrations (version, name, checksum, applied_at)
-        VALUES (?, ?, ?, ?)
-      `).run(migration.version, migration.name, migration.checksum, now().toISOString());
-      db.exec('COMMIT');
-    } catch (error) {
-      try { db.exec('ROLLBACK'); } catch {}
-      if (error?.code?.startsWith?.('SCHEMA_')) throw error;
-      throw schemaError('SCHEMA_MIGRATION_FAILED', `schema migration ${migration.version} failed`, error);
+    } finally {
+      if (rebuild) db.exec(`PRAGMA foreign_keys = ${foreignKeys ? 'ON' : 'OFF'}`);
     }
   }
 

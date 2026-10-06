@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>工作安排 · Jenn</title><link rel="stylesheet" href="/manage.css"></head>
+<body><header><a href="/board">Jenn 拍摄工作台</a><span>工作安排</span></header>
+<main><h1>安排工作，也留出调整的余地</h1><p class="muted">工作日历决定可拍时间。改期前，会检查摄影师占用、午休和拍后缓冲。</p>
+<form id="login"><label>管理访问令牌<input id="token" type="password" autocomplete="off" required></label><button id="login-button">连接工作台</button><small>令牌只在当前页面内存中使用。</small></form>
+<p id="message" role="status" aria-live="polite"></p><section id="unknown" hidden><strong>上一次操作结果待核对</strong><p>暂不提交新操作，先读取原操作的结果。</p><button id="reconcile" type="button">核对结果</button></section>
+<section id="workspace" hidden><div class="toolbar"><p id="identity"></p><button id="refresh" type="button">刷新状态</button><button id="logout" type="button">退出</button></div>
+<section id="setup" hidden><h2>一个摄影师，一份产能</h2><p>登记 Jenn 摄影师，模特、细节和场景共用同一资源，最多同时拍一场。</p><button id="register" type="button">登记摄影师</button></section>
+<section id="calendar-panel"><h2>工作日历</h2><p id="config-state"></p><form id="calendar-form">
+<fieldset id="calendar-fields"><legend>日常工作时段（北京时间）</legend><div class="grid">
+<label>这次规则从哪天开始<input id="effective" type="date" required></label><label>确定上班的周六<input id="anchor" type="date" value="2026-10-10" required></label>
+<label>上午开始<input id="am-start" type="time" value="09:00" required></label><label>上午结束<input id="am-end" type="time" value="12:00" required></label>
+<label>下午开始<input id="pm-start" type="time" value="13:30" required></label><label>下午结束<input id="pm-end" type="time" value="18:00" required></label></div>
+<p class="muted">周一至周五上班，周日休息，周六隔周。锚点只确定大小周，不限制未来可排日期。</p>
+<h3>临时休息或加班</h3><div id="exceptions"></div><button id="add-exception" type="button" class="secondary">添加日期例外</button>
+<p class="muted">删除某天的例外后恢复周期规则。历史例外保留；自定义时段可以只填一段。</p>
+<h3>初始耗时</h3><div class="grid"><label>细节（分钟）<input id="duration-detail" type="number" min="1" max="1440" value="60" required></label><label>模特（分钟）<input id="duration-model" type="number" min="1" max="1440" value="120" required></label><label>场景（分钟）<input id="duration-scene" type="number" min="1" max="1440" value="90" required></label></div><p class="muted">这是可校准的起始估计。每场拍后缓冲10分钟，连同拍摄一起占用工作时段。</p>
+<button id="preview-button" type="submit">预览影响</button></fieldset></form>
+<div id="preview" hidden><h3>保存前核对</h3><p id="preview-summary"></p><ul id="conflicts"></ul><button id="publish" type="button">保存并生效</button></div>
+<div id="published" hidden><p>有已经保存、尚未生效的规则。当前安排仍使用原规则。</p><label>选择待生效记录<select id="saved-version"></select></label><button id="inspect-saved" type="button">查看这份规则及影响</button><div id="saved-preview" hidden><p id="saved-details"></p><details><summary>查看保存的完整规则记录</summary><pre id="saved-record"></pre></details><ul id="saved-conflicts"></ul><button id="activate" type="button">确认以上规则并生效</button></div></div></section>
+<section><h2>拍摄改期</h2><p>只调整未锁定、尚无执行记录的场次。已确认拍摄不会随工作日历自动移动。</p><div id="sessions"></div>
+<form id="reschedule-form" hidden><h3 id="edit-title"></h3><div class="grid"><label>拍摄日期<input id="shoot-date" type="date" required></label><label>开始时间<input id="shoot-start" type="time" required></label><label>结束时间<input id="shoot-end" type="time" required></label></div><p id="buffer-note"></p><button type="submit">检查并保存改期</button><button id="cancel-edit" type="button" class="secondary">取消</button></form></section>
+<section><h2>排程提案</h2><form id="proposal-form"><div class="grid"><label>开始日期<input id="plan-from" type="date" required></label><label>结束日期（含当天）<input id="plan-through" type="date" required></label></div><button type="submit">生成提案</button></form><div id="proposal"></div></section>
+<p class="muted">备份安排：Jenn 负责，首选北京时间每日02:00–03:00，保留7天。115上传与恢复尚未启用；此页面不会启动备份。改期通知尚未接入外部发送。</p>
+</section></main><script type="module" src="/manage.js"></script></body></html>

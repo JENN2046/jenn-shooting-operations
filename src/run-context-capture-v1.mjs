@@ -1,4 +1,4 @@
-import { normalizeSchedulingConfigV1 } from './scheduling-admin-contract-v1.mjs';
+import { normalizeSchedulingConfig } from './scheduling-admin-contract-v2.mjs';
 import {
   buildSchedulingRunContextSnapshotV1,
   RUN_CONTEXT_SNAPSHOT_SCHEMA_V1,
@@ -88,7 +88,7 @@ export function buildFirstStartRunContextSnapshotV1({
   }
   let config;
   try {
-    const admitted = normalizeSchedulingConfigV1(JSON.parse(activeConfig.config_json));
+    const admitted = normalizeSchedulingConfig(JSON.parse(activeConfig.config_json));
     if (!admitted.ok
       || admitted.configJson !== activeConfig.config_json
       || admitted.configDigest !== activeConfig.config_digest) {

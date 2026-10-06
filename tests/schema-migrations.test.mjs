@@ -131,7 +131,7 @@ test('fresh schema applies the continuous migration prefix and known tables', ()
   try {
     const result = initializeWritableSchema(db, { now: () => new Date('2026-09-22T08:00:00.000Z') });
     assert.deepEqual(result, { version: LATEST_SCHEMA_VERSION, latestVersion: LATEST_SCHEMA_VERSION });
-    assert.equal(LATEST_SCHEMA_VERSION, 10);
+    assert.equal(LATEST_SCHEMA_VERSION, 11);
     assert.deepEqual(
       db.prepare('SELECT version, name, checksum FROM schema_migrations ORDER BY version').all().map(row => ({ ...row })),
       MIGRATIONS.map(({ version, name, checksum }) => ({ version, name, checksum })),
@@ -148,7 +148,7 @@ test('fresh schema applies the continuous migration prefix and known tables', ()
       'scheduling_request_requirements',
       'scheduling_config_versions', 'scheduling_active_config',
       'scheduling_config_activations', 'scheduling_proposals', 'scheduling_proposal_decisions',
-      'scheduling_run_context_snapshots',
+      'scheduling_run_context_snapshots', 'schedule_reschedule_operations',
     ]) assert.ok(tables.includes(table), `expected ${table}`);
 
     assert.equal(db.prepare(`PRAGMA table_info(product_catalog_entries)`).all().find(row => row.name === 'id').type, 'TEXT');

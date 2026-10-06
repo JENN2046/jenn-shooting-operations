@@ -1,12 +1,11 @@
+import { normalizeSchedulingInput, canonicalizeSchedulingResult } from './scheduling-contract-compat.mjs';
 import {
   buildSchedulingDiagnosticV1,
-  canonicalizeSchedulingResultV1,
-  normalizeSchedulingInputV1,
 } from './scheduling-contract-v1.mjs';
 import {
-  compileSchedulingCalendarDateV1,
-  normalizeSchedulingConfigV1,
-} from './scheduling-admin-contract-v1.mjs';
+  compileSchedulingCalendarDate,
+  normalizeSchedulingConfig,
+} from './scheduling-admin-contract-v2.mjs';
 
 export const DETERMINISTIC_SCHEDULER_VERSION_V1 = 'deterministic-scheduler-v1';
 
@@ -166,9 +165,9 @@ function softPenalty(candidate, resource, slot, selected, config, formatter, dur
 
 /** Pure, proposal-only scheduler. Callers must provide the complete frozen input and active config. */
 export function generateDeterministicScheduleV1(inputValue, configValue) {
-  const admittedInput = normalizeSchedulingInputV1(inputValue);
+  const admittedInput = normalizeSchedulingInput(inputValue);
   if (!admittedInput.ok) return failure(admittedInput.reason);
-  const admittedConfig = normalizeSchedulingConfigV1(configValue);
+  const admittedConfig = normalizeSchedulingConfig(configValue);
   if (!admittedConfig.ok) return failure(admittedConfig.reason);
   const { input, inputDigest } = admittedInput;
   const { config, configDigest } = admittedConfig;
@@ -193,7 +192,7 @@ export function generateDeterministicScheduleV1(inputValue, configValue) {
   for (const resource of input.resources) {
     const expectedWindows = [];
     for (const date of dates) {
-      const compiled = compileSchedulingCalendarDateV1({
+      const compiled = compileSchedulingCalendarDate({
         configJson: config, resourceId: resource.resourceId, date,
         calendarCompilerVersion: input.calendarCompilerVersion,
         timeZoneDataVersion: input.timeZoneDataVersion,
@@ -335,7 +334,7 @@ export function generateDeterministicScheduleV1(inputValue, configValue) {
     for (const code of choice.reasons) diagnostics.push(diagnostic(code, candidate, choice.resource.resourceId,
       null, code === 'DESIRED_DATE_MISS' ? '$.candidates[].desiredDate' : '$.occupied[]'));
   }
-  const result = canonicalizeSchedulingResultV1({
+  const result = canonicalizeSchedulingResult({
     algorithmVersion: input.algorithmVersion,
     configVersion: input.configVersion,
     configDigest: input.configDigest,

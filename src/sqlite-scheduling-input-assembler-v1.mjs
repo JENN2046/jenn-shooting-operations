@@ -1,4 +1,4 @@
-import { compileSchedulingCalendarDateV1 } from './scheduling-admin-contract-v1.mjs';
+import { compileSchedulingCalendarDate } from './scheduling-admin-contract-v2.mjs';
 import { SCHEDULING_TIME_ZONE_DATA_VERSION } from './scheduling-contract-v1.mjs';
 
 const DAY_MS = 86_400_000;
@@ -43,7 +43,7 @@ export function assembleSchedulingInputFromSqliteV1({ db, command, activeConfig 
     if (!row) throw new Error('SCHEDULING_RESOURCE_NOT_REGISTERED');
     const businessWindows = [];
     for (const date of dates) {
-      const compiled = compileSchedulingCalendarDateV1({
+      const compiled = compileSchedulingCalendarDate({
         configJson: config, resourceId, date,
         calendarCompilerVersion: activeConfig.calendar_compiler_version,
         timeZoneDataVersion: SCHEDULING_TIME_ZONE_DATA_VERSION,

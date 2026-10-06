@@ -1,3 +1,4 @@
+import { businessRoute, businessHttpStatus, safeBusinessException } from './business-http-v1.mjs';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { extname, join } from 'node:path';
@@ -16,6 +17,9 @@ const PUBLIC_ROOT = fileURLToPath(new URL('../public/', import.meta.url));
 const STATIC = new Map([
   ['/', 'board.html'],
   ['/board', 'board.html'],
+  ['/manage', 'manage.html'],
+  ['/manage.js', 'manage.js'],
+  ['/manage.css', 'manage.css'],
   ['/submit', 'submit.html'],
   ['/submit/print', 'submit-print.html'],
   ['/submit/video', 'submit-video.html'],
@@ -241,7 +245,7 @@ export function createHttpApp({
   const authorize = createAuthorizer(tokens);
   const storeAdmission = store?.writeAdmissionControl;
   const kioskWrites = typeof kiosk?.applyRunEvent === 'function';
-  const schedulingWrites = typeof scheduling?.decideProposal === 'function';
+  const schedulingWrites = ['decideProposal','manage','generateProposal','reschedule'].some(name => typeof scheduling?.[name] === 'function');
   const kioskAdmission = kiosk?.writeAdmissionControl;
   const schedulingAdmission = scheduling?.writeAdmissionControl;
 
@@ -435,6 +439,29 @@ export function createHttpApp({
           return sendMapped(response, kioskFailure('INTERNAL_ERROR'));
         }
         return sendMapped(response, mapKioskRunEventHttpResult(result));
+      }
+
+      const business = businessRoute(request.method, url.pathname);
+      if (business) {
+        if ([...url.searchParams].length) return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'});
+        const auth=await authenticateScheduling(scheduling,request);
+        if (!auth.ok) return sendJson(response,auth.code==='FORBIDDEN'?403:401,{ok:false,code:auth.code});
+        if (typeof scheduling?.[business.method] !== 'function') return sendJson(response,503,{ok:false,code:'SERVICE_UNAVAILABLE'});
+        const input={principal:auth.principal};
+        if (business.encoded) {
+          try { input[business.key]=decodeURIComponent(business.encoded); } catch { return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'}); }
+          if (!validIdentifier(input[business.key])) return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'});
+        }
+        if (request.method==='POST') {
+          input.command=await readJson(request);
+          if (!input.command || typeof input.command!=='object' || Array.isArray(input.command)) return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'});
+          if (business.key && input.command[business.key]!==input[business.key]) return sendJson(response,400,{ok:false,code:'PATH_COMMAND_MISMATCH'});
+          if (business.kind) input.kind=business.kind;
+        }
+        let result;
+        try { result=await scheduling[business.method](input); } catch(error) { result=safeBusinessException(error); }
+        const status=result?.code==='INTERNAL_ERROR'?500:businessHttpStatus(result);
+        return sendJson(response,status,status===500?{ok:false,code:'INTERNAL_ERROR'}:result);
       }
 
       const proposalDecisionRoute = request.method === 'POST'

@@ -585,7 +585,7 @@ function admissionResult(code, work) {
   }
 }
 
-export function normalizeSchedulingInputV1(input) {
+function normalizeSchedulingInputWithCompiler(input, compilerVersion) {
   return admissionResult('SCHEDULING_INPUT_INVALID', () => {
     exactRecord(input, INPUT_KEYS, '$');
     if (input.schemaVersion !== SCHEDULING_INPUT_SCHEMA_V1) fail('SCHEMA_VERSION_INVALID', '$.schemaVersion');
@@ -652,7 +652,7 @@ export function normalizeSchedulingInputV1(input) {
       businessTimeZone: businessTimeZone(input.businessTimeZone, '$.businessTimeZone'),
       baseScheduleRevision: safeInteger(input.baseScheduleRevision, '$.baseScheduleRevision'),
       algorithmVersion: controlledToken(input.algorithmVersion, '$.algorithmVersion'),
-      calendarCompilerVersion: input.calendarCompilerVersion === SCHEDULING_CALENDAR_COMPILER_VERSION_V1
+      calendarCompilerVersion: input.calendarCompilerVersion === compilerVersion
         ? input.calendarCompilerVersion
         : fail('CALENDAR_COMPILER_VERSION_UNSUPPORTED', '$.calendarCompilerVersion'),
       timeZoneDataVersion: SCHEDULING_TIME_ZONE_DATA_VERSION !== null
@@ -749,7 +749,7 @@ export function buildSchedulingDiagnosticV1(diagnostic) {
   }));
 }
 
-export function canonicalizeSchedulingResultV1(value) {
+function canonicalizeSchedulingResultWithCompiler(value, compilerVersion) {
   return admissionResult('SCHEDULING_RESULT_INVALID', () => {
     exactRecord(value, RESULT_INPUT_KEYS, '$');
     const algorithmVersion = controlledToken(value.algorithmVersion, '$.algorithmVersion');
@@ -761,7 +761,7 @@ export function canonicalizeSchedulingResultV1(value) {
       value.calendarCompilerVersion,
       '$.calendarCompilerVersion',
     );
-    if (calendarCompilerVersion !== SCHEDULING_CALENDAR_COMPILER_VERSION_V1) {
+    if (calendarCompilerVersion !== compilerVersion) {
       fail('CALENDAR_COMPILER_VERSION_UNSUPPORTED', '$.calendarCompilerVersion');
     }
     const timeZoneDataVersion = controlledToken(value.timeZoneDataVersion, '$.timeZoneDataVersion');
@@ -814,3 +814,9 @@ export function canonicalizeSchedulingResultV1(value) {
     });
   });
 }
+
+// Successor compiler support shares canonical data rules without broadening the v1 API.
+export function normalizeSchedulingInputV1(input) { return normalizeSchedulingInputWithCompiler(input, SCHEDULING_CALENDAR_COMPILER_VERSION_V1); }
+export function normalizeSchedulingInputCalendarV2(input) { return normalizeSchedulingInputWithCompiler(input, 'calendar-compiler-v2'); }
+export function canonicalizeSchedulingResultV1(value) { return canonicalizeSchedulingResultWithCompiler(value, SCHEDULING_CALENDAR_COMPILER_VERSION_V1); }
+export function canonicalizeSchedulingResultCalendarV2(value) { return canonicalizeSchedulingResultWithCompiler(value, 'calendar-compiler-v2'); }

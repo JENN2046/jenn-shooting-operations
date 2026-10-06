@@ -1,3 +1,4 @@
+import { normalizePublishSchedulingConfig } from './scheduling-admin-contract-v2.mjs';
 import { assertSchedulingQuiescenceV1, assertGf15CommandPacketV1 } from './sqlite-scheduling-quiescence-v1.mjs';
 import {
   canonicalJsonSchedulingV1, digestCanonicalJsonSchedulingV1,
@@ -5,7 +6,6 @@ import {
 } from './scheduling-contract-v1.mjs';
 import {
   normalizeActivateSchedulingConfigV1,
-  normalizePublishSchedulingConfigV1,
   normalizeRegisterSchedulingResourceV1,
   normalizeReplaceSchedulingResourceV1,
 } from './scheduling-admin-contract-v1.mjs';
@@ -120,7 +120,7 @@ function advanceRevisions(db, current, { schedule, projection, at }) {
 }
 
 /** Internal-only commands. An injected transactionRunner must retain same-transaction atomicity. */
-export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections, schedulingLease = null, transactionRunner = transaction } = {}) {
+export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections, schedulingLease = null, transactionRunner = transaction, validateActivation = null } = {}) {
   if (!db || typeof db.exec !== 'function' || typeof db.prepare !== 'function'
     || typeof now !== 'function' || typeof transactionRunner !== 'function') throw new TypeError('SQLite db and injected clock required');
 
@@ -272,7 +272,7 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
     },
 
     publishConfig(input, actor) {
-      const admitted = normalizePublishSchedulingConfigV1(input);
+      const admitted = normalizePublishSchedulingConfig(input);
       if (!admitted.ok) return admitted;
       if (!trusted(actor)) return denied('TRUSTED_ADMIN_REQUIRED');
       const { command, commandDigest } = admitted;
@@ -294,8 +294,8 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
         db.prepare(`INSERT INTO scheduling_config_versions
           (config_version, schema_version, algorithm_version, calendar_compiler_version,
            estimate_policy_version, config_json, config_digest, published_by, published_at,
-           publish_operation_id) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-            command.configVersion, command.algorithmVersion, command.calendarCompilerVersion,
+           publish_operation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            command.configVersion, command.configJson.schemaVersion, command.algorithmVersion, command.calendarCompilerVersion,
             command.estimatePolicyVersion, canonicalJsonSchedulingV1(command.configJson),
             command.configDigest, actor, at, command.operationId,
           );
@@ -322,12 +322,16 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
         if (!current || current.projection_revision !== command.expectedProjectionRevision) {
           return denied('SCHEDULING_REVISION_CONFLICT');
         }
-        if (!db.prepare(`SELECT 1 FROM scheduling_config_versions
-          WHERE config_version = ?`).get(command.configVersion)) return denied('CONFIG_VERSION_NOT_FOUND');
+        const configRow = db.prepare(`SELECT * FROM scheduling_config_versions WHERE config_version = ?`).get(command.configVersion);
+        if (!configRow) return denied('CONFIG_VERSION_NOT_FOUND');
         const previous = db.prepare(`SELECT config_version FROM scheduling_active_config
           WHERE id = 1`).get()?.config_version ?? null;
         if (previous === command.configVersion) return denied('CONFIG_ALREADY_ACTIVE');
         const at = now().toISOString();
+        if (validateActivation !== null) {
+          const validation = validateActivation({ db, command, configRow, current, at });
+          if (validation?.ok !== true) return validation?.ok === false ? validation : denied('CONFIG_ACTIVATION_VALIDATION_FAILED');
+        }
         const next = advanceRevisions(db, current, { schedule: 0, projection: 1, at });
         if (!next) throw new Error('SCHEDULING_REVISION_ADVANCE_FAILED');
         db.prepare(`INSERT INTO scheduling_active_config
