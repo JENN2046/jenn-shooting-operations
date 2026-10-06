@@ -10,12 +10,11 @@
     "contractId",
     "authorityHead",
     "artifact",
-    "authorityTargetDigest",
+    "authorityTarget",
     "target",
     "prestate",
     "writerContainment",
-    "execution",
-    "authorization"
+    "execution"
   ],
   "properties": {
     "schemaVersion": {
@@ -32,9 +31,91 @@
       "type": "string",
       "pattern": "^[a-f0-9]{40}$"
     },
-    "authorityTargetDigest": {
-      "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$"
+    "authorityTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "digest",
+        "authorization"
+      ],
+      "properties": {
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "authorization": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "humanApprovalRequired",
+            "approvalRef"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "NOT_REQUESTED",
+                "APPROVED"
+              ]
+            },
+            "humanApprovalRequired": {
+              "const": true
+            },
+            "approvalRef": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,160}$"
+                }
+              ]
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "NOT_REQUESTED"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "approvalRef": {
+                    "type": "null"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "status": {
+                    "const": "APPROVED"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "approvalRef": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,160}$"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
     },
     "artifact": {
       "type": "object",
@@ -90,8 +171,8 @@
       "required": [
         "capturedAt",
         "recoveryArtifactDigest",
-        "recoveryReadbackDigest",
-        "recoveryReadbackMatchesArtifact",
+        "recoveryReadbackProofDigest",
+        "recoveryReadbackVerified",
         "integrityCheck",
         "foreignKeyViolationCount"
       ],
@@ -104,11 +185,11 @@
           "type": "string",
           "pattern": "^sha256:[a-f0-9]{64}$"
         },
-        "recoveryReadbackDigest": {
+        "recoveryReadbackProofDigest": {
           "type": "string",
           "pattern": "^sha256:[a-f0-9]{64}$"
         },
-        "recoveryReadbackMatchesArtifact": {
+        "recoveryReadbackVerified": {
           "const": true
         },
         "integrityCheck": {
@@ -127,7 +208,9 @@
         "inFlightWriterCount",
         "drainProofDigest",
         "processLifetimeIsAuthority",
-        "migrationWorkerMayWriteActiveFamilyBeforePublication"
+        "executionBoundaryProofDigest",
+        "unknownExecutorHasAuthoritativeWriteCapability",
+        "nonDatabaseProductionMutationAllowed"
       ],
       "properties": {
         "durableDisableReceiptDigest": {
@@ -144,7 +227,14 @@
         "processLifetimeIsAuthority": {
           "const": false
         },
-        "migrationWorkerMayWriteActiveFamilyBeforePublication": {
+        "executionBoundaryProofDigest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "unknownExecutorHasAuthoritativeWriteCapability": {
+          "const": false
+        },
+        "nonDatabaseProductionMutationAllowed": {
           "const": false
         }
       }
@@ -169,97 +259,6 @@
           "const": false
         }
       }
-    },
-    "authorization": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "status",
-        "humanApprovalRequired",
-        "approvalRef",
-        "approvedAuthorityTargetDigest"
-      ],
-      "properties": {
-        "status": {
-          "enum": [
-            "NOT_REQUESTED",
-            "APPROVED"
-          ]
-        },
-        "humanApprovalRequired": {
-          "const": true
-        },
-        "approvalRef": {
-          "oneOf": [
-            {
-              "type": "null"
-            },
-            {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{1,160}$"
-            }
-          ]
-        },
-        "approvedAuthorityTargetDigest": {
-          "oneOf": [
-            {
-              "type": "null"
-            },
-            {
-              "type": "string",
-              "pattern": "^sha256:[a-f0-9]{64}$"
-            }
-          ]
-        }
-      },
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "status": {
-                "const": "NOT_REQUESTED"
-              }
-            },
-            "required": [
-              "status"
-            ]
-          },
-          "then": {
-            "properties": {
-              "approvalRef": {
-                "type": "null"
-              },
-              "approvedAuthorityTargetDigest": {
-                "type": "null"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "status": {
-                "const": "APPROVED"
-              }
-            },
-            "required": [
-              "status"
-            ]
-          },
-          "then": {
-            "properties": {
-              "approvalRef": {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9_-]{1,160}$"
-              },
-              "approvedAuthorityTargetDigest": {
-                "type": "string",
-                "pattern": "^sha256:[a-f0-9]{64}$"
-              }
-            }
-          }
-        }
-      ]
     }
   }
 }

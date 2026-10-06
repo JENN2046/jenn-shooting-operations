@@ -29,14 +29,15 @@
       "exactImageDigestRequired": true,
       "exactMigrationChecksumRequired": true,
       "exactAuthorityTargetDigestRequired": true,
+      "humanApprovalBoundToAuthorityTargetRequired": true,
       "artifactDriftAllowed": false
     },
     {
       "id": "G2_I3_VERIFIED_PRESTATE_RECOVERY",
       "activeDatabaseFamilyDigestRequired": true,
       "recoveryArtifactRequired": true,
-      "recoveryReadbackRequired": true,
-      "recoveryReadbackMustMatchArtifact": true,
+      "recoveryReadbackProofRequired": true,
+      "recoveryReadbackMustVerifyArtifact": true,
       "integrityCheckRequired": true,
       "foreignKeyCheckRequired": true
     },
@@ -44,7 +45,9 @@
       "id": "G2_I4_EXPLICIT_CUTOVER_ENTRY",
       "entrypointId": "G3_SCHEMA11_CUTOVER",
       "ordinaryRuntimeCutoverAllowed": false,
-      "migrationWorkerMayWriteActiveFamilyBeforePublication": false,
+      "executionCapabilityMustBeBounded": true,
+      "unknownExecutorMayRetainAuthoritativeWriteCapability": false,
+      "nonDatabaseProductionMutationAllowed": false,
       "unprovenBoundaryOutcome": "UNKNOWN"
     },
     {
@@ -54,6 +57,9 @@
         "ROLLED_BACK",
         "UNKNOWN"
       ],
+      "committedRequiresSchema11Verification": true,
+      "rolledBackRequiresPrestateRestorationVerification": true,
+      "unclassifiableOutcome": "UNKNOWN",
       "automaticRetryAllowed": false,
       "otherOutcomesAllowed": false
     },

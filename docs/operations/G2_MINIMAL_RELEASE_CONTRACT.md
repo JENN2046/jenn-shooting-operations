@@ -15,10 +15,10 @@ historical PROD/GF/C01/custody gate family.
 | ID | Frozen rule |
 | --- | --- |
 | `G2_I1_DURABLE_WRITER_CONTAINMENT` | Normal writers must be durably disabled and all in-flight writers drained before cutover. Process lifetime is not authority. If containment cannot be proven, outcome is `UNKNOWN`. |
-| `G2_I2_EXACT_ARTIFACT_BINDING` | G3 must bind one exact source commit, image digest, Schema 11 migration checksum and exact authority-target digest for human approval. Drift is forbidden. |
-| `G2_I3_VERIFIED_PRESTATE_RECOVERY` | G3 requires an exact active-database-family digest, recovery artifact, independent readback that explicitly matches that artifact, SQLite integrity check and zero FK violations. |
-| `G2_I4_EXPLICIT_CUTOVER_ENTRY` | Ordinary runtime cannot perform 10→11. Only `G3_SCHEMA11_CUTOVER` may enter the transition, and its migration worker may not write the active family before a separately proven publication step. |
-| `G2_I5_TERMINAL_OUTCOME_MODEL` | The only outcomes are `COMMITTED`, `ROLLED_BACK`, or `UNKNOWN`. Automatic retry is forbidden. |
+| `G2_I2_EXACT_ARTIFACT_BINDING` | G3 must bind one exact source commit, image digest, Schema 11 migration checksum and one authority-target object. Human approval is structurally bound inside that exact target object. Drift is forbidden. |
+| `G2_I3_VERIFIED_PRESTATE_RECOVERY` | G3 requires an exact active-database-family digest, recovery artifact, an independent readback proof that verifies that artifact, SQLite integrity check and zero FK violations. |
+| `G2_I4_EXPLICIT_CUTOVER_ENTRY` | Ordinary runtime cannot perform 10→11. Only `G3_SCHEMA11_CUTOVER` may enter the transition. The execution capability must be bounded so an UNKNOWN executor cannot retain authoritative write capability; non-database production mutation is forbidden. |
+| `G2_I5_TERMINAL_OUTCOME_MODEL` | The only outcomes are `COMMITTED`, `ROLLED_BACK`, or `UNKNOWN`. COMMITTED requires verified Schema 11; ROLLED_BACK requires verified restoration of the pre-state; anything unclassifiable is UNKNOWN. Automatic retry is forbidden. |
 | `G2_I6_UNKNOWN_BLOCKS_READMISSION` | `UNKNOWN` keeps normal writes disabled. Human reconciliation plus fresh readmission evidence is required before re-enable. |
 
 ## Exact Schema 11 binding
@@ -47,11 +47,12 @@ A packet is invalid unless it includes all of these classes of proof:
 3. verified pre-state and recovery readback;
 4. durable writer-disable receipt and zero in-flight writer proof;
 5. the single explicit G3 entrypoint and no automatic retry;
-6. explicit human authorization bound to the exact authority-target digest before execution.
+6. explicit human authorization nested inside the exact authority-target object before execution.
 
 The schema deliberately does **not** choose systemd, flock, process custody, clone/swap, or another
-physical implementation. G3 may choose a bounded mechanism only after fresh production facts are observed,
-but whatever mechanism is chosen must satisfy the frozen invariants above.
+physical implementation. G3 may choose a bounded mechanism only after fresh production facts are observed.
+That mechanism must prove that controller loss / UNKNOWN cannot leave an executor with authoritative write
+capability. A process merely staying alive, holding a lock, or being paused is not such proof.
 
 ## Explicit non-goals
 

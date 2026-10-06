@@ -17,9 +17,15 @@
     "prohibitions"
   ],
   "properties": {
-    "schemaVersion": { "const": 1 },
-    "contractId": { "const": "G2_MINIMAL_RELEASE_CONTRACT_V1" },
-    "status": { "const": "FROZEN_NOT_EXECUTABLE" },
+    "schemaVersion": {
+      "const": 1
+    },
+    "contractId": {
+      "const": "G2_MINIMAL_RELEASE_CONTRACT_V1"
+    },
+    "status": {
+      "const": "FROZEN_NOT_EXECUTABLE"
+    },
     "authority": {
       "type": "object",
       "additionalProperties": false,
@@ -30,10 +36,18 @@
         "schema11CutoverAuthorized"
       ],
       "properties": {
-        "canonicalBranch": { "const": "codex/v2-1-architecture-freeze" },
-        "g1MergeCommit": { "const": "175586e2c67c94ad61fae6c5964c106f0966dda8" },
-        "productionMutationAuthorized": { "const": false },
-        "schema11CutoverAuthorized": { "const": false }
+        "canonicalBranch": {
+          "const": "codex/v2-1-architecture-freeze"
+        },
+        "g1MergeCommit": {
+          "const": "175586e2c67c94ad61fae6c5964c106f0966dda8"
+        },
+        "productionMutationAuthorized": {
+          "const": false
+        },
+        "schema11CutoverAuthorized": {
+          "const": false
+        }
       }
     },
     "transition": {
@@ -47,13 +61,21 @@
         "ordinaryRuntimeMayPerformTransition"
       ],
       "properties": {
-        "sourceSchemaVersion": { "const": 10 },
-        "targetSchemaVersion": { "const": 11 },
-        "migrationName": { "const": "business_calendar_and_reschedule" },
+        "sourceSchemaVersion": {
+          "const": 10
+        },
+        "targetSchemaVersion": {
+          "const": 11
+        },
+        "migrationName": {
+          "const": "business_calendar_and_reschedule"
+        },
         "migrationChecksum": {
           "const": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8"
         },
-        "ordinaryRuntimeMayPerformTransition": { "const": false }
+        "ordinaryRuntimeMayPerformTransition": {
+          "const": false
+        }
       }
     },
     "invariants": {
@@ -72,11 +94,21 @@
             "unprovenContainmentOutcome"
           ],
           "properties": {
-            "id": { "const": "G2_I1_DURABLE_WRITER_CONTAINMENT" },
-            "durableNormalWriterDisableRequired": { "const": true },
-            "inFlightWriterDrainRequired": { "const": true },
-            "processLifetimeMayCarryAuthority": { "const": false },
-            "unprovenContainmentOutcome": { "const": "UNKNOWN" }
+            "id": {
+              "const": "G2_I1_DURABLE_WRITER_CONTAINMENT"
+            },
+            "durableNormalWriterDisableRequired": {
+              "const": true
+            },
+            "inFlightWriterDrainRequired": {
+              "const": true
+            },
+            "processLifetimeMayCarryAuthority": {
+              "const": false
+            },
+            "unprovenContainmentOutcome": {
+              "const": "UNKNOWN"
+            }
           }
         },
         {
@@ -88,15 +120,31 @@
             "exactImageDigestRequired",
             "exactMigrationChecksumRequired",
             "exactAuthorityTargetDigestRequired",
+            "humanApprovalBoundToAuthorityTargetRequired",
             "artifactDriftAllowed"
           ],
           "properties": {
-            "id": { "const": "G2_I2_EXACT_ARTIFACT_BINDING" },
-            "exactSourceCommitRequired": { "const": true },
-            "exactImageDigestRequired": { "const": true },
-            "exactMigrationChecksumRequired": { "const": true },
-            "exactAuthorityTargetDigestRequired": { "const": true },
-            "artifactDriftAllowed": { "const": false }
+            "id": {
+              "const": "G2_I2_EXACT_ARTIFACT_BINDING"
+            },
+            "exactSourceCommitRequired": {
+              "const": true
+            },
+            "exactImageDigestRequired": {
+              "const": true
+            },
+            "exactMigrationChecksumRequired": {
+              "const": true
+            },
+            "exactAuthorityTargetDigestRequired": {
+              "const": true
+            },
+            "artifactDriftAllowed": {
+              "const": false
+            },
+            "humanApprovalBoundToAuthorityTargetRequired": {
+              "const": true
+            }
           }
         },
         {
@@ -106,19 +154,33 @@
             "id",
             "activeDatabaseFamilyDigestRequired",
             "recoveryArtifactRequired",
-            "recoveryReadbackRequired",
-            "recoveryReadbackMustMatchArtifact",
+            "recoveryReadbackProofRequired",
+            "recoveryReadbackMustVerifyArtifact",
             "integrityCheckRequired",
             "foreignKeyCheckRequired"
           ],
           "properties": {
-            "id": { "const": "G2_I3_VERIFIED_PRESTATE_RECOVERY" },
-            "activeDatabaseFamilyDigestRequired": { "const": true },
-            "recoveryArtifactRequired": { "const": true },
-            "recoveryReadbackRequired": { "const": true },
-            "recoveryReadbackMustMatchArtifact": { "const": true },
-            "integrityCheckRequired": { "const": true },
-            "foreignKeyCheckRequired": { "const": true }
+            "id": {
+              "const": "G2_I3_VERIFIED_PRESTATE_RECOVERY"
+            },
+            "activeDatabaseFamilyDigestRequired": {
+              "const": true
+            },
+            "recoveryArtifactRequired": {
+              "const": true
+            },
+            "recoveryReadbackProofRequired": {
+              "const": true
+            },
+            "recoveryReadbackMustVerifyArtifact": {
+              "const": true
+            },
+            "integrityCheckRequired": {
+              "const": true
+            },
+            "foreignKeyCheckRequired": {
+              "const": true
+            }
           }
         },
         {
@@ -128,15 +190,33 @@
             "id",
             "entrypointId",
             "ordinaryRuntimeCutoverAllowed",
-            "migrationWorkerMayWriteActiveFamilyBeforePublication",
+            "executionCapabilityMustBeBounded",
+            "unknownExecutorMayRetainAuthoritativeWriteCapability",
+            "nonDatabaseProductionMutationAllowed",
             "unprovenBoundaryOutcome"
           ],
           "properties": {
-            "id": { "const": "G2_I4_EXPLICIT_CUTOVER_ENTRY" },
-            "entrypointId": { "const": "G3_SCHEMA11_CUTOVER" },
-            "ordinaryRuntimeCutoverAllowed": { "const": false },
-            "migrationWorkerMayWriteActiveFamilyBeforePublication": { "const": false },
-            "unprovenBoundaryOutcome": { "const": "UNKNOWN" }
+            "id": {
+              "const": "G2_I4_EXPLICIT_CUTOVER_ENTRY"
+            },
+            "entrypointId": {
+              "const": "G3_SCHEMA11_CUTOVER"
+            },
+            "ordinaryRuntimeCutoverAllowed": {
+              "const": false
+            },
+            "executionCapabilityMustBeBounded": {
+              "const": true
+            },
+            "unknownExecutorMayRetainAuthoritativeWriteCapability": {
+              "const": false
+            },
+            "nonDatabaseProductionMutationAllowed": {
+              "const": false
+            },
+            "unprovenBoundaryOutcome": {
+              "const": "UNKNOWN"
+            }
           }
         },
         {
@@ -145,24 +225,48 @@
           "required": [
             "id",
             "allowedOutcomes",
+            "committedRequiresSchema11Verification",
+            "rolledBackRequiresPrestateRestorationVerification",
+            "unclassifiableOutcome",
             "automaticRetryAllowed",
             "otherOutcomesAllowed"
           ],
           "properties": {
-            "id": { "const": "G2_I5_TERMINAL_OUTCOME_MODEL" },
+            "id": {
+              "const": "G2_I5_TERMINAL_OUTCOME_MODEL"
+            },
             "allowedOutcomes": {
               "type": "array",
               "prefixItems": [
-                { "const": "COMMITTED" },
-                { "const": "ROLLED_BACK" },
-                { "const": "UNKNOWN" }
+                {
+                  "const": "COMMITTED"
+                },
+                {
+                  "const": "ROLLED_BACK"
+                },
+                {
+                  "const": "UNKNOWN"
+                }
               ],
               "items": false,
               "minItems": 3,
               "maxItems": 3
             },
-            "automaticRetryAllowed": { "const": false },
-            "otherOutcomesAllowed": { "const": false }
+            "automaticRetryAllowed": {
+              "const": false
+            },
+            "otherOutcomesAllowed": {
+              "const": false
+            },
+            "committedRequiresSchema11Verification": {
+              "const": true
+            },
+            "rolledBackRequiresPrestateRestorationVerification": {
+              "const": true
+            },
+            "unclassifiableOutcome": {
+              "const": "UNKNOWN"
+            }
           }
         },
         {
@@ -176,27 +280,53 @@
             "automaticReenableAllowed"
           ],
           "properties": {
-            "id": { "const": "G2_I6_UNKNOWN_BLOCKS_READMISSION" },
-            "unknownKeepsNormalWritesDisabled": { "const": true },
-            "humanReconciliationRequired": { "const": true },
-            "freshReadmissionEvidenceRequired": { "const": true },
-            "automaticReenableAllowed": { "const": false }
+            "id": {
+              "const": "G2_I6_UNKNOWN_BLOCKS_READMISSION"
+            },
+            "unknownKeepsNormalWritesDisabled": {
+              "const": true
+            },
+            "humanReconciliationRequired": {
+              "const": true
+            },
+            "freshReadmissionEvidenceRequired": {
+              "const": true
+            },
+            "automaticReenableAllowed": {
+              "const": false
+            }
           }
         }
       ],
       "items": false
     },
-    "g3PacketSchema": { "const": "contracts/g3-schema11-cutover-packet.v1.schema.json" },
-    "currentPacketStatus": { "const": "NOT_CREATED" },
-    "nextGate": { "const": "G3_SCHEMA11_CUTOVER" },
+    "g3PacketSchema": {
+      "const": "contracts/g3-schema11-cutover-packet.v1.schema.json"
+    },
+    "currentPacketStatus": {
+      "const": "NOT_CREATED"
+    },
+    "nextGate": {
+      "const": "G3_SCHEMA11_CUTOVER"
+    },
     "prohibitions": {
       "type": "array",
       "prefixItems": [
-        { "const": "NO_PRODUCTION_ACTION_IN_G2" },
-        { "const": "NO_SCHEMA11_CUTOVER_IN_G2" },
-        { "const": "NO_AUTOMATIC_RETRY_AFTER_UNKNOWN" },
-        { "const": "NO_PROCESS_LIFETIME_AS_DURABLE_AUTHORITY" },
-        { "const": "NO_NEW_GATE_FAMILY" }
+        {
+          "const": "NO_PRODUCTION_ACTION_IN_G2"
+        },
+        {
+          "const": "NO_SCHEMA11_CUTOVER_IN_G2"
+        },
+        {
+          "const": "NO_AUTOMATIC_RETRY_AFTER_UNKNOWN"
+        },
+        {
+          "const": "NO_PROCESS_LIFETIME_AS_DURABLE_AUTHORITY"
+        },
+        {
+          "const": "NO_NEW_GATE_FAMILY"
+        }
       ],
       "items": false,
       "minItems": 5,
