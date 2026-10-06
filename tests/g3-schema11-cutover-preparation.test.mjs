@@ -67,3 +67,52 @@ test('exact physical executor is pinned and rename-exchange self-test passes', a
   assert.equal(run.status, 0, run.stderr);
   assert.match(run.stdout, /G3_RENAME_EXCHANGE_SELF_TEST_PASS/);
 });
+
+test('executor requires approved packet/approval and rejects free-form authority digests', async () => {
+  const path = new URL('../scripts/g3-schema11-cutover-executor.py', import.meta.url).pathname;
+  const bytes = await readFile(path, 'utf8');
+  assert.doesNotMatch(bytes, /--authority-target-digest/);
+  assert.match(bytes, /--approved-packet/);
+  assert.match(bytes, /--approval-record/);
+  assert.match(bytes, /--preparation-record/);
+
+  const oldStyle = spawnSync('python3', [
+    path,
+    '--execute',
+    '--authority-target-digest',
+    record.authorityTargetDigest,
+  ], { encoding: 'utf8' });
+  assert.notEqual(oldStyle.status, 0);
+
+  const missingApproval = spawnSync('python3', [path, '--execute'], { encoding: 'utf8' });
+  assert.notEqual(missingApproval.status, 0);
+  assert.match(missingApproval.stderr, /approved-packet/);
+});
+
+test('execution boundary freezes physical target and non-Docker drain verification', () => {
+  const boundary = record.executionBoundaryEvidence;
+  assert.deepEqual(boundary.approvalGate, {
+    approvedPacketRequired: true,
+    separateApprovalRecordRequired: true,
+    arbitraryAuthorityTargetDigestCliAllowed: false,
+    approvedPacketMustMatchFrozenPreparation: true,
+    approvalSource: 'EXPLICIT_HUMAN_CHAT_AUTHORIZATION',
+  });
+  assert.deepEqual(boundary.targetRuntimeVerification, {
+    hostname: 'VM-0-12-ubuntu',
+    instanceIdMetadataEndpoint: 'http://169.254.0.23/latest/meta-data/instance-id',
+    instanceId: 'ins-mi85f3my',
+    filesystemSource: '/dev/vdb',
+    filesystemType: 'ext4',
+    activeFileIdentityExact: true,
+    requiresRootPrivileges: true,
+  });
+  assert.deepEqual(boundary.finalDrainVerification, {
+    dockerVolumeUsersRequired: 0,
+    lsofOpenUsersRequired: 0,
+    fuserPidsRequired: 0,
+    walRequiredAbsent: true,
+    shmRequiredAbsent: true,
+    checkedImmediatelyBeforeExchange: true,
+  });
+});

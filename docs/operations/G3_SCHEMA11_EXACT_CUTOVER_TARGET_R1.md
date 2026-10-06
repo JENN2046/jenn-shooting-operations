@@ -78,16 +78,17 @@ The proposed physical boundary is `G3_SCHEMA11_ATOMIC_EXCHANGE_R1`.
 
 It deliberately does **not** migrate the active database:
 
-1. revalidate exact Schema10 pre-state, artifact and zero production-volume users;
-2. durably claim the one-shot attempt ledger before candidate mutation;
-3. copy the exact active DB into a dedicated same-filesystem control directory;
-4. give the exact image RW access only to that isolated candidate directory;
-5. run migration 11 on the candidate with network disabled, read-only rootfs, all Linux capabilities dropped and
+1. require an exact approved packet plus separate human-approval record, both bound to this frozen preparation target; reject the old free-form authority-digest CLI entirely;
+2. require root execution, then revalidate hostname, Tencent instance-id metadata, `/dev/vdb`/ext4 binding, exact active DB inode/device/mode/uid/gid, zero Docker volume users, zero `lsof`/`fuser` DB users, and absent WAL/SHM;
+3. durably claim the one-shot attempt ledger before candidate mutation;
+4. copy the exact active DB into a dedicated same-filesystem control directory;
+5. give the exact image RW access only to that isolated candidate directory;
+6. run migration 11 on the candidate with network disabled, read-only rootfs, all Linux capabilities dropped and
    `no-new-privileges`;
-6. require Schema11 / exact migration checksum / `integrity_check=ok` / FK=0 / DELETE journal mode and no WAL/SHM/journal residue;
-7. revalidate the active Schema10 hash and writer containment;
-8. perform one `renameat2(RENAME_EXCHANGE)` syscall between the verified candidate and active DB path;
-9. perform no further active-DB writes; terminal classification is a separate independent read-only verification.
+7. require Schema11 / exact migration checksum / `integrity_check=ok` / FK=0 / DELETE journal mode and no WAL/SHM/journal residue;
+8. immediately before switch, repeat the exact physical-target, Schema10 hash, Docker-user, `lsof`, `fuser`, WAL/SHM and containment checks;
+9. perform one `renameat2(RENAME_EXCHANGE)` syscall between the verified candidate and active DB path;
+10. perform no further active-DB writes; terminal classification is a separate independent read-only verification.
 
 Controller loss before the exchange leaves the active Schema10 file untouched. The final switch is one same-filesystem
 atomic exchange. There is no automatic rollback and no automatic retry. If terminal state cannot be independently
@@ -97,7 +98,7 @@ Exact executor:
 
 ```text
 scripts/g3-schema11-cutover-executor.py
-sha256:858ea9d835be5ab6498e0b4caa5611cd8e41b993cbccb7515a145e611d1f23cc
+sha256:0516bb2ea28ef5a360f8fd7ee8c615efcd455614123ca8f9b7445bc21b28335a
 ```
 
 The rename-exchange helper passed a local self-test, and the exact candidate image independently migrated a disposable
@@ -122,7 +123,7 @@ drainProofDigest =
 sha256:7d4de65434606b1c4557536deee386ed25fc6f26c05919bc5e18f7bad1e7081f
 
 executionBoundaryProofDigest =
-sha256:279226c2629f6aa92ff43d30014c25269ee55e17c00584f9edd49cf5627e9c0b
+sha256:795f45f4881d891f073b42d559b463265f4682ddc22f25fc05df514acbcbac17
 ```
 
 ## Exact human approval target
@@ -135,7 +136,7 @@ proposed packetId =
 G3-SCHEMA11-CUTOVER-20261006-R1
 
 authorityTargetDigest =
-sha256:4834377362f153aebd2223e5f38af4750c30558f290a10710dd5948fd3688caf
+sha256:f6affea16a2e5b963c395a6dfa99c352fd5f182fb565461a14dca3acbb9cc1f0
 ```
 
 Current authority state remains:

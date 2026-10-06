@@ -8,6 +8,9 @@ import os
 from pathlib import Path
 import re
 import shutil
+import socket
+import stat
+import urllib.request
 import sqlite3
 import subprocess
 import sys
@@ -27,6 +30,23 @@ PACKET_ID = "G3-SCHEMA11-CUTOVER-20261006-R1"
 DIGEST_RE = re.compile(r"^sha256:[a-f0-9]{64}$")
 RENAME_EXCHANGE = 2
 AT_FDCWD = -100
+EXPECTED_HOSTNAME = "VM-0-12-ubuntu"
+EXPECTED_INSTANCE_ID = "ins-mi85f3my"
+INSTANCE_ID_URL = "http://169.254.0.23/latest/meta-data/instance-id"
+EXPECTED_VOLUME_MOUNTPOINT = Path("/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data")
+EXPECTED_FILESYSTEM_SOURCE = "/dev/vdb"
+EXPECTED_FILESYSTEM_TYPE = "ext4"
+EXPECTED_ACTIVE_SIZE = 512000
+EXPECTED_ACTIVE_DEVICE = 64784
+EXPECTED_ACTIVE_INODE = 1835048
+EXPECTED_ACTIVE_MODE = 0o644
+EXPECTED_ACTIVE_UID = 1000
+EXPECTED_ACTIVE_GID = 1000
+EXPECTED_TARGET_BINDING_DIGEST = "sha256:30e6c937d5caddac4c575b49dac0d68139c5eff57b1d28c353d99e53c97e9a60"
+EXPECTED_ACTIVE_DATABASE_FAMILY_DIGEST = "sha256:3df22ce713b686313f1c19bbb6fcf6b1af670f610ae46e884e890cb41fbe568e"
+EXPECTED_RECOVERY_ARTIFACT_DIGEST = "sha256:f2e643317a152600c8bf864648cec095ad57ba398c804feb35f9338a7073cfef"
+APPROVAL_SOURCE = "EXPLICIT_HUMAN_CHAT_AUTHORIZATION"
+APPROVED_ACTION_ID = "G3_SCHEMA11_CUTOVER"
 
 NODE_MIGRATE = r"""
 import { DatabaseSync } from 'node:sqlite';
@@ -63,6 +83,168 @@ try {
   db.close();
 }
 """
+
+def canonical_json(value):
+    if value is None or isinstance(value, (bool, int, float, str)):
+        if isinstance(value, float) and not (value == value and abs(value) != float("inf")):
+            raise RuntimeError("G3_CANONICAL_JSON_INVALID")
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    if isinstance(value, list):
+        return "[" + ",".join(canonical_json(item) for item in value) + "]"
+    if isinstance(value, dict):
+        if any(not isinstance(key, str) or key in {"__proto__", "constructor", "prototype"} for key in value):
+            raise RuntimeError("G3_CANONICAL_JSON_INVALID")
+        return "{" + ",".join(
+            json.dumps(key, ensure_ascii=False) + ":" + canonical_json(value[key])
+            for key in sorted(value)
+        ) + "}"
+    raise RuntimeError("G3_CANONICAL_JSON_INVALID")
+
+def canonical_digest(value) -> str:
+    return "sha256:" + hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
+
+def exact_keys(value, expected, code):
+    if not isinstance(value, dict) or set(value) != set(expected):
+        raise RuntimeError(code)
+    return value
+
+def load_json_file(path: Path, code):
+    try:
+        metadata = path.lstat()
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            raise RuntimeError(code)
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(code) from exc
+
+def verify_approved_authority(packet_path: Path, approval_path: Path, preparation_path: Path):
+    preparation = load_json_file(preparation_path, "G3_PREPARATION_RECORD_INVALID")
+    packet = load_json_file(packet_path, "G3_APPROVED_PACKET_INVALID")
+    approval = load_json_file(approval_path, "G3_APPROVAL_RECORD_INVALID")
+
+    exact_keys(packet, {
+        "schemaVersion", "packetId", "contractId", "authorityTarget",
+        "authorityTargetDigest", "authorization",
+    }, "G3_APPROVED_PACKET_KEYS_INVALID")
+    if packet.get("schemaVersion") != 1 or packet.get("packetId") != PACKET_ID       or packet.get("contractId") != "G2_MINIMAL_RELEASE_CONTRACT_V1":
+        raise RuntimeError("G3_APPROVED_PACKET_IDENTITY_MISMATCH")
+
+    authority_target = packet.get("authorityTarget")
+    if authority_target != preparation.get("authorityTarget"):
+        raise RuntimeError("G3_APPROVED_TARGET_NOT_FROZEN_PREPARATION")
+    computed = canonical_digest({
+        "domain": "g3-schema11-authority-target-v1",
+        "authorityTarget": authority_target,
+    })
+    if packet.get("authorityTargetDigest") != computed       or preparation.get("authorityTargetDigest") != computed:
+        raise RuntimeError("G3_APPROVED_TARGET_DIGEST_MISMATCH")
+
+    target = authority_target.get("target", {})
+    prestate = authority_target.get("prestate", {})
+    execution = authority_target.get("execution", {})
+    if target.get("targetBindingDigest") != EXPECTED_TARGET_BINDING_DIGEST       or target.get("activeDatabaseFamilyDigest") != EXPECTED_ACTIVE_DATABASE_FAMILY_DIGEST       or prestate.get("recoveryArtifactDigest") != EXPECTED_RECOVERY_ARTIFACT_DIGEST       or execution.get("operationId") != OPERATION_ID       or execution.get("entrypointId") != "G3_SCHEMA11_CUTOVER"       or execution.get("automaticRetryAllowed") is not False:
+        raise RuntimeError("G3_APPROVED_TARGET_SCOPE_MISMATCH")
+
+    boundary = preparation.get("executionBoundaryEvidence", {})
+    executor_digest = "sha256:" + sha256_file(Path(__file__).resolve())
+    if boundary.get("executorSha256") != executor_digest:
+        raise RuntimeError("G3_EXECUTOR_DIGEST_MISMATCH")
+    boundary_digest = canonical_digest({
+        "domain": "g3-schema11-execution-boundary-v1",
+        "executionBoundaryEvidence": boundary,
+    })
+    if authority_target.get("writerContainment", {}).get("executionBoundaryProofDigest") != boundary_digest:
+        raise RuntimeError("G3_EXECUTION_BOUNDARY_DIGEST_MISMATCH")
+
+    authorization = packet.get("authorization")
+    exact_keys(authorization, {
+        "status", "humanApprovalRequired", "approvalRef",
+        "approvedAuthorityTargetDigest", "approvalEvidenceDigest",
+    }, "G3_PACKET_AUTHORIZATION_KEYS_INVALID")
+    if authorization.get("status") != "APPROVED"       or authorization.get("humanApprovalRequired") is not True       or authorization.get("approvedAuthorityTargetDigest") != computed       or not isinstance(authorization.get("approvalRef"), str)       or not authorization.get("approvalRef")       or not DIGEST_RE.fullmatch(str(authorization.get("approvalEvidenceDigest", ""))):
+        raise RuntimeError("G3_PACKET_NOT_APPROVED")
+
+    exact_keys(approval, {
+        "schemaVersion", "approvalId", "approvalSource", "approvalRef",
+        "approvedActionId", "approvedAuthorityTargetDigest", "approvalEvidenceDigest",
+        "authorizationReceivedBeforeExecution", "schema11CutoverAuthorized",
+        "normalWriterReadmissionAuthorized",
+    }, "G3_APPROVAL_RECORD_KEYS_INVALID")
+    if approval.get("schemaVersion") != 1       or approval.get("approvalSource") != APPROVAL_SOURCE       or approval.get("approvedActionId") != APPROVED_ACTION_ID       or approval.get("approvalRef") != authorization.get("approvalRef")       or approval.get("approvedAuthorityTargetDigest") != computed       or approval.get("approvalEvidenceDigest") != authorization.get("approvalEvidenceDigest")       or approval.get("authorizationReceivedBeforeExecution") is not True       or approval.get("schema11CutoverAuthorized") is not True       or approval.get("normalWriterReadmissionAuthorized") is not False:
+        raise RuntimeError("G3_APPROVAL_RECORD_NOT_TRUSTED")
+
+    return computed
+
+def read_instance_id():
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(INSTANCE_ID_URL, timeout=2) as response:
+            value = response.read(256).decode("utf-8").strip()
+    except Exception as exc:
+        raise RuntimeError("G3_INSTANCE_METADATA_UNAVAILABLE") from exc
+    if value != EXPECTED_INSTANCE_ID:
+        raise RuntimeError("G3_INSTANCE_ID_MISMATCH")
+    return value
+
+def verify_physical_target():
+    if os.geteuid() != 0:
+        raise RuntimeError("G3_ROOT_EXECUTION_REQUIRED")
+    if socket.gethostname() != EXPECTED_HOSTNAME:
+        raise RuntimeError("G3_HOSTNAME_MISMATCH")
+    read_instance_id()
+    try:
+        mountpoint = docker_json(["volume", "inspect", VOLUME_NAME, "--format", "{{.Mountpoint}}"])
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError("G3_VOLUME_BINDING_UNAVAILABLE") from exc
+    if Path(mountpoint) != EXPECTED_VOLUME_MOUNTPOINT:
+        raise RuntimeError("G3_VOLUME_MOUNTPOINT_MISMATCH")
+    try:
+        fs = subprocess.check_output(
+            ["findmnt", "-n", "-o", "SOURCE,FSTYPE", "-T", str(ACTIVE_DB)],
+            text=True,
+        ).strip().split()
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        raise RuntimeError("G3_FILESYSTEM_BINDING_UNAVAILABLE") from exc
+    if fs != [EXPECTED_FILESYSTEM_SOURCE, EXPECTED_FILESYSTEM_TYPE]:
+        raise RuntimeError("G3_FILESYSTEM_BINDING_MISMATCH")
+    metadata = ACTIVE_DB.lstat()
+    identity = (
+        metadata.st_size, metadata.st_dev, metadata.st_ino,
+        stat.S_IMODE(metadata.st_mode), metadata.st_uid, metadata.st_gid,
+    )
+    expected = (
+        EXPECTED_ACTIVE_SIZE, EXPECTED_ACTIVE_DEVICE, EXPECTED_ACTIVE_INODE,
+        EXPECTED_ACTIVE_MODE, EXPECTED_ACTIVE_UID, EXPECTED_ACTIVE_GID,
+    )
+    if identity != expected or metadata.st_nlink != 1:
+        raise RuntimeError("G3_ACTIVE_DB_PHYSICAL_IDENTITY_MISMATCH")
+
+def verify_no_open_db_users():
+    paths = [
+        ACTIVE_DB,
+        ACTIVE_DB.with_name(ACTIVE_DB.name + "-wal"),
+        ACTIVE_DB.with_name(ACTIVE_DB.name + "-shm"),
+    ]
+    existing = [str(path) for path in paths if path.exists()]
+    if not existing:
+        raise RuntimeError("G3_ACTIVE_DB_MISSING")
+    try:
+        lsof = subprocess.run(["lsof", "-t", *existing], text=True, capture_output=True)
+    except FileNotFoundError as exc:
+        raise RuntimeError("G3_LSOF_UNAVAILABLE") from exc
+    if lsof.returncode == 0 and lsof.stdout.strip():
+        raise RuntimeError("G3_OPEN_DATABASE_FILE_USERS:" + ",".join(lsof.stdout.split()))
+    if lsof.returncode not in (0, 1):
+        raise RuntimeError("G3_LSOF_CHECK_FAILED")
+    try:
+        fuser = subprocess.run(["fuser", *existing], text=True, capture_output=True)
+    except FileNotFoundError as exc:
+        raise RuntimeError("G3_FUSER_UNAVAILABLE") from exc
+    pids = " ".join((fuser.stdout, fuser.stderr)).strip()
+    if fuser.returncode == 0 and pids:
+        raise RuntimeError("G3_FUSER_DATABASE_PIDS:" + " ".join(pids.split()))
+    if fuser.returncode not in (0, 1):
+        raise RuntimeError("G3_FUSER_CHECK_FAILED")
 
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
@@ -126,6 +308,7 @@ def verify_image():
         raise RuntimeError("G3_EXACT_IMAGE_MISMATCH")
 
 def verify_active_prestate():
+    verify_physical_target()
     if ACTIVE_DB.is_symlink() or not ACTIVE_DB.is_file():
         raise RuntimeError("G3_ACTIVE_DB_IDENTITY_INVALID")
     if ACTIVE_DB.with_name(ACTIVE_DB.name + "-wal").exists() or ACTIVE_DB.with_name(ACTIVE_DB.name + "-shm").exists():
@@ -136,6 +319,7 @@ def verify_active_prestate():
     if meta["count"] != 10 or meta["maxVersion"] != 10 or meta["migration11Count"] != 0 or meta["integrity"] != "ok" or meta["fkViolations"] != 0:
         raise RuntimeError("G3_ACTIVE_DB_SCHEMA10_PRESTATE_INVALID")
     verify_no_running_volume_users()
+    verify_no_open_db_users()
 
 def claim_attempt(authority_target_digest: str):
     if not DIGEST_RE.fullmatch(authority_target_digest):
@@ -200,8 +384,9 @@ def rename_exchange(left: Path, right: Path):
         err = ctypes.get_errno()
         raise OSError(err, os.strerror(err))
 
-def execute(authority_target_digest: str):
+def execute(packet_path: Path, approval_path: Path, preparation_path: Path):
     exchanged = False
+    authority_target_digest = verify_approved_authority(packet_path, approval_path, preparation_path)
     verify_active_prestate()
     verify_image()
     if os.stat(ACTIVE_DB).st_dev != os.stat(ACTIVE_DB.parent).st_dev:
@@ -261,16 +446,21 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--self-test-exchange", action="store_true")
     parser.add_argument("--execute", action="store_true")
-    parser.add_argument("--authority-target-digest")
+    parser.add_argument("--approved-packet")
+    parser.add_argument("--approval-record")
+    parser.add_argument("--preparation-record")
     args = parser.parse_args()
     if args.self_test_exchange:
-        if args.execute or args.authority_target_digest is not None:
+        if args.execute or args.approved_packet or args.approval_record or args.preparation_record:
             raise SystemExit("self-test must be isolated")
         self_test_exchange()
         return
-    if not args.execute or not args.authority_target_digest:
-        raise SystemExit("G3 executable mode requires --execute and --authority-target-digest")
-    execute(args.authority_target_digest)
+    if not args.execute or not args.approved_packet or not args.approval_record or not args.preparation_record:
+        raise SystemExit(
+            "G3 executable mode requires --execute, --approved-packet, "
+            "--approval-record and --preparation-record"
+        )
+    execute(Path(args.approved_packet), Path(args.approval_record), Path(args.preparation_record))
 
 if __name__ == "__main__":
     main()

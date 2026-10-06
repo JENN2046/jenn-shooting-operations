@@ -83,6 +83,7 @@ try {
   };
   const authorityTargetDigest = digestG3AuthorityTargetV1(expectedAuthorityTarget);
   const executorDigest = 'sha256:' + createHash('sha256').update(executorBytes).digest('hex');
+  const executorText = executorBytes.toString('utf8');
 
   const t = record.targetBindingEvidence;
   const f = record.databaseFamilyEvidence;
@@ -173,6 +174,30 @@ try {
     || eb.attemptLedger?.replayIdentity !== 'operationId+authorityTargetDigest'
     || eb.attemptLedger?.packetIdPartitionsReplayIdentity !== false
     || eb.attemptLedger?.automaticRetryAllowed !== false
+    || eb.approvalGate?.approvedPacketRequired !== true
+    || eb.approvalGate?.separateApprovalRecordRequired !== true
+    || eb.approvalGate?.arbitraryAuthorityTargetDigestCliAllowed !== false
+    || eb.approvalGate?.approvedPacketMustMatchFrozenPreparation !== true
+    || eb.approvalGate?.approvalSource !== 'EXPLICIT_HUMAN_CHAT_AUTHORIZATION'
+    || eb.targetRuntimeVerification?.hostname !== 'VM-0-12-ubuntu'
+    || eb.targetRuntimeVerification?.instanceIdMetadataEndpoint !== 'http://169.254.0.23/latest/meta-data/instance-id'
+    || eb.targetRuntimeVerification?.instanceId !== 'ins-mi85f3my'
+    || eb.targetRuntimeVerification?.filesystemSource !== '/dev/vdb'
+    || eb.targetRuntimeVerification?.filesystemType !== 'ext4'
+    || eb.targetRuntimeVerification?.activeFileIdentityExact !== true
+    || eb.targetRuntimeVerification?.requiresRootPrivileges !== true
+    || eb.finalDrainVerification?.dockerVolumeUsersRequired !== 0
+    || eb.finalDrainVerification?.lsofOpenUsersRequired !== 0
+    || eb.finalDrainVerification?.fuserPidsRequired !== 0
+    || eb.finalDrainVerification?.walRequiredAbsent !== true
+    || eb.finalDrainVerification?.shmRequiredAbsent !== true
+    || eb.finalDrainVerification?.checkedImmediatelyBeforeExchange !== true
+    || executorText.includes('--authority-target-digest')
+    || !executorText.includes('--approved-packet')
+    || !executorText.includes('--approval-record')
+    || !executorText.includes('--preparation-record')
+    || !executorText.includes('verify_physical_target()')
+    || !executorText.includes('verify_no_open_db_users()')
     || ha.status !== 'NOT_REQUESTED' || ha.humanApprovalRequired !== true
     || ha.approvedAuthorityTargetDigest !== null || ha.approvalRef !== null
     || ha.approvalEvidenceDigest !== null
