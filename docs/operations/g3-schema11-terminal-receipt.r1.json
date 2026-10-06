@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "G3R-SCHEMA11-COMMITTED-20261006-R1",
+  "contractId": "G2_MINIMAL_RELEASE_CONTRACT_V1",
+  "packetId": "G3-SCHEMA11-CUTOVER-20261006-R1",
+  "operationId": "G3-SCHEMA11-OP-20261006-R1",
+  "authorityTargetDigest": "sha256:10ce21ebeb207afa556a48c215439077736af242cd312a49783b1136fe046ab5",
+  "classifiedAt": "2026-10-06T21:05:34Z",
+  "outcome": "COMMITTED",
+  "evidence": {
+    "schemaVersionObserved": 11,
+    "schemaVerificationDigest": "sha256:e2da8bab2b70956463927b418738bd82f64e6733100ad5f063e8cd44658a52e4",
+    "postStateDigest": "sha256:ce80ae31d1bc38f15b90ae8dc77f026c8fb745cb217b5e2708a6d0db03ba4aea",
+    "integrityCheck": "ok",
+    "foreignKeyViolationCount": 0,
+    "authoritativeWriteCapabilityAbsent": true,
+    "normalWritesDisabledAtClassification": true
+  }
+}

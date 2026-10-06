@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "approvalId": "G3_SCHEMA11_CUTOVER_APPROVAL_20261006_R2",
+  "approvalSource": "EXPLICIT_HUMAN_CHAT_AUTHORIZATION",
+  "approvalRef": "CHAT-2026-10-06-G3-SCHEMA11-CUTOVER-10CE21EB",
+  "approvedActionId": "G3_SCHEMA11_CUTOVER",
+  "approvedAuthorityTargetDigest": "sha256:10ce21ebeb207afa556a48c215439077736af242cd312a49783b1136fe046ab5",
+  "authorizationReceivedBeforeExecution": true,
+  "schema11CutoverAuthorized": true,
+  "normalWriterReadmissionAuthorized": false,
+  "signatureAlgorithm": "Ed25519",
+  "signingKeyId": "sha256:0d9c964a35c05842b5aafbe261fb5e020427ad5c635357e6955201da56100bae",
+  "approvalEvidenceDigest": "sha256:21c4a02bf69fbe2ab8cd6e1cc178b87e74900f9bb547cf1dd69809433332aa4b",
+  "signatureBase64": "ekK4lvqcYF19f6hCdQbWwsmT43nqczdmBaQoi7UuoMCS2+q62MLLm2oMeczCbqcFIZ07kgx7CvhuCuA9WY4ACA=="
+}
