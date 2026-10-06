@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "approvalId": "G3_PREP_SOURCE_PREFIX_ALIGNMENT_6_TO_10_APPROVAL_R1",
+  "approvalRef": "CHAT-2026-10-06-G3-PREP-SOURCE-PREFIX-ALIGNMENT",
+  "approvalSource": "EXPLICIT_HUMAN_CHAT_AUTHORIZATION",
+  "authorizationText": "做吧",
+  "approvedActionId": "G3_PREP_SOURCE_PREFIX_ALIGNMENT_6_TO_10",
+  "approvedAuthorityTargetDigest": "sha256:64d8ce58fc6f6419869fc1675dca8a7074134459dd5ec782030a476f84dd7ca4",
+  "authorizationReceivedBeforeExecution": true,
+  "recordCreatedAfterExecution": true,
+  "schema11CutoverAuthorized": false,
+  "normalWriterReadmissionAuthorized": false,
+  "note": "Records the explicit human authorization given in the controlling ChatGPT conversation before production execution. It authorizes only the bounded Schema 6→10 source-prefix alignment described in the preceding exchange."
+}
