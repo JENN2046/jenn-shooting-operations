@@ -195,6 +195,7 @@ try {
     || eb.targetRuntimeVerification?.activeFileIdentityExact !== true
     || eb.targetRuntimeVerification?.requiresRootPrivileges !== true
     || eb.finalDrainVerification?.dockerVolumeUsersRequired !== 0
+    || eb.finalDrainVerification?.dockerMountSourceAncestryChecked !== true
     || eb.finalDrainVerification?.lsofOpenUsersRequired !== 0
     || eb.finalDrainVerification?.fuserPidsRequired !== 0
     || eb.finalDrainVerification?.walRequiredAbsent !== true
@@ -245,6 +246,12 @@ try {
   if (approvalSelfTest.status !== 0
     || !approvalSelfTest.stdout.includes('G3_APPROVAL_SIGNATURE_SELF_TEST_PASS')) {
     fail('APPROVAL_SIGNATURE_SELF_TEST_FAILED');
+  }
+  const mountSourceSelfTest = spawnSync('python3', [executorPath, '--self-test-mount-source'],
+    { encoding: 'utf8' });
+  if (mountSourceSelfTest.status !== 0
+    || !mountSourceSelfTest.stdout.includes('G3_MOUNT_SOURCE_SELF_TEST_PASS')) {
+    fail('DOCKER_MOUNT_SOURCE_SELF_TEST_FAILED');
   }
 
   console.log(JSON.stringify({

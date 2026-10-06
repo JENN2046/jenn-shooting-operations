@@ -356,13 +356,26 @@ def inspect_db(path: Path):
 def docker_json(args):
     return subprocess.check_output(["docker", *args], text=True).strip()
 
+def mount_source_can_access_active_db(source):
+    if not isinstance(source, str) or not source.startswith("/"):
+        return False
+    try:
+        resolved_source = Path(source).resolve(strict=False)
+        resolved_db = ACTIVE_DB.resolve(strict=False)
+    except OSError as exc:
+        raise RuntimeError("G3_DOCKER_MOUNT_SOURCE_UNRESOLVABLE") from exc
+    return resolved_source == resolved_db or resolved_source in resolved_db.parents
+
 def verify_no_running_volume_users():
     ids = subprocess.check_output(["docker", "ps", "-q"], text=True).split()
     users = []
     for cid in ids:
         mounts = json.loads(docker_json(["inspect", cid, "--format", "{{json .Mounts}}"]))
-        if any(m.get("Name") == VOLUME_NAME for m in mounts):
-            users.append(cid)
+        for mount in mounts:
+            if mount.get("Name") == VOLUME_NAME \
+              or mount_source_can_access_active_db(mount.get("Source")):
+                users.append(cid)
+                break
     if users:
         raise RuntimeError("G3_RUNNING_VOLUME_USERS:" + ",".join(users))
 
@@ -519,6 +532,17 @@ def execute(packet_path: Path, approval_path: Path, preparation_path: Path):
             }, sort_keys=True))
         raise
 
+def self_test_mount_source():
+    if not mount_source_can_access_active_db(str(EXPECTED_VOLUME_MOUNTPOINT)):
+        raise RuntimeError("G3_MOUNT_SOURCE_SELF_TEST_PARENT_FAILED")
+    if not mount_source_can_access_active_db(str(ACTIVE_DB)):
+        raise RuntimeError("G3_MOUNT_SOURCE_SELF_TEST_FILE_FAILED")
+    if mount_source_can_access_active_db(str(EXPECTED_VOLUME_MOUNTPOINT / "uploads")):
+        raise RuntimeError("G3_MOUNT_SOURCE_SELF_TEST_CHILD_FALSE_POSITIVE")
+    if mount_source_can_access_active_db("/tmp"):
+        raise RuntimeError("G3_MOUNT_SOURCE_SELF_TEST_UNRELATED_FALSE_POSITIVE")
+    print(json.dumps({"status": "G3_MOUNT_SOURCE_SELF_TEST_PASS"}))
+
 def self_test_approval_signature():
     verify_approval_signature(
         APPROVAL_SIGNATURE_SELF_TEST_MESSAGE,
@@ -545,19 +569,27 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--self-test-exchange", action="store_true")
     parser.add_argument("--self-test-approval-signature", action="store_true")
+    parser.add_argument("--self-test-mount-source", action="store_true")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--approved-packet")
     parser.add_argument("--approval-record")
     parser.add_argument("--preparation-record")
     args = parser.parse_args()
-    if args.self_test_exchange or args.self_test_approval_signature:
+    self_tests = [
+        args.self_test_exchange,
+        args.self_test_approval_signature,
+        args.self_test_mount_source,
+    ]
+    if any(self_tests):
         if args.execute or args.approved_packet or args.approval_record or args.preparation_record \
-          or (args.self_test_exchange and args.self_test_approval_signature):
+          or sum(bool(value) for value in self_tests) != 1:
             raise SystemExit("self-test must be isolated")
         if args.self_test_exchange:
             self_test_exchange()
-        else:
+        elif args.self_test_approval_signature:
             self_test_approval_signature()
+        else:
+            self_test_mount_source()
         return
     if not args.execute or not args.approved_packet or not args.approval_record or not args.preparation_record:
         raise SystemExit(

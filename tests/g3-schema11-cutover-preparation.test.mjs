@@ -70,6 +70,10 @@ test('exact physical executor is pinned and rename-exchange self-test passes', a
   const approval = spawnSync('python3', [path, '--self-test-approval-signature'], { encoding: 'utf8' });
   assert.equal(approval.status, 0, approval.stderr);
   assert.match(approval.stdout, /G3_APPROVAL_SIGNATURE_SELF_TEST_PASS/);
+
+  const mountSource = spawnSync('python3', [path, '--self-test-mount-source'], { encoding: 'utf8' });
+  assert.equal(mountSource.status, 0, mountSource.stderr);
+  assert.match(mountSource.stdout, /G3_MOUNT_SOURCE_SELF_TEST_PASS/);
 });
 
 test('executor requires approved packet/approval and rejects free-form authority digests', async () => {
@@ -190,6 +194,7 @@ test('execution boundary freezes physical target and non-Docker drain verificati
   });
   assert.deepEqual(boundary.finalDrainVerification, {
     dockerVolumeUsersRequired: 0,
+    dockerMountSourceAncestryChecked: true,
     lsofOpenUsersRequired: 0,
     fuserPidsRequired: 0,
     walRequiredAbsent: true,
