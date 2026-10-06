@@ -19,15 +19,17 @@ Jenn Shooting Operations 是 `jenn-shooting-planner` 的独立协作服务边界
 
 ## 当前阶段
 
-**G1 CORE_CANONICAL 已关闭**。当前 canonical authority 为
-`codex/v2-1-architecture-freeze @ 175586e2c67c94ad61fae6c5964c106f0966dda8`。
+**G1 CORE_CANONICAL / G2 MINIMAL_RELEASE_CONTRACT 已关闭**。当前 canonical authority 为
+`codex/v2-1-architecture-freeze @ 6334e2ae851247cb1558074fbd80cfee06b28c11`。
 
-当前 Gate 是 **G2 MINIMAL_RELEASE_CONTRACT**：只冻结 Schema 10→11 cutover 的六条安全不变式和
-未来 G3 packet 结构，不执行生产迁移、不授权生产写，也不重新引入 C01/custody/launch-custody。
-仓库内历史 PROD/GF 记录只作为 provenance，不能替代 fresh production facts 或当前 G0-G4 roadmap。
+当前 Gate 是 **G3 SCHEMA11_CUTOVER Preparation**。Fresh production observation 已确认生产仍在 Schema 6，
+而 G2 冻结的 cutover source 是 Schema 10，因此当前状态为 **BLOCKED_SOURCE_SCHEMA_MISMATCH**。
+现阶段只允许证据采集、artifact 准备与前置动作设计；Schema 11 cutover、生产写、writer containment mutation
+和 source-prefix 6→10 对齐都没有获得授权。历史 PROD/GF 记录只作为 provenance。
 
 ## 入口
 
+- [G3 Schema 11 Cutover Preparation R1](docs/operations/G3_SCHEMA11_CUTOVER_PREPARATION_R1.md)
 - [G2 Minimal Release Contract](docs/operations/G2_MINIMAL_RELEASE_CONTRACT.md)
 - [JSO Core Canonical R1](docs/JSO_CORE_CANONICAL_R1.md)
 - [执行计划（历史初始阶段计划）](docs/EXECUTION_PLAN.md)
