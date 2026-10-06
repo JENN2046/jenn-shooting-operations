@@ -1,0 +1,229 @@
+{
+  "schemaVersion": 1,
+  "preparationId": "G3_SCHEMA11_CUTOVER_EXACT_TARGET_R1",
+  "status": "AWAITING_EXPLICIT_HUMAN_APPROVAL",
+  "authority": {
+    "canonicalBranch": "codex/v2-1-architecture-freeze",
+    "authorityHead": "a4199fdb14808ebb866943148a222b0d4300d66e",
+    "productionMutationAuthorized": false,
+    "schema11CutoverAuthorized": false
+  },
+  "proposedPacketId": "G3-SCHEMA11-CUTOVER-20261006-R1",
+  "targetBindingEvidence": {
+    "provider": "TENCENT_CLOUD_CVM",
+    "instanceId": "ins-mi85f3my",
+    "hostname": "VM-0-12-ubuntu",
+    "productionServiceContainerPresent": false,
+    "dataVolumeName": "jenn-shooting-operations_shooting_data",
+    "volumeMountpoint": "/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data",
+    "databasePath": "/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data/shooting-operations.sqlite",
+    "filesystem": {
+      "source": "/dev/vdb",
+      "type": "ext4",
+      "options": [
+        "relatime",
+        "rw"
+      ]
+    },
+    "activeFileIdentity": {
+      "size": 512000,
+      "device": 64784,
+      "inode": 1835048,
+      "mode": 644,
+      "uid": 1000,
+      "gid": 1000
+    }
+  },
+  "targetBindingDigest": "sha256:30e6c937d5caddac4c575b49dac0d68139c5eff57b1d28c353d99e53c97e9a60",
+  "databaseFamilyEvidence": {
+    "main": {
+      "size": 512000,
+      "sha256": "sha256:5d65282b197350c2d6175fef2ccfa641c40908ecd9c053e296182f65e7bfede7"
+    },
+    "wal": null,
+    "shm": null,
+    "schemaVersion": 10,
+    "migrationCount": 10,
+    "migration11Count": 0
+  },
+  "activeDatabaseFamilyDigest": "sha256:3df22ce713b686313f1c19bbb6fcf6b1af670f610ae46e884e890cb41fbe568e",
+  "recoveryReadbackEvidence": {
+    "recoveryArtifactDigest": "sha256:f2e643317a152600c8bf864648cec095ad57ba398c804feb35f9338a7073cfef",
+    "sourceDatabaseFamilyDigest": "sha256:3df22ce713b686313f1c19bbb6fcf6b1af670f610ae46e884e890cb41fbe568e",
+    "readbackMain": {
+      "size": 512000,
+      "sha256": "sha256:5d65282b197350c2d6175fef2ccfa641c40908ecd9c053e296182f65e7bfede7"
+    },
+    "restoredSchemaVersion": 10,
+    "migration11Count": 0,
+    "integrityCheck": "ok",
+    "foreignKeyViolationCount": 0,
+    "byteReadbackVerified": true
+  },
+  "recoveryReadbackProofDigest": "sha256:97b9fc0635056d1b0e172be337ac81de99667cc7b68703e6aed8815843873ad3",
+  "durableDisableEvidence": {
+    "productionServiceContainerPresent": false,
+    "runningContainersUsingProductionVolume": 0,
+    "managedSystemdServicePresent": false,
+    "normalWritersBlocked": true,
+    "orphanCleanupBlocked": true,
+    "processLifetimeIsAuthority": false
+  },
+  "durableDisableReceiptDigest": "sha256:ded7530acd93b8997c08dbc68846f47d641c76e738a180b0a1d0267fc8103f7e",
+  "drainEvidence": {
+    "runningContainersUsingProductionVolume": 0,
+    "openDatabaseFileUsers": 0,
+    "fuserDatabasePids": 0,
+    "walPresent": false,
+    "shmPresent": false,
+    "stableMainSha256AcrossSamples": true,
+    "sample1MainSha256": "sha256:5d65282b197350c2d6175fef2ccfa641c40908ecd9c053e296182f65e7bfede7",
+    "sample2MainSha256": "sha256:5d65282b197350c2d6175fef2ccfa641c40908ecd9c053e296182f65e7bfede7"
+  },
+  "drainProofDigest": "sha256:7d4de65434606b1c4557536deee386ed25fc6f26c05919bc5e18f7bad1e7081f",
+  "executionBoundaryEvidence": {
+    "boundaryId": "G3_SCHEMA11_ATOMIC_EXCHANGE_R1",
+    "executorPath": "scripts/g3-schema11-cutover-executor.py",
+    "executorSha256": "sha256:1756b84ee45079cae85d482fdd1bee1d5a56aae4ea6d9a999edbf003f53da3c4",
+    "imageArchiveSha256": "sha256:7e6e707d11fab6c317851ad21fbc1a4ccdde0ff1dda4d6dba7535b3b37303dff",
+    "imageArchiveSize": 63533056,
+    "exactImageDigest": "sha256:581e9fa25e04b582aa39c2fdaa291f6db3e80fc3f3ac15a8a4afa06622442144",
+    "exactImageSourceCommit": "6334e2ae851247cb1558074fbd80cfee06b28c11",
+    "artifactStagedOnProduction": true,
+    "platform": {
+      "kernel": "6.8.0-101-generic",
+      "architecture": "x86_64",
+      "filesystemSource": "/dev/vdb",
+      "filesystemType": "ext4",
+      "renameat2SymbolAvailable": true
+    },
+    "candidateIsolation": {
+      "migrationRunsAgainstActiveDatabase": false,
+      "candidateDirectoryOnlyRwMount": true,
+      "activeDatabaseMountedIntoMigrationContainer": false,
+      "networkMode": "none",
+      "rootFilesystemReadOnly": true,
+      "capDropAll": true,
+      "noNewPrivileges": true,
+      "migrationUid": 1000,
+      "migrationGid": 1000,
+      "preclaimWorkdirWriteProbeRequired": true,
+      "workdirMode": "0750",
+      "candidateMode": "0600"
+    },
+    "candidateMigrationVerification": {
+      "localSyntheticPass": true,
+      "sourceSchemaVersion": 10,
+      "targetSchemaVersion": 11,
+      "migrationName": "business_calendar_and_reschedule",
+      "migrationChecksum": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8",
+      "integrityCheck": "ok",
+      "foreignKeyViolationCount": 0,
+      "journalMode": "delete"
+    },
+    "finalSwitch": {
+      "syscall": "renameat2",
+      "flag": "RENAME_EXCHANGE",
+      "sameFilesystemRequired": true,
+      "activeDatabaseWritesBeforeExchange": false,
+      "automaticRollbackAllowed": false,
+      "postExchangeActiveDatabaseWriteAllowed": false,
+      "independentTerminalVerificationRequired": true
+    },
+    "attemptLedger": {
+      "durableOneShotRequired": true,
+      "claimBeforeCandidateMutation": true,
+      "replayIdentity": "operationId+authorityTargetDigest",
+      "packetIdPartitionsReplayIdentity": false,
+      "automaticRetryAllowed": false
+    },
+    "approvalGate": {
+      "approvedPacketRequired": true,
+      "separateApprovalRecordRequired": true,
+      "arbitraryAuthorityTargetDigestCliAllowed": false,
+      "approvedPacketMustMatchFrozenPreparation": true,
+      "approvalSource": "EXPLICIT_HUMAN_CHAT_AUTHORIZATION",
+      "cryptographicApprovalRequired": true,
+      "signatureAlgorithm": "Ed25519",
+      "signingKeyId": "sha256:0d9c964a35c05842b5aafbe261fb5e020427ad5c635357e6955201da56100bae"
+    },
+    "targetRuntimeVerification": {
+      "hostname": "VM-0-12-ubuntu",
+      "instanceIdMetadataEndpoint": "http://169.254.0.23/latest/meta-data/instance-id",
+      "instanceId": "ins-mi85f3my",
+      "filesystemSource": "/dev/vdb",
+      "filesystemType": "ext4",
+      "activeFileIdentityExact": true,
+      "requiresRootPrivileges": true
+    },
+    "finalDrainVerification": {
+      "dockerVolumeUsersRequired": 0,
+      "lsofOpenUsersRequired": 0,
+      "fuserPidsRequired": 0,
+      "walRequiredAbsent": true,
+      "shmRequiredAbsent": true,
+      "checkedImmediatelyBeforeExchange": true,
+      "dockerMountSourceAncestryChecked": true,
+      "dockerMountFilesystemIdentityChecked": true,
+      "dockerMountInfoNamespace": "dockerd",
+      "dockerContainerMountNamespaceChecked": true,
+      "dockerRecursiveSubmountsChecked": true
+    }
+  },
+  "executionBoundaryProofDigest": "sha256:1c2f11649fa98bd47cd1aed18a662027ed7359969a732dd64feaea0ab8f685f5",
+  "authorityTarget": {
+    "authorityHead": "a4199fdb14808ebb866943148a222b0d4300d66e",
+    "artifact": {
+      "sourceCommit": "6334e2ae851247cb1558074fbd80cfee06b28c11",
+      "imageDigest": "sha256:581e9fa25e04b582aa39c2fdaa291f6db3e80fc3f3ac15a8a4afa06622442144",
+      "migrationVersion": 11,
+      "migrationName": "business_calendar_and_reschedule",
+      "migrationChecksum": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8"
+    },
+    "target": {
+      "targetBindingDigest": "sha256:30e6c937d5caddac4c575b49dac0d68139c5eff57b1d28c353d99e53c97e9a60",
+      "activeDatabaseFamilyDigest": "sha256:3df22ce713b686313f1c19bbb6fcf6b1af670f610ae46e884e890cb41fbe568e"
+    },
+    "prestate": {
+      "capturedAt": "2026-10-06T10:28:00Z",
+      "recoveryArtifactDigest": "sha256:f2e643317a152600c8bf864648cec095ad57ba398c804feb35f9338a7073cfef",
+      "recoveryReadbackProofDigest": "sha256:97b9fc0635056d1b0e172be337ac81de99667cc7b68703e6aed8815843873ad3",
+      "recoveryReadbackVerified": true,
+      "integrityCheck": "ok",
+      "foreignKeyViolationCount": 0,
+      "capturedDatabaseFamilyDigest": "sha256:3df22ce713b686313f1c19bbb6fcf6b1af670f610ae46e884e890cb41fbe568e",
+      "recoverySourceDatabaseFamilyDigest": "sha256:3df22ce713b686313f1c19bbb6fcf6b1af670f610ae46e884e890cb41fbe568e"
+    },
+    "writerContainment": {
+      "durableDisableReceiptDigest": "sha256:ded7530acd93b8997c08dbc68846f47d641c76e738a180b0a1d0267fc8103f7e",
+      "inFlightWriterCount": 0,
+      "drainProofDigest": "sha256:7d4de65434606b1c4557536deee386ed25fc6f26c05919bc5e18f7bad1e7081f",
+      "processLifetimeIsAuthority": false,
+      "executionBoundaryProofDigest": "sha256:1c2f11649fa98bd47cd1aed18a662027ed7359969a732dd64feaea0ab8f685f5",
+      "unknownExecutorHasAuthoritativeWriteCapability": false,
+      "nonDatabaseProductionMutationAllowed": false
+    },
+    "execution": {
+      "entrypointId": "G3_SCHEMA11_CUTOVER",
+      "operationId": "G3-SCHEMA11-OP-20261006-R1",
+      "automaticRetryAllowed": false
+    }
+  },
+  "authorityTargetDigest": "sha256:ca3cea04d880d06cc6ebc436773b643560162449b0d221a27b7fd15f0e851169",
+  "humanApproval": {
+    "status": "NOT_REQUESTED",
+    "humanApprovalRequired": true,
+    "approvedAuthorityTargetDigest": null,
+    "approvalRef": null,
+    "approvalEvidenceDigest": null
+  },
+  "executablePacketStatus": "NOT_CREATED",
+  "terminalOutcomeStatus": "NOT_STARTED",
+  "prohibitions": [
+    "NO_SCHEMA11_EXECUTION_BEFORE_EXPLICIT_APPROVAL",
+    "NO_NORMAL_WRITER_READMISSION",
+    "NO_AUTOMATIC_RETRY",
+    "NO_DIRECT_MIGRATION_OF_ACTIVE_DATABASE",
+    "NO_UNVERIFIED_ARTIFACT_DRIFT"
+  ]
+}
