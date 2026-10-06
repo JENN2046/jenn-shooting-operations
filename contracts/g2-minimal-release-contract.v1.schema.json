@@ -12,6 +12,8 @@
     "transition",
     "invariants",
     "g3PacketSchema",
+    "g3SemanticValidatorModule",
+    "g3ReceiptSchema",
     "currentPacketStatus",
     "nextGate",
     "prohibitions"
@@ -91,7 +93,7 @@
             "durableNormalWriterDisableRequired",
             "inFlightWriterDrainRequired",
             "processLifetimeMayCarryAuthority",
-            "unprovenContainmentOutcome"
+            "unprovenContainmentDisposition"
           ],
           "properties": {
             "id": {
@@ -106,8 +108,8 @@
             "processLifetimeMayCarryAuthority": {
               "const": false
             },
-            "unprovenContainmentOutcome": {
-              "const": "UNKNOWN"
+            "unprovenContainmentDisposition": {
+              "const": "DO_NOT_EXECUTE"
             }
           }
         },
@@ -121,6 +123,9 @@
             "exactMigrationChecksumRequired",
             "exactAuthorityTargetDigestRequired",
             "humanApprovalBoundToAuthorityTargetRequired",
+            "semanticApprovalBindingValidationRequired",
+            "trustedApprovalVerificationRequired",
+            "trustedArtifactBindingVerificationRequired",
             "artifactDriftAllowed"
           ],
           "properties": {
@@ -144,6 +149,15 @@
             },
             "humanApprovalBoundToAuthorityTargetRequired": {
               "const": true
+            },
+            "semanticApprovalBindingValidationRequired": {
+              "const": true
+            },
+            "trustedApprovalVerificationRequired": {
+              "const": true
+            },
+            "trustedArtifactBindingVerificationRequired": {
+              "const": true
             }
           }
         },
@@ -157,7 +171,8 @@
             "recoveryReadbackProofRequired",
             "recoveryReadbackMustVerifyArtifact",
             "integrityCheckRequired",
-            "foreignKeyCheckRequired"
+            "foreignKeyCheckRequired",
+            "trustedPrestateRecoveryEvidenceVerificationRequired"
           ],
           "properties": {
             "id": {
@@ -180,6 +195,9 @@
             },
             "foreignKeyCheckRequired": {
               "const": true
+            },
+            "trustedPrestateRecoveryEvidenceVerificationRequired": {
+              "const": true
             }
           }
         },
@@ -193,7 +211,8 @@
             "executionCapabilityMustBeBounded",
             "unknownExecutorMayRetainAuthoritativeWriteCapability",
             "nonDatabaseProductionMutationAllowed",
-            "unprovenBoundaryOutcome"
+            "trustedExecutionBoundaryEvidenceVerificationRequired",
+            "unprovenBoundaryDisposition"
           ],
           "properties": {
             "id": {
@@ -214,8 +233,11 @@
             "nonDatabaseProductionMutationAllowed": {
               "const": false
             },
-            "unprovenBoundaryOutcome": {
-              "const": "UNKNOWN"
+            "unprovenBoundaryDisposition": {
+              "const": "DO_NOT_EXECUTE"
+            },
+            "trustedExecutionBoundaryEvidenceVerificationRequired": {
+              "const": true
             }
           }
         },
@@ -228,6 +250,9 @@
             "committedRequiresSchema11Verification",
             "rolledBackRequiresPrestateRestorationVerification",
             "unclassifiableOutcome",
+            "terminalReceiptRequired",
+            "terminalSemanticValidationRequired",
+            "trustedTerminalEvidenceVerificationRequired",
             "automaticRetryAllowed",
             "otherOutcomesAllowed"
           ],
@@ -266,6 +291,15 @@
             },
             "unclassifiableOutcome": {
               "const": "UNKNOWN"
+            },
+            "terminalReceiptRequired": {
+              "const": true
+            },
+            "terminalSemanticValidationRequired": {
+              "const": true
+            },
+            "trustedTerminalEvidenceVerificationRequired": {
+              "const": true
             }
           }
         },
@@ -331,6 +365,12 @@
       "items": false,
       "minItems": 5,
       "maxItems": 5
+    },
+    "g3ReceiptSchema": {
+      "const": "contracts/g3-schema11-cutover-receipt.v1.schema.json"
+    },
+    "g3SemanticValidatorModule": {
+      "const": "src/g3-schema11-cutover-contract-v1.mjs"
     }
   }
 }

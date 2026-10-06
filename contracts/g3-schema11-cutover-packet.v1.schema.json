@@ -1,20 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://jenn.local/contracts/g3-schema11-cutover-packet-v1.schema.json",
-  "title": "G3 Schema 11 Cutover Packet v1",
+  "title": "G3 Schema 11 Executable Cutover Packet v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schemaVersion",
     "packetId",
     "contractId",
-    "authorityHead",
-    "artifact",
     "authorityTarget",
-    "target",
-    "prestate",
-    "writerContainment",
-    "execution"
+    "authorityTargetDigest",
+    "authorization"
   ],
   "properties": {
     "schemaVersion": {
@@ -27,236 +23,199 @@
     "contractId": {
       "const": "G2_MINIMAL_RELEASE_CONTRACT_V1"
     },
-    "authorityHead": {
-      "type": "string",
-      "pattern": "^[a-f0-9]{40}$"
-    },
     "authorityTarget": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "digest",
-        "authorization"
+        "authorityHead",
+        "artifact",
+        "target",
+        "prestate",
+        "writerContainment",
+        "execution"
       ],
       "properties": {
-        "digest": {
-          "type": "string",
-          "pattern": "^sha256:[a-f0-9]{64}$"
-        },
-        "authorization": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "status",
-            "humanApprovalRequired",
-            "approvalRef"
-          ],
-          "properties": {
-            "status": {
-              "enum": [
-                "NOT_REQUESTED",
-                "APPROVED"
-              ]
-            },
-            "humanApprovalRequired": {
-              "const": true
-            },
-            "approvalRef": {
-              "oneOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "type": "string",
-                  "pattern": "^[A-Za-z0-9_-]{1,160}$"
-                }
-              ]
-            }
-          },
-          "allOf": [
-            {
-              "if": {
-                "properties": {
-                  "status": {
-                    "const": "NOT_REQUESTED"
-                  }
-                },
-                "required": [
-                  "status"
-                ]
-              },
-              "then": {
-                "properties": {
-                  "approvalRef": {
-                    "type": "null"
-                  }
-                }
-              }
-            },
-            {
-              "if": {
-                "properties": {
-                  "status": {
-                    "const": "APPROVED"
-                  }
-                },
-                "required": [
-                  "status"
-                ]
-              },
-              "then": {
-                "properties": {
-                  "approvalRef": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9_-]{1,160}$"
-                  }
-                }
-              }
-            }
-          ]
-        }
-      }
-    },
-    "artifact": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "sourceCommit",
-        "imageDigest",
-        "migrationVersion",
-        "migrationName",
-        "migrationChecksum"
-      ],
-      "properties": {
-        "sourceCommit": {
+        "authorityHead": {
           "type": "string",
           "pattern": "^[a-f0-9]{40}$"
         },
-        "imageDigest": {
-          "type": "string",
-          "pattern": "^sha256:[a-f0-9]{64}$"
+        "artifact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sourceCommit",
+            "imageDigest",
+            "migrationVersion",
+            "migrationName",
+            "migrationChecksum"
+          ],
+          "properties": {
+            "sourceCommit": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40}$"
+            },
+            "imageDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "migrationVersion": {
+              "const": 11
+            },
+            "migrationName": {
+              "const": "business_calendar_and_reschedule"
+            },
+            "migrationChecksum": {
+              "const": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8"
+            }
+          }
         },
-        "migrationVersion": {
-          "const": 11
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "targetBindingDigest",
+            "activeDatabaseFamilyDigest"
+          ],
+          "properties": {
+            "targetBindingDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "activeDatabaseFamilyDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            }
+          }
         },
-        "migrationName": {
-          "const": "business_calendar_and_reschedule"
+        "prestate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "capturedAt",
+            "recoveryArtifactDigest",
+            "recoveryReadbackProofDigest",
+            "recoveryReadbackVerified",
+            "integrityCheck",
+            "foreignKeyViolationCount"
+          ],
+          "properties": {
+            "capturedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "recoveryArtifactDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "recoveryReadbackProofDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "recoveryReadbackVerified": {
+              "const": true
+            },
+            "integrityCheck": {
+              "const": "ok"
+            },
+            "foreignKeyViolationCount": {
+              "const": 0
+            }
+          }
         },
-        "migrationChecksum": {
-          "const": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8"
+        "writerContainment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "durableDisableReceiptDigest",
+            "inFlightWriterCount",
+            "drainProofDigest",
+            "processLifetimeIsAuthority",
+            "executionBoundaryProofDigest",
+            "unknownExecutorHasAuthoritativeWriteCapability",
+            "nonDatabaseProductionMutationAllowed"
+          ],
+          "properties": {
+            "durableDisableReceiptDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "inFlightWriterCount": {
+              "const": 0
+            },
+            "drainProofDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "processLifetimeIsAuthority": {
+              "const": false
+            },
+            "executionBoundaryProofDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "unknownExecutorHasAuthoritativeWriteCapability": {
+              "const": false
+            },
+            "nonDatabaseProductionMutationAllowed": {
+              "const": false
+            }
+          }
+        },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "entrypointId",
+            "operationId",
+            "automaticRetryAllowed"
+          ],
+          "properties": {
+            "entrypointId": {
+              "const": "G3_SCHEMA11_CUTOVER"
+            },
+            "operationId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+            },
+            "automaticRetryAllowed": {
+              "const": false
+            }
+          }
         }
       }
     },
-    "target": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "targetBindingDigest",
-        "activeDatabaseFamilyDigest"
-      ],
-      "properties": {
-        "targetBindingDigest": {
-          "type": "string",
-          "pattern": "^sha256:[a-f0-9]{64}$"
-        },
-        "activeDatabaseFamilyDigest": {
-          "type": "string",
-          "pattern": "^sha256:[a-f0-9]{64}$"
-        }
-      }
+    "authorityTargetDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
     },
-    "prestate": {
+    "authorization": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "capturedAt",
-        "recoveryArtifactDigest",
-        "recoveryReadbackProofDigest",
-        "recoveryReadbackVerified",
-        "integrityCheck",
-        "foreignKeyViolationCount"
+        "status",
+        "humanApprovalRequired",
+        "approvalRef",
+        "approvedAuthorityTargetDigest",
+        "approvalEvidenceDigest"
       ],
       "properties": {
-        "capturedAt": {
-          "type": "string",
-          "format": "date-time"
+        "status": {
+          "const": "APPROVED"
         },
-        "recoveryArtifactDigest": {
-          "type": "string",
-          "pattern": "^sha256:[a-f0-9]{64}$"
-        },
-        "recoveryReadbackProofDigest": {
-          "type": "string",
-          "pattern": "^sha256:[a-f0-9]{64}$"
-        },
-        "recoveryReadbackVerified": {
+        "humanApprovalRequired": {
           "const": true
         },
-        "integrityCheck": {
-          "const": "ok"
+        "approvalRef": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,160}$"
         },
-        "foreignKeyViolationCount": {
-          "const": 0
-        }
-      }
-    },
-    "writerContainment": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "durableDisableReceiptDigest",
-        "inFlightWriterCount",
-        "drainProofDigest",
-        "processLifetimeIsAuthority",
-        "executionBoundaryProofDigest",
-        "unknownExecutorHasAuthoritativeWriteCapability",
-        "nonDatabaseProductionMutationAllowed"
-      ],
-      "properties": {
-        "durableDisableReceiptDigest": {
+        "approvedAuthorityTargetDigest": {
           "type": "string",
           "pattern": "^sha256:[a-f0-9]{64}$"
         },
-        "inFlightWriterCount": {
-          "const": 0
-        },
-        "drainProofDigest": {
+        "approvalEvidenceDigest": {
           "type": "string",
           "pattern": "^sha256:[a-f0-9]{64}$"
-        },
-        "processLifetimeIsAuthority": {
-          "const": false
-        },
-        "executionBoundaryProofDigest": {
-          "type": "string",
-          "pattern": "^sha256:[a-f0-9]{64}$"
-        },
-        "unknownExecutorHasAuthoritativeWriteCapability": {
-          "const": false
-        },
-        "nonDatabaseProductionMutationAllowed": {
-          "const": false
-        }
-      }
-    },
-    "execution": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "entrypointId",
-        "operationId",
-        "automaticRetryAllowed"
-      ],
-      "properties": {
-        "entrypointId": {
-          "const": "G3_SCHEMA11_CUTOVER"
-        },
-        "operationId": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
-        },
-        "automaticRetryAllowed": {
-          "const": false
         }
       }
     }

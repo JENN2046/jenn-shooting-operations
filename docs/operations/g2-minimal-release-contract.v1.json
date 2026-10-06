@@ -21,7 +21,7 @@
       "durableNormalWriterDisableRequired": true,
       "inFlightWriterDrainRequired": true,
       "processLifetimeMayCarryAuthority": false,
-      "unprovenContainmentOutcome": "UNKNOWN"
+      "unprovenContainmentDisposition": "DO_NOT_EXECUTE"
     },
     {
       "id": "G2_I2_EXACT_ARTIFACT_BINDING",
@@ -30,7 +30,10 @@
       "exactMigrationChecksumRequired": true,
       "exactAuthorityTargetDigestRequired": true,
       "humanApprovalBoundToAuthorityTargetRequired": true,
-      "artifactDriftAllowed": false
+      "artifactDriftAllowed": false,
+      "semanticApprovalBindingValidationRequired": true,
+      "trustedApprovalVerificationRequired": true,
+      "trustedArtifactBindingVerificationRequired": true
     },
     {
       "id": "G2_I3_VERIFIED_PRESTATE_RECOVERY",
@@ -39,7 +42,8 @@
       "recoveryReadbackProofRequired": true,
       "recoveryReadbackMustVerifyArtifact": true,
       "integrityCheckRequired": true,
-      "foreignKeyCheckRequired": true
+      "foreignKeyCheckRequired": true,
+      "trustedPrestateRecoveryEvidenceVerificationRequired": true
     },
     {
       "id": "G2_I4_EXPLICIT_CUTOVER_ENTRY",
@@ -48,7 +52,8 @@
       "executionCapabilityMustBeBounded": true,
       "unknownExecutorMayRetainAuthoritativeWriteCapability": false,
       "nonDatabaseProductionMutationAllowed": false,
-      "unprovenBoundaryOutcome": "UNKNOWN"
+      "trustedExecutionBoundaryEvidenceVerificationRequired": true,
+      "unprovenBoundaryDisposition": "DO_NOT_EXECUTE"
     },
     {
       "id": "G2_I5_TERMINAL_OUTCOME_MODEL",
@@ -61,7 +66,10 @@
       "rolledBackRequiresPrestateRestorationVerification": true,
       "unclassifiableOutcome": "UNKNOWN",
       "automaticRetryAllowed": false,
-      "otherOutcomesAllowed": false
+      "otherOutcomesAllowed": false,
+      "terminalReceiptRequired": true,
+      "terminalSemanticValidationRequired": true,
+      "trustedTerminalEvidenceVerificationRequired": true
     },
     {
       "id": "G2_I6_UNKNOWN_BLOCKS_READMISSION",
@@ -80,5 +88,7 @@
     "NO_AUTOMATIC_RETRY_AFTER_UNKNOWN",
     "NO_PROCESS_LIFETIME_AS_DURABLE_AUTHORITY",
     "NO_NEW_GATE_FAMILY"
-  ]
+  ],
+  "g3ReceiptSchema": "contracts/g3-schema11-cutover-receipt.v1.schema.json",
+  "g3SemanticValidatorModule": "src/g3-schema11-cutover-contract-v1.mjs"
 }

@@ -14,11 +14,11 @@ historical PROD/GF/C01/custody gate family.
 
 | ID | Frozen rule |
 | --- | --- |
-| `G2_I1_DURABLE_WRITER_CONTAINMENT` | Normal writers must be durably disabled and all in-flight writers drained before cutover. Process lifetime is not authority. If containment cannot be proven, outcome is `UNKNOWN`. |
-| `G2_I2_EXACT_ARTIFACT_BINDING` | G3 must bind one exact source commit, image digest, Schema 11 migration checksum and one authority-target object. Human approval is structurally bound inside that exact target object. Drift is forbidden. |
-| `G2_I3_VERIFIED_PRESTATE_RECOVERY` | G3 requires an exact active-database-family digest, recovery artifact, an independent readback proof that verifies that artifact, SQLite integrity check and zero FK violations. |
-| `G2_I4_EXPLICIT_CUTOVER_ENTRY` | Ordinary runtime cannot perform 10→11. Only `G3_SCHEMA11_CUTOVER` may enter the transition. The execution capability must be bounded so an UNKNOWN executor cannot retain authoritative write capability; non-database production mutation is forbidden. |
-| `G2_I5_TERMINAL_OUTCOME_MODEL` | The only outcomes are `COMMITTED`, `ROLLED_BACK`, or `UNKNOWN`. COMMITTED requires verified Schema 11; ROLLED_BACK requires verified restoration of the pre-state; anything unclassifiable is UNKNOWN. Automatic retry is forbidden. |
+| `G2_I1_DURABLE_WRITER_CONTAINMENT` | Normal writers must be durably disabled and all in-flight writers drained before cutover. Process lifetime is not authority. If containment cannot be proven, the cutover is **not executed**. |
+| `G2_I2_EXACT_ARTIFACT_BINDING` | G3 must bind one exact source commit, image digest, Schema 11 migration checksum and one authority-target object. Human approval must bind the computed digest of that complete target, and trusted verification must confirm both artifact evidence and approval evidence. Drift is forbidden. |
+| `G2_I3_VERIFIED_PRESTATE_RECOVERY` | G3 requires an exact active-database-family digest, recovery artifact, an independent readback proof that verifies that artifact, SQLite integrity check and zero FK violations. These are trusted evidence, not self-asserted digest-shaped strings. |
+| `G2_I4_EXPLICIT_CUTOVER_ENTRY` | Ordinary runtime cannot perform 10→11. Only `G3_SCHEMA11_CUTOVER` may enter the transition. The execution capability must be bounded and trusted-verifiable so an UNKNOWN executor cannot retain authoritative write capability; if this boundary is unproven, **do not execute**. Non-database production mutation is forbidden. |
+| `G2_I5_TERMINAL_OUTCOME_MODEL` | After an admitted attempt, the only outcomes are `COMMITTED`, `ROLLED_BACK`, or `UNKNOWN`. COMMITTED requires trusted verification of Schema 11; ROLLED_BACK requires trusted verification of exact pre-state restoration; anything unclassifiable is UNKNOWN. Automatic retry is forbidden. |
 | `G2_I6_UNKNOWN_BLOCKS_READMISSION` | `UNKNOWN` keeps normal writes disabled. Human reconciliation plus fresh readmission evidence is required before re-enable. |
 
 ## Exact Schema 11 binding
@@ -36,20 +36,37 @@ pretend those future artifacts already exist.
 
 ## G3 packet boundary
 
-The future execution packet is defined by:
+The future executable packet, terminal receipt and semantic validator are defined by:
 
-`contracts/g3-schema11-cutover-packet.v1.schema.json`
+- `contracts/g3-schema11-cutover-packet.v1.schema.json`
+- `contracts/g3-schema11-cutover-receipt.v1.schema.json`
+- `src/g3-schema11-cutover-contract-v1.mjs`
 
-A packet is invalid unless it includes all of these classes of proof:
+The executable packet schema accepts **APPROVED only**. A packet is invalid unless it includes all of these classes of proof:
 
 1. exact artifact identity;
 2. exact production target binding;
 3. verified pre-state and recovery readback;
 4. durable writer-disable receipt and zero in-flight writer proof;
 5. the single explicit G3 entrypoint and no automatic retry;
-6. explicit human authorization nested inside the exact authority-target object before execution.
+6. explicit human authorization whose approved target digest equals the computed digest of the complete authority target.
 
-The schema deliberately does **not** choose systemd, flock, process custody, clone/swap, or another
+The semantic validator computes the authority-target digest from the exact authority head, artifact, production target,
+pre-state/recovery evidence, writer containment and execution fields. It requires injected **trusted authority-evidence** and
+**trusted approval** verifiers; schema-valid JSON and digest-shaped strings alone are never authority. Changing any target field
+invalidates the approval unless the trusted approval source verifies a new approval record for that exact computed digest.
+If the target/recovery/containment/boundary evidence cannot be independently verified at the execution boundary, the packet is
+inadmissible and the cutover is not started.
+
+After an admitted attempt, a terminal receipt is mandatory and must also pass a **trusted terminal-evidence verifier**. It admits only:
+
+- `COMMITTED` with verified Schema 11 / post-state evidence;
+- `ROLLED_BACK` with verified restoration evidence matching the exact pre-state digest;
+- `UNKNOWN` with writes still disabled, authoritative write capability absent, reconciliation required and retry forbidden.
+
+Anything that cannot satisfy COMMITTED or ROLLED_BACK must be represented as UNKNOWN.
+
+The schemas deliberately do **not** choose systemd, flock, process custody, clone/swap, or another
 physical implementation. G3 may choose a bounded mechanism only after fresh production facts are observed.
 That mechanism must prove that controller loss / UNKNOWN cannot leave an executor with authoritative write
 capability. A process merely staying alive, holding a lock, or being paused is not such proof.
@@ -75,6 +92,12 @@ node --test tests/g2-minimal-release-contract.test.mjs
 
 The validator also checks that the frozen migration name/checksum still match the live Schema 11
 definition in source. A later source change therefore cannot silently leave the release contract stale.
+
+Current local validation on Node 24.21.0:
+
+- G2 validator: **PASS**;
+- G2 contract/packet/receipt tests: **7 / 7 PASS**;
+- full repository suite: **1035 total, 1034 PASS, 0 FAIL, 1 existing conditional skip**.
 
 ## G2 exit
 

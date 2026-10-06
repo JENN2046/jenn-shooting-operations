@@ -9,6 +9,7 @@ import { parseProductionManifestJson } from '../src/production-manifest-json-v1.
 const CONTRACT_URL = new URL('../docs/operations/g2-minimal-release-contract.v1.json', import.meta.url);
 const CONTRACT_SCHEMA_URL = new URL('../contracts/g2-minimal-release-contract.v1.schema.json', import.meta.url);
 const G3_PACKET_SCHEMA_URL = new URL('../contracts/g3-schema11-cutover-packet.v1.schema.json', import.meta.url);
+const G3_RECEIPT_SCHEMA_URL = new URL('../contracts/g3-schema11-cutover-receipt.v1.schema.json', import.meta.url);
 
 function fail(code) {
   console.error(JSON.stringify({ status: 'G2_MINIMAL_RELEASE_CONTRACT_INVALID', code }));
@@ -22,19 +23,22 @@ function parse(bytes) {
 }
 
 try {
-  const [contractBytes, contractSchemaBytes, packetSchemaBytes] = await Promise.all([
+  const [contractBytes, contractSchemaBytes, packetSchemaBytes, receiptSchemaBytes] = await Promise.all([
     readFile(CONTRACT_URL),
     readFile(CONTRACT_SCHEMA_URL),
     readFile(G3_PACKET_SCHEMA_URL),
+    readFile(G3_RECEIPT_SCHEMA_URL),
   ]);
   const contract = parse(contractBytes);
   const contractSchema = parse(contractSchemaBytes);
   const packetSchema = parse(packetSchemaBytes);
+  const receiptSchema = parse(receiptSchemaBytes);
 
   const ajv = new Ajv2020({ allErrors: true, strict: true });
   addFormats(ajv);
   const validateContract = ajv.compile(contractSchema);
   ajv.compile(packetSchema);
+  ajv.compile(receiptSchema);
 
   if (!validateContract(contract)) {
     fail('SCHEMA_VALIDATION_FAILED');
