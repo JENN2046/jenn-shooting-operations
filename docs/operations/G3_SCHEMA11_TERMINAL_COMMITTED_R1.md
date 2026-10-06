@@ -103,7 +103,7 @@ sha256:ce80ae31d1bc38f15b90ae8dc77f026c8fb745cb217b5e2708a6d0db03ba4aea
 ```
 
 The repository validator independently re-verifies the R2 Ed25519 approval, frozen packet/target,
-attempt identity, detailed terminal evidence digests and the existing G2/G3 terminal receipt semantic contract.
+attempt identity, detailed terminal evidence digests and the existing G2/G3 terminal receipt semantic contract. It also recomputes the target-binding digest from `targetBindingEvidence`, requires it to match the signed authority target, and exact-pins both Schema11 observations to the frozen production database path.
 
 ## What this does not authorize
 

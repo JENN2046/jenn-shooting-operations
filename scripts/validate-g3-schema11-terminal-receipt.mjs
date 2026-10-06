@@ -15,6 +15,8 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 const EXPECTED = Object.freeze({
   target: 'sha256:10ce21ebeb207afa556a48c215439077736af242cd312a49783b1136fe046ab5',
+  productionDbPath:
+    '/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data/shooting-operations.sqlite',
   executor: 'sha256:a87eca97276b9f38a2d5cee6d5e8bb1ad17ba9f883d6224d2145fcc0c2ffc2a4',
   approvalEvidence: 'sha256:21c4a02bf69fbe2ab8cd6e1cc178b87e74900f9bb547cf1dd69809433332aa4b',
   activeDb: 'sha256:0eae48b85f362cf1064f92e14511865fe7fd68dbc13a85d4c6efd6e656e736d9',
@@ -44,8 +46,15 @@ try {
   ]);
   const attemptRecord = JSON.parse(attemptRecordBytes.toString('utf8'));
   const attemptRecordDigest = sha256(attemptRecordBytes);
+  const targetBindingDigest = digestCanonicalJsonSchedulingV1({
+    domain: 'g3-schema11-target-binding-v1',
+    targetBindingEvidence: prep.targetBindingEvidence,
+  });
 
-  if (prep.authorityTargetDigest !== EXPECTED.target
+  if (prep.targetBindingEvidence.databasePath !== EXPECTED.productionDbPath
+    || prep.targetBindingDigest !== targetBindingDigest
+    || prep.authorityTarget.target.targetBindingDigest !== targetBindingDigest
+    || prep.authorityTargetDigest !== EXPECTED.target
     || digestG3AuthorityTargetV1(prep.authorityTarget) !== EXPECTED.target
     || packet.authorityTargetDigest !== EXPECTED.target
     || !same(packet.authorityTarget, prep.authorityTarget)
@@ -111,7 +120,7 @@ try {
   const sv = terminal.schemaVerificationEvidence;
   const ps = terminal.postStateEvidence;
   const at = ps.attempt;
-  const productionDbPath = prep.targetBindingEvidence.databasePath;
+  const productionDbPath = EXPECTED.productionDbPath;
   const expectedAttemptPath =
     '/mnt/datadisk0/g3-schema11-cutover/attempts/aa9c7a4c2ad48ed6e808a48c6e24790ff0c5d25883536ab2bfd27e0f6447b6c6.json';
   const attemptKeys = Object.keys(attemptRecord).sort();
