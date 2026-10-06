@@ -56,7 +56,10 @@
       "unprovenBoundaryDisposition": "DO_NOT_EXECUTE",
       "durableAttemptLedgerRequired": true,
       "oneShotAttemptClaimBeforeExecutionRequired": true,
-      "attemptReplayDisposition": "RECONCILIATION_REQUIRED"
+      "attemptReplayDisposition": "RECONCILIATION_REQUIRED",
+      "attemptReplayIdentity": "operationId+authorityTargetDigest",
+      "packetIdPartitionsReplayIdentity": false,
+      "attemptRecordBindsExactPacketId": true
     },
     {
       "id": "G2_I5_TERMINAL_OUTCOME_MODEL",

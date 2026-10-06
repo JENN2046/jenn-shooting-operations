@@ -79,6 +79,9 @@ test('G2 rejects relaxation of containment, approval binding, recovery, outcomes
     changed(v => { v.invariants[3].durableAttemptLedgerRequired = false; }),
     changed(v => { v.invariants[3].oneShotAttemptClaimBeforeExecutionRequired = false; }),
     changed(v => { v.invariants[3].attemptReplayDisposition = 'RETRY_ALLOWED'; }),
+    changed(v => { v.invariants[3].attemptReplayIdentity = 'packetId+operationId+authorityTargetDigest'; }),
+    changed(v => { v.invariants[3].packetIdPartitionsReplayIdentity = true; }),
+    changed(v => { v.invariants[3].attemptRecordBindsExactPacketId = false; }),
     changed(v => { v.invariants[3].unprovenBoundaryDisposition = 'UNKNOWN'; }),
     changed(v => { v.invariants[4].committedRequiresSchema11Verification = false; }),
     changed(v => { v.invariants[4].rolledBackRequiresPrestateRestorationVerification = false; }),
@@ -149,19 +152,20 @@ const verifyApproval = value => value.approvalRef === trustedApproval.approvalRe
   && value.approvalEvidenceDigest === trustedApproval.approvalEvidenceDigest;
 const verifyAuthorityTargetEvidence = () => true;
 const verifyTerminalEvidence = () => true;
-const attemptKey = value =>
-  `${value.packetId}\n${value.operationId}\n${value.authorityTargetDigest}`;
-
 function createTestG3(overrides = {}) {
-  const started = new Set();
+  const started = new Map();
   const claimExecutionAttempt = overrides.claimExecutionAttempt ?? (value => {
-    const key = attemptKey(value);
-    if (started.has(key)) return { ok: false, code: 'ATTEMPT_ALREADY_STARTED' };
-    started.add(key);
+    if (started.has(value.replayKey)) return { ok: false, code: 'ATTEMPT_ALREADY_STARTED' };
+    started.set(value.replayKey, structuredClone(value));
     return { ok: true };
   });
   const verifyExecutionAttemptStarted = overrides.verifyExecutionAttemptStarted
-    ?? (value => started.has(attemptKey(value)));
+    ?? (value => {
+      const prior = started.get(value.replayKey);
+      return prior?.packetId === value.packetId
+        && prior?.operationId === value.operationId
+        && prior?.authorityTargetDigest === value.authorityTargetDigest;
+    });
   const g3 = createG3Schema11CutoverContractV1({
     packetSchema,
     receiptSchema,
@@ -398,5 +402,27 @@ test('UNKNOWN terminal state never makes the same packet executable again', () =
   assert.equal(
     g3.admitExecutablePacket(packet).code,
     'G3_EXECUTION_ATTEMPT_ALREADY_STARTED',
+  );
+});
+
+test('changing only packetId cannot partition the durable one-shot replay identity', () => {
+  const { packet, receipt } = makeReceipt('UNKNOWN');
+  const { g3 } = createTestG3();
+  assert.equal(g3.admitExecutablePacket(packet).ok, true);
+
+  const rebound = structuredClone(packet);
+  rebound.packetId = 'G3-SCHEMA11-CUTOVER-002';
+  assert.equal(validatePacketSchema(rebound), true, JSON.stringify(validatePacketSchema.errors));
+  assert.equal(
+    g3.admitExecutablePacket(rebound).code,
+    'G3_EXECUTION_ATTEMPT_ALREADY_STARTED',
+  );
+
+  const reboundReceipt = structuredClone(receipt);
+  reboundReceipt.packetId = rebound.packetId;
+  assert.equal(validateReceiptSchema(reboundReceipt), true, JSON.stringify(validateReceiptSchema.errors));
+  assert.equal(
+    g3.validateTerminalReceipt(rebound, reboundReceipt).code,
+    'G3_EXECUTION_ATTEMPT_NOT_FOUND',
   );
 });

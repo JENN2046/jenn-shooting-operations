@@ -215,7 +215,10 @@
             "unprovenBoundaryDisposition",
             "durableAttemptLedgerRequired",
             "oneShotAttemptClaimBeforeExecutionRequired",
-            "attemptReplayDisposition"
+            "attemptReplayDisposition",
+            "attemptReplayIdentity",
+            "packetIdPartitionsReplayIdentity",
+            "attemptRecordBindsExactPacketId"
           ],
           "properties": {
             "id": {
@@ -250,6 +253,15 @@
             },
             "attemptReplayDisposition": {
               "const": "RECONCILIATION_REQUIRED"
+            },
+            "attemptReplayIdentity": {
+              "const": "operationId+authorityTargetDigest"
+            },
+            "packetIdPartitionsReplayIdentity": {
+              "const": false
+            },
+            "attemptRecordBindsExactPacketId": {
+              "const": true
             }
           }
         },

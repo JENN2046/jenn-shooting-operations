@@ -83,9 +83,16 @@ export function createG3Schema11CutoverContractV1({
   }
 
   function attemptIdentity(packet, authorityTargetDigest) {
+    const operationId = packet.authorityTarget.execution.operationId;
+    const replayKey = digestCanonicalJsonSchedulingV1({
+      domain: 'g3-schema11-execution-attempt-v1',
+      operationId,
+      authorityTargetDigest,
+    });
     return frozenClone({
+      replayKey,
       packetId: packet.packetId,
-      operationId: packet.authorityTarget.execution.operationId,
+      operationId,
       authorityTargetDigest,
     });
   }
