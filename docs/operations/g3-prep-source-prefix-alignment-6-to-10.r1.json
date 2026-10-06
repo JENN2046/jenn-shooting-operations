@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "actionId": "G3_PREP_SOURCE_PREFIX_ALIGNMENT_6_TO_10",
+  "status": "ALIGNED_TO_10_CONTAINED",
+  "authority": {
+    "canonicalBranch": "codex/v2-1-architecture-freeze",
+    "authorityHead": "26a3390035fa209bbd1a926a3ebb1bb0df486935",
+    "sourcePrefixAlignmentAuthorized": true,
+    "schema11CutoverAuthorized": false
+  },
+  "scope": {
+    "sourceSchemaVersion": 6,
+    "targetSchemaVersion": 10,
+    "migration11Allowed": false,
+    "normalWriterReadmissionAllowed": false
+  },
+  "artifact": {
+    "sourceCommit": "6334e2ae851247cb1558074fbd80cfee06b28c11",
+    "candidateImageDigest": "sha256:581e9fa25e04b582aa39c2fdaa291f6db3e80fc3f3ac15a8a4afa06622442144",
+    "architecture": "amd64",
+    "productionImageLoaded": true,
+    "executionScriptDigest": "sha256:ce48facc88364b5028297d20c2e1f4d85d593c29a8d226caa943bbca5875c9df"
+  },
+  "target": {
+    "provider": "TENCENT_CLOUD_CVM",
+    "instanceId": "ins-mi85f3my",
+    "hostname": "VM-0-12-ubuntu",
+    "containerName": "jenn-shooting-operations-prod",
+    "containerId": "b29798598ac043794420599c23f735c19038744a76f1b490b3e8c5a58e28e6be",
+    "priorImageDigest": "sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545",
+    "dataVolumeName": "jenn-shooting-operations_shooting_data",
+    "databasePath": "/app/data/shooting-operations.sqlite"
+  },
+  "preExecution": {
+    "observedAt": "2026-10-06T09:25:10Z",
+    "schemaVersion": 6,
+    "migrationCount": 6,
+    "integrityCheck": "ok",
+    "foreignKeyViolationCount": 0,
+    "writeAdmissionMode": "enabled",
+    "orphanCleanupMode": "enabled"
+  },
+  "containment": {
+    "priorRestartPolicy": "unless-stopped",
+    "currentRestartPolicy": "no",
+    "oldContainerRunning": false,
+    "runningVolumeUsers": 0,
+    "normalWritersBlocked": true,
+    "stoppedBeforeMutation": true
+  },
+  "schema6Recovery": {
+    "verified": true,
+    "byteReadbackVerified": true,
+    "restoredSchemaVersion": 6,
+    "integrityCheck": "ok",
+    "foreignKeyViolationCount": 0,
+    "familyObservationDigest": "sha256:5ec5c0a3685236bf73553eeb85b4967a11961cecae7ec337e4663ca364104a06",
+    "sourceManifestDigest": "sha256:9dd47a5668ea027cd928814fff2be84ae06c426cf2c8eb14e3717304028aa587",
+    "recoveryArtifactDigest": "sha256:5c7e9a17d9762e8fb31d534e03ea2285182e44a82ddbaf6863f10b655989b103"
+  },
+  "appliedPrefix": [
+    {
+      "version": 7,
+      "name": "gf15_bounded_capabilities",
+      "checksum": "sha256:b9e8bed840ee71a300977e2e89039c96e1a5270e5ca4edbc98e41b27b7909b19"
+    },
+    {
+      "version": 8,
+      "name": "kiosk_bounded_smoke",
+      "checksum": "sha256:44e999a608bd257ffb9db7ee0f10d7b42932afdccf0463757cf333443e02c448"
+    },
+    {
+      "version": 9,
+      "name": "kiosk_smoke_runtime_ownership",
+      "checksum": "sha256:ab2ac08cfb8510124d9ac64fe38353e0117e754d0266e8d1f150d34f3929c88e"
+    },
+    {
+      "version": 10,
+      "name": "empty_db_maintenance_receipts",
+      "checksum": "sha256:992f3dee7f23780f407b5f1445413e3d801dcab0bafe8fdac29ee4730e3243aa"
+    }
+  ],
+  "result": {
+    "observedAt": "2026-10-06T09:33:57Z",
+    "schemaVersion": 10,
+    "migrationCount": 10,
+    "migration11Count": 0,
+    "integrityCheck": "ok",
+    "foreignKeyViolationCount": 0,
+    "outcome": "ALIGNED_TO_10",
+    "productionServiceRunning": false,
+    "normalWritersBlocked": true
+  },
+  "schema10PrestateRecovery": {
+    "authoritative": true,
+    "verified": true,
+    "byteReadbackVerified": true,
+    "restoredSchemaVersion": 10,
+    "migration11Count": 0,
+    "integrityCheck": "ok",
+    "foreignKeyViolationCount": 0,
+    "familyObservationDigest": "sha256:d294f752d51bc6091aef932a52774163815178a0a6aacfc10ea994fab66d8212",
+    "sourceManifestDigest": "sha256:1c12912586639127f2192e1bf72bdc1f28c04d5be81dc985969300e237a6dd0b",
+    "recoveryArtifactDigest": "sha256:f2e643317a152600c8bf864648cec095ad57ba398c804feb35f9338a7073cfef"
+  },
+  "nextState": {
+    "sourceSchemaMismatchCleared": true,
+    "g3ExecutablePacketStatus": "NOT_CREATED",
+    "humanApprovalStatus": "NOT_REQUESTED",
+    "schema11CutoverStatus": "NOT_AUTHORIZED_NOT_STARTED",
+    "nextAction": "CONTINUE_G3_SCHEMA11_CUTOVER_PREPARATION"
+  },
+  "prohibitions": [
+    "NO_SCHEMA11_MIGRATION_IN_SOURCE_PREFIX_ALIGNMENT",
+    "NO_NORMAL_WRITER_READMISSION",
+    "NO_AUTOMATIC_RETRY",
+    "NO_OLD_SCHEMA6_CONTAINER_RESTART",
+    "NO_SCHEMA11_CUTOVER_WITHOUT_SEPARATE_EXACT_AUTHORIZATION"
+  ]
+}

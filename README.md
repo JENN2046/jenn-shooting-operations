@@ -19,16 +19,21 @@ Jenn Shooting Operations 是 `jenn-shooting-planner` 的独立协作服务边界
 
 ## 当前阶段
 
-**G1 CORE_CANONICAL / G2 MINIMAL_RELEASE_CONTRACT 已关闭**。当前 canonical authority 为
-`codex/v2-1-architecture-freeze @ 6334e2ae851247cb1558074fbd80cfee06b28c11`。
+**G1 CORE_CANONICAL / G2 MINIMAL_RELEASE_CONTRACT 已关闭**。本次生产前置动作以
+`codex/v2-1-architecture-freeze @ 26a3390035fa209bbd1a926a3ebb1bb0df486935`
+为 authority base。
 
-当前 Gate 是 **G3 SCHEMA11_CUTOVER Preparation**。Fresh production observation 已确认生产仍在 Schema 6，
-而 G2 冻结的 cutover source 是 Schema 10，因此当前状态为 **BLOCKED_SOURCE_SCHEMA_MISMATCH**。
-现阶段只允许证据采集、artifact 准备与前置动作设计；Schema 11 cutover、生产写、writer containment mutation
-和 source-prefix 6→10 对齐都没有获得授权。历史 PROD/GF 记录只作为 provenance。
+当前 Gate 仍是 **G3 SCHEMA11_CUTOVER Preparation**。已授权并完成
+`G3_PREP_SOURCE_PREFIX_ALIGNMENT_6_TO_10`：生产数据库由 Schema 6 对齐到 Schema 10，
+migration 11 保持不存在，`integrity_check=ok`、FK violation=0，并在 normal writers 继续被
+contain 的状态下建立了独立验证的 Schema-10 recovery artifact。
+
+**BLOCKED_SOURCE_SCHEMA_MISMATCH 已清除。** 但 Schema 11 cutover 仍未授权、未开始；
+executable G3 packet 仍未创建，旧 Schema-6 生产容器保持 stopped / restart=no，不能重新启动。
 
 ## 入口
 
+- [G3 Source-Prefix Alignment 6→10 R1](docs/operations/G3_PREP_SOURCE_PREFIX_ALIGNMENT_6_TO_10_R1.md)
 - [G3 Schema 11 Cutover Preparation R1](docs/operations/G3_SCHEMA11_CUTOVER_PREPARATION_R1.md)
 - [G2 Minimal Release Contract](docs/operations/G2_MINIMAL_RELEASE_CONTRACT.md)
 - [JSO Core Canonical R1](docs/JSO_CORE_CANONICAL_R1.md)
