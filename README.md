@@ -20,19 +20,22 @@ Jenn Shooting Operations 是 `jenn-shooting-planner` 的独立协作服务边界
 ## 当前阶段
 
 **G1 CORE_CANONICAL / G2 MINIMAL_RELEASE_CONTRACT 已关闭**。本次生产前置动作以
-`codex/v2-1-architecture-freeze @ 26a3390035fa209bbd1a926a3ebb1bb0df486935`
+`codex/v2-1-architecture-freeze @ a4199fdb14808ebb866943148a222b0d4300d66e`
 为 authority base。
 
-当前 Gate 仍是 **G3 SCHEMA11_CUTOVER Preparation**。已授权并完成
-`G3_PREP_SOURCE_PREFIX_ALIGNMENT_6_TO_10`：生产数据库由 Schema 6 对齐到 Schema 10，
-migration 11 保持不存在，`integrity_check=ok`、FK violation=0，并在 normal writers 继续被
-contain 的状态下建立了独立验证的 Schema-10 recovery artifact。
+当前 Gate 仍是 **G3 SCHEMA11_CUTOVER Preparation**。已完成
+`G3_PREP_SOURCE_PREFIX_ALIGNMENT_6_TO_10`，并进一步冻结了 exact Schema10 pre-state、
+recovery proof、writer containment、exact image 与 `G3_SCHEMA11_ATOMIC_EXCHANGE_R1`
+execution boundary。
 
-**BLOCKED_SOURCE_SCHEMA_MISMATCH 已清除。** 但 Schema 11 cutover 仍未授权、未开始；
-executable G3 packet 仍未创建，旧 Schema-6 生产容器保持 stopped / restart=no，不能重新启动。
+当前唯一审批目标为
+`sha256:4834377362f153aebd2223e5f38af4750c30558f290a10710dd5948fd3688caf`。
+**Human approval 仍为 NOT_REQUESTED，executable G3 packet 仍为 NOT_CREATED，Schema11 cutover
+未授权、未开始，normal writers 继续 blocked。**
 
 ## 入口
 
+- [G3 Schema11 Exact Cutover Target R1](docs/operations/G3_SCHEMA11_EXACT_CUTOVER_TARGET_R1.md)
 - [G3 Source-Prefix Alignment 6→10 R1](docs/operations/G3_PREP_SOURCE_PREFIX_ALIGNMENT_6_TO_10_R1.md)
 - [G3 Schema 11 Cutover Preparation R1](docs/operations/G3_SCHEMA11_CUTOVER_PREPARATION_R1.md)
 - [G2 Minimal Release Contract](docs/operations/G2_MINIMAL_RELEASE_CONTRACT.md)

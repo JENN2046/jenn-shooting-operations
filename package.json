@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "npm run validate:contract && npm run validate:shadow && npm run validate:production-manifest && npm run validate:production-greenfield-authority && npm run validate:g2-release-contract && npm run validate:g3-source-prefix-alignment && npm test",
+    "check": "npm run validate:contract && npm run validate:shadow && npm run validate:production-manifest && npm run validate:production-greenfield-authority && npm run validate:g2-release-contract && npm run validate:g3-source-prefix-alignment && npm run validate:g3-cutover-preparation && npm test",
     "backup": "node scripts/backup.mjs",
     "uploads:cleanup": "node scripts/cleanup-uploads.mjs",
     "validate:contract": "node scripts/validate-contracts.mjs",
@@ -18,7 +18,8 @@
     "attachments:copy": "node scripts/copy-production-attachments.mjs",
     "validate:production-greenfield-authority": "node scripts/validate-production-greenfield-authority.mjs",
     "validate:g2-release-contract": "node scripts/validate-g2-minimal-release-contract.mjs",
-    "validate:g3-source-prefix-alignment": "node scripts/validate-g3-source-prefix-alignment.mjs"
+    "validate:g3-source-prefix-alignment": "node scripts/validate-g3-source-prefix-alignment.mjs",
+    "validate:g3-cutover-preparation": "node scripts/validate-g3-schema11-cutover-preparation.mjs"
   },
   "engines": {
     "node": ">=24.16.0"
