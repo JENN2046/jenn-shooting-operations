@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jenn.local/contracts/g3-schema11-cutover-receipt-v1.schema.json",
+  "title": "G3 Schema 11 Terminal Cutover Receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "receiptId",
+    "contractId",
+    "packetId",
+    "operationId",
+    "authorityTargetDigest",
+    "classifiedAt",
+    "outcome",
+    "evidence"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "receiptId": {
+      "type": "string",
+      "pattern": "^G3R-[A-Z0-9][A-Z0-9_-]{2,80}$"
+    },
+    "contractId": {
+      "const": "G2_MINIMAL_RELEASE_CONTRACT_V1"
+    },
+    "packetId": {
+      "type": "string",
+      "pattern": "^G3-[A-Z0-9][A-Z0-9_-]{2,80}$"
+    },
+    "operationId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+    },
+    "authorityTargetDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "classifiedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "outcome": {
+      "enum": [
+        "COMMITTED",
+        "ROLLED_BACK",
+        "UNKNOWN"
+      ]
+    },
+    "evidence": {
+      "type": "object"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "outcome": {
+          "const": "COMMITTED"
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schemaVersionObserved",
+            "schemaVerificationDigest",
+            "postStateDigest",
+            "integrityCheck",
+            "foreignKeyViolationCount",
+            "authoritativeWriteCapabilityAbsent",
+            "normalWritesDisabledAtClassification"
+          ],
+          "properties": {
+            "schemaVersionObserved": {
+              "const": 11
+            },
+            "schemaVerificationDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "postStateDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "integrityCheck": {
+              "const": "ok"
+            },
+            "foreignKeyViolationCount": {
+              "const": 0
+            },
+            "authoritativeWriteCapabilityAbsent": {
+              "const": true
+            },
+            "normalWritesDisabledAtClassification": {
+              "const": true
+            }
+          }
+        }
+      },
+      "required": [
+        "outcome",
+        "evidence"
+      ]
+    },
+    {
+      "properties": {
+        "outcome": {
+          "const": "ROLLED_BACK"
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "restoredPrestateDigest",
+            "restorationVerificationDigest",
+            "integrityCheck",
+            "foreignKeyViolationCount",
+            "authoritativeWriteCapabilityAbsent",
+            "normalWritesDisabledAtClassification"
+          ],
+          "properties": {
+            "restoredPrestateDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "restorationVerificationDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "integrityCheck": {
+              "const": "ok"
+            },
+            "foreignKeyViolationCount": {
+              "const": 0
+            },
+            "authoritativeWriteCapabilityAbsent": {
+              "const": true
+            },
+            "normalWritesDisabledAtClassification": {
+              "const": true
+            }
+          }
+        }
+      },
+      "required": [
+        "outcome",
+        "evidence"
+      ]
+    },
+    {
+      "properties": {
+        "outcome": {
+          "const": "UNKNOWN"
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ambiguityEvidenceDigest",
+            "authoritativeWriteCapabilityAbsent",
+            "normalWritesDisabledAtClassification",
+            "reconciliationRequired",
+            "freshReadmissionEvidenceRequired",
+            "automaticRetryAllowed"
+          ],
+          "properties": {
+            "ambiguityEvidenceDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "authoritativeWriteCapabilityAbsent": {
+              "const": true
+            },
+            "normalWritesDisabledAtClassification": {
+              "const": true
+            },
+            "reconciliationRequired": {
+              "const": true
+            },
+            "freshReadmissionEvidenceRequired": {
+              "const": true
+            },
+            "automaticRetryAllowed": {
+              "const": false
+            }
+          }
+        }
+      },
+      "required": [
+        "outcome",
+        "evidence"
+      ]
+    }
+  ]
+}

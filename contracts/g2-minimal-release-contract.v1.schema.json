@@ -1,0 +1,412 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jenn.local/contracts/g2-minimal-release-contract-v1.schema.json",
+  "title": "G2 Minimal Release Contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "contractId",
+    "status",
+    "authority",
+    "transition",
+    "invariants",
+    "g3PacketSchema",
+    "g3SemanticValidatorModule",
+    "g3ReceiptSchema",
+    "currentPacketStatus",
+    "nextGate",
+    "prohibitions"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "contractId": {
+      "const": "G2_MINIMAL_RELEASE_CONTRACT_V1"
+    },
+    "status": {
+      "const": "FROZEN_NOT_EXECUTABLE"
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "canonicalBranch",
+        "g1MergeCommit",
+        "productionMutationAuthorized",
+        "schema11CutoverAuthorized"
+      ],
+      "properties": {
+        "canonicalBranch": {
+          "const": "codex/v2-1-architecture-freeze"
+        },
+        "g1MergeCommit": {
+          "const": "175586e2c67c94ad61fae6c5964c106f0966dda8"
+        },
+        "productionMutationAuthorized": {
+          "const": false
+        },
+        "schema11CutoverAuthorized": {
+          "const": false
+        }
+      }
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceSchemaVersion",
+        "targetSchemaVersion",
+        "migrationName",
+        "migrationChecksum",
+        "ordinaryRuntimeMayPerformTransition"
+      ],
+      "properties": {
+        "sourceSchemaVersion": {
+          "const": 10
+        },
+        "targetSchemaVersion": {
+          "const": 11
+        },
+        "migrationName": {
+          "const": "business_calendar_and_reschedule"
+        },
+        "migrationChecksum": {
+          "const": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8"
+        },
+        "ordinaryRuntimeMayPerformTransition": {
+          "const": false
+        }
+      }
+    },
+    "invariants": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "durableNormalWriterDisableRequired",
+            "inFlightWriterDrainRequired",
+            "processLifetimeMayCarryAuthority",
+            "unprovenContainmentDisposition"
+          ],
+          "properties": {
+            "id": {
+              "const": "G2_I1_DURABLE_WRITER_CONTAINMENT"
+            },
+            "durableNormalWriterDisableRequired": {
+              "const": true
+            },
+            "inFlightWriterDrainRequired": {
+              "const": true
+            },
+            "processLifetimeMayCarryAuthority": {
+              "const": false
+            },
+            "unprovenContainmentDisposition": {
+              "const": "DO_NOT_EXECUTE"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "exactSourceCommitRequired",
+            "exactImageDigestRequired",
+            "exactMigrationChecksumRequired",
+            "exactAuthorityTargetDigestRequired",
+            "humanApprovalBoundToAuthorityTargetRequired",
+            "semanticApprovalBindingValidationRequired",
+            "trustedApprovalVerificationRequired",
+            "trustedArtifactBindingVerificationRequired",
+            "artifactDriftAllowed"
+          ],
+          "properties": {
+            "id": {
+              "const": "G2_I2_EXACT_ARTIFACT_BINDING"
+            },
+            "exactSourceCommitRequired": {
+              "const": true
+            },
+            "exactImageDigestRequired": {
+              "const": true
+            },
+            "exactMigrationChecksumRequired": {
+              "const": true
+            },
+            "exactAuthorityTargetDigestRequired": {
+              "const": true
+            },
+            "artifactDriftAllowed": {
+              "const": false
+            },
+            "humanApprovalBoundToAuthorityTargetRequired": {
+              "const": true
+            },
+            "semanticApprovalBindingValidationRequired": {
+              "const": true
+            },
+            "trustedApprovalVerificationRequired": {
+              "const": true
+            },
+            "trustedArtifactBindingVerificationRequired": {
+              "const": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "activeDatabaseFamilyDigestRequired",
+            "recoveryArtifactRequired",
+            "recoveryReadbackProofRequired",
+            "recoveryReadbackMustVerifyArtifact",
+            "integrityCheckRequired",
+            "foreignKeyCheckRequired",
+            "trustedPrestateRecoveryEvidenceVerificationRequired",
+            "prestateDigestMustMatchActiveDatabaseFamily",
+            "recoverySourceMustMatchPrestate"
+          ],
+          "properties": {
+            "id": {
+              "const": "G2_I3_VERIFIED_PRESTATE_RECOVERY"
+            },
+            "activeDatabaseFamilyDigestRequired": {
+              "const": true
+            },
+            "recoveryArtifactRequired": {
+              "const": true
+            },
+            "recoveryReadbackProofRequired": {
+              "const": true
+            },
+            "recoveryReadbackMustVerifyArtifact": {
+              "const": true
+            },
+            "integrityCheckRequired": {
+              "const": true
+            },
+            "foreignKeyCheckRequired": {
+              "const": true
+            },
+            "trustedPrestateRecoveryEvidenceVerificationRequired": {
+              "const": true
+            },
+            "prestateDigestMustMatchActiveDatabaseFamily": {
+              "const": true
+            },
+            "recoverySourceMustMatchPrestate": {
+              "const": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "entrypointId",
+            "ordinaryRuntimeCutoverAllowed",
+            "executionCapabilityMustBeBounded",
+            "unknownExecutorMayRetainAuthoritativeWriteCapability",
+            "nonDatabaseProductionMutationAllowed",
+            "trustedExecutionBoundaryEvidenceVerificationRequired",
+            "unprovenBoundaryDisposition",
+            "durableAttemptLedgerRequired",
+            "oneShotAttemptClaimBeforeExecutionRequired",
+            "attemptReplayDisposition",
+            "attemptReplayIdentity",
+            "packetIdPartitionsReplayIdentity",
+            "attemptRecordBindsExactPacketId"
+          ],
+          "properties": {
+            "id": {
+              "const": "G2_I4_EXPLICIT_CUTOVER_ENTRY"
+            },
+            "entrypointId": {
+              "const": "G3_SCHEMA11_CUTOVER"
+            },
+            "ordinaryRuntimeCutoverAllowed": {
+              "const": false
+            },
+            "executionCapabilityMustBeBounded": {
+              "const": true
+            },
+            "unknownExecutorMayRetainAuthoritativeWriteCapability": {
+              "const": false
+            },
+            "nonDatabaseProductionMutationAllowed": {
+              "const": false
+            },
+            "unprovenBoundaryDisposition": {
+              "const": "DO_NOT_EXECUTE"
+            },
+            "trustedExecutionBoundaryEvidenceVerificationRequired": {
+              "const": true
+            },
+            "durableAttemptLedgerRequired": {
+              "const": true
+            },
+            "oneShotAttemptClaimBeforeExecutionRequired": {
+              "const": true
+            },
+            "attemptReplayDisposition": {
+              "const": "RECONCILIATION_REQUIRED"
+            },
+            "attemptReplayIdentity": {
+              "const": "operationId+authorityTargetDigest"
+            },
+            "packetIdPartitionsReplayIdentity": {
+              "const": false
+            },
+            "attemptRecordBindsExactPacketId": {
+              "const": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "allowedOutcomes",
+            "committedRequiresSchema11Verification",
+            "rolledBackRequiresPrestateRestorationVerification",
+            "unclassifiableOutcome",
+            "terminalReceiptRequired",
+            "terminalSemanticValidationRequired",
+            "trustedTerminalEvidenceVerificationRequired",
+            "automaticRetryAllowed",
+            "otherOutcomesAllowed",
+            "terminalReceiptRequiresStartedAttempt"
+          ],
+          "properties": {
+            "id": {
+              "const": "G2_I5_TERMINAL_OUTCOME_MODEL"
+            },
+            "allowedOutcomes": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "const": "COMMITTED"
+                },
+                {
+                  "const": "ROLLED_BACK"
+                },
+                {
+                  "const": "UNKNOWN"
+                }
+              ],
+              "items": false,
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "automaticRetryAllowed": {
+              "const": false
+            },
+            "otherOutcomesAllowed": {
+              "const": false
+            },
+            "committedRequiresSchema11Verification": {
+              "const": true
+            },
+            "rolledBackRequiresPrestateRestorationVerification": {
+              "const": true
+            },
+            "unclassifiableOutcome": {
+              "const": "UNKNOWN"
+            },
+            "terminalReceiptRequired": {
+              "const": true
+            },
+            "terminalSemanticValidationRequired": {
+              "const": true
+            },
+            "trustedTerminalEvidenceVerificationRequired": {
+              "const": true
+            },
+            "terminalReceiptRequiresStartedAttempt": {
+              "const": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "unknownKeepsNormalWritesDisabled",
+            "humanReconciliationRequired",
+            "freshReadmissionEvidenceRequired",
+            "automaticReenableAllowed"
+          ],
+          "properties": {
+            "id": {
+              "const": "G2_I6_UNKNOWN_BLOCKS_READMISSION"
+            },
+            "unknownKeepsNormalWritesDisabled": {
+              "const": true
+            },
+            "humanReconciliationRequired": {
+              "const": true
+            },
+            "freshReadmissionEvidenceRequired": {
+              "const": true
+            },
+            "automaticReenableAllowed": {
+              "const": false
+            }
+          }
+        }
+      ],
+      "items": false
+    },
+    "g3PacketSchema": {
+      "const": "contracts/g3-schema11-cutover-packet.v1.schema.json"
+    },
+    "currentPacketStatus": {
+      "const": "NOT_CREATED"
+    },
+    "nextGate": {
+      "const": "G3_SCHEMA11_CUTOVER"
+    },
+    "prohibitions": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "const": "NO_PRODUCTION_ACTION_IN_G2"
+        },
+        {
+          "const": "NO_SCHEMA11_CUTOVER_IN_G2"
+        },
+        {
+          "const": "NO_AUTOMATIC_RETRY_AFTER_UNKNOWN"
+        },
+        {
+          "const": "NO_PROCESS_LIFETIME_AS_DURABLE_AUTHORITY"
+        },
+        {
+          "const": "NO_NEW_GATE_FAMILY"
+        }
+      ],
+      "items": false,
+      "minItems": 5,
+      "maxItems": 5
+    },
+    "g3ReceiptSchema": {
+      "const": "contracts/g3-schema11-cutover-receipt.v1.schema.json"
+    },
+    "g3SemanticValidatorModule": {
+      "const": "src/g3-schema11-cutover-contract-v1.mjs"
+    }
+  }
+}

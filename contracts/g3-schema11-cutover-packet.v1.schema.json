@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jenn.local/contracts/g3-schema11-cutover-packet-v1.schema.json",
+  "title": "G3 Schema 11 Executable Cutover Packet v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "packetId",
+    "contractId",
+    "authorityTarget",
+    "authorityTargetDigest",
+    "authorization"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "packetId": {
+      "type": "string",
+      "pattern": "^G3-[A-Z0-9][A-Z0-9_-]{2,80}$"
+    },
+    "contractId": {
+      "const": "G2_MINIMAL_RELEASE_CONTRACT_V1"
+    },
+    "authorityTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorityHead",
+        "artifact",
+        "target",
+        "prestate",
+        "writerContainment",
+        "execution"
+      ],
+      "properties": {
+        "authorityHead": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "artifact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sourceCommit",
+            "imageDigest",
+            "migrationVersion",
+            "migrationName",
+            "migrationChecksum"
+          ],
+          "properties": {
+            "sourceCommit": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40}$"
+            },
+            "imageDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "migrationVersion": {
+              "const": 11
+            },
+            "migrationName": {
+              "const": "business_calendar_and_reschedule"
+            },
+            "migrationChecksum": {
+              "const": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8"
+            }
+          }
+        },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "targetBindingDigest",
+            "activeDatabaseFamilyDigest"
+          ],
+          "properties": {
+            "targetBindingDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "activeDatabaseFamilyDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            }
+          }
+        },
+        "prestate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "capturedAt",
+            "recoveryArtifactDigest",
+            "recoveryReadbackProofDigest",
+            "recoveryReadbackVerified",
+            "integrityCheck",
+            "foreignKeyViolationCount",
+            "capturedDatabaseFamilyDigest",
+            "recoverySourceDatabaseFamilyDigest"
+          ],
+          "properties": {
+            "capturedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "recoveryArtifactDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "recoveryReadbackProofDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "recoveryReadbackVerified": {
+              "const": true
+            },
+            "integrityCheck": {
+              "const": "ok"
+            },
+            "foreignKeyViolationCount": {
+              "const": 0
+            },
+            "capturedDatabaseFamilyDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "recoverySourceDatabaseFamilyDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            }
+          }
+        },
+        "writerContainment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "durableDisableReceiptDigest",
+            "inFlightWriterCount",
+            "drainProofDigest",
+            "processLifetimeIsAuthority",
+            "executionBoundaryProofDigest",
+            "unknownExecutorHasAuthoritativeWriteCapability",
+            "nonDatabaseProductionMutationAllowed"
+          ],
+          "properties": {
+            "durableDisableReceiptDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "inFlightWriterCount": {
+              "const": 0
+            },
+            "drainProofDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "processLifetimeIsAuthority": {
+              "const": false
+            },
+            "executionBoundaryProofDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "unknownExecutorHasAuthoritativeWriteCapability": {
+              "const": false
+            },
+            "nonDatabaseProductionMutationAllowed": {
+              "const": false
+            }
+          }
+        },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "entrypointId",
+            "operationId",
+            "automaticRetryAllowed"
+          ],
+          "properties": {
+            "entrypointId": {
+              "const": "G3_SCHEMA11_CUTOVER"
+            },
+            "operationId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+            },
+            "automaticRetryAllowed": {
+              "const": false
+            }
+          }
+        }
+      }
+    },
+    "authorityTargetDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "humanApprovalRequired",
+        "approvalRef",
+        "approvedAuthorityTargetDigest",
+        "approvalEvidenceDigest"
+      ],
+      "properties": {
+        "status": {
+          "const": "APPROVED"
+        },
+        "humanApprovalRequired": {
+          "const": true
+        },
+        "approvalRef": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,160}$"
+        },
+        "approvedAuthorityTargetDigest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "approvalEvidenceDigest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      }
+    }
+  }
+}
