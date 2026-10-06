@@ -9,6 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { ScheduleStore } from '../src/store.mjs';
 import { initializeWritableSchema } from '../src/sqlite-schema-v2.mjs';
 import { createJsoAgentBoundary } from '../src/jso-agent-host-v1.mjs';
+import { createSqliteAgentGrantAttemptStoreV1 } from '../src/sqlite-agent-grant-attempt-store-v1.mjs';
 import {
   JSO_AGENT_COMMANDS,
   JSO_AGENT_PATH,
@@ -24,8 +25,14 @@ const executorToken = 'local-test-executor-'.padEnd(40, 'e');
 const command = { operationId: 'MOVE-1', resourceId: 'R1' };
 const args = (action, payload = {}) => ({ command: action, payload_json: JSON.stringify(payload) });
 
-function fixture({ mode = 'planner', grants = [], result = { ok: true }, handler } = {}) {
-  const calls = [];
+function fixture({ mode = 'planner', grants = [], result = { ok: true }, handler, claimGrantAttempt } = {}) {
+  const calls = [], attempted = new Set();
+  const claim = claimGrantAttempt ?? (input => {
+    const key = JSON.stringify(input);
+    if (attempted.has(key)) return { ok: false, code: 'RECONCILIATION_REQUIRED' };
+    attempted.add(key);
+    return { ok: true };
+  });
   const service = Object.fromEntries(Object.values(JSO_AGENT_COMMANDS).map(method => [method, input => {
     calls.push({ method, input });
     return handler ? handler(input) : result;
@@ -38,7 +45,8 @@ function fixture({ mode = 'planner', grants = [], result = { ok: true }, handler
     resourceIds: ['R1'],
     grants,
   };
-  const application = createJsoAgentApplication({ service, identities: [identity], clock: () => new Date(at) });
+  const application = createJsoAgentApplication({ service, identities: [identity],
+    claimGrantAttempt: claim, clock: () => new Date(at) });
   return {
     calls,
     identity,
@@ -241,6 +249,59 @@ test('agent boundary fails closed before Schema11 cutover', async () => {
     assert.equal(store.db.prepare('SELECT max(version) version FROM schema_migrations').get().version, 10);
   } finally {
     store.close();
+  }
+});
+
+test('durable grant consumption survives restart and blocks a second dispatch', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'jso-agent-grant-restart-'));
+  const filename = join(root, 'db.sqlite');
+  const uploadRoot = join(root, 'uploads');
+  mkdirSync(uploadRoot);
+  const bootstrap = new DatabaseSync(filename);
+  bootstrap.exec('PRAGMA foreign_keys = ON');
+  initializeWritableSchema(bootstrap);
+  bootstrap.close();
+
+  const identity = { token: executorToken, subjectId: 'agent-JSO', mode: 'executor',
+    resourceIds: ['R1'], grants: [grant()] };
+  let serviceCalls = 0;
+  const service = Object.fromEntries(Object.values(JSO_AGENT_COMMANDS).map(method => [method, () => {
+    serviceCalls += 1;
+    if (method === 'reschedule') throw new Error('synthetic unknown outcome');
+    return { ok: true };
+  }]));
+
+  const firstStore = new ScheduleStore({ filename, uploadRoot, orphanCleanupMode: 'disabled' });
+  try {
+    const attempts = createSqliteAgentGrantAttemptStoreV1({ db: firstStore.db,
+      now: () => new Date('2026-10-01T12:30:00.000Z') });
+    const first = createJsoAgentApplication({ service, identities: [identity],
+      claimGrantAttempt: attempts.claim, clock: () => new Date('2026-10-01T12:30:00.000Z') });
+    const result = await first.call({ authorization: `Bearer ${executorToken}`,
+      arguments: args('reschedule', command) });
+    assert.equal(result.code, 'RESULT_UNKNOWN');
+    assert.equal(serviceCalls, 1);
+    assert.equal(firstStore.db.prepare('SELECT count(*) n FROM agent_grant_attempts').get().n, 1);
+    assert.throws(() => firstStore.db.exec('DELETE FROM agent_grant_attempts'), /immutable/);
+    assert.throws(() => firstStore.db.exec("UPDATE agent_grant_attempts SET subject_id='other'"), /immutable/);
+  } finally {
+    firstStore.close();
+  }
+
+  const secondStore = new ScheduleStore({ filename, uploadRoot, orphanCleanupMode: 'disabled' });
+  try {
+    const attempts = createSqliteAgentGrantAttemptStoreV1({ db: secondStore.db,
+      now: () => new Date('2026-10-01T12:30:00.000Z') });
+    const second = createJsoAgentApplication({ service, identities: [identity],
+      claimGrantAttempt: attempts.claim, clock: () => new Date('2026-10-01T12:30:00.000Z') });
+    const result = await second.call({ authorization: `Bearer ${executorToken}`,
+      arguments: args('reschedule', command) });
+    assert.equal(result.code, 'RECONCILIATION_REQUIRED');
+    assert.equal(serviceCalls, 1);
+    assert.equal(secondStore.db.prepare('SELECT count(*) n FROM agent_grant_attempts').get().n, 1);
+  } finally {
+    secondStore.close();
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

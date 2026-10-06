@@ -1,5 +1,6 @@
 import { SCHEDULING_CALENDAR_SCHEMA_V2_SQL, SCHEDULING_CONFIG_TABLE_V2_SQL } from './sqlite-scheduling-calendar-schema-v2.mjs';
 import { SCHEDULE_RESCHEDULE_SCHEMA_SQL } from './sqlite-schedule-reschedule-schema-v1.mjs';
+import { AGENT_GRANT_ATTEMPT_SCHEMA_SQL } from './sqlite-agent-grant-attempt-schema-v1.mjs';
 import { EMPTY_DB_MAINTENANCE_SCHEMA_SQL } from './sqlite-empty-db-maintenance-schema-v1.mjs';
 import { KIOSK_SMOKE_SESSION_SCHEMA_SQL } from './sqlite-kiosk-smoke-session-schema-v1.mjs';
 import { KIOSK_SMOKE_SCHEMA_SQL } from './sqlite-kiosk-smoke-schema-v1.mjs';
@@ -9,7 +10,8 @@ import { SCHEDULING_SCHEMA_SQL } from './sqlite-scheduling-schema-v1.mjs';
 import { RUN_CONTEXT_CAPTURE_SCHEMA_SQL } from './sqlite-run-context-capture-schema-v1.mjs';
 
 const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
-const BUSINESS_SCHEDULING_SQL = SCHEDULING_CALENDAR_SCHEMA_V2_SQL + '\n' + SCHEDULE_RESCHEDULE_SCHEMA_SQL;
+const BUSINESS_SCHEDULING_SQL = [SCHEDULING_CALENDAR_SCHEMA_V2_SQL, SCHEDULE_RESCHEDULE_SCHEMA_SQL,
+  AGENT_GRANT_ATTEMPT_SCHEMA_SQL].join('\n');
 
 export const V1_SCHEMA_SQL = `
   CREATE TABLE schedule_state (
@@ -792,7 +794,8 @@ const KIOSK_REVIEW_TABLE_DEFINITIONS = schemaDefinitions(KIOSK_REVIEW_SQL, 'tabl
 const NOTIFICATION_OUTBOX_INDEX_DEFINITIONS = schemaDefinitions(NOTIFICATION_OUTBOX_SQL, 'index');
 const NOTIFICATION_OUTBOX_TRIGGER_DEFINITIONS = schemaDefinitions(NOTIFICATION_OUTBOX_SQL, 'trigger');
 const NOTIFICATION_OUTBOX_TABLE_DEFINITIONS = schemaDefinitions(NOTIFICATION_OUTBOX_SQL, 'table');
-const BUSINESS_SCHEDULING_DEFINITIONS = Object.fromEntries(['table', 'index', 'trigger'].map(type => [type, schemaDefinitions(SCHEDULE_RESCHEDULE_SCHEMA_SQL, type)]));
+const BUSINESS_SCHEDULING_DEFINITIONS = Object.fromEntries(['table', 'index', 'trigger'].map(type => [type,
+  schemaDefinitions(SCHEDULE_RESCHEDULE_SCHEMA_SQL + '\n' + AGENT_GRANT_ATTEMPT_SCHEMA_SQL, type)]));
 const SCHEDULING_TABLE_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'table');
 const SCHEDULING_INDEX_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'index');
 const SCHEDULING_TRIGGER_DEFINITIONS = schemaDefinitions(SCHEDULING_SCHEMA_SQL, 'trigger');

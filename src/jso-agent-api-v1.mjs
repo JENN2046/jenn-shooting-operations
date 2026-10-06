@@ -9,6 +9,7 @@ export const JSO_AGENT_COMMANDS = Object.freeze({
   reschedule: 'reschedule', read_receipt: 'readReceipt',
 });
 const WRITES = new Set(['adopt_proposal', 'reschedule']);
+const CLAIM_FAILURES = new Set(['RECONCILIATION_REQUIRED', 'WRITE_ADMISSION_DISABLED', 'BUSINESS_SCHEMA11_REQUIRED']);
 const MAX_BYTES = 256 * 1024;
 const RESERVED = new Set(['tool_name', 'archery', 'ink', 'river', 'vref', '__proto__',
   'prototype', 'constructor', 'authorization', 'token', 'principal', 'role', 'mode', 'grant']);
@@ -90,7 +91,7 @@ function validGrant(g, subjectId) {
  * Planner principals have the existing viewer capability, not a scheduler credential.
  * A service instance must own a single serialized SQLite connection.
  */
-export function createJsoAgentApplication({ service, identities, clock = () => new Date() }) {
+export function createJsoAgentApplication({ service, identities, claimGrantAttempt, clock = () => new Date() }) {
   if (!service || Object.values(JSO_AGENT_COMMANDS).some(k => typeof service[k] !== 'function')
     || !Array.isArray(identities) || identities.length === 0) throw new TypeError('Trusted agent service and identities required');
   const tokens = new Set();
@@ -105,7 +106,9 @@ export function createJsoAgentApplication({ service, identities, clock = () => n
     if (!trusted.ok) throw new TypeError('Invalid agent principal');
     return { bytes: Buffer.from(token), mode, principal: trusted.principal, grants: structuredClone(grants) };
   });
-  const attempted = new Set();
+  if (entries.some(entry => entry.grants.length > 0) && typeof claimGrantAttempt !== 'function') {
+    throw new TypeError('Durable agent grant-attempt store required');
+  }
   function authenticate(header) {
     if (typeof header !== 'string' || !header.startsWith('Bearer ') || header.length > 4096) return null;
     const bytes = Buffer.from(header.slice(7));
@@ -130,10 +133,14 @@ export function createJsoAgentApplication({ service, identities, clock = () => n
         grant = identity.grants.find(g => g.action === action && g.commandDigest === digest
           && time >= Date.parse(g.notBefore) && time < Date.parse(g.expiresAt));
         if (!grant) return fail('EXACT_APPROVAL_REQUIRED');
-        const key = `${grant.approvalRef}:${grant.subjectId}:${digest}`;
-        if (attempted.has(key)) return fail('RECONCILIATION_REQUIRED');
-        // Consume before dispatch, including exceptions/unknown outcomes; never auto retry.
-        attempted.add(key);
+        // Persist the attempt before dispatch. A restart or parallel application instance must
+        // observe the same claim and refuse a second dispatch, including after RESULT_UNKNOWN.
+        let claimed;
+        try {
+          claimed = await claimGrantAttempt({ approvalRef: grant.approvalRef, subjectId: grant.subjectId,
+            action: grant.action, commandDigest: digest });
+        } catch { return fail('SERVICE_UNAVAILABLE'); }
+        if (claimed?.ok !== true) return fail(CLAIM_FAILURES.has(claimed?.code) ? claimed.code : 'SERVICE_UNAVAILABLE');
       }
       try {
         const executionGuard = () => {

@@ -23,7 +23,7 @@ Jenn Shooting Operations remains the owner of shooting-operation facts and busin
 - single-session rescheduling;
 - management UI and business authentication;
 - Kiosk/run-event domain behavior already present in the base;
-- JSO-side Agent read/preview/adopt/reschedule service and exact server-side grant enforcement;
+- JSO-side Agent read/preview/adopt/reschedule service, exact server-side grant enforcement and durable one-attempt ledger;
 - SQLite schemas, revisions, receipts, audit and projections.
 
 The following are **not** JSO Core:
@@ -197,9 +197,9 @@ It is evidence of an unresolved historical observation, not current production t
 
 Fresh validation on Node 24.21.0 / Debian:
 
-- P1/narrow targeted tests: **148 / 148 PASS**;
+- current review-targeted tests: **68 / 68 PASS**;
 - repository validators: **PASS**;
-- full suite: **1024 total, 1023 PASS, 0 FAIL, 1 existing conditional skip**;
+- full suite: **1026 total, 1025 PASS, 0 FAIL, 1 existing conditional skip**;
 - conditional skip: external VCPToolBox/JENN-Extensions adapter package identity not supplied;
 - fresh real-Chrome local business UI acceptance: **10 / 10 PASS**.
 

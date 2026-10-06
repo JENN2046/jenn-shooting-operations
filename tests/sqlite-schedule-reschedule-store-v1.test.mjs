@@ -119,6 +119,21 @@ test('projection failure rolls schedule/counters/receipts/audit back atomically'
 });
 
 
+test('reschedule rejects an operation id already owned by proposal generation', () => {
+  const f = fixture(); try {
+    const proposals = createSqliteSchedulingProposalStoreV1({ db: f.db, now: f.now,
+      assembleInput: assembleSchedulingInputFromSqliteV1 });
+    const generated = proposals.generate({ operationId: f.command.operationId,
+      planningWindowStart: '2026-10-02T00:00:00.000Z', planningWindowEnd: '2026-10-03T00:00:00.000Z',
+      resourceScope: ['PHOTO'] }, principal.subjectId);
+    assert.equal(generated.ok, true, JSON.stringify(generated));
+    const before = f.counts();
+    assert.equal(f.store.reschedule(f.command, principal).code, 'IDEMPOTENCY_KEY_REUSE');
+    assert.deepEqual(f.counts(), before);
+    assert.equal(proposals.read(generated.proposal.proposalId).proposal.generationOperationId, f.command.operationId);
+  } finally { f.db.close(); }
+});
+
 test('reschedule invalidates existing draft proposals with immutable stale decisions', () => {
   const f = fixture(); try {
     const proposals = createSqliteSchedulingProposalStoreV1({ db: f.db, now: f.now, assembleInput: assembleSchedulingInputFromSqliteV1 });

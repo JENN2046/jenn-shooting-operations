@@ -149,7 +149,7 @@ test('fresh schema applies the continuous migration prefix and known tables', ()
       'scheduling_request_requirements',
       'scheduling_config_versions', 'scheduling_active_config',
       'scheduling_config_activations', 'scheduling_proposals', 'scheduling_proposal_decisions',
-      'scheduling_run_context_snapshots', 'schedule_reschedule_operations',
+      'scheduling_run_context_snapshots', 'schedule_reschedule_operations', 'agent_grant_attempts',
     ]) assert.ok(tables.includes(table), `expected ${table}`);
 
     assert.equal(db.prepare(`PRAGMA table_info(product_catalog_entries)`).all().find(row => row.name === 'id').type, 'TEXT');

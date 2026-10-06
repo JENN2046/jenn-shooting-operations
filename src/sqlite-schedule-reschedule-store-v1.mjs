@@ -72,7 +72,10 @@ export function createSqliteScheduleRescheduleStoreV1({ db, now, refreshProjecti
           ? { ...readOperation(command.operationId, principal), exactReplay: true } : denied('IDEMPOTENCY_KEY_REUSE');
         // Prevent reusing a key owned by another canonical operation family.
         if (db.prepare('SELECT 1 FROM operations WHERE operation_id = ?').get(command.operationId)
-          || db.prepare('SELECT 1 FROM scheduling_admin_operations WHERE operation_id = ?').get(command.operationId)) return denied('IDEMPOTENCY_KEY_REUSE');
+          || db.prepare('SELECT 1 FROM scheduling_admin_operations WHERE operation_id = ?').get(command.operationId)
+          || db.prepare('SELECT 1 FROM scheduling_proposals WHERE generation_operation_id = ?').get(command.operationId)) {
+          return denied('IDEMPOTENCY_KEY_REUSE');
+        }
         const counters = db.prepare('SELECT schedule_revision, projection_revision FROM revision_counters WHERE id = 1').get();
         if (!counters || counters.schedule_revision !== command.expectedScheduleRevision || counters.projection_revision !== command.expectedProjectionRevision) return denied('SCHEDULING_REVISION_CONFLICT');
         if (Math.max(counters.schedule_revision, counters.projection_revision) >= Number.MAX_SAFE_INTEGER) return denied('SCHEDULE_REVISION_EXHAUSTED');
