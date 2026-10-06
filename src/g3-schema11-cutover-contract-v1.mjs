@@ -57,6 +57,14 @@ export function createG3Schema11CutoverContractV1({
     try { computed = digestG3AuthorityTargetV1(packet.authorityTarget); }
     catch { return fail('G3_AUTHORITY_TARGET_INVALID'); }
     if (packet.authorityTargetDigest !== computed) return fail('G3_AUTHORITY_TARGET_DIGEST_MISMATCH');
+    if (packet.authorityTarget.prestate.capturedDatabaseFamilyDigest
+      !== packet.authorityTarget.target.activeDatabaseFamilyDigest) {
+      return fail('G3_PRESTATE_TARGET_MISMATCH');
+    }
+    if (packet.authorityTarget.prestate.recoverySourceDatabaseFamilyDigest
+      !== packet.authorityTarget.prestate.capturedDatabaseFamilyDigest) {
+      return fail('G3_RECOVERY_PRESTATE_MISMATCH');
+    }
 
     const authorityEvidence = frozenClone({
       authorityTargetDigest: computed,
@@ -112,8 +120,9 @@ export function createG3Schema11CutoverContractV1({
         authorityTargetDigest: admitted.authorityTargetDigest,
       });
     }
-    if (claim?.ok === false && claim.code === 'ATTEMPT_ALREADY_STARTED') {
-      return fail('G3_EXECUTION_ATTEMPT_ALREADY_STARTED');
+    if (claim?.ok === false
+      && ['ATTEMPT_ALREADY_STARTED', 'RECONCILIATION_REQUIRED'].includes(claim.code)) {
+      return fail('RECONCILIATION_REQUIRED');
     }
     return fail('G3_EXECUTION_ATTEMPT_CLAIM_UNAVAILABLE');
   }
@@ -137,7 +146,7 @@ export function createG3Schema11CutoverContractV1({
 
     if (receipt.outcome === 'ROLLED_BACK'
       && receipt.evidence.restoredPrestateDigest
-        !== packet.authorityTarget.target.activeDatabaseFamilyDigest) {
+        !== packet.authorityTarget.prestate.capturedDatabaseFamilyDigest) {
       return fail('G3_ROLLBACK_PRESTATE_MISMATCH');
     }
 

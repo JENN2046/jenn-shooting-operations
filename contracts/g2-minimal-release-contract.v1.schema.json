@@ -172,7 +172,9 @@
             "recoveryReadbackMustVerifyArtifact",
             "integrityCheckRequired",
             "foreignKeyCheckRequired",
-            "trustedPrestateRecoveryEvidenceVerificationRequired"
+            "trustedPrestateRecoveryEvidenceVerificationRequired",
+            "prestateDigestMustMatchActiveDatabaseFamily",
+            "recoverySourceMustMatchPrestate"
           ],
           "properties": {
             "id": {
@@ -197,6 +199,12 @@
               "const": true
             },
             "trustedPrestateRecoveryEvidenceVerificationRequired": {
+              "const": true
+            },
+            "prestateDigestMustMatchActiveDatabaseFamily": {
+              "const": true
+            },
+            "recoverySourceMustMatchPrestate": {
               "const": true
             }
           }

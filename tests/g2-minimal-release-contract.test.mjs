@@ -71,6 +71,8 @@ test('G2 rejects relaxation of containment, approval binding, recovery, outcomes
     changed(v => { v.invariants[2].recoveryReadbackProofRequired = false; }),
     changed(v => { v.invariants[2].recoveryReadbackMustVerifyArtifact = false; }),
     changed(v => { v.invariants[2].trustedPrestateRecoveryEvidenceVerificationRequired = false; }),
+    changed(v => { v.invariants[2].prestateDigestMustMatchActiveDatabaseFamily = false; }),
+    changed(v => { v.invariants[2].recoverySourceMustMatchPrestate = false; }),
     changed(v => { v.invariants[3].ordinaryRuntimeCutoverAllowed = true; }),
     changed(v => { v.invariants[3].executionCapabilityMustBeBounded = false; }),
     changed(v => { v.invariants[3].unknownExecutorMayRetainAuthoritativeWriteCapability = true; }),
@@ -117,6 +119,8 @@ function makeAuthorityTarget() {
     },
     prestate: {
       capturedAt: '2026-10-06T00:00:00.000Z',
+      capturedDatabaseFamilyDigest: digest('3'),
+      recoverySourceDatabaseFamilyDigest: digest('3'),
       recoveryArtifactDigest: digest('4'),
       recoveryReadbackProofDigest: digest('5'),
       recoveryReadbackVerified: true,
@@ -242,7 +246,7 @@ test('G3 semantic admission requires trusted evidence and a durable one-shot att
   });
   assert.equal(
     g3.admitExecutablePacket(packet).code,
-    'G3_EXECUTION_ATTEMPT_ALREADY_STARTED',
+    'RECONCILIATION_REQUIRED',
   );
 
   const changedTarget = structuredClone(packet);
@@ -270,6 +274,38 @@ test('G3 semantic admission requires trusted evidence and a durable one-shot att
   assert.equal(
     forgedValidator.admitExecutablePacket(forgedReapproval).code,
     'G3_APPROVAL_EVIDENCE_NOT_VERIFIED',
+  );
+
+  const prestateMismatch = makePacket();
+  prestateMismatch.authorityTarget.prestate.capturedDatabaseFamilyDigest = digest('0');
+  prestateMismatch.authorityTargetDigest = digestG3AuthorityTargetV1(prestateMismatch.authorityTarget);
+  prestateMismatch.authorization.approvedAuthorityTargetDigest = prestateMismatch.authorityTargetDigest;
+  const { g3: prestateMismatchValidator } = createTestG3({
+    verifyApproval: () => true,
+  });
+  assert.equal(
+    prestateMismatchValidator.admitExecutablePacket(prestateMismatch).code,
+    'G3_PRESTATE_TARGET_MISMATCH',
+  );
+
+  const recoveryMismatch = makePacket();
+  recoveryMismatch.authorityTarget.prestate.recoverySourceDatabaseFamilyDigest = digest('0');
+  recoveryMismatch.authorityTargetDigest = digestG3AuthorityTargetV1(recoveryMismatch.authorityTarget);
+  recoveryMismatch.authorization.approvedAuthorityTargetDigest = recoveryMismatch.authorityTargetDigest;
+  const { g3: recoveryMismatchValidator } = createTestG3({
+    verifyApproval: () => true,
+  });
+  assert.equal(
+    recoveryMismatchValidator.admitExecutablePacket(recoveryMismatch).code,
+    'G3_RECOVERY_PRESTATE_MISMATCH',
+  );
+
+  const { g3: reconciliationClaim } = createTestG3({
+    claimExecutionAttempt: () => ({ ok: false, code: 'RECONCILIATION_REQUIRED' }),
+  });
+  assert.equal(
+    reconciliationClaim.admitExecutablePacket(packet).code,
+    'RECONCILIATION_REQUIRED',
   );
 
   const { g3: unavailableClaim } = createTestG3({
@@ -401,7 +437,7 @@ test('UNKNOWN terminal state never makes the same packet executable again', () =
   });
   assert.equal(
     g3.admitExecutablePacket(packet).code,
-    'G3_EXECUTION_ATTEMPT_ALREADY_STARTED',
+    'RECONCILIATION_REQUIRED',
   );
 });
 
@@ -415,7 +451,7 @@ test('changing only packetId cannot partition the durable one-shot replay identi
   assert.equal(validatePacketSchema(rebound), true, JSON.stringify(validatePacketSchema.errors));
   assert.equal(
     g3.admitExecutablePacket(rebound).code,
-    'G3_EXECUTION_ATTEMPT_ALREADY_STARTED',
+    'RECONCILIATION_REQUIRED',
   );
 
   const reboundReceipt = structuredClone(receipt);

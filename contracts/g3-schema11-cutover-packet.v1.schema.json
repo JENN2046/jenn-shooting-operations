@@ -96,7 +96,9 @@
             "recoveryReadbackProofDigest",
             "recoveryReadbackVerified",
             "integrityCheck",
-            "foreignKeyViolationCount"
+            "foreignKeyViolationCount",
+            "capturedDatabaseFamilyDigest",
+            "recoverySourceDatabaseFamilyDigest"
           ],
           "properties": {
             "capturedAt": {
@@ -119,6 +121,14 @@
             },
             "foreignKeyViolationCount": {
               "const": 0
+            },
+            "capturedDatabaseFamilyDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "recoverySourceDatabaseFamilyDigest": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
             }
           }
         },

@@ -16,7 +16,7 @@ historical PROD/GF/C01/custody gate family.
 | --- | --- |
 | `G2_I1_DURABLE_WRITER_CONTAINMENT` | Normal writers must be durably disabled and all in-flight writers drained before cutover. Process lifetime is not authority. If containment cannot be proven, the cutover is **not executed**. |
 | `G2_I2_EXACT_ARTIFACT_BINDING` | G3 must bind one exact source commit, image digest, Schema 11 migration checksum and one authority-target object. Human approval must bind the computed digest of that complete target, and trusted verification must confirm both artifact evidence and approval evidence. Drift is forbidden. |
-| `G2_I3_VERIFIED_PRESTATE_RECOVERY` | G3 requires an exact active-database-family digest, recovery artifact, an independent readback proof that verifies that artifact, SQLite integrity check and zero FK violations. These are trusted evidence, not self-asserted digest-shaped strings. |
+| `G2_I3_VERIFIED_PRESTATE_RECOVERY` | G3 requires an exact active-database-family digest, a pre-state digest equal to that active family, a recovery artifact explicitly bound to the same pre-state, an independent readback proof that verifies that artifact, SQLite integrity check and zero FK violations. These are trusted evidence, not self-asserted digest-shaped strings. |
 | `G2_I4_EXPLICIT_CUTOVER_ENTRY` | Ordinary runtime cannot perform 10→11. Only `G3_SCHEMA11_CUTOVER` may enter the transition. Before execution, a durable one-shot ledger atomically claims replay identity `operationId + authorityTargetDigest` and records the exact `packetId`; changing `packetId` cannot create a new attempt. If the bounded execution boundary is unproven, **do not execute**. |
 | `G2_I5_TERMINAL_OUTCOME_MODEL` | After an admitted attempt, the only outcomes are `COMMITTED`, `ROLLED_BACK`, or `UNKNOWN`. A terminal receipt is valid only for a durably recorded started attempt. COMMITTED requires trusted Schema 11 verification; ROLLED_BACK requires trusted exact pre-state restoration; anything unclassifiable is UNKNOWN. Automatic retry is forbidden. |
 | `G2_I6_UNKNOWN_BLOCKS_READMISSION` | `UNKNOWN` keeps normal writes disabled. Human reconciliation plus fresh readmission evidence is required before re-enable. |
@@ -60,7 +60,7 @@ inadmissible and the cutover is not started.
 
 Immediately before execution, the semantic boundary must atomically claim a replay key derived only from the approved
 `{operationId, authorityTargetDigest}` in a **durable one-shot attempt ledger**, while recording the exact `packetId`
-that obtained the claim. `packetId` is not allowed to partition replay identity. A second claim for that operation/target is
+that obtained the claim. `packetId` is not allowed to partition replay identity. A second claim for that operation/target is normalized at the semantic boundary to
 `RECONCILIATION_REQUIRED`; it is never another execution attempt. Terminal receipts must match the exact recorded packet.
 This one-shot state must survive process restart and controller loss.
 

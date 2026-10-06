@@ -43,7 +43,9 @@
       "recoveryReadbackMustVerifyArtifact": true,
       "integrityCheckRequired": true,
       "foreignKeyCheckRequired": true,
-      "trustedPrestateRecoveryEvidenceVerificationRequired": true
+      "trustedPrestateRecoveryEvidenceVerificationRequired": true,
+      "prestateDigestMustMatchActiveDatabaseFamily": true,
+      "recoverySourceMustMatchPrestate": true
     },
     {
       "id": "G2_I4_EXPLICIT_CUTOVER_ENTRY",
