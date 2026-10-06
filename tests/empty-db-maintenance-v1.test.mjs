@@ -61,7 +61,7 @@ test('resource, publication and explicit activation reuse services atomically wi
       'INSERT OR REPLACE INTO empty_db_maintenance_operations SELECT * FROM empty_db_maintenance_operations']) assert.throws(() => db.exec(sql));
   });
   const store = new ScheduleStore({ filename: join(f.root, 'synthetic.sqlite'), uploadRoot: join(f.root, 'uploads'),
-    writeAdmissionMode: 'disabled', orphanCleanupMode: 'disabled' });
+    writeAdmissionMode: 'disabled', orphanCleanupMode: 'disabled', readOnly: true });
   try { assert.throws(() => store.db.exec("INSERT INTO operations VALUES ('forbidden', 'other', '{}', 'now', NULL)"), /not authorized/); }
   finally { store.close(); }
   assert.equal(f.state(), before);
@@ -309,4 +309,9 @@ test('refusal at the final commit decision after target validation rolls back al
     beforeCommitDecision: () => { assert.equal(prepared, true); throw Object.assign(new Error(), { code: 'MAINTENANCE_ADAPTER_APPROVAL_DENIED' }); },
   }), { code: 'MAINTENANCE_ADAPTER_APPROVAL_DENIED' });
   assert.equal(f.state(), before); assert.equal(f.execute().exactReplay, false);
+});
+
+test('schema11 cannot be initialized by the schema10 maintenance contract', t => {
+ const f=fixture(t); f.write(db => initializeWritableSchema(db));
+ const before=f.state(); assert.throws(()=>f.execute(), error=>error.code==='SCHEMA_VERSION_TOO_NEW' || error.code==='MAINTENANCE_SCHEMA_UNSUPPORTED'); assert.equal(f.state(),before);
 });

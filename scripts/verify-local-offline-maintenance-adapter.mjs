@@ -8,8 +8,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { dockerMaintenanceReadV1 as docker, observeOfflineDockerTargetV1, digestOfflineMaintenanceV1,
   executeOfflineMaintenanceAdapterV1, acquireOfflineMaintenanceFenceV1 } from '../src/offline-maintenance-adapter-v1.mjs';
-import { MIGRATIONS } from '../src/sqlite-schema-v2.mjs';
-const EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1 = digestOfflineMaintenanceV1(MIGRATIONS.map(({version,name,checksum})=>({version,name,checksum})));
+import { EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1 } from '../src/empty-db-maintenance-v1.mjs';
 import { digestResourceCapabilitiesV1 } from '../src/scheduling-contract-v1.mjs';
 import { normalizeSchedulingConfigV1, SCHEDULING_CALENDAR_COMPILER_VERSION_V1 } from '../src/scheduling-admin-contract-v1.mjs';
 const [imageId, sourceRevision, inventoryMode] = process.argv.slice(2);

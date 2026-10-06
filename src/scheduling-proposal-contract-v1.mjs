@@ -1,9 +1,8 @@
+import { normalizeSchedulingInput, canonicalizeSchedulingResult } from './scheduling-contract-compat.mjs';
 import {
   canonicalJsonSchedulingV1,
-  canonicalizeSchedulingResultV1,
   digestCanonicalJsonSchedulingV1,
   isSchedulingIdentifierV1,
-  normalizeSchedulingInputV1,
 } from './scheduling-contract-v1.mjs';
 
 const CONTROL_OR_LINE_SEPARATOR = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u;
@@ -337,14 +336,14 @@ function normalizeProposal(value, path = '$') {
   }
   const scope = resourceScope(value.resourceScope, `${path}.resourceScope`);
   const inputSnapshot = parseCanonicalJson(value.inputSnapshotJson, `${path}.inputSnapshotJson`);
-  const normalizedInput = normalizeSchedulingInputV1(inputSnapshot);
+  const normalizedInput = normalizeSchedulingInput(inputSnapshot);
   if (!normalizedInput.ok || normalizedInput.inputJson !== value.inputSnapshotJson) {
     fail('INPUT_SNAPSHOT_INVALID', `${path}.inputSnapshotJson`);
   }
   if (normalizedInput.inputDigest !== value.inputDigest) fail('INPUT_DIGEST_MISMATCH', `${path}.inputDigest`);
   const proposedItems = parseCanonicalJson(value.proposedItemsJson, `${path}.proposedItemsJson`);
   const diagnostics = parseCanonicalJson(value.diagnosticsJson, `${path}.diagnosticsJson`);
-  const result = canonicalizeSchedulingResultV1({
+  const result = canonicalizeSchedulingResult({
     algorithmVersion: value.algorithmVersion,
     configVersion: value.configVersion,
     configDigest: value.configDigest,

@@ -2,7 +2,9 @@ import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { ScheduleStore } from '../../src/store.mjs';
+import { resolveOrphanCleanupControlRoot } from '../../src/store.mjs';
+import { createOrphanCleanupControl } from '../../src/orphan-cleanup-control.mjs';
+import { initializeWritableSchema, MIGRATIONS } from '../../src/sqlite-schema-v2.mjs';
 import { bindLocalEmptyDbMaintenanceTargetV1, EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1,
   digestEmptyDbMaintenancePacketV1, executeLocalEmptyDbMaintenanceV1 } from '../../src/empty-db-maintenance-v1.mjs';
 import { digestResourceCapabilitiesV1 } from '../../src/scheduling-contract-v1.mjs';
@@ -18,9 +20,18 @@ export function authorizationFor(packet) {
 export function maintenanceFixture(runtime = syntheticRuntime) {
   const root = mkdtempSync(join(tmpdir(), 'jso-empty-maintenance-'));
   mkdirSync(join(root, 'uploads'));
-  const store = new ScheduleStore({ filename: join(root, 'synthetic.sqlite'),
-    uploadRoot: join(root, 'uploads'), writeAdmissionMode: 'disabled', orphanCleanupMode: 'disabled' });
-  store.close();
+  // Legacy maintenance is deliberately pinned to schema10; normal runtime now migrates to11.
+  const filename = join(root, 'synthetic.sqlite');
+  mkdirSync(join(root, 'uploads', '.cleanup'));
+  const control = createOrphanCleanupControl({ controlRoot: resolveOrphanCleanupControlRoot({filename}) });
+  if (!control.disable({reason:'store-startup',waitForDrainMs:0}).ok) throw new Error('FIXTURE_CONTROL_FAILED');
+  const bootstrap = new DatabaseSync(filename);
+  try {
+    bootstrap.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON');
+    initializeWritableSchema(bootstrap, {migrations:MIGRATIONS.slice(0,10)});
+    const at = new Date().toISOString();
+    bootstrap.prepare('INSERT INTO schedule_state VALUES (1,0,?,?)').run(at,JSON.stringify({schemaVersion:1,revision:0,updatedAt:at,products:[],tasks:[],sessions:[]}));
+  } finally {bootstrap.close();}
   const target = bindLocalEmptyDbMaintenanceTargetV1(root);
   const packet = (kind = 'initialize', command = null, expected = { scheduleRevision: 0, projectionRevision: 0 }) =>
     ({ schemaVersion: 1, operationId: command?.operationId ?? 'LOCAL-INIT-01', kind,

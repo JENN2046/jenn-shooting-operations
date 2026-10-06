@@ -1,13 +1,14 @@
+import { normalizeSchedulingInput } from './scheduling-contract-compat.mjs';
 import { assertSchedulingQuiescenceV1, assertGf15CommandPacketV1 } from './sqlite-scheduling-quiescence-v1.mjs';
 import {
   canonicalJsonSchedulingV1,
   digestCanonicalJsonSchedulingV1,
-  normalizeSchedulingInputV1,
 } from './scheduling-contract-v1.mjs';
-import { normalizeSchedulingConfigV1 } from './scheduling-admin-contract-v1.mjs';
+import { normalizeSchedulingConfig } from './scheduling-admin-contract-v2.mjs';
 import { generateDeterministicScheduleV1 } from './deterministic-scheduler-v1.mjs';
 import { applyCanonicalScheduleAcceptanceInTransactionV2 } from './sqlite-schedule-command-v2.mjs';
 import { authorizeCapability, validateTrustedPrincipal } from './authorization-v2.mjs';
+import { schedulingOperationIdOwnedByOtherV1 } from './sqlite-scheduling-operation-id-v1.mjs';
 import {
   admitSchedulingProposalDecisionV1,
   buildSchedulingProposalDecisionReceiptV1,
@@ -50,7 +51,7 @@ function readActiveConfig(db) {
     JOIN scheduling_config_versions AS version ON version.config_version = active.config_version
     WHERE active.id = 1`).get();
   if (!row) return null;
-  const admitted = normalizeSchedulingConfigV1(JSON.parse(row.config_json));
+  const admitted = normalizeSchedulingConfig(JSON.parse(row.config_json));
   if (!admitted.ok || admitted.configDigest !== row.config_digest
     || admitted.configJson !== row.config_json) return null;
   return { ...row, config: admitted.config };
@@ -154,6 +155,9 @@ function staleOneInTransaction(db, { proposalId, triggerOperationId, reasonCode,
       ...JSON.parse(prior.receipt_json), decisionReceiptDigest: prior.receipt_digest,
     }, exactReplay: true };
   }
+  if (schedulingOperationIdOwnedByOtherV1(db, derived.decisionId, ['proposalDecision'])) {
+    return denied('IDEMPOTENCY_KEY_REUSE');
+  }
   if (found.lifecycle.status !== 'draft') return denied('PROPOSAL_NOT_DRAFT');
   const built = buildSchedulingProposalDecisionReceiptV1({
     decisionId: derived.decisionId,
@@ -201,6 +205,13 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
     throw new TypeError('SQLite db, trusted input assembler, injected clock, and optional acceptance precondition are required');
   }
 
+  // Only adoptPreview owns this synchronous transaction scope. Ordinary callers
+  // retain the original transaction boundaries; no generic nested-transaction bypass.
+  let atomicAdoption = false;
+  const runTransaction = (database, begin, work) => atomicAdoption ? work() : transaction(database, begin, work);
+  const expectedMatches = (proposal, expected) => ['inputDigest', 'resultDigest', 'baseScheduleRevision', 'configVersion', 'configDigest']
+    .every(key => proposal[key] === expected[key]);
+
   function readAssembled(command, active) {
     let assembled;
     try {
@@ -209,7 +220,7 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
       return denied(ASSEMBLER_DENIALS.has(error?.message) ? error.message
         : 'SCHEDULING_INPUT_ASSEMBLY_FAILED');
     }
-    const admitted = normalizeSchedulingInputV1(assembled);
+    const admitted = normalizeSchedulingInput(assembled);
     if (!admitted.ok) return denied('SCHEDULING_INPUT_INVALID');
     if (admitted.input.configVersion !== active.config_version
       || admitted.input.configDigest !== active.config_digest
@@ -229,22 +240,82 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
   }
 
   return Object.freeze({
-    generate(commandInput, trustedActor) {
+    /** Computes from a consistent read snapshot; never inserts a draft or a receipt. */
+    preview(commandInput, trustedActor) {
+      const generation = buildSchedulingProposalGenerationCommandV1(commandInput);
+      if (!generation.ok) return generation;
+      if (typeof trustedActor !== 'string' || !trustedActor.length
+        || (schedulingLease && trustedActor !== schedulingLease.owner)) return denied('TRUSTED_ACTOR_REQUIRED');
+      return runTransaction(db, 'BEGIN DEFERRED', () => {
+        assertSchedulingQuiescenceV1({ db, now, lease: schedulingLease });
+        const active = readActiveConfig(db), revision = readRevision(db);
+        if (!active) return denied('SCHEDULING_CONFIG_NOT_ACTIVE');
+        if (revision === null) return denied('SCHEDULING_REVISION_NOT_READY');
+        const input = readAssembled(generation.command, active);
+        if (!input.ok) return input;
+        if (input.input.baseScheduleRevision !== revision) return denied('SCHEDULING_INPUT_INVALID');
+        const computed = generateDeterministicScheduleV1(input.input, active.config);
+        if (!computed.ok) return computed;
+        return { ok: true, preview: {
+          generationCommand: generation.command,
+          proposalId: `sp_${digestCanonicalJsonSchedulingV1({domain:'scheduling-proposal-generation-id-v1',operationId:generation.command.operationId}).slice('sha256:'.length)}`,
+          inputDigest: input.inputDigest, resultDigest: computed.resultDigest,
+          baseScheduleRevision: revision, configVersion: active.config_version, configDigest: active.config_digest,
+          proposedItems: computed.result.proposedItems, diagnostics: computed.result.diagnostics,
+        } };
+      });
+    },
+
+    /** Exact preview proof + existing generation/acceptance, committed together or not at all. */
+    adoptPreview(input, principal, { executionGuard = () => true } = {}) {
+      if (typeof executionGuard !== 'function') return denied('INVALID_EXECUTION_GUARD');
+      const proof = input?.expectedPreview;
+      if (!input || Object.keys(input).sort().join(',') !== 'decision,expectedPreview,generationCommand'
+        || !proof || Object.keys(proof).sort().join(',') !== 'baseScheduleRevision,configDigest,configVersion,inputDigest,resultDigest'
+        || !Number.isSafeInteger(proof.baseScheduleRevision) || proof.baseScheduleRevision < 0
+        || !['inputDigest','resultDigest','configDigest'].every(key => /^sha256:[a-f0-9]{64}$/.test(proof[key]))
+        || typeof proof.configVersion !== 'string') return denied('INVALID_PREVIEW_ADOPTION');
+      if (!validateTrustedPrincipal(principal).ok || !Array.isArray(input.generationCommand?.resourceScope)
+        || !input.generationCommand.resourceScope.length
+        || input.generationCommand.resourceScope.some(resourceId => !authorizeCapability({principal,capability:'modifySchedule',resourceId}).allowed)) return denied('TRUSTED_SCHEDULER_REQUIRED');
+      if (atomicAdoption) return denied('NESTED_ADOPTION_FORBIDDEN');
+      const rollbackDenial = result => { const error = new Error('ATOMIC_ADOPTION_DENIED'); error.adoptionDenial = result; throw error; };
+      try {
+        return transaction(db, 'BEGIN IMMEDIATE', () => {
+          atomicAdoption = true;
+          try {
+            const generated = this.generate(input.generationCommand, principal.subjectId, proof);
+            if (!generated.ok) rollbackDenial(generated);
+            if (input.decision?.proposalId !== generated.proposal.proposalId) rollbackDenial(denied('PREVIEW_PROPOSAL_MISMATCH'));
+            const accepted = this.accept(input.decision, principal);
+            if (!accepted.ok || !['accept','partiallyAccept'].includes(accepted.receipt?.decisionType)) rollbackDenial(accepted.ok ? denied('SCHEDULING_PREVIEW_STALE') : accepted);
+            if (executionGuard() !== true) rollbackDenial(denied('AGENT_EXECUTION_WINDOW_CLOSED'));
+            return accepted;
+          } finally { atomicAdoption = false; }
+        });
+      } catch (error) { if (error.adoptionDenial) return error.adoptionDenial; throw error; }
+    },
+
+    generate(commandInput, trustedActor, expectedPreview = null) {
       const generation = buildSchedulingProposalGenerationCommandV1(commandInput);
       if (!generation.ok) return generation;
       if (typeof trustedActor !== 'string' || trustedActor.length === 0
         || (schedulingLease && trustedActor !== schedulingLease.owner)) return denied('TRUSTED_ACTOR_REQUIRED');
       const command = generation.command;
-      transaction(db, 'BEGIN DEFERRED', () => {
+      runTransaction(db, 'BEGIN DEFERRED', () => {
         assertSchedulingQuiescenceV1({ db, now, lease: schedulingLease });
         assertGf15CommandPacketV1(db, command, schedulingLease);
       });
       const existing = db.prepare(`SELECT proposal_id, generation_command_digest
         FROM scheduling_proposals WHERE generation_operation_id = ?`).get(command.operationId);
-      if (existing) return existing.generation_command_digest === generation.commandDigest
-        ? readStored(existing.proposal_id) : denied('IDEMPOTENCY_KEY_REUSE');
+      if (existing) {
+        if (existing.generation_command_digest !== generation.commandDigest) return denied('IDEMPOTENCY_KEY_REUSE');
+        const stored = readStored(existing.proposal_id);
+        return expectedPreview && (!stored.ok || !expectedMatches(stored.proposal, expectedPreview))
+          ? denied('SCHEDULING_PREVIEW_CHANGED') : stored;
+      }
 
-      const snapshot = transaction(db, 'BEGIN DEFERRED', () => {
+      const snapshot = runTransaction(db, 'BEGIN DEFERRED', () => {
         assertSchedulingQuiescenceV1({ db, now, lease: schedulingLease });
         const active = readActiveConfig(db);
         const revision = readRevision(db);
@@ -258,6 +329,8 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
       if (!snapshot.ok) return snapshot;
       const computed = generateDeterministicScheduleV1(snapshot.input.input, snapshot.active.config);
       if (!computed.ok) return computed;
+      if (expectedPreview && !expectedMatches({inputDigest:snapshot.input.inputDigest,resultDigest:computed.resultDigest,
+        baseScheduleRevision:snapshot.revision,configVersion:snapshot.active.config_version,configDigest:snapshot.active.config_digest}, expectedPreview)) return denied('SCHEDULING_PREVIEW_CHANGED');
       const createdAt = now().toISOString();
       const proposalId = `sp_${digestCanonicalJsonSchedulingV1({
         domain: 'scheduling-proposal-generation-id-v1', operationId: command.operationId,
@@ -283,12 +356,15 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
         createdBy: trustedActor, createdAt,
       });
       if (!built.ok) return built;
-      return transaction(db, 'BEGIN IMMEDIATE', () => {
+      return runTransaction(db, 'BEGIN IMMEDIATE', () => {
         assertSchedulingQuiescenceV1({ db, now, lease: schedulingLease });
         const replay = db.prepare(`SELECT proposal_id, generation_command_digest
           FROM scheduling_proposals WHERE generation_operation_id = ?`).get(command.operationId);
         if (replay) return replay.generation_command_digest === generation.commandDigest
           ? readStored(replay.proposal_id) : denied('IDEMPOTENCY_KEY_REUSE');
+        if (schedulingOperationIdOwnedByOtherV1(db, command.operationId, ['proposalGeneration'])) {
+          return denied('IDEMPOTENCY_KEY_REUSE');
+        }
         const currentActive = readActiveConfig(db);
         const currentRevision = readRevision(db);
         if (!currentActive || currentRevision !== snapshot.revision
@@ -322,7 +398,7 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
     reject(decisionInput, trustedActor) {
       if (typeof trustedActor !== 'string' || trustedActor.length === 0
         || (schedulingLease && trustedActor !== schedulingLease.owner)) return denied('TRUSTED_ACTOR_REQUIRED');
-      return transaction(db, 'BEGIN IMMEDIATE', () => {
+      return runTransaction(db, 'BEGIN IMMEDIATE', () => {
         assertSchedulingQuiescenceV1({ db, now, lease: schedulingLease });
         const prior = db.prepare(`SELECT proposal_id, decision_command_digest, decision_type,
           receipt_json, receipt_digest FROM scheduling_proposal_decisions
@@ -355,6 +431,9 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
           }
           return { ok: true, receipt, exactReplay: true };
         }
+
+        if (schedulingOperationIdOwnedByOtherV1(db, admitted.command.decisionId,
+          ['operation', 'proposalDecision'])) return denied('IDEMPOTENCY_KEY_REUSE');
 
         const operation = db.prepare(`SELECT kind, response_json, request_digest FROM operations
           WHERE operation_id = ?`).get(admitted.command.decisionId);
@@ -402,7 +481,7 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
       if (typeof authorizeAcceptance !== 'function'
         || typeof refreshProjections !== 'function') return denied('PROPOSAL_ACCEPT_NOT_WIRED');
       if (!validateTrustedPrincipal(principal).ok || (schedulingLease && principal.subjectId !== schedulingLease.owner)) return denied('TRUSTED_SCHEDULER_REQUIRED');
-      return transaction(db, 'BEGIN IMMEDIATE', () => {
+      return runTransaction(db, 'BEGIN IMMEDIATE', () => {
         assertSchedulingQuiescenceV1({ db, now, lease: schedulingLease });
         const operation = db.prepare(`SELECT kind, response_json, request_digest FROM operations
           WHERE operation_id = ?`).get(decisionInput?.decisionId);
@@ -420,6 +499,8 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
         if (!found) return denied('PROPOSAL_NOT_FOUND');
         const admitted = buildSchedulingProposalDecisionCommandV1(decisionInput, found.proposal);
         if (!admitted.ok) return admitted;
+        if (schedulingOperationIdOwnedByOtherV1(db, admitted.command.decisionId,
+          ['operation', 'proposalDecision'])) return denied('IDEMPOTENCY_KEY_REUSE');
         assertGf15CommandPacketV1(db, admitted.command, schedulingLease);
         if (!['accept', 'partiallyAccept'].includes(admitted.command.decisionType)) {
           return denied('PROPOSAL_ACCEPT_DECISION_TYPE_INVALID');
@@ -538,7 +619,7 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
     },
 
     stale({ proposalId, triggerOperationId, reasonCode } = {}) {
-      return transaction(db, 'BEGIN IMMEDIATE', () => {
+      return runTransaction(db, 'BEGIN IMMEDIATE', () => {
         assertSchedulingQuiescenceV1({ db, now, lease: schedulingLease });
         if (schedulingLease) return denied('GF15_COMMAND_NOT_BOUND');
         return staleOneInTransaction(db, { proposalId, triggerOperationId, reasonCode, now });

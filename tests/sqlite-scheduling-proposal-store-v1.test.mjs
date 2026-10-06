@@ -326,6 +326,54 @@ test('global operation ID collision returns a stable denial before acceptance wr
   } finally { f.db.close(); }
 });
 
+test('proposal decisions cannot reuse the proposal generation operation id', () => {
+  const f = acceptanceFixture();
+  try {
+    const generated = f.store.generate(f.command, 'scheduler:fixture');
+    assert.equal(generated.ok, true, JSON.stringify(generated));
+    const selected = JSON.parse(generated.proposal.proposedItemsJson).map(item => item.proposalItemId);
+    const accept = f.store.accept({ decisionId: f.command.operationId,
+      proposalId: generated.proposal.proposalId, decisionType: 'accept',
+      selectedProposalItemIds: selected, decisionNote: null, reasonCode: null,
+    }, schedulerPrincipal);
+    assert.equal(accept.code, 'IDEMPOTENCY_KEY_REUSE');
+    const reject = f.store.reject({ decisionId: f.command.operationId,
+      proposalId: generated.proposal.proposalId, decisionType: 'reject',
+      selectedProposalItemIds: null, decisionNote: null, reasonCode: 'HUMAN_REJECTED',
+    }, 'scheduler:fixture');
+    assert.equal(reject.code, 'IDEMPOTENCY_KEY_REUSE');
+    assert.equal(f.store.read(generated.proposal.proposalId).lifecycle.status, 'draft');
+    assert.equal(f.db.prepare('SELECT COUNT(*) count FROM scheduling_proposal_decisions').get().count, 0);
+  } finally { f.db.close(); }
+});
+
+test('generation and admin writers reject operation ids already owned by another scheduling family', () => {
+  const f = fixture();
+  try {
+    f.db.prepare(`INSERT INTO scheduling_admin_operations
+      (operation_id, command_digest, kind, response_json, created_at)
+      VALUES ('ADMIN-TAKEN', ?, 'publishConfig', '{}', ?)`).run(
+        `sha256:${'a'.repeat(64)}`, '2026-09-23T08:00:00.000Z',
+      );
+    assert.equal(f.store.generate({ ...f.command, operationId: 'ADMIN-TAKEN' },
+      'scheduler:fixture').code, 'IDEMPOTENCY_KEY_REUSE');
+
+    const generated = f.store.generate(f.command, 'scheduler:fixture');
+    assert.equal(generated.ok, true, JSON.stringify(generated));
+    const admin = createSqliteSchedulingAdminStoreV1({ db: f.db,
+      now: () => new Date('2026-09-23T08:00:00.000Z'), refreshProjections: () => {},
+    });
+    const normalized = normalizeSchedulingConfigV1(config());
+    const result = admin.publishConfig({ operationId: f.command.operationId, configVersion: 'config-cross-family',
+      algorithmVersion: 'deterministic-scheduler-v1', calendarCompilerVersion: 'calendar-compiler-v1',
+      estimatePolicyVersion: 'estimate-policy-v1', configJson: config(), configDigest: normalized.configDigest,
+    }, 'admin:fixture');
+    assert.equal(result.code, 'IDEMPOTENCY_KEY_REUSE');
+    assert.equal(f.db.prepare(`SELECT COUNT(*) count FROM scheduling_config_versions
+      WHERE config_version = 'config-cross-family'`).get().count, 0);
+  } finally { f.db.close(); }
+});
+
 test('projection failure rolls back every accepted item, revision, receipt and Outbox row', () => {
   const f = acceptanceFixture(['REQ-1', 'REQ-2']);
   try {

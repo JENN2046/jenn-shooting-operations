@@ -1,5 +1,10 @@
 # 执行计划
 
+> **历史初始阶段计划。** 本文件保留 Phase 1-7 的原始演进边界用于 provenance，
+> 不再定义当前 next action。Scope Reset 后的当前收官主线与唯一 G0-G4 Gate 见
+> [JSO Core Canonical R1](JSO_CORE_CANONICAL_R1.md)。历史 PROD/GF authority
+> 不因仍能通过 validator 就自动升级为当前 roadmap 或生产授权。
+
 ## 已锁定边界
 
 - VCP 工作台：`jenn-shooting-planner`

@@ -12,6 +12,9 @@ import { createSqliteKioskRunEventStore } from './sqlite-kiosk-run-event-store-v
 import { refreshSqliteSnapshotProjectionsV2 } from './sqlite-run-event-store-v2.mjs';
 import { assembleSchedulingInputFromSqliteV1 } from './sqlite-scheduling-input-assembler-v1.mjs';
 import { createSqliteSchedulingProposalStoreV1 } from './sqlite-scheduling-proposal-store-v1.mjs';
+import { createAgentSchedulingServiceV1 } from './agent-scheduling-service-v1.mjs';
+import { createBusinessSchedulingApplication } from './business-scheduling-application-v1.mjs';
+import { createBusinessRuntimeOptionsFromEnv } from './business-runtime-auth-v1.mjs';
 import { ScheduleStore } from './store.mjs';
 import { createWriteAdmissionControl, normalizeWriteAdmissionMode } from './write-admission-v1.mjs';
 
@@ -123,7 +126,18 @@ export function createSchedulingV2Application({
       });
     },
   });
+  const business = createBusinessSchedulingApplication({ db: store.db, writeAdmissionControl, clock, proposalStore,
+    refreshProjections: context => {
+      const row=store.db.prepare(`SELECT v.config_json FROM scheduling_active_config a JOIN scheduling_config_versions v
+        ON v.config_version=a.config_version WHERE a.id=1`).get();
+      const businessTimeZone=row ? JSON.parse(row.config_json).businessTimeZone : 'Asia/Shanghai';
+      return refreshSqliteSnapshotProjectionsV2({ ...context, businessTimeZone, allowedBriefHosts });
+    } });
   return Object.freeze({
+    ...business,
+    // Injection port only. No route or identity is enabled by constructing this facade.
+    agentService: createAgentSchedulingServiceV1({ db: store.db, proposalStore,
+      application: business, writeAdmissionControl }),
     authenticate,
     writeAdmissionControl,
     decideProposal({ command, principal } = {}) {
@@ -325,6 +339,7 @@ if (invokedDirectly) {
     orphanCleanupDomain,
     writeAdmissionMode,
     ...kioskRuntimeOptions,
+    ...createBusinessRuntimeOptionsFromEnv(process.env),
   });
 
   const enableWriteAdmission = () => {

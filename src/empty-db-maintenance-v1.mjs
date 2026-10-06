@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { lstatSync, realpathSync, readdirSync, readFileSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import { assertKnownSchema, MIGRATIONS, LATEST_SCHEMA_VERSION } from './sqlite-schema-v2.mjs';
+import { assertKnownSchema, MIGRATIONS } from './sqlite-schema-v2.mjs';
 import { canonicalJsonSchedulingV1, digestCanonicalJsonSchedulingV1,
   isSchedulingIdentifierV1 } from './scheduling-contract-v1.mjs';
 import { normalizeRegisterSchedulingResourceV1, normalizePublishSchedulingConfigV1,
@@ -17,7 +17,7 @@ const normalizers = Object.freeze({ registerResource: normalizeRegisterSchedulin
   publishConfig: normalizePublishSchedulingConfigV1, activateConfig: normalizeActivateSchedulingConfigV1 });
 const digest = value => digestCanonicalJsonSchedulingV1(value);
 const json = value => canonicalJsonSchedulingV1(value);
-export const EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1 = digest(MIGRATIONS.map(({ version, name, checksum }) =>
+export const EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1 = digest(MIGRATIONS.slice(0, 10).map(({ version, name, checksum }) =>
   ({ version, name, checksum })));
 export function digestEmptyDbMaintenancePacketV1(packet) { return digest(packet); }
 function fail(code) { const error = new Error(code); error.code = code; throw error; }
@@ -150,8 +150,8 @@ function assertTarget(packet, offline = false) {
   }
 }
 function assertSchema(db) {
-  const known = assertKnownSchema(db);
-  requireValue(known.version === LATEST_SCHEMA_VERSION && known.version === 10,
+  const known = assertKnownSchema(db, { migrations: MIGRATIONS.slice(0, 10) });
+  requireValue(known.version === 10,
     'MAINTENANCE_SCHEMA_UNSUPPORTED');
   requireValue(db.prepare('PRAGMA integrity_check').get().integrity_check === 'ok'
     && db.prepare('PRAGMA foreign_key_check').all().length === 0, 'MAINTENANCE_DATABASE_INVALID');
