@@ -53,7 +53,10 @@
       "unknownExecutorMayRetainAuthoritativeWriteCapability": false,
       "nonDatabaseProductionMutationAllowed": false,
       "trustedExecutionBoundaryEvidenceVerificationRequired": true,
-      "unprovenBoundaryDisposition": "DO_NOT_EXECUTE"
+      "unprovenBoundaryDisposition": "DO_NOT_EXECUTE",
+      "durableAttemptLedgerRequired": true,
+      "oneShotAttemptClaimBeforeExecutionRequired": true,
+      "attemptReplayDisposition": "RECONCILIATION_REQUIRED"
     },
     {
       "id": "G2_I5_TERMINAL_OUTCOME_MODEL",
@@ -69,7 +72,8 @@
       "otherOutcomesAllowed": false,
       "terminalReceiptRequired": true,
       "terminalSemanticValidationRequired": true,
-      "trustedTerminalEvidenceVerificationRequired": true
+      "trustedTerminalEvidenceVerificationRequired": true,
+      "terminalReceiptRequiresStartedAttempt": true
     },
     {
       "id": "G2_I6_UNKNOWN_BLOCKS_READMISSION",

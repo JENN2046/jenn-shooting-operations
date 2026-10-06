@@ -33,12 +33,16 @@ export function createG3Schema11CutoverContractV1({
   verifyApproval,
   verifyAuthorityTargetEvidence,
   verifyTerminalEvidence,
+  claimExecutionAttempt,
+  verifyExecutionAttemptStarted,
 } = {}) {
   if (!packetSchema || !receiptSchema
     || typeof verifyApproval !== 'function'
     || typeof verifyAuthorityTargetEvidence !== 'function'
-    || typeof verifyTerminalEvidence !== 'function') {
-    throw new TypeError('packet/receipt schemas and trusted G3 evidence verifiers required');
+    || typeof verifyTerminalEvidence !== 'function'
+    || typeof claimExecutionAttempt !== 'function'
+    || typeof verifyExecutionAttemptStarted !== 'function') {
+    throw new TypeError('packet/receipt schemas and trusted G3 authority/attempt/evidence boundaries required');
   }
 
   const ajv = new Ajv2020({ allErrors: true, strict: true });
@@ -46,7 +50,7 @@ export function createG3Schema11CutoverContractV1({
   const validatePacketSchema = ajv.compile(packetSchema);
   const validateReceiptSchema = ajv.compile(receiptSchema);
 
-  function validateExecutablePacket(packet) {
+  function verifyApprovedPacket(packet) {
     if (!validatePacketSchema(packet)) return fail('G3_PACKET_SCHEMA_INVALID');
 
     let computed;
@@ -78,8 +82,37 @@ export function createG3Schema11CutoverContractV1({
     return Object.freeze({ ok: true, authorityTargetDigest: computed });
   }
 
+  function attemptIdentity(packet, authorityTargetDigest) {
+    return frozenClone({
+      packetId: packet.packetId,
+      operationId: packet.authorityTarget.execution.operationId,
+      authorityTargetDigest,
+    });
+  }
+
+  function admitExecutablePacket(packet) {
+    const admitted = verifyApprovedPacket(packet);
+    if (!admitted.ok) return admitted;
+
+    const attempt = attemptIdentity(packet, admitted.authorityTargetDigest);
+    let claim;
+    try { claim = claimExecutionAttempt(attempt); }
+    catch { return fail('G3_EXECUTION_ATTEMPT_CLAIM_UNAVAILABLE'); }
+
+    if (claim?.ok === true) {
+      return Object.freeze({
+        ok: true,
+        authorityTargetDigest: admitted.authorityTargetDigest,
+      });
+    }
+    if (claim?.ok === false && claim.code === 'ATTEMPT_ALREADY_STARTED') {
+      return fail('G3_EXECUTION_ATTEMPT_ALREADY_STARTED');
+    }
+    return fail('G3_EXECUTION_ATTEMPT_CLAIM_UNAVAILABLE');
+  }
+
   function validateTerminalReceipt(packet, receipt) {
-    const admitted = validateExecutablePacket(packet);
+    const admitted = verifyApprovedPacket(packet);
     if (!admitted.ok) return admitted;
     if (!validateReceiptSchema(receipt)) return fail('G3_RECEIPT_SCHEMA_INVALID');
 
@@ -88,6 +121,12 @@ export function createG3Schema11CutoverContractV1({
       || receipt.authorityTargetDigest !== admitted.authorityTargetDigest) {
       return fail('G3_RECEIPT_BINDING_MISMATCH');
     }
+
+    const attempt = attemptIdentity(packet, admitted.authorityTargetDigest);
+    let attemptStarted = false;
+    try { attemptStarted = verifyExecutionAttemptStarted(attempt) === true; }
+    catch { return fail('G3_EXECUTION_ATTEMPT_LEDGER_UNAVAILABLE'); }
+    if (!attemptStarted) return fail('G3_EXECUTION_ATTEMPT_NOT_FOUND');
 
     if (receipt.outcome === 'ROLLED_BACK'
       && receipt.evidence.restoredPrestateDigest
@@ -110,7 +149,7 @@ export function createG3Schema11CutoverContractV1({
   }
 
   return Object.freeze({
-    validateExecutablePacket,
+    admitExecutablePacket,
     validateTerminalReceipt,
   });
 }

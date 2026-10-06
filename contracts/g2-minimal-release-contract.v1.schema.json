@@ -212,7 +212,10 @@
             "unknownExecutorMayRetainAuthoritativeWriteCapability",
             "nonDatabaseProductionMutationAllowed",
             "trustedExecutionBoundaryEvidenceVerificationRequired",
-            "unprovenBoundaryDisposition"
+            "unprovenBoundaryDisposition",
+            "durableAttemptLedgerRequired",
+            "oneShotAttemptClaimBeforeExecutionRequired",
+            "attemptReplayDisposition"
           ],
           "properties": {
             "id": {
@@ -238,6 +241,15 @@
             },
             "trustedExecutionBoundaryEvidenceVerificationRequired": {
               "const": true
+            },
+            "durableAttemptLedgerRequired": {
+              "const": true
+            },
+            "oneShotAttemptClaimBeforeExecutionRequired": {
+              "const": true
+            },
+            "attemptReplayDisposition": {
+              "const": "RECONCILIATION_REQUIRED"
             }
           }
         },
@@ -254,7 +266,8 @@
             "terminalSemanticValidationRequired",
             "trustedTerminalEvidenceVerificationRequired",
             "automaticRetryAllowed",
-            "otherOutcomesAllowed"
+            "otherOutcomesAllowed",
+            "terminalReceiptRequiresStartedAttempt"
           ],
           "properties": {
             "id": {
@@ -299,6 +312,9 @@
               "const": true
             },
             "trustedTerminalEvidenceVerificationRequired": {
+              "const": true
+            },
+            "terminalReceiptRequiresStartedAttempt": {
               "const": true
             }
           }

@@ -76,12 +76,16 @@ test('G2 rejects relaxation of containment, approval binding, recovery, outcomes
     changed(v => { v.invariants[3].unknownExecutorMayRetainAuthoritativeWriteCapability = true; }),
     changed(v => { v.invariants[3].nonDatabaseProductionMutationAllowed = true; }),
     changed(v => { v.invariants[3].trustedExecutionBoundaryEvidenceVerificationRequired = false; }),
+    changed(v => { v.invariants[3].durableAttemptLedgerRequired = false; }),
+    changed(v => { v.invariants[3].oneShotAttemptClaimBeforeExecutionRequired = false; }),
+    changed(v => { v.invariants[3].attemptReplayDisposition = 'RETRY_ALLOWED'; }),
     changed(v => { v.invariants[3].unprovenBoundaryDisposition = 'UNKNOWN'; }),
     changed(v => { v.invariants[4].committedRequiresSchema11Verification = false; }),
     changed(v => { v.invariants[4].rolledBackRequiresPrestateRestorationVerification = false; }),
     changed(v => { v.invariants[4].terminalReceiptRequired = false; }),
     changed(v => { v.invariants[4].terminalSemanticValidationRequired = false; }),
     changed(v => { v.invariants[4].trustedTerminalEvidenceVerificationRequired = false; }),
+    changed(v => { v.invariants[4].terminalReceiptRequiresStartedAttempt = false; }),
     changed(v => { v.invariants[4].automaticRetryAllowed = true; }),
     changed(v => { v.invariants[4].allowedOutcomes = ['COMMITTED', 'ROLLED_BACK']; }),
     changed(v => { v.invariants[5].unknownKeepsNormalWritesDisabled = false; }),
@@ -145,13 +149,31 @@ const verifyApproval = value => value.approvalRef === trustedApproval.approvalRe
   && value.approvalEvidenceDigest === trustedApproval.approvalEvidenceDigest;
 const verifyAuthorityTargetEvidence = () => true;
 const verifyTerminalEvidence = () => true;
-const g3 = createG3Schema11CutoverContractV1({
-  packetSchema,
-  receiptSchema,
-  verifyApproval,
-  verifyAuthorityTargetEvidence,
-  verifyTerminalEvidence,
-});
+const attemptKey = value =>
+  `${value.packetId}\n${value.operationId}\n${value.authorityTargetDigest}`;
+
+function createTestG3(overrides = {}) {
+  const started = new Set();
+  const claimExecutionAttempt = overrides.claimExecutionAttempt ?? (value => {
+    const key = attemptKey(value);
+    if (started.has(key)) return { ok: false, code: 'ATTEMPT_ALREADY_STARTED' };
+    started.add(key);
+    return { ok: true };
+  });
+  const verifyExecutionAttemptStarted = overrides.verifyExecutionAttemptStarted
+    ?? (value => started.has(attemptKey(value)));
+  const g3 = createG3Schema11CutoverContractV1({
+    packetSchema,
+    receiptSchema,
+    verifyApproval: overrides.verifyApproval ?? verifyApproval,
+    verifyAuthorityTargetEvidence:
+      overrides.verifyAuthorityTargetEvidence ?? verifyAuthorityTargetEvidence,
+    verifyTerminalEvidence: overrides.verifyTerminalEvidence ?? verifyTerminalEvidence,
+    claimExecutionAttempt,
+    verifyExecutionAttemptStarted,
+  });
+  return { g3, started };
+}
 
 function makePacket() {
   const authorityTarget = structuredClone(trustedAuthorityTarget);
@@ -190,40 +212,69 @@ test('G3 executable packet schema cannot represent an unapproved execution', () 
   }
 });
 
-test('G3 semantic validator requires trusted evidence verifiers and binds approval to the complete authority target', () => {
+test('G3 semantic admission requires trusted evidence and a durable one-shot attempt claim', () => {
   assert.throws(() => createG3Schema11CutoverContractV1({ packetSchema, receiptSchema }));
   assert.throws(() => createG3Schema11CutoverContractV1({
-    packetSchema, receiptSchema, verifyApproval, verifyAuthorityTargetEvidence,
-  }));
-  const packet = makePacket();
-  const unverifiedEvidence = createG3Schema11CutoverContractV1({
     packetSchema,
     receiptSchema,
     verifyApproval,
-    verifyAuthorityTargetEvidence: () => false,
+    verifyAuthorityTargetEvidence,
     verifyTerminalEvidence,
+  }));
+
+  const packet = makePacket();
+  const { g3: unverifiedEvidence } = createTestG3({
+    verifyAuthorityTargetEvidence: () => false,
   });
   assert.equal(
-    unverifiedEvidence.validateExecutablePacket(packet).code,
+    unverifiedEvidence.admitExecutablePacket(packet).code,
     'G3_AUTHORITY_TARGET_EVIDENCE_NOT_VERIFIED',
   );
-  assert.deepEqual(g3.validateExecutablePacket(packet), {
+
+  const { g3 } = createTestG3();
+  assert.deepEqual(g3.admitExecutablePacket(packet), {
     ok: true,
     authorityTargetDigest: packet.authorityTargetDigest,
   });
+  assert.equal(
+    g3.admitExecutablePacket(packet).code,
+    'G3_EXECUTION_ATTEMPT_ALREADY_STARTED',
+  );
 
   const changedTarget = structuredClone(packet);
   changedTarget.authorityTarget.artifact.imageDigest = digest('a');
-  assert.equal(g3.validateExecutablePacket(changedTarget).code, 'G3_AUTHORITY_TARGET_DIGEST_MISMATCH');
+  const { g3: changedValidator } = createTestG3();
+  assert.equal(
+    changedValidator.admitExecutablePacket(changedTarget).code,
+    'G3_AUTHORITY_TARGET_DIGEST_MISMATCH',
+  );
 
   const reboundWithoutApproval = structuredClone(packet);
   reboundWithoutApproval.authorityTarget.target.targetBindingDigest = digest('b');
-  reboundWithoutApproval.authorityTargetDigest = digestG3AuthorityTargetV1(reboundWithoutApproval.authorityTarget);
-  assert.equal(g3.validateExecutablePacket(reboundWithoutApproval).code, 'G3_APPROVAL_TARGET_MISMATCH');
+  reboundWithoutApproval.authorityTargetDigest =
+    digestG3AuthorityTargetV1(reboundWithoutApproval.authorityTarget);
+  const { g3: reboundValidator } = createTestG3();
+  assert.equal(
+    reboundValidator.admitExecutablePacket(reboundWithoutApproval).code,
+    'G3_APPROVAL_TARGET_MISMATCH',
+  );
 
   const forgedReapproval = structuredClone(reboundWithoutApproval);
-  forgedReapproval.authorization.approvedAuthorityTargetDigest = forgedReapproval.authorityTargetDigest;
-  assert.equal(g3.validateExecutablePacket(forgedReapproval).code, 'G3_APPROVAL_EVIDENCE_NOT_VERIFIED');
+  forgedReapproval.authorization.approvedAuthorityTargetDigest =
+    forgedReapproval.authorityTargetDigest;
+  const { g3: forgedValidator } = createTestG3();
+  assert.equal(
+    forgedValidator.admitExecutablePacket(forgedReapproval).code,
+    'G3_APPROVAL_EVIDENCE_NOT_VERIFIED',
+  );
+
+  const { g3: unavailableClaim } = createTestG3({
+    claimExecutionAttempt: () => { throw new Error('synthetic unavailable'); },
+  });
+  assert.equal(
+    unavailableClaim.admitExecutablePacket(packet).code,
+    'G3_EXECUTION_ATTEMPT_CLAIM_UNAVAILABLE',
+  );
 });
 
 function makeReceipt(outcome) {
@@ -272,7 +323,11 @@ function makeReceipt(outcome) {
 test('terminal receipt schema enforces COMMITTED, ROLLED_BACK and UNKNOWN evidence separately', () => {
   for (const outcome of ['COMMITTED', 'ROLLED_BACK', 'UNKNOWN']) {
     const { receipt } = makeReceipt(outcome);
-    assert.equal(validateReceiptSchema(receipt), true, `${outcome}: ${JSON.stringify(validateReceiptSchema.errors)}`);
+    assert.equal(
+      validateReceiptSchema(receipt),
+      true,
+      `${outcome}: ${JSON.stringify(validateReceiptSchema.errors)}`,
+    );
   }
 
   const { receipt: committed } = makeReceipt('COMMITTED');
@@ -288,30 +343,60 @@ test('terminal receipt schema enforces COMMITTED, ROLLED_BACK and UNKNOWN eviden
   assert.equal(validateReceiptSchema(invalid), false);
 });
 
-test('terminal semantic validator binds receipt to packet, exact prestate and trusted terminal evidence', () => {
+test('terminal semantic validator requires a started attempt, exact prestate and trusted evidence', () => {
   for (const outcome of ['COMMITTED', 'ROLLED_BACK', 'UNKNOWN']) {
     const { packet, receipt } = makeReceipt(outcome);
+    const { g3 } = createTestG3();
+    assert.equal(g3.admitExecutablePacket(packet).ok, true);
     assert.deepEqual(g3.validateTerminalReceipt(packet, receipt), { ok: true, outcome });
   }
 
-  const terminalUnverified = createG3Schema11CutoverContractV1({
-    packetSchema,
-    receiptSchema,
-    verifyApproval,
-    verifyAuthorityTargetEvidence,
+  const neverStarted = makeReceipt('UNKNOWN');
+  const { g3: noAttempt } = createTestG3();
+  assert.equal(
+    noAttempt.validateTerminalReceipt(neverStarted.packet, neverStarted.receipt).code,
+    'G3_EXECUTION_ATTEMPT_NOT_FOUND',
+  );
+
+  const unverified = makeReceipt('COMMITTED');
+  const { g3: terminalUnverified } = createTestG3({
     verifyTerminalEvidence: () => false,
   });
-  const unverified = makeReceipt('COMMITTED');
+  assert.equal(terminalUnverified.admitExecutablePacket(unverified.packet).ok, true);
   assert.equal(
     terminalUnverified.validateTerminalReceipt(unverified.packet, unverified.receipt).code,
     'G3_TERMINAL_EVIDENCE_NOT_VERIFIED',
   );
 
-  const { packet, receipt } = makeReceipt('ROLLED_BACK');
-  receipt.evidence.restoredPrestateDigest = digest('0');
-  assert.equal(g3.validateTerminalReceipt(packet, receipt).code, 'G3_ROLLBACK_PRESTATE_MISMATCH');
+  const rollback = makeReceipt('ROLLED_BACK');
+  const { g3: rollbackValidator } = createTestG3();
+  assert.equal(rollbackValidator.admitExecutablePacket(rollback.packet).ok, true);
+  rollback.receipt.evidence.restoredPrestateDigest = digest('0');
+  assert.equal(
+    rollbackValidator.validateTerminalReceipt(rollback.packet, rollback.receipt).code,
+    'G3_ROLLBACK_PRESTATE_MISMATCH',
+  );
 
   const bound = makeReceipt('UNKNOWN');
+  const { g3: bindingValidator } = createTestG3();
+  assert.equal(bindingValidator.admitExecutablePacket(bound.packet).ok, true);
   bound.receipt.authorityTargetDigest = digest('0');
-  assert.equal(g3.validateTerminalReceipt(bound.packet, bound.receipt).code, 'G3_RECEIPT_BINDING_MISMATCH');
+  assert.equal(
+    bindingValidator.validateTerminalReceipt(bound.packet, bound.receipt).code,
+    'G3_RECEIPT_BINDING_MISMATCH',
+  );
+});
+
+test('UNKNOWN terminal state never makes the same packet executable again', () => {
+  const { packet, receipt } = makeReceipt('UNKNOWN');
+  const { g3 } = createTestG3();
+  assert.equal(g3.admitExecutablePacket(packet).ok, true);
+  assert.deepEqual(g3.validateTerminalReceipt(packet, receipt), {
+    ok: true,
+    outcome: 'UNKNOWN',
+  });
+  assert.equal(
+    g3.admitExecutablePacket(packet).code,
+    'G3_EXECUTION_ATTEMPT_ALREADY_STARTED',
+  );
 });

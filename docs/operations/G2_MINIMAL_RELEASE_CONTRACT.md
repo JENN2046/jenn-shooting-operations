@@ -17,8 +17,8 @@ historical PROD/GF/C01/custody gate family.
 | `G2_I1_DURABLE_WRITER_CONTAINMENT` | Normal writers must be durably disabled and all in-flight writers drained before cutover. Process lifetime is not authority. If containment cannot be proven, the cutover is **not executed**. |
 | `G2_I2_EXACT_ARTIFACT_BINDING` | G3 must bind one exact source commit, image digest, Schema 11 migration checksum and one authority-target object. Human approval must bind the computed digest of that complete target, and trusted verification must confirm both artifact evidence and approval evidence. Drift is forbidden. |
 | `G2_I3_VERIFIED_PRESTATE_RECOVERY` | G3 requires an exact active-database-family digest, recovery artifact, an independent readback proof that verifies that artifact, SQLite integrity check and zero FK violations. These are trusted evidence, not self-asserted digest-shaped strings. |
-| `G2_I4_EXPLICIT_CUTOVER_ENTRY` | Ordinary runtime cannot perform 10→11. Only `G3_SCHEMA11_CUTOVER` may enter the transition. The execution capability must be bounded and trusted-verifiable so an UNKNOWN executor cannot retain authoritative write capability; if this boundary is unproven, **do not execute**. Non-database production mutation is forbidden. |
-| `G2_I5_TERMINAL_OUTCOME_MODEL` | After an admitted attempt, the only outcomes are `COMMITTED`, `ROLLED_BACK`, or `UNKNOWN`. COMMITTED requires trusted verification of Schema 11; ROLLED_BACK requires trusted verification of exact pre-state restoration; anything unclassifiable is UNKNOWN. Automatic retry is forbidden. |
+| `G2_I4_EXPLICIT_CUTOVER_ENTRY` | Ordinary runtime cannot perform 10→11. Only `G3_SCHEMA11_CUTOVER` may enter the transition. The execution capability must be bounded and trusted-verifiable; before execution, a durable one-shot attempt ledger must atomically claim the exact packet/operation/authority-target identity. A claimed packet can never execute again. If the boundary is unproven, **do not execute**. |
+| `G2_I5_TERMINAL_OUTCOME_MODEL` | After an admitted attempt, the only outcomes are `COMMITTED`, `ROLLED_BACK`, or `UNKNOWN`. A terminal receipt is valid only for a durably recorded started attempt. COMMITTED requires trusted Schema 11 verification; ROLLED_BACK requires trusted exact pre-state restoration; anything unclassifiable is UNKNOWN. Automatic retry is forbidden. |
 | `G2_I6_UNKNOWN_BLOCKS_READMISSION` | `UNKNOWN` keeps normal writes disabled. Human reconciliation plus fresh readmission evidence is required before re-enable. |
 
 ## Exact Schema 11 binding
@@ -58,7 +58,13 @@ invalidates the approval unless the trusted approval source verifies a new appro
 If the target/recovery/containment/boundary evidence cannot be independently verified at the execution boundary, the packet is
 inadmissible and the cutover is not started.
 
-After an admitted attempt, a terminal receipt is mandatory and must also pass a **trusted terminal-evidence verifier**. It admits only:
+Immediately before execution, the semantic boundary must atomically claim the exact
+`{packetId, operationId, authorityTargetDigest}` in a **durable one-shot attempt ledger**. A second claim for the same
+identity is `RECONCILIATION_REQUIRED`; it is never another execution attempt. This one-shot state must survive process restart
+and controller loss.
+
+After an admitted attempt, a terminal receipt is mandatory, must correspond to a durably recorded started attempt, and must also
+pass a **trusted terminal-evidence verifier**. It admits only:
 
 - `COMMITTED` with verified Schema 11 / post-state evidence;
 - `ROLLED_BACK` with verified restoration evidence matching the exact pre-state digest;
@@ -96,8 +102,8 @@ definition in source. A later source change therefore cannot silently leave the 
 Current local validation on Node 24.21.0:
 
 - G2 validator: **PASS**;
-- G2 contract/packet/receipt tests: **7 / 7 PASS**;
-- full repository suite: **1035 total, 1034 PASS, 0 FAIL, 1 existing conditional skip**.
+- G2 contract/packet/receipt tests: **8 / 8 PASS**;
+- full repository suite: **1036 total, 1035 PASS, 0 FAIL, 1 existing conditional skip**.
 
 ## G2 exit
 
