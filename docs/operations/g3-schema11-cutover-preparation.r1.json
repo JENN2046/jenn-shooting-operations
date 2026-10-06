@@ -1,0 +1,151 @@
+{
+  "schemaVersion": 1,
+  "preparationId": "G3_SCHEMA11_CUTOVER_PREPARATION_R1",
+  "status": "BLOCKED_SOURCE_SCHEMA_MISMATCH",
+  "authority": {
+    "canonicalBranch": "codex/v2-1-architecture-freeze",
+    "authorityHead": "6334e2ae851247cb1558074fbd80cfee06b28c11",
+    "g2Status": "CLOSED",
+    "productionMutationAuthorized": false,
+    "schema11CutoverAuthorized": false
+  },
+  "contractTransition": {
+    "requiredSourceSchemaVersion": 10,
+    "targetSchemaVersion": 11,
+    "migrationName": "business_calendar_and_reschedule",
+    "migrationChecksum": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8"
+  },
+  "artifactCandidate": {
+    "sourceCommit": "6334e2ae851247cb1558074fbd80cfee06b28c11",
+    "imageDigest": "sha256:581e9fa25e04b582aa39c2fdaa291f6db3e80fc3f3ac15a8a4afa06622442144",
+    "architecture": "amd64",
+    "builtOn": "jenn-System-Product-Name",
+    "builtLocally": true,
+    "uploadedToProduction": false
+  },
+  "productionObservation": {
+    "firstSampleAt": "2026-10-06T08:35:21Z",
+    "secondSampleAt": "2026-10-06T08:43:35Z",
+    "targetBinding": {
+      "provider": "TENCENT_CLOUD_CVM",
+      "instanceId": "ins-mi85f3my",
+      "hostname": "VM-0-12-ubuntu",
+      "containerName": "jenn-shooting-operations-prod",
+      "applicationBind": "127.0.0.1:3800",
+      "dataVolumeName": "jenn-shooting-operations_shooting_data",
+      "databasePath": "/app/data/shooting-operations.sqlite",
+      "targetBindingDigest": "sha256:1229e1f330d8b9e32d2a25a0665b2ba127954fa9d75905565482bef05dbc0008"
+    },
+    "runtime": {
+      "containerId": "b29798598ac043794420599c23f735c19038744a76f1b490b3e8c5a58e28e6be",
+      "imageDigest": "sha256:c305de265b480160e24d0ad4ce75b7c4617a7f49a5a8497ef6ba71d99d9aa545",
+      "sourceRevision": "92b7137211bf807f178901e878a8c3d6e335cec4",
+      "containerHealth": "healthy",
+      "healthzStatus": 200,
+      "writeAdmissionMode": "enabled",
+      "orphanCleanupMode": "enabled"
+    },
+    "database": {
+      "schemaVersion": 6,
+      "migrationCount": 6,
+      "latestMigration": {
+        "version": 6,
+        "name": "scheduling_run_context_capture",
+        "checksum": "sha256:15b0462915aa0cc12f3d0c06020f557cbaf2d1db22015d79aeb015f93abe5a5b"
+      },
+      "journalMode": "wal",
+      "integrityCheck": "ok",
+      "foreignKeyViolationCount": 0,
+      "observedDatabaseFamilyDigest": "sha256:16074029ff0385dfc838d3271c53436393a1308aa102d3378c7a449527636131",
+      "stableAcrossSamples": true,
+      "authoritativePrestate": false,
+      "authoritativePrestateReason": "WRITE_ADMISSION_ENABLED"
+    },
+    "databaseFamily": {
+      "db": {
+        "size": 4096,
+        "device": 64784,
+        "inode": 1835048,
+        "sha256": "97e8d54f8a7255106f66cf1b213c4a4d7b558d21310b1c2bfedc3d0d526dddda"
+      },
+      "wal": {
+        "size": 609792,
+        "device": 64784,
+        "inode": 1835049,
+        "sha256": "a4556b355fc70efd346d41ab7ed11deefca46d3fe18901d3c615e92327bd6d2b"
+      },
+      "shm": {
+        "size": 32768,
+        "device": 64784,
+        "inode": 1835050,
+        "sha256": "f455743a63a919802676039b97c4b10053b5566d670b0c0cceccbadb9cb2d7d5"
+      }
+    }
+  },
+  "sourcePrefixAlignment": {
+    "required": true,
+    "actionId": "G3_PREP_SOURCE_PREFIX_ALIGNMENT_6_TO_10",
+    "status": "NOT_AUTHORIZED",
+    "productionMutationRequired": true,
+    "candidateRuntimeBehaviorValidatedLocally": true,
+    "candidateRuntimeObservedResult": {
+      "sourceSchemaVersion": 6,
+      "resultSchemaVersion": 10,
+      "migration11Count": 0
+    },
+    "allowedMigrationPrefix": [
+      {
+        "version": 7,
+        "name": "gf15_bounded_capabilities",
+        "checksum": "sha256:b9e8bed840ee71a300977e2e89039c96e1a5270e5ca4edbc98e41b27b7909b19"
+      },
+      {
+        "version": 8,
+        "name": "kiosk_bounded_smoke",
+        "checksum": "sha256:44e999a608bd257ffb9db7ee0f10d7b42932afdccf0463757cf333443e02c448"
+      },
+      {
+        "version": 9,
+        "name": "kiosk_smoke_runtime_ownership",
+        "checksum": "sha256:ab2ac08cfb8510124d9ac64fe38353e0117e754d0266e8d1f150d34f3929c88e"
+      },
+      {
+        "version": 10,
+        "name": "empty_db_maintenance_receipts",
+        "checksum": "sha256:992f3dee7f23780f407b5f1445413e3d801dcab0bafe8fdac29ee4730e3243aa"
+      }
+    ],
+    "schema11Allowed": false
+  },
+  "readiness": {
+    "exactArtifactPrepared": true,
+    "freshTargetObserved": true,
+    "sourceSchemaReady": false,
+    "durableWriterContainmentVerified": false,
+    "zeroInFlightWritersVerified": false,
+    "verifiedRecoveryArtifactAvailable": false,
+    "authoritativePrestateVerified": false,
+    "executionBoundaryVerified": false,
+    "humanApprovalStatus": "NOT_REQUESTED",
+    "executablePacketStatus": "NOT_CREATED"
+  },
+  "blockers": [
+    "SOURCE_SCHEMA_VERSION_6_REQUIRES_10",
+    "WRITE_ADMISSION_ENABLED",
+    "ORPHAN_CLEANUP_ENABLED",
+    "DURABLE_WRITER_CONTAINMENT_NOT_ESTABLISHED",
+    "ZERO_IN_FLIGHT_WRITERS_NOT_PROVEN",
+    "RECOVERY_ARTIFACT_NOT_VERIFIED",
+    "AUTHORITATIVE_PRESTATE_NOT_CAPTURED",
+    "EXECUTION_BOUNDARY_NOT_VERIFIED",
+    "HUMAN_APPROVAL_NOT_REQUESTED"
+  ],
+  "nextAction": "REQUEST_EXPLICIT_G3_PREP_SOURCE_PREFIX_ALIGNMENT_6_TO_10_AUTHORIZATION",
+  "prohibitions": [
+    "NO_PRODUCTION_MUTATION_WITHOUT_SEPARATE_EXPLICIT_AUTHORIZATION",
+    "NO_SCHEMA11_CUTOVER_DURING_SOURCE_PREFIX_ALIGNMENT",
+    "NO_EXECUTABLE_G3_PACKET_WHILE_SOURCE_SCHEMA_IS_NOT_10",
+    "NO_AUTOMATIC_RETRY",
+    "NO_PROCESS_LIFETIME_AS_DURABLE_AUTHORITY"
+  ]
+}
