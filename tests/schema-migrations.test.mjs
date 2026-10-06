@@ -11,6 +11,7 @@ import { ScheduleStore } from '../src/store.mjs';
 import {
   LATEST_SCHEMA_VERSION,
   MIGRATIONS,
+  PRE_CUTOVER_SCHEMA_VERSION,
   V1_SCHEMA_SQL,
   assertKnownSchema,
   applySchemaMigrations,
@@ -883,6 +884,51 @@ test('marker rows and production events are append-only, and foreign keys remain
   }
 });
 
+test('ScheduleStore startup cannot cross the Schema 11 cutover boundary', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jenn-shooting-runtime-schema-boundary-'));
+  const databasePath = join(root, 'runtime.sqlite');
+  try {
+    const first = new ScheduleStore({
+      filename: databasePath,
+      writeAdmissionMode: 'disabled',
+      orphanCleanupMode: 'disabled',
+    });
+    assert.equal(first.writeAdmissionControl.status().mode, 'disabled');
+    first.close();
+
+    let db = new DatabaseSync(databasePath);
+    db.exec('PRAGMA foreign_keys = ON;');
+    assert.deepEqual(assertKnownSchema(db), {
+      version: PRE_CUTOVER_SCHEMA_VERSION,
+      latestVersion: LATEST_SCHEMA_VERSION,
+    });
+    initializeWritableSchema(db);
+    assert.deepEqual(assertKnownSchema(db), {
+      version: LATEST_SCHEMA_VERSION,
+      latestVersion: LATEST_SCHEMA_VERSION,
+    });
+    db.close();
+
+    const reopened = new ScheduleStore({
+      filename: databasePath,
+      writeAdmissionMode: 'disabled',
+      orphanCleanupMode: 'disabled',
+    });
+    assert.equal(reopened.writeAdmissionControl.status().mode, 'disabled');
+    reopened.close();
+
+    db = new DatabaseSync(databasePath, { readOnly: true });
+    db.exec('PRAGMA foreign_keys = ON; PRAGMA query_only = ON;');
+    assert.deepEqual(assertKnownSchema(db), {
+      version: LATEST_SCHEMA_VERSION,
+      latestVersion: LATEST_SCHEMA_VERSION,
+    });
+    db.close();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('concurrent independent processes safely initialize and migrate the same database', async t => {
   await t.test('fresh full initialization lets both processes succeed', async () => {
     const root = mkdtempSync(join(tmpdir(), 'jenn-shooting-schema-concurrent-fresh-'));
@@ -974,7 +1020,7 @@ test('concurrent independent processes safely initialize and migrate the same da
     }
   });
 
-  await t.test('two first-open ScheduleStore processes create exactly one initial snapshot', async () => {
+  await t.test('two first-open ScheduleStore processes stop at the pre-cutover schema and create one initial snapshot', async () => {
     const root = mkdtempSync(join(tmpdir(), 'jenn-shooting-store-concurrent-first-open-'));
     const databasePath = join(root, 'store.sqlite');
     try {
@@ -983,9 +1029,10 @@ test('concurrent independent processes safely initialize and migrate the same da
       try {
         db.exec('PRAGMA foreign_keys = ON;');
         assert.deepEqual(assertKnownSchema(db), {
-          version: LATEST_SCHEMA_VERSION,
+          version: PRE_CUTOVER_SCHEMA_VERSION,
           latestVersion: LATEST_SCHEMA_VERSION,
         });
+        assert.equal(db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get().count, PRE_CUTOVER_SCHEMA_VERSION);
         assert.equal(db.prepare('SELECT COUNT(*) AS count FROM schedule_state').get().count, 1);
         const row = db.prepare('SELECT id, revision, snapshot_json FROM schedule_state').get();
         assert.equal(row.id, 1);

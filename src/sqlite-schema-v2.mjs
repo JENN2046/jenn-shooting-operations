@@ -847,6 +847,7 @@ export const MIGRATIONS = Object.freeze([
 ]);
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1).version;
+export const PRE_CUTOVER_SCHEMA_VERSION = 10;
 
 const V1_COLUMNS = Object.freeze({
   schedule_state: ['id', 'revision', 'updated_at', 'snapshot_json'],
@@ -1469,6 +1470,27 @@ export function applySchemaMigrations(db, { now = () => new Date(), migrations =
   }
 
   return assertKnownSchema(db, { migrations });
+}
+
+export function initializeRuntimeWritableSchema(db, { now = () => new Date() } = {}) {
+  const foreignKeys = db.prepare('PRAGMA foreign_keys').get().foreign_keys;
+  if (foreignKeys !== 1) throw schemaError('FOREIGN_KEYS_DISABLED', 'PRAGMA foreign_keys must be enabled');
+  ensureV1Schema(db);
+  ensureMigrationMarker(db);
+  const applied = appliedMigrations(db);
+  // Runtime startup may finish the already-authorized pre-cutover prefix, but it must
+  // never cross the Schema 11 release boundary. A database already migrated by a
+  // separate cutover action is validated and opened without being modified here.
+  assertAppliedPrefix(applied, MIGRATIONS);
+  assertStructureForVersion(db, applied.length);
+  assertNoUnknownSchemaObjects(db, applied.length);
+  if (applied.length <= PRE_CUTOVER_SCHEMA_VERSION) {
+    applySchemaMigrations(db, {
+      now,
+      migrations: MIGRATIONS.slice(0, PRE_CUTOVER_SCHEMA_VERSION),
+    });
+  }
+  return assertKnownSchema(db);
 }
 
 export function initializeWritableSchema(db, options = {}) {

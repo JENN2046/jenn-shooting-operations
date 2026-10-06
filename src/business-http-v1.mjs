@@ -15,7 +15,7 @@ export function businessRoute(method, pathname) {
   if (edit) return {method:'reschedule',key:'scheduleItemId',encoded:edit[1]};
   return null;
 }
-const RETRY_LATER = new Set(['WRITE_ADMISSION_DISABLED','SCHEDULING_QUIESCENCE_HELD','SCHEDULING_LEASE_EXPIRED','SERVICE_UNAVAILABLE']);
+const RETRY_LATER = new Set(['WRITE_ADMISSION_DISABLED','SCHEDULING_QUIESCENCE_HELD','SCHEDULING_LEASE_EXPIRED','SERVICE_UNAVAILABLE','BUSINESS_SCHEMA11_REQUIRED']);
 export function businessHttpStatus(result) {
   if (result?.ok === true) return 200;
   const c=result?.code;

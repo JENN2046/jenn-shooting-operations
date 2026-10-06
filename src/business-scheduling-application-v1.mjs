@@ -63,6 +63,9 @@ function preservePastRules(db, config, at) {
 }
 
 export function createBusinessSchedulingApplication({ db, writeAdmissionControl, clock, refreshProjections, proposalStore }) {
+  const businessSchemaReady = () => Boolean(db.prepare(`SELECT 1 FROM schema_migrations
+    WHERE version = 11 AND name = 'business_calendar_and_reschedule'`).get());
+  const requireBusinessSchema = () => businessSchemaReady() ? null : denied('BUSINESS_SCHEMA11_REQUIRED');
   const active = () => db.prepare(`SELECT v.* FROM scheduling_active_config a JOIN scheduling_config_versions v
     ON v.config_version=a.config_version WHERE a.id=1`).get();
   const configScope = command => command?.configJson?.resourceCalendars?.map(c => c.resourceId);
@@ -76,6 +79,7 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
   const permitWrite = () => !writeAdmissionControl.isDisabled();
   return {
     readManagement({ principal }) {
+      const schema = requireBusinessSchema(); if (schema) return schema;
       if (!scoped(principal, principal?.resourceIds)) return denied('FORBIDDEN');
       const resources = db.prepare(`SELECT resource_id, v1_display_place, status, capability_json,
         capability_digest FROM scheduling_resources ORDER BY resource_id`).all().filter(r => principal.resourceIds.includes(r.resource_id));
@@ -96,6 +100,7 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
         writeAdmission: writeAdmissionControl.status().mode };
     },
     previewConfig({ command, principal }) {
+      const schema = requireBusinessSchema(); if (schema) return schema;
       if (!command || !scoped(principal, configScope(command), true)) return denied('FORBIDDEN');
       if (Object.keys(command).length!==3 || !['configJson','expectedProjectionRevision','baseConfigDigest'].every(k=>Object.hasOwn(command,k))
         || !Number.isSafeInteger(command.expectedProjectionRevision) || command.expectedProjectionRevision<0
@@ -111,6 +116,7 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
         expectedProjectionRevision: command.expectedProjectionRevision, baseConfigDigest: command.baseConfigDigest };
     },
     manage({ kind, command, principal }) {
+      const schema = requireBusinessSchema(); if (schema) return schema;
       if (!permitWrite()) return denied('WRITE_ADMISSION_DISABLED');
       if (!scoped(principal, principal?.resourceIds, true)) return denied('FORBIDDEN');
       if (kind === 'registerResource') {
@@ -130,6 +136,7 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
       return denied('INVALID_REQUEST');
     },
     readBusinessOperation({ operationId, principal }) {
+      const schema = requireBusinessSchema(); if (schema) return schema;
       if (!scoped(principal, principal?.resourceIds)) return denied('FORBIDDEN');
       const reschedule = reschedules.readOperation(operationId, principal);
       if (reschedule.ok) return reschedule;
@@ -153,15 +160,20 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
       return denied('OPERATION_NOT_FOUND');
     },
     generateProposal({ command, principal }) {
+      const schema = requireBusinessSchema(); if (schema) return schema;
       if (!permitWrite()) return denied('WRITE_ADMISSION_DISABLED');
       if (!scoped(principal, command?.resourceScope)) return denied('FORBIDDEN');
       return proposalStore.generate(command, principal.subjectId);
     },
     readBusinessProposal({ proposalId, principal }) {
+      const schema = requireBusinessSchema(); if (schema) return schema;
       if (!scoped(principal, principal?.resourceIds)) return denied('FORBIDDEN');
       const found = proposalStore.read(proposalId);
       return !found.ok || scoped(principal, found.proposal.resourceScope) ? found : denied('FORBIDDEN');
     },
-    reschedule({ command, principal, executionGuard }) { return reschedules.reschedule(command, principal, { executionGuard }); },
+    reschedule({ command, principal, executionGuard }) {
+      const schema = requireBusinessSchema(); if (schema) return schema;
+      return reschedules.reschedule(command, principal, { executionGuard });
+    },
   };
 }

@@ -57,6 +57,10 @@ A future release contract is limited to:
 
 Safety must not depend on an owner/helper process remaining alive indefinitely.
 
+Ordinary JSO runtime bootstrap is pinned to the pre-cutover Schema 10 prefix. It may validate and open an
+already-migrated Schema 11 database, but it cannot perform the 10 → 11 transition. Before cutover, the new
+business and Agent surfaces return `BUSINESS_SCHEMA11_REQUIRED` instead of manufacturing Schema 11.
+
 ### C. Production V1 Closure
 
 After Schema 11 cutover, close the real business loop:
@@ -193,9 +197,9 @@ It is evidence of an unresolved historical observation, not current production t
 
 Fresh validation on Node 24.21.0 / Debian:
 
-- targeted Core tests: **64 / 64 PASS**;
+- P1/narrow targeted tests: **148 / 148 PASS**;
 - repository validators: **PASS**;
-- full suite: **1021 total, 1020 PASS, 0 FAIL, 1 existing conditional skip**;
+- full suite: **1024 total, 1023 PASS, 0 FAIL, 1 existing conditional skip**;
 - conditional skip: external VCPToolBox/JENN-Extensions adapter package identity not supplied;
 - fresh real-Chrome local business UI acceptance: **10 / 10 PASS**.
 

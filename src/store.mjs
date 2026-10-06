@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, realpathSync, readdirSync, renameSync, statSync,
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { DatabaseSync, StatementSync, constants as sqliteConstants } from 'node:sqlite';
 import { validateSnapshot, validateSubmission } from './contract-validator.mjs';
-import { initializeWritableSchema } from './sqlite-schema-v2.mjs';
+import { initializeRuntimeWritableSchema } from './sqlite-schema-v2.mjs';
 import { createOrphanCleanupControl, normalizeOrphanCleanupMode } from './orphan-cleanup-control.mjs';
 import {
   createWriteAdmissionControl,
@@ -360,7 +360,7 @@ export class ScheduleStore {
     } else {
       enableWalWithBusyRetry(bootstrapDb);
       bootstrapDb.exec('PRAGMA foreign_keys = ON;');
-      initializeWritableSchema(bootstrapDb, { now: this.clock });
+      initializeRuntimeWritableSchema(bootstrapDb, { now: this.clock });
       transaction(bootstrapDb, () => {
         const current = bootstrapDb.prepare('SELECT id FROM schedule_state WHERE id = 1').get();
         if (current) return;

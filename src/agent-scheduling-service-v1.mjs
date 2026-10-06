@@ -36,6 +36,8 @@ function readTransaction(db, work) {
 const revisions = db => db.prepare('SELECT schedule_revision AS scheduleRevision,projection_revision AS projectionRevision FROM revision_counters WHERE id=1').get() ?? null;
 const activeConfig = db => db.prepare(`SELECT v.config_version,v.config_json,v.config_digest,v.calendar_compiler_version
   FROM scheduling_active_config a JOIN scheduling_config_versions v ON v.config_version=a.config_version WHERE a.id=1`).get();
+const businessSchemaReady = db => Boolean(db.prepare(`SELECT 1 FROM schema_migrations
+  WHERE version = 11 AND name = 'business_calendar_and_reschedule'`).get());
 function validConfig(row) {
   if (!row) return null;
   try {
@@ -63,6 +65,7 @@ export function createAgentSchedulingServiceV1({ db, proposalStore, application,
   }
   return Object.freeze({
     readState({ principal, command }) {
+      if (!businessSchemaReady(db)) return denied('BUSINESS_SCHEMA11_REQUIRED');
       if (!exact(command, ['resourceScope'])) return denied('INVALID_REQUEST');
       if (!scoped(principal, command.resourceScope)) return denied('FORBIDDEN');
       return readTransaction(db, () => {
@@ -79,6 +82,7 @@ export function createAgentSchedulingServiceV1({ db, proposalStore, application,
       });
     },
     previewCalendar({ principal, command }) {
+      if (!businessSchemaReady(db)) return denied('BUSINESS_SCHEMA11_REQUIRED');
       if (!exact(command, ['resourceId', 'startDate', 'endDate']) || !isoDate(command.startDate) || !isoDate(command.endDate)) return denied('INVALID_REQUEST');
       if (!scoped(principal, [command.resourceId])) return denied('FORBIDDEN');
       const first = Date.parse(command.startDate), last = Date.parse(command.endDate);
@@ -99,22 +103,26 @@ export function createAgentSchedulingServiceV1({ db, proposalStore, application,
       });
     },
     generateProposal({ principal, command }) {
+      if (!businessSchemaReady(db)) return denied('BUSINESS_SCHEMA11_REQUIRED');
       if (!scoped(principal, command?.resourceScope)) return denied('FORBIDDEN');
       return proposalStore.preview(command, principal.subjectId);
     },
     adoptProposal({ principal, command, executionGuard = () => true }) {
+      if (!businessSchemaReady(db)) return denied('BUSINESS_SCHEMA11_REQUIRED');
       if (!scoped(principal, command?.generationCommand?.resourceScope, 'modifySchedule')) return denied('FORBIDDEN');
       if (writeAdmissionControl.isDisabled()) return denied('WRITE_ADMISSION_DISABLED');
       const result = proposalStore.adoptPreview(command, principal, { executionGuard: () => !writeAdmissionControl.isDisabled() && executionGuard() === true && !writeAdmissionControl.isDisabled() });
       return result.ok ? {ok:true,receipt:decisionSummary(result.receipt),exactReplay:result.exactReplay} : result;
     },
     reschedule({ principal, command, executionGuard = () => true }) {
+      if (!businessSchemaReady(db)) return denied('BUSINESS_SCHEMA11_REQUIRED');
       if (!scoped(principal, [command?.resourceId], 'modifySchedule')) return denied('FORBIDDEN');
       if (writeAdmissionControl.isDisabled()) return denied('WRITE_ADMISSION_DISABLED');
       const result = application.reschedule({principal,command,executionGuard: () => !writeAdmissionControl.isDisabled() && executionGuard() === true && !writeAdmissionControl.isDisabled()});
       return result.ok ? {ok:true,receipt:rescheduleSummary(result.receipt),exactReplay:result.exactReplay} : result;
     },
     readReceipt({ principal, command }) {
+      if (!businessSchemaReady(db)) return denied('BUSINESS_SCHEMA11_REQUIRED');
       if (!exact(command, ['operationId']) || typeof command.operationId !== 'string' || !command.operationId.length || command.operationId.length > 160) return denied('INVALID_REQUEST');
       if (!validateTrustedPrincipal(principal).ok) return denied('FORBIDDEN');
       return readTransaction(db, () => {

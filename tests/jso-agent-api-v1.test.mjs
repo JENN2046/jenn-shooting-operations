@@ -2,7 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { ScheduleStore } from '../src/store.mjs';
+import { initializeWritableSchema } from '../src/sqlite-schema-v2.mjs';
 import { createJsoAgentBoundary } from '../src/jso-agent-host-v1.mjs';
 import {
   JSO_AGENT_COMMANDS,
@@ -44,6 +49,24 @@ function fixture({ mode = 'planner', grants = [], result = { ok: true }, handler
       arguments: args(action, payload),
     }),
   };
+}
+
+function schema11Store({ disabled = false } = {}) {
+  const root = mkdtempSync(join(tmpdir(), 'jso-agent-api-'));
+  const filename = join(root, 'db.sqlite');
+  const uploadRoot = join(root, 'uploads');
+  mkdirSync(uploadRoot);
+  const db = new DatabaseSync(filename);
+  db.exec('PRAGMA foreign_keys = ON');
+  initializeWritableSchema(db);
+  db.close();
+  const store = new ScheduleStore({
+    filename,
+    uploadRoot,
+    writeAdmissionMode: disabled ? 'disabled' : 'enabled',
+    orphanCleanupMode: 'disabled',
+  });
+  return { store, close: () => { store.close(); rmSync(root, { recursive: true, force: true }); } };
 }
 
 function grant(payload = command) {
@@ -202,11 +225,30 @@ test('dedicated HTTP endpoint preserves server-side enforcement and rejects dupl
   }
 });
 
-test('actual JSO host composition exposes read scope but respects global write admission', async () => {
-  const store = new ScheduleStore({ filename: ':memory:', writeAdmissionMode: 'disabled', orphanCleanupMode: 'disabled' });
+test('agent boundary fails closed before Schema11 cutover', async () => {
+  const store = new ScheduleStore({ filename: ':memory:', orphanCleanupMode: 'disabled' });
   try {
     const boundary = createJsoAgentBoundary({
       store,
+      clock: () => new Date('2026-10-01T12:30:00.000Z'),
+      identities: [{ token: plannerToken, subjectId: 'planner', mode: 'planner', resourceIds: ['R1'] }],
+    });
+    const result = await boundary.application.call({
+      authorization: `Bearer ${plannerToken}`,
+      arguments: args('read_state', { resourceScope: ['R1'] }),
+    });
+    assert.equal(result.code, 'BUSINESS_SCHEMA11_REQUIRED');
+    assert.equal(store.db.prepare('SELECT max(version) version FROM schema_migrations').get().version, 10);
+  } finally {
+    store.close();
+  }
+});
+
+test('actual JSO host composition exposes read scope but respects global write admission', async () => {
+  const fixture = schema11Store({ disabled: true });
+  try {
+    const boundary = createJsoAgentBoundary({
+      store: fixture.store,
       clock: () => new Date('2026-10-01T12:30:00.000Z'),
       identities: [
         { token: plannerToken, subjectId: 'planner', mode: 'planner', resourceIds: ['R1'] },
@@ -225,8 +267,8 @@ test('actual JSO host composition exposes read scope but respects global write a
       arguments: args('reschedule', command),
     });
     assert.equal(denied.code, 'WRITE_ADMISSION_DISABLED');
-    assert.equal(store.db.prepare('SELECT count(*) n FROM schedule_reschedule_operations').get().n, 0);
+    assert.equal(fixture.store.db.prepare('SELECT count(*) n FROM schedule_reschedule_operations').get().n, 0);
   } finally {
-    store.close();
+    fixture.close();
   }
 });

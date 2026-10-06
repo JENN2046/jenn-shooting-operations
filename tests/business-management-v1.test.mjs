@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Readable } from 'node:stream';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { ScheduleStore } from '../src/store.mjs';
+import { initializeWritableSchema } from '../src/sqlite-schema-v2.mjs';
 import { createSchedulingV2Application } from '../src/server.mjs';
 import { createHttpApp } from '../src/http-app.mjs';
 import { createBusinessRuntimeAuthV1,createBusinessRuntimeOptionsFromEnv } from '../src/business-runtime-auth-v1.mjs';
@@ -10,7 +15,10 @@ import { normalizeSchedulingConfig } from '../src/scheduling-admin-contract-v2.m
 const tokens={admin:'a'.repeat(40),scheduler:'s'.repeat(40),other:'o'.repeat(40)};
 const resourceId='JSO-BIZ-RESOURCE-001';
 function fixture({disabled=false}={}){
- const store=new ScheduleStore({filename:':memory:',writeAdmissionMode:disabled?'disabled':'enabled',orphanCleanupMode:'disabled'});
+ const root=mkdtempSync(join(tmpdir(),'jso-business-management-')),filename=join(root,'db.sqlite'),uploadRoot=join(root,'uploads');
+ mkdirSync(uploadRoot);
+ const bootstrap=new DatabaseSync(filename);bootstrap.exec('PRAGMA foreign_keys=ON');initializeWritableSchema(bootstrap);bootstrap.close();
+ const store=new ScheduleStore({filename,uploadRoot,writeAdmissionMode:disabled?'disabled':'enabled',orphanCleanupMode:'disabled'});
  if(!disabled)store.db.prepare('INSERT INTO revision_counters VALUES(1,0,0,?)').run('2026-10-01T00:00:00.000Z');
  const authenticate=createBusinessRuntimeAuthV1({identities:[{token:tokens.admin,subjectId:'Jenn',role:'administrator',resourceIds:[resourceId]},{token:tokens.scheduler,subjectId:'scheduler',role:'scheduler',resourceIds:[resourceId]},{token:tokens.other,subjectId:'other',role:'administrator',resourceIds:['OTHER']}]});
  let time='2026-10-01T00:00:00.000Z';
@@ -22,7 +30,7 @@ function fixture({disabled=false}={}){
  const state=()=>call('/api/v2/business/state');
  async function setup(){const first=(await state()).body;const registered=await call('/api/v2/business/resources',{operationId:'REG',expectedScheduleRevision:0,expectedProjectionRevision:0,resource:first.initialResource});assert.equal(registered.status,200,JSON.stringify(registered));await publish(first.initialConfig,'C1');const a=await call('/api/v2/business/config/activate',{operationId:'ACT1',configVersion:'C1',expectedProjectionRevision:1});assert.equal(a.status,200,JSON.stringify(a));return first.initialConfig;}
  async function publish(config,version){const n=normalizeSchedulingConfig(config);assert.equal(n.ok,true,JSON.stringify(n));const p=await call('/api/v2/business/config/publish',{operationId:`PUB-${version}`,configVersion:version,algorithmVersion:'deterministic-scheduler-v1',calendarCompilerVersion:config.schemaVersion===2?'calendar-compiler-v2':'calendar-compiler-v1',estimatePolicyVersion:'estimate-policy-v1',configJson:n.config,configDigest:n.configDigest});assert.equal(p.status,200,JSON.stringify(p));return p;}
- return {store,scheduling,call,state,setup,publish,setTime:t=>time=t,close:()=>store.close()};
+ return {store,scheduling,call,state,setup,publish,setTime:t=>time=t,close:()=>{store.close();rmSync(root,{recursive:true,force:true});}};
 }
 test('business auth is explicit, server trusted, unique-token and resource scoped',()=>{
  assert.deepEqual(createBusinessRuntimeOptionsFromEnv({}),{});
@@ -31,6 +39,21 @@ test('business auth is explicit, server trusted, unique-token and resource scope
  const a=createBusinessRuntimeAuthV1({identities:[{token:tokens.admin,subjectId:'Jenn',role:'administrator',resourceIds:[resourceId]}]});
  assert.equal(a({headers:{authorization:`Bearer ${tokens.admin}`},role:'viewer'}).role,'administrator');assert.equal(a({headers:{authorization:'Bearer invalid'},role:'administrator'}),null);
 });
+test('business HTTP fails closed on pre-cutover schema10 without migrating it',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'jso-business-precutover-')),filename=join(root,'db.sqlite');
+ const store=new ScheduleStore({filename,writeAdmissionMode:'disabled',orphanCleanupMode:'disabled'});
+ try{
+  const authenticate=createBusinessRuntimeAuthV1({identities:[{token:tokens.admin,subjectId:'Jenn',role:'administrator',resourceIds:[resourceId]}]});
+  const scheduling=createSchedulingV2Application({store,authenticate,clock:()=>new Date('2026-10-01T00:00:00.000Z')});
+  const app=createHttpApp({store,scheduling});
+  const request=Readable.from([]);request.method='GET';request.url='/api/v2/business/state';request.headers={authorization:`Bearer ${tokens.admin}`};let status,text;
+  await app(request,{setHeader(){},writeHead(s){status=s;},end(t){text=t;}});
+  assert.equal(status,503);assert.equal(JSON.parse(text).code,'BUSINESS_SCHEMA11_REQUIRED');
+ }finally{store.close();}
+ const db=new DatabaseSync(filename,{readOnly:true});
+ try{assert.equal(db.prepare('SELECT max(version) version FROM schema_migrations').get().version,10);assert.equal(db.prepare("SELECT count(*) n FROM sqlite_schema WHERE name='schedule_reschedule_operations'").get().n,0);}finally{db.close();rmSync(root,{recursive:true,force:true});}
+});
+
 test('HTTP registers, publishes, activates recurrence and reconciles operations without duplicate revisions',async()=>{
  const f=fixture();try{await f.setup();const s=(await f.state()).body;assert.deepEqual(s.revisions,{scheduleRevision:1,projectionRevision:2});assert.equal(s.configs[0].configJson.schemaVersion,2);assert.equal(s.configs[0].active,true);assert.equal(s.configs[0].everActive,true);
  const read=await f.call('/api/v2/business/operations/ACT1');assert.equal(read.status,200);assert.equal(read.body.receipt.configVersion,'C1');
