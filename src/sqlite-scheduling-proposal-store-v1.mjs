@@ -8,6 +8,7 @@ import { normalizeSchedulingConfig } from './scheduling-admin-contract-v2.mjs';
 import { generateDeterministicScheduleV1 } from './deterministic-scheduler-v1.mjs';
 import { applyCanonicalScheduleAcceptanceInTransactionV2 } from './sqlite-schedule-command-v2.mjs';
 import { authorizeCapability, validateTrustedPrincipal } from './authorization-v2.mjs';
+import { schedulingOperationIdOwnedByOtherV1 } from './sqlite-scheduling-operation-id-v1.mjs';
 import {
   admitSchedulingProposalDecisionV1,
   buildSchedulingProposalDecisionReceiptV1,
@@ -153,6 +154,9 @@ function staleOneInTransaction(db, { proposalId, triggerOperationId, reasonCode,
     return { ok: true, receipt: {
       ...JSON.parse(prior.receipt_json), decisionReceiptDigest: prior.receipt_digest,
     }, exactReplay: true };
+  }
+  if (schedulingOperationIdOwnedByOtherV1(db, derived.decisionId, ['proposalDecision'])) {
+    return denied('IDEMPOTENCY_KEY_REUSE');
   }
   if (found.lifecycle.status !== 'draft') return denied('PROPOSAL_NOT_DRAFT');
   const built = buildSchedulingProposalDecisionReceiptV1({
@@ -358,6 +362,9 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
           FROM scheduling_proposals WHERE generation_operation_id = ?`).get(command.operationId);
         if (replay) return replay.generation_command_digest === generation.commandDigest
           ? readStored(replay.proposal_id) : denied('IDEMPOTENCY_KEY_REUSE');
+        if (schedulingOperationIdOwnedByOtherV1(db, command.operationId, ['proposalGeneration'])) {
+          return denied('IDEMPOTENCY_KEY_REUSE');
+        }
         const currentActive = readActiveConfig(db);
         const currentRevision = readRevision(db);
         if (!currentActive || currentRevision !== snapshot.revision
@@ -425,6 +432,9 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
           return { ok: true, receipt, exactReplay: true };
         }
 
+        if (schedulingOperationIdOwnedByOtherV1(db, admitted.command.decisionId,
+          ['operation', 'proposalDecision'])) return denied('IDEMPOTENCY_KEY_REUSE');
+
         const operation = db.prepare(`SELECT kind, response_json, request_digest FROM operations
           WHERE operation_id = ?`).get(admitted.command.decisionId);
         if (operation && operation.kind !== 'rejectSchedulingProposal') {
@@ -489,6 +499,8 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
         if (!found) return denied('PROPOSAL_NOT_FOUND');
         const admitted = buildSchedulingProposalDecisionCommandV1(decisionInput, found.proposal);
         if (!admitted.ok) return admitted;
+        if (schedulingOperationIdOwnedByOtherV1(db, admitted.command.decisionId,
+          ['operation', 'proposalDecision'])) return denied('IDEMPOTENCY_KEY_REUSE');
         assertGf15CommandPacketV1(db, admitted.command, schedulingLease);
         if (!['accept', 'partiallyAccept'].includes(admitted.command.decisionType)) {
           return denied('PROPOSAL_ACCEPT_DECISION_TYPE_INVALID');

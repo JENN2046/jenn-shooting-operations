@@ -158,18 +158,37 @@ test('v2 alternating Saturdays continue beyond specimen horizon and respect off-
 });
 
 
-test('queued old confirmed intent preserved without new notification; in-flight send blocks reschedule', () => {
-  for (const leased of [false, true]) {
+test('reschedule blocks every still-dispatchable old confirmation without rewriting the outbox', () => {
+  for (const status of ['pending', 'leased', 'retryableFailed', 'sent', 'deadLetter']) {
     const f = fixture(); try {
-      const outbox = createSqliteOutboxRepositoryV1({ db: f.db });
+      let token = 0;
+      const outbox = createSqliteOutboxRepositoryV1({ db: f.db, tokenFactory: () => `LEASE-${++token}`, random: () => 0 });
       const card = buildScheduleConfirmedCardV1({ scheduleItemId: 'ITEM', resourceId: 'PHOTO', plannedStart: '2026-10-02T01:00:00.000Z', plannedEnd: '2026-10-02T02:00:00.000Z', taskCount: 1, scheduleRevision: 2 });
       assert.equal(card.ok, true);
       const intent = buildNotificationIntentV1({ outboxId: 'OLD-CONFIRMED', intentType: 'schedule.confirmed.v1', aggregateType: 'schedule_item', aggregateId: 'ITEM', routeKey: 'operations.default', aggregateRevisionScope: 'schedule', aggregateRevision: 2, cardSchemaVersion: card.cardSchemaVersion, payload: card.card, createdAt: at });
       assert.equal(intent.ok, true); f.db.exec('BEGIN IMMEDIATE'); assert.equal(outbox.enqueue(intent.intent).ok, true); f.db.exec('COMMIT');
-      if (leased) assert.equal(outbox.claimBatch({ workerId: 'local-fake', now: at, limit: 1 }).ok, true);
+      if (status !== 'pending') {
+        const claimed = outbox.claimBatch({ workerId: 'local-fake', now: at, limit: 1 });
+        assert.equal(claimed.ok, true); assert.equal(claimed.items.length, 1);
+        if (status === 'retryableFailed') {
+          assert.equal(outbox.settleDelivery({ outboxId: intent.intent.outboxId, leaseToken: claimed.items[0].leaseToken,
+            result: { ok: false, code: 'DINGTALK_TIMEOUT' }, now: '2026-10-01T00:00:01.000Z' }).code, 'OUTBOX_RETRY_SCHEDULED');
+        } else if (status === 'sent') {
+          assert.equal(outbox.settleDelivery({ outboxId: intent.intent.outboxId, leaseToken: claimed.items[0].leaseToken,
+            result: { ok: true, code: 'DINGTALK_CARD_SENT', providerRef: 'dt:test/sent' }, now: '2026-10-01T00:00:01.000Z' }).code, 'OUTBOX_SENT');
+        } else if (status === 'deadLetter') {
+          assert.equal(outbox.settleDelivery({ outboxId: intent.intent.outboxId, leaseToken: claimed.items[0].leaseToken,
+            result: { ok: false, code: 'DINGTALK_REQUEST_REJECTED' }, now: '2026-10-01T00:00:01.000Z' }).code, 'OUTBOX_DEAD_LETTERED');
+        }
+      }
+      assert.equal(outbox.getById(intent.intent.outboxId).record.status, status);
       const before = f.db.prepare('SELECT * FROM notification_outbox').all();
       const result = f.store.reschedule(f.command, principal);
-      if (leased) assert.equal(result.code, 'RESCHEDULE_NOTIFICATION_IN_FLIGHT'); else assert.equal(result.ok, true);
+      if (['pending', 'retryableFailed', 'leased'].includes(status)) {
+        assert.equal(result.code, 'RESCHEDULE_NOTIFICATION_IN_FLIGHT', status);
+      } else {
+        assert.equal(result.ok, true, status);
+      }
       assert.deepEqual(f.db.prepare('SELECT * FROM notification_outbox').all(), before);
     } finally { f.db.close(); }
   }

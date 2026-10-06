@@ -10,6 +10,7 @@ import {
   normalizeReplaceSchedulingResourceV1,
 } from './scheduling-admin-contract-v1.mjs';
 import { staleDraftProposalsInTransactionV1 } from './sqlite-scheduling-proposal-store-v1.mjs';
+import { schedulingOperationIdOwnedByOtherV1 } from './sqlite-scheduling-operation-id-v1.mjs';
 
 const MAX_SAFE = Number.MAX_SAFE_INTEGER;
 function denied(code) { return Object.freeze({ ok: false, code }); }
@@ -147,6 +148,7 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
       assertGf15CommandPacketV1(db, command, schedulingLease);
       const prior = replay(db, command.operationId, commandDigest);
       if (prior) return prior;
+      if (schedulingOperationIdOwnedByOtherV1(db, command.operationId, ['admin'])) return denied('IDEMPOTENCY_KEY_REUSE');
       const current = counters(db);
       if (!current || current.schedule_revision !== command.expectedScheduleRevision
         || current.projection_revision !== command.expectedProjectionRevision) {
@@ -224,6 +226,7 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
         assertGf15CommandPacketV1(db, command, schedulingLease);
         const prior = replay(db, command.operationId, commandDigest);
         if (prior) return prior;
+        if (schedulingOperationIdOwnedByOtherV1(db, command.operationId, ['admin'])) return denied('IDEMPOTENCY_KEY_REUSE');
         const current = counters(db);
         if (!current || current.schedule_revision !== command.expectedScheduleRevision
           || current.projection_revision !== command.expectedProjectionRevision) {
@@ -281,6 +284,7 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
         assertGf15CommandPacketV1(db, command, schedulingLease);
         const prior = replay(db, command.operationId, commandDigest);
         if (prior) return prior;
+        if (schedulingOperationIdOwnedByOtherV1(db, command.operationId, ['admin'])) return denied('IDEMPOTENCY_KEY_REUSE');
         if (db.prepare(`SELECT 1 FROM scheduling_config_versions
           WHERE config_version = ?`).get(command.configVersion)) return denied('CONFIG_VERSION_EXISTS');
         for (const calendar of command.configJson.resourceCalendars) {
@@ -318,6 +322,7 @@ export function createSqliteSchedulingAdminStoreV1({ db, now, refreshProjections
         assertGf15CommandPacketV1(db, command, schedulingLease);
         const prior = replay(db, command.operationId, commandDigest);
         if (prior) return prior;
+        if (schedulingOperationIdOwnedByOtherV1(db, command.operationId, ['admin'])) return denied('IDEMPOTENCY_KEY_REUSE');
         const current = counters(db);
         if (!current || current.projection_revision !== command.expectedProjectionRevision) {
           return denied('SCHEDULING_REVISION_CONFLICT');

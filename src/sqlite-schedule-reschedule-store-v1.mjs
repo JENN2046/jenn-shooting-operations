@@ -3,6 +3,7 @@ import { compileSchedulingCalendarDate, normalizeSchedulingConfig } from './sche
 import { validateTrustedPrincipal, authorizeCapability } from './authorization-v2.mjs';
 import { assertSchedulingQuiescenceV1, assertGf15CommandPacketV1 } from './sqlite-scheduling-quiescence-v1.mjs';
 import { staleDraftProposalsInTransactionV1 } from './sqlite-scheduling-proposal-store-v1.mjs';
+import { schedulingOperationIdOwnedByOtherV1 } from './sqlite-scheduling-operation-id-v1.mjs';
 
 const denied = code => ({ ok: false, code });
 const keys = ['operationId', 'scheduleItemId', 'resourceId', 'plannedStart', 'plannedEnd',
@@ -71,9 +72,7 @@ export function createSqliteScheduleRescheduleStoreV1({ db, now, refreshProjecti
         if (prior) return prior.command_digest === commandDigest && prior.actor_id === principal.subjectId
           ? { ...readOperation(command.operationId, principal), exactReplay: true } : denied('IDEMPOTENCY_KEY_REUSE');
         // Prevent reusing a key owned by another canonical operation family.
-        if (db.prepare('SELECT 1 FROM operations WHERE operation_id = ?').get(command.operationId)
-          || db.prepare('SELECT 1 FROM scheduling_admin_operations WHERE operation_id = ?').get(command.operationId)
-          || db.prepare('SELECT 1 FROM scheduling_proposals WHERE generation_operation_id = ?').get(command.operationId)) {
+        if (schedulingOperationIdOwnedByOtherV1(db, command.operationId, ['reschedule'])) {
           return denied('IDEMPOTENCY_KEY_REUSE');
         }
         const counters = db.prepare('SELECT schedule_revision, projection_revision FROM revision_counters WHERE id = 1').get();
@@ -84,10 +83,13 @@ export function createSqliteScheduleRescheduleStoreV1({ db, now, refreshProjecti
         if (row.resource_id !== command.resourceId || row.resource_resolution_status !== 'resolved') return denied('RESCHEDULE_RESOURCE_MISMATCH');
         if (row.schedule_status === 'cancelled' || row.lock_status !== 'unlocked' || row.allocation_mode !== 'single'
           || db.prepare('SELECT 1 FROM production_runs WHERE schedule_item_id = ? LIMIT 1').get(row.id)) return denied('RESCHEDULE_ITEM_IMMUTABLE');
-        // Original confirmed intents remain historical facts. A leased send has an unknown
-        // external outcome, including after lease expiry; never race it with a time change.
+        // Original confirmed intents remain historical facts. Any still-dispatchable
+        // confirmation can send the old time after this transaction, so never race it with a move.
         if (db.prepare(`SELECT 1 FROM notification_outbox WHERE aggregate_type = 'schedule_item'
-          AND aggregate_id = ? AND intent_type = 'schedule.confirmed.v1' AND status = 'leased' LIMIT 1`).get(row.id)) return denied('RESCHEDULE_NOTIFICATION_IN_FLIGHT');
+          AND aggregate_id = ? AND intent_type = 'schedule.confirmed.v1'
+          AND status IN ('pending', 'retryableFailed', 'leased') LIMIT 1`).get(row.id)) {
+          return denied('RESCHEDULE_NOTIFICATION_IN_FLIGHT');
+        }
         const at = now().toISOString();
         if (!iso(row.planned_start) || row.planned_start <= at || command.plannedStart <= at) return denied('RESCHEDULE_PAST_INTERVAL');
         const resource = db.prepare('SELECT * FROM scheduling_resources WHERE resource_id = ?').get(command.resourceId);

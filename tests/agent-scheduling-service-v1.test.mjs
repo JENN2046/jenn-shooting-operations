@@ -8,6 +8,7 @@ import {createSqliteSchedulingProposalStoreV1} from '../src/sqlite-scheduling-pr
 import {assembleSchedulingInputFromSqliteV1} from '../src/sqlite-scheduling-input-assembler-v1.mjs';
 import {createSqliteScheduleRescheduleStoreV1} from '../src/sqlite-schedule-reschedule-store-v1.mjs';
 import {refreshSqliteSnapshotProjectionsV2} from '../src/sqlite-run-event-store-v2.mjs';
+import {createSqliteOutboxRepositoryV1} from '../src/sqlite-outbox-repository-v1.mjs';
 import {businessInitialConfig,businessInitialResource} from '../src/business-defaults-v1.mjs';
 import {normalizeSchedulingConfig} from '../src/scheduling-admin-contract-v2.mjs';
 const principal=(role='viewer',resourceIds=['PHOTO'])=>createTrustedPrincipal({subjectId:'agent:local',role,resourceIds}).principal;
@@ -33,6 +34,14 @@ function fixture(options={}) {
 }
 function adoption(preview) {return {generationCommand:preview.generationCommand,expectedPreview:Object.fromEntries(['inputDigest','resultDigest','baseScheduleRevision','configVersion','configDigest'].map(k=>[k,preview[k]])),decision:{decisionId:'ADOPT-1',proposalId:preview.proposalId,decisionType:'accept',selectedProposalItemIds:preview.proposedItems.map(i=>i.proposalItemId),decisionNote:null,reasonCode:null}};}
 function getPreview(f){const result=f.service.generateProposal({principal:viewer,command:f.command});assert.equal(result.ok,true,JSON.stringify(result));assert.equal(result.preview.proposedItems.length,1);return result.preview;}
+function settleConfirmed(f){
+ const outbox=createSqliteOutboxRepositoryV1({db:f.db,tokenFactory:()=> 'LEASE-AGENT-TEST',random:()=>0});
+ const claimed=outbox.claimBatch({workerId:'agent-test',now:'2026-10-01T00:00:00.000Z',limit:8});
+ assert.equal(claimed.ok,true,JSON.stringify(claimed));
+ for(const item of claimed.items){
+  assert.equal(outbox.settleDelivery({outboxId:item.outboxId,leaseToken:item.leaseToken,result:{ok:true,code:'DINGTALK_CARD_SENT',providerRef:`dt:test/${item.outboxId}`},now:'2026-10-01T00:00:01.000Z'}).code,'OUTBOX_SENT');
+ }
+}
 
 test('viewer reads scoped state/calendar and nonempty proposal without any persistent write, including disabled admission',()=>{
  const f=fixture();try{f.disable();f.db.exec('PRAGMA query_only=ON');const before=f.state();
@@ -69,7 +78,7 @@ test('viewer, disabled gate and another resource cannot write; other resource ca
  }finally{f.db.close();}
 });
 test('accepted session reschedules through canonical application and viewer reads scoped safe receipt',()=>{
- const f=fixture();try{const accepted=f.service.adoptProposal({principal:executor,command:adoption(getPreview(f))});assert.equal(accepted.ok,true);const id=accepted.receipt.adoptedItems[0].scheduleItemId;const rev=f.db.prepare('SELECT * FROM revision_counters').get();
+ const f=fixture();try{const accepted=f.service.adoptProposal({principal:executor,command:adoption(getPreview(f))});assert.equal(accepted.ok,true);settleConfirmed(f);const id=accepted.receipt.adoptedItems[0].scheduleItemId;const rev=f.db.prepare('SELECT * FROM revision_counters').get();
  const command={operationId:'MOVE-1',scheduleItemId:id,resourceId:'PHOTO',plannedStart:'2026-10-02T05:30:00.000Z',plannedEnd:'2026-10-02T06:30:00.000Z',expectedScheduleRevision:rev.schedule_revision,expectedProjectionRevision:rev.projection_revision,configDigest:f.config.configDigest};
  assert.equal(f.service.reschedule({principal:viewer,command}).code,'FORBIDDEN');assert.equal(f.service.reschedule({principal:elsewhere,command}).code,'FORBIDDEN');const moved=f.service.reschedule({principal:executor,command});assert.equal(moved.ok,true,JSON.stringify(moved));assert.equal(moved.receipt.scheduleItemId,id);
  const receipt=f.service.readReceipt({principal:viewer,command:{operationId:'MOVE-1'}});assert.equal(receipt.ok,true);assert.equal(receipt.receipt.resourceId,'PHOTO');assert.equal(Object.hasOwn(receipt.receipt,'actor'),false);assert.equal(f.service.readReceipt({principal:elsewhere,command:{operationId:'MOVE-1'}}).code,'FORBIDDEN');
@@ -89,7 +98,7 @@ test('trusted expiry or admission closure at commit rolls back atomic adoption a
   assert.equal(f.state(),before);
  }finally{f.db.close();}}
  const f=fixture();try {
-  const adopted=f.service.adoptProposal({principal:executor,command:adoption(getPreview(f))});const rev=f.db.prepare('SELECT * FROM revision_counters').get();
+  const adopted=f.service.adoptProposal({principal:executor,command:adoption(getPreview(f))});settleConfirmed(f);const rev=f.db.prepare('SELECT * FROM revision_counters').get();
   const command={operationId:'MOVE-EXPIRY',scheduleItemId:adopted.receipt.adoptedItems[0].scheduleItemId,resourceId:'PHOTO',plannedStart:'2026-10-02T05:30:00.000Z',plannedEnd:'2026-10-02T06:30:00.000Z',expectedScheduleRevision:rev.schedule_revision,expectedProjectionRevision:rev.projection_revision,configDigest:f.config.configDigest};
   const before=f.state();assert.equal(f.service.reschedule({principal:executor,command,executionGuard:()=>false}).code,'AGENT_EXECUTION_WINDOW_CLOSED');assert.equal(f.state(),before);
  }finally{f.db.close();}
@@ -111,7 +120,7 @@ for (const kind of ['proposalDecision','reschedule']) for (const corruption of [
    const adopted=f.service.adoptProposal({principal:executor,command:adoption(getPreview(f))});assert.equal(adopted.ok,true);
    let operationId='ADOPT-1', table='scheduling_proposal_decisions';
    if(kind==='reschedule') {
-    const rev=f.db.prepare('SELECT * FROM revision_counters').get();operationId='MOVE-CORRUPT';table='schedule_reschedule_operations';
+    settleConfirmed(f);const rev=f.db.prepare('SELECT * FROM revision_counters').get();operationId='MOVE-CORRUPT';table='schedule_reschedule_operations';
     assert.equal(f.service.reschedule({principal:executor,command:{operationId,scheduleItemId:adopted.receipt.adoptedItems[0].scheduleItemId,resourceId:'PHOTO',plannedStart:'2026-10-02T05:30:00.000Z',plannedEnd:'2026-10-02T06:30:00.000Z',expectedScheduleRevision:rev.schedule_revision,expectedProjectionRevision:rev.projection_revision,configDigest:f.config.configDigest}}).ok,true);
    }
    // Synthetic corruption deliberately bypasses immutability; production access never does.

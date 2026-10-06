@@ -197,9 +197,9 @@ It is evidence of an unresolved historical observation, not current production t
 
 Fresh validation on Node 24.21.0 / Debian:
 
-- current review-targeted tests: **68 / 68 PASS**;
+- current review-targeted tests: **73 / 73 PASS**;
 - repository validators: **PASS**;
-- full suite: **1026 total, 1025 PASS, 0 FAIL, 1 existing conditional skip**;
+- full suite: **1028 total, 1027 PASS, 0 FAIL, 1 existing conditional skip**;
 - conditional skip: external VCPToolBox/JENN-Extensions adapter package identity not supplied;
 - fresh real-Chrome local business UI acceptance: **10 / 10 PASS**.
 
