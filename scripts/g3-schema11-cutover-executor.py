@@ -373,8 +373,15 @@ def parse_mountinfo(text):
             raise RuntimeError("G3_MOUNTINFO_INVALID")
         root = Path(_mountinfo_unescape(fields[3]))
         mountpoint = Path(_mountinfo_unescape(fields[4]))
-        if not root.is_absolute() or not mountpoint.is_absolute():
+        if not mountpoint.is_absolute():
             raise RuntimeError("G3_MOUNTINFO_INVALID")
+        # Linux mountinfo can legitimately expose non-path roots for pseudo
+        # filesystems, e.g. nsfs roots such as net:[4026532564]. Those entries
+        # cannot map a host filesystem pathname and are irrelevant to the
+        # production DB filesystem identity, so skip them without weakening
+        # checks for path-addressable mounts such as the /dev/vdb ext4 volume.
+        if not root.is_absolute():
+            continue
         entries.append({
             "majorMinor": fields[2],
             "root": root,
@@ -633,6 +640,7 @@ def self_test_mount_source():
         "13 1 252:16 /docker /srv/docker-alias rw,relatime - ext4 /dev/vdb rw",
         "14 1 252:16 /unrelated /srv/unrelated rw,relatime - ext4 /dev/vdb rw",
         "15 1 0:99 / /tmp rw,relatime - tmpfs tmpfs rw",
+        "16 1 0:4 net:[4026532564] /run/docker/netns/example rw - nsfs nsfs rw",
     ])
     if not mount_source_can_access_active_db(str(EXPECTED_VOLUME_MOUNTPOINT), synthetic_mountinfo):
         raise RuntimeError("G3_MOUNT_SOURCE_SELF_TEST_PARENT_FAILED")
