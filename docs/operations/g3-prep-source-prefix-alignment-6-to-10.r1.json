@@ -5,7 +5,6 @@
   "authority": {
     "canonicalBranch": "codex/v2-1-architecture-freeze",
     "authorityHead": "26a3390035fa209bbd1a926a3ebb1bb0df486935",
-    "sourcePrefixAlignmentAuthorized": true,
     "schema11CutoverAuthorized": false
   },
   "scope": {
@@ -116,5 +115,10 @@
     "NO_AUTOMATIC_RETRY",
     "NO_OLD_SCHEMA6_CONTAINER_RESTART",
     "NO_SCHEMA11_CUTOVER_WITHOUT_SEPARATE_EXACT_AUTHORIZATION"
-  ]
+  ],
+  "authorization": {
+    "approvalRef": "CHAT-2026-10-06-G3-PREP-SOURCE-PREFIX-ALIGNMENT",
+    "approvalRecord": "docs/operations/g3-prep-source-prefix-alignment-approval.r1.json",
+    "approvedAuthorityTargetDigest": "sha256:64d8ce58fc6f6419869fc1675dca8a7074134459dd5ec782030a476f84dd7ca4"
+  }
 }
