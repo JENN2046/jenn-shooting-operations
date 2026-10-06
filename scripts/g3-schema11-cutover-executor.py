@@ -434,17 +434,40 @@ def mount_source_can_access_active_db(source, mountinfo_text=None):
     return source_device == db_device \
       and (source_fs_path == db_fs_path or source_fs_path in db_fs_path.parents)
 
+def mountinfo_can_access_filesystem_path(mountinfo_text, db_device, db_fs_path):
+    for entry in parse_mountinfo(mountinfo_text):
+        if entry["majorMinor"] == db_device \
+          and (entry["root"] == db_fs_path or entry["root"] in db_fs_path.parents):
+            return True
+    return False
+
+def container_mount_namespace_can_access_active_db(cid, db_device, db_fs_path):
+    pid_text = docker_json(["inspect", cid, "--format", "{{.State.Pid}}"])
+    if not pid_text.isdigit() or int(pid_text) <= 0:
+        raise RuntimeError("G3_DOCKER_CONTAINER_PID_INVALID")
+    path = Path(f"/proc/{pid_text}/mountinfo")
+    try:
+        mountinfo = path.read_text()
+    except OSError as exc:
+        raise RuntimeError("G3_DOCKER_CONTAINER_MOUNTINFO_UNAVAILABLE") from exc
+    return mountinfo_can_access_filesystem_path(mountinfo, db_device, db_fs_path)
+
 def verify_no_running_volume_users():
     ids = subprocess.check_output(["docker", "ps", "-q"], text=True).split()
     users = []
     mountinfo = docker_daemon_mountinfo_text()
+    db_device, db_fs_path = mount_identity_for_path(ACTIVE_DB, mountinfo)
     for cid in ids:
         mounts = json.loads(docker_json(["inspect", cid, "--format", "{{json .Mounts}}"]))
-        for mount in mounts:
-            if mount.get("Name") == VOLUME_NAME \
-              or mount_source_can_access_active_db(mount.get("Source"), mountinfo):
-                users.append(cid)
-                break
+        direct_access = any(
+            mount.get("Name") == VOLUME_NAME
+            or mount_source_can_access_active_db(mount.get("Source"), mountinfo)
+            for mount in mounts
+        )
+        if direct_access or container_mount_namespace_can_access_active_db(
+          cid, db_device, db_fs_path
+        ):
+            users.append(cid)
     if users:
         raise RuntimeError("G3_RUNNING_VOLUME_USERS:" + ",".join(users))
 
@@ -630,6 +653,25 @@ def self_test_mount_source():
         raise RuntimeError("G3_MOUNT_SOURCE_SELF_TEST_SAME_FS_FALSE_POSITIVE")
     if mount_source_can_access_active_db("/tmp", synthetic_mountinfo):
         raise RuntimeError("G3_MOUNT_SOURCE_SELF_TEST_UNRELATED_FALSE_POSITIVE")
+
+    db_device, db_fs_path = mount_identity_for_path(ACTIVE_DB, synthetic_mountinfo)
+    recursive_container_mountinfo = "\n".join([
+        "20 1 252:16 /shared /container/shared rw,relatime - ext4 /dev/vdb rw",
+        f"21 20 252:16 {volume_root} /container/shared/prod rw,relatime - ext4 /dev/vdb rw",
+        "22 1 0:99 / /proc rw,nosuid,nodev,noexec - proc proc rw",
+    ])
+    if not mountinfo_can_access_filesystem_path(
+      recursive_container_mountinfo, db_device, db_fs_path
+    ):
+        raise RuntimeError("G3_MOUNT_SOURCE_SELF_TEST_RECURSIVE_SUBMOUNT_FAILED")
+    unrelated_container_mountinfo = "\n".join([
+        "30 1 252:16 /shared /container/shared rw,relatime - ext4 /dev/vdb rw",
+        "31 1 252:16 /unrelated /container/unrelated rw,relatime - ext4 /dev/vdb rw",
+    ])
+    if mountinfo_can_access_filesystem_path(
+      unrelated_container_mountinfo, db_device, db_fs_path
+    ):
+        raise RuntimeError("G3_MOUNT_SOURCE_SELF_TEST_RECURSIVE_FALSE_POSITIVE")
     print(json.dumps({"status": "G3_MOUNT_SOURCE_SELF_TEST_PASS"}))
 
 def self_test_approval_signature():

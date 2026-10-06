@@ -79,14 +79,14 @@ The proposed physical boundary is `G3_SCHEMA11_ATOMIC_EXCHANGE_R1`.
 It deliberately does **not** migrate the active database:
 
 1. require an exact approved packet plus a separately signed human-approval record; the approval payload is Ed25519-verified against the frozen signing public key and binds the computed authority-target digest, so caller-authored JSON cannot self-authorize execution;
-2. require root execution, then revalidate hostname, Tencent instance-id metadata, `/dev/vdb`/ext4 binding, exact active DB inode/device/mode/uid/gid, and reject every running Docker container that either uses the named volume or can reach the active DB through a direct path, parent bind, or host bind-mount alias; alias detection is based on dockerd mountinfo filesystem identity rather than pathname alone; also require zero `lsof`/`fuser` DB users and absent WAL/SHM;
+2. require root execution, then revalidate hostname, Tencent instance-id metadata, `/dev/vdb`/ext4 binding, exact active DB inode/device/mode/uid/gid, and reject every running Docker container that can reach the active DB through a named volume, direct bind, host bind-mount alias, or recursive submount; containment verifies both dockerd mountinfo filesystem identity and each running container's actual mount namespace, then also requires zero `lsof`/`fuser` DB users and absent WAL/SHM;
 3. before consuming the one-shot claim, prove the exact migration UID/GID can write through the candidate-directory bind mount using the exact image; only then durably claim the one-shot attempt ledger before candidate mutation;
 4. create the same-filesystem workdir as UID/GID 1000 with mode `0750`, copy the exact active DB there, and set the candidate file to UID/GID 1000 with mode `0600`;
 5. give the exact image RW access only to that isolated candidate directory;
 6. run migration 11 on the candidate with network disabled, read-only rootfs, all Linux capabilities dropped and
    `no-new-privileges`;
 7. require Schema11 / exact migration checksum / `integrity_check=ok` / FK=0 / DELETE journal mode and no WAL/SHM/journal residue;
-8. immediately before switch, repeat the exact physical-target, Schema10 hash, Docker-user, dockerd mountinfo filesystem-identity, `lsof`, `fuser`, WAL/SHM and containment checks;
+8. immediately before switch, repeat the exact physical-target, Schema10 hash, Docker-user, dockerd mountinfo filesystem-identity, per-container mount-namespace/recursive-submount, `lsof`, `fuser`, WAL/SHM and containment checks;
 9. perform one `renameat2(RENAME_EXCHANGE)` syscall between the verified candidate and active DB path;
 10. perform no further active-DB writes; terminal classification is a separate independent read-only verification.
 
@@ -98,7 +98,7 @@ Exact executor:
 
 ```text
 scripts/g3-schema11-cutover-executor.py
-sha256:5d6a37fa2bf2e91e1df138537fa5822ce50d73a9f51b3bf34e1aa309fe27ed71
+sha256:1756b84ee45079cae85d482fdd1bee1d5a56aae4ea6d9a999edbf003f53da3c4
 ```
 
 The rename-exchange helper and the pinned Ed25519 approval verifier both pass local self-tests. The exact candidate image independently migrated a disposable Schema10 DB to Schema11 with the frozen migration checksum, DELETE journal mode, integrity ok and FK=0. The approval signing private key is not stored in this repository or on the production host; only its public-key fingerprint is frozen into the execution boundary.
@@ -122,7 +122,7 @@ drainProofDigest =
 sha256:7d4de65434606b1c4557536deee386ed25fc6f26c05919bc5e18f7bad1e7081f
 
 executionBoundaryProofDigest =
-sha256:75754ff148e2fcfadf7cb143af63033db25e5ced80e0b47e5d93e637f63175e2
+sha256:1c2f11649fa98bd47cd1aed18a662027ed7359969a732dd64feaea0ab8f685f5
 ```
 
 ## Exact human approval target
@@ -135,7 +135,7 @@ proposed packetId =
 G3-SCHEMA11-CUTOVER-20261006-R1
 
 authorityTargetDigest =
-sha256:9d502475b7bdbae953c57ba0a922243d4518c6deb79904a9bdc31900187ee2f9
+sha256:ca3cea04d880d06cc6ebc436773b643560162449b0d221a27b7fd15f0e851169
 ```
 
 Current authority state remains:

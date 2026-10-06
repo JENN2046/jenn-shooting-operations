@@ -198,6 +198,8 @@ try {
     || eb.finalDrainVerification?.dockerMountSourceAncestryChecked !== true
     || eb.finalDrainVerification?.dockerMountFilesystemIdentityChecked !== true
     || eb.finalDrainVerification?.dockerMountInfoNamespace !== 'dockerd'
+    || eb.finalDrainVerification?.dockerContainerMountNamespaceChecked !== true
+    || eb.finalDrainVerification?.dockerRecursiveSubmountsChecked !== true
     || eb.finalDrainVerification?.lsofOpenUsersRequired !== 0
     || eb.finalDrainVerification?.fuserPidsRequired !== 0
     || eb.finalDrainVerification?.walRequiredAbsent !== true
@@ -210,6 +212,7 @@ try {
     || !executorText.includes('verify_physical_target()')
     || !executorText.includes('verify_no_open_db_users()')
     || !executorText.includes('mount_identity_for_path(')
+    || !executorText.includes('container_mount_namespace_can_access_active_db(')
     || !executorText.includes('/mountinfo')
     || !executorText.includes('verify_approval_signature(')
     || !executorText.includes('verify_migration_user_workdir_access()')

@@ -197,6 +197,8 @@ test('execution boundary freezes physical target and non-Docker drain verificati
     dockerMountSourceAncestryChecked: true,
     dockerMountFilesystemIdentityChecked: true,
     dockerMountInfoNamespace: 'dockerd',
+    dockerContainerMountNamespaceChecked: true,
+    dockerRecursiveSubmountsChecked: true,
     lsofOpenUsersRequired: 0,
     fuserPidsRequired: 0,
     walRequiredAbsent: true,
