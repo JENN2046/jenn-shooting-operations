@@ -30,7 +30,8 @@ MCowBQYDK2VwAyEAO6+9DSKWYrwyEC20zFe1GPdeTEYggybpXBrxDib5Koo=
 `;
 
 try {
-  const [packetSchema, receiptSchema, prep, approval, packet, terminal, receipt, executorBytes] = await Promise.all([
+  const [packetSchema, receiptSchema, prep, approval, packet, terminal, receipt,
+    executorBytes, attemptRecordBytes] = await Promise.all([
     readJson('contracts/g3-schema11-cutover-packet.v1.schema.json'),
     readJson('contracts/g3-schema11-cutover-receipt.v1.schema.json'),
     readJson('docs/operations/g3-schema11-cutover-exact-target.r1.json'),
@@ -39,7 +40,10 @@ try {
     readJson('docs/operations/g3-schema11-terminal-evidence.r1.json'),
     readJson('docs/operations/g3-schema11-terminal-receipt.r1.json'),
     readFile(new URL('scripts/g3-schema11-cutover-executor.py', ROOT)),
+    readFile(new URL('docs/operations/g3-schema11-attempt-record.r1.json', ROOT)),
   ]);
+  const attemptRecord = JSON.parse(attemptRecordBytes.toString('utf8'));
+  const attemptRecordDigest = sha256(attemptRecordBytes);
 
   if (prep.authorityTargetDigest !== EXPECTED.target
     || digestG3AuthorityTargetV1(prep.authorityTarget) !== EXPECTED.target
@@ -107,6 +111,10 @@ try {
   const sv = terminal.schemaVerificationEvidence;
   const ps = terminal.postStateEvidence;
   const at = ps.attempt;
+  const productionDbPath = prep.targetBindingEvidence.databasePath;
+  const expectedAttemptPath =
+    '/mnt/datadisk0/g3-schema11-cutover/attempts/aa9c7a4c2ad48ed6e808a48c6e24790ff0c5d25883536ab2bfd27e0f6447b6c6.json';
+  const attemptKeys = Object.keys(attemptRecord).sort();
   if (terminal.packetId !== packet.packetId
     || terminal.operationId !== packet.authorityTarget.execution.operationId
     || terminal.authorityTargetDigest !== EXPECTED.target
@@ -118,6 +126,9 @@ try {
     || sv.migration11Count !== 1
     || sv.migration11Name !== 'business_calendar_and_reschedule'
     || sv.migration11Checksum !== EXPECTED.migration11
+    || sv.databasePath !== productionDbPath
+    || ps.activeDatabase.path !== productionDbPath
+    || sv.databasePath !== ps.activeDatabase.path
     || sv.activeDatabaseSha256 !== EXPECTED.activeDb
     || sv.integrityCheck !== 'ok'
     || sv.foreignKeyViolationCount !== 0
@@ -138,10 +149,19 @@ try {
     || ps.containment.fuserDatabasePids !== 0
     || ps.containment.normalWritesDisabled !== true
     || ps.containment.authoritativeWriteCapabilityAbsent !== true
-    || at.sha256 !== EXPECTED.attemptRecord
-    || at.packetId !== packet.packetId
-    || at.operationId !== packet.authorityTarget.execution.operationId
-    || at.authorityTargetDigest !== EXPECTED.target
+    || attemptRecordDigest !== EXPECTED.attemptRecord
+    || attemptRecordBytes.length !== 230
+    || attemptKeys.join(',') !== 'authorityTargetDigest,claimedAt,operationId,packetId'
+    || at.path !== expectedAttemptPath
+    || at.sha256 !== attemptRecordDigest
+    || at.size !== attemptRecordBytes.length
+    || attemptRecord.packetId !== packet.packetId
+    || attemptRecord.operationId !== packet.authorityTarget.execution.operationId
+    || attemptRecord.authorityTargetDigest !== EXPECTED.target
+    || attemptRecord.claimedAt !== at.claimedAt
+    || at.packetId !== attemptRecord.packetId
+    || at.operationId !== attemptRecord.operationId
+    || at.authorityTargetDigest !== attemptRecord.authorityTargetDigest
     || terminal.classification.outcome !== 'COMMITTED'
     || terminal.classification.authoritativeWriteCapabilityAbsent !== true
     || terminal.classification.normalWritesDisabledAtClassification !== true
@@ -160,10 +180,11 @@ try {
     && same(value.authorityTarget, prep.authorityTarget);
 
   const verifyExecutionAttemptStarted = value =>
-    value.replayKey === contractReplayKey
-    && value.packetId === at.packetId
-    && value.operationId === at.operationId
-    && value.authorityTargetDigest === at.authorityTargetDigest;
+    attemptRecordDigest === EXPECTED.attemptRecord
+    && value.replayKey === contractReplayKey
+    && value.packetId === attemptRecord.packetId
+    && value.operationId === attemptRecord.operationId
+    && value.authorityTargetDigest === attemptRecord.authorityTargetDigest;
 
   const verifyTerminalEvidence = value =>
     value.packetId === receipt.packetId

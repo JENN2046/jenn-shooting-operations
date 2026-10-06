@@ -30,7 +30,7 @@ sha256 =
 b398b83229bdece61032e7fa64f03d01594a3aa59abcc96954036871a8c4ed37
 ```
 
-It binds the exact packet, operation and authority-target digest above.
+It binds the exact packet, operation and authority-target digest above. The exact 230-byte production ledger record is also archived as `g3-schema11-attempt-record.r1.json`; the terminal validator hashes those archived bytes and verifies the parsed record identity rather than trusting copied terminal-evidence fields.
 
 ## Independent terminal verification
 
