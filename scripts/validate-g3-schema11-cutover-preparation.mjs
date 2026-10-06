@@ -156,6 +156,11 @@ try {
     || eb.candidateIsolation?.rootFilesystemReadOnly !== true
     || eb.candidateIsolation?.capDropAll !== true
     || eb.candidateIsolation?.noNewPrivileges !== true
+    || eb.candidateIsolation?.migrationUid !== 1000
+    || eb.candidateIsolation?.migrationGid !== 1000
+    || eb.candidateIsolation?.preclaimWorkdirWriteProbeRequired !== true
+    || eb.candidateIsolation?.workdirMode !== '0750'
+    || eb.candidateIsolation?.candidateMode !== '0600'
     || eb.candidateMigrationVerification?.localSyntheticPass !== true
     || eb.candidateMigrationVerification?.sourceSchemaVersion !== 10
     || eb.candidateMigrationVerification?.targetSchemaVersion !== 11
@@ -179,6 +184,9 @@ try {
     || eb.approvalGate?.arbitraryAuthorityTargetDigestCliAllowed !== false
     || eb.approvalGate?.approvedPacketMustMatchFrozenPreparation !== true
     || eb.approvalGate?.approvalSource !== 'EXPLICIT_HUMAN_CHAT_AUTHORIZATION'
+    || eb.approvalGate?.cryptographicApprovalRequired !== true
+    || eb.approvalGate?.signatureAlgorithm !== 'Ed25519'
+    || eb.approvalGate?.signingKeyId !== 'sha256:0d9c964a35c05842b5aafbe261fb5e020427ad5c635357e6955201da56100bae'
     || eb.targetRuntimeVerification?.hostname !== 'VM-0-12-ubuntu'
     || eb.targetRuntimeVerification?.instanceIdMetadataEndpoint !== 'http://169.254.0.23/latest/meta-data/instance-id'
     || eb.targetRuntimeVerification?.instanceId !== 'ins-mi85f3my'
@@ -198,6 +206,8 @@ try {
     || !executorText.includes('--preparation-record')
     || !executorText.includes('verify_physical_target()')
     || !executorText.includes('verify_no_open_db_users()')
+    || !executorText.includes('verify_approval_signature(')
+    || !executorText.includes('verify_migration_user_workdir_access()')
     || ha.status !== 'NOT_REQUESTED' || ha.humanApprovalRequired !== true
     || ha.approvedAuthorityTargetDigest !== null || ha.approvalRef !== null
     || ha.approvalEvidenceDigest !== null
@@ -225,10 +235,16 @@ try {
   };
   if (!validatePacket(shapeProbe)) fail('AUTHORITY_TARGET_PACKET_SHAPE_INVALID');
 
-  const selfTest = spawnSync('python3', [new URL(EXECUTOR_URL).pathname, '--self-test-exchange'],
-    { encoding: 'utf8' });
+  const executorPath = new URL(EXECUTOR_URL).pathname;
+  const selfTest = spawnSync('python3', [executorPath, '--self-test-exchange'], { encoding: 'utf8' });
   if (selfTest.status !== 0 || !selfTest.stdout.includes('G3_RENAME_EXCHANGE_SELF_TEST_PASS')) {
     fail('EXECUTION_BOUNDARY_SELF_TEST_FAILED');
+  }
+  const approvalSelfTest = spawnSync('python3', [executorPath, '--self-test-approval-signature'],
+    { encoding: 'utf8' });
+  if (approvalSelfTest.status !== 0
+    || !approvalSelfTest.stdout.includes('G3_APPROVAL_SIGNATURE_SELF_TEST_PASS')) {
+    fail('APPROVAL_SIGNATURE_SELF_TEST_FAILED');
   }
 
   console.log(JSON.stringify({

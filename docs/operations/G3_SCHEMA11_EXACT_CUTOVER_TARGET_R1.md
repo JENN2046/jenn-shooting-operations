@@ -78,10 +78,10 @@ The proposed physical boundary is `G3_SCHEMA11_ATOMIC_EXCHANGE_R1`.
 
 It deliberately does **not** migrate the active database:
 
-1. require an exact approved packet plus separate human-approval record, both bound to this frozen preparation target; reject the old free-form authority-digest CLI entirely;
+1. require an exact approved packet plus a separately signed human-approval record; the approval payload is Ed25519-verified against the frozen signing public key and binds the computed authority-target digest, so caller-authored JSON cannot self-authorize execution;
 2. require root execution, then revalidate hostname, Tencent instance-id metadata, `/dev/vdb`/ext4 binding, exact active DB inode/device/mode/uid/gid, zero Docker volume users, zero `lsof`/`fuser` DB users, and absent WAL/SHM;
-3. durably claim the one-shot attempt ledger before candidate mutation;
-4. copy the exact active DB into a dedicated same-filesystem control directory;
+3. before consuming the one-shot claim, prove the exact migration UID/GID can write through the candidate-directory bind mount using the exact image; only then durably claim the one-shot attempt ledger before candidate mutation;
+4. create the same-filesystem workdir as UID/GID 1000 with mode `0750`, copy the exact active DB there, and set the candidate file to UID/GID 1000 with mode `0600`;
 5. give the exact image RW access only to that isolated candidate directory;
 6. run migration 11 on the candidate with network disabled, read-only rootfs, all Linux capabilities dropped and
    `no-new-privileges`;
@@ -98,11 +98,10 @@ Exact executor:
 
 ```text
 scripts/g3-schema11-cutover-executor.py
-sha256:0516bb2ea28ef5a360f8fd7ee8c615efcd455614123ca8f9b7445bc21b28335a
+sha256:b24b1c7f4d9a700d32d822f2ee235867f2fffb2982319066c050b94077cd8160
 ```
 
-The rename-exchange helper passed a local self-test, and the exact candidate image independently migrated a disposable
-Schema10 DB to Schema11 with the frozen migration checksum, DELETE journal mode, integrity ok and FK=0.
+The rename-exchange helper and the pinned Ed25519 approval verifier both pass local self-tests. The exact candidate image independently migrated a disposable Schema10 DB to Schema11 with the frozen migration checksum, DELETE journal mode, integrity ok and FK=0. The approval signing private key is not stored in this repository or on the production host; only its public-key fingerprint is frozen into the execution boundary.
 
 ## Frozen digests
 
@@ -123,7 +122,7 @@ drainProofDigest =
 sha256:7d4de65434606b1c4557536deee386ed25fc6f26c05919bc5e18f7bad1e7081f
 
 executionBoundaryProofDigest =
-sha256:795f45f4881d891f073b42d559b463265f4682ddc22f25fc05df514acbcbac17
+sha256:423c5799df2f5fb6ca32ec623a7241f61e25fe3e16d9cd5307838cfa318f600e
 ```
 
 ## Exact human approval target
@@ -136,7 +135,7 @@ proposed packetId =
 G3-SCHEMA11-CUTOVER-20261006-R1
 
 authorityTargetDigest =
-sha256:f6affea16a2e5b963c395a6dfa99c352fd5f182fb565461a14dca3acbb9cc1f0
+sha256:0f764dd5f9ffc3b86ac1d01f2cdc561db833d51860ccd59c64f1a71268380513
 ```
 
 Current authority state remains:

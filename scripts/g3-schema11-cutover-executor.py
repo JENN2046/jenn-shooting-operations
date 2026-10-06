@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import base64
 import ctypes
 import datetime as dt
 import hashlib
@@ -47,6 +48,16 @@ EXPECTED_ACTIVE_DATABASE_FAMILY_DIGEST = "sha256:3df22ce713b686313f1c19bbb6fcf6b
 EXPECTED_RECOVERY_ARTIFACT_DIGEST = "sha256:f2e643317a152600c8bf864648cec095ad57ba398c804feb35f9338a7073cfef"
 APPROVAL_SOURCE = "EXPLICIT_HUMAN_CHAT_AUTHORIZATION"
 APPROVED_ACTION_ID = "G3_SCHEMA11_CUTOVER"
+APPROVAL_SIGNATURE_ALGORITHM = "Ed25519"
+APPROVAL_SIGNING_KEY_ID = "sha256:0d9c964a35c05842b5aafbe261fb5e020427ad5c635357e6955201da56100bae"
+APPROVAL_PUBLIC_KEY_PEM = """-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAO6+9DSKWYrwyEC20zFe1GPdeTEYggybpXBrxDib5Koo=
+-----END PUBLIC KEY-----
+"""
+APPROVAL_SIGNATURE_SELF_TEST_MESSAGE = b"G3_APPROVAL_SIGNATURE_SELF_TEST_V1\n"
+APPROVAL_SIGNATURE_SELF_TEST_B64 = "9jiqxI3bnc4FPzxhipF4NCqNGE+tbaA6hGfMzSTW+sOqNOKD32s8VwSnlaG+Y/HwVs7/adS2ceTK1QOfYpuZCA=="
+MIGRATION_UID = 1000
+MIGRATION_GID = 1000
 
 NODE_MIGRATE = r"""
 import { DatabaseSync } from 'node:sqlite';
@@ -108,6 +119,30 @@ def exact_keys(value, expected, code):
         raise RuntimeError(code)
     return value
 
+def verify_approval_signature(message: bytes, signature_b64: str):
+    try:
+        signature = base64.b64decode(signature_b64, validate=True)
+    except Exception as exc:
+        raise RuntimeError("G3_APPROVAL_SIGNATURE_INVALID") from exc
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        public_key = root / "approval-public.pem"
+        signature_path = root / "approval.sig"
+        message_path = root / "approval.msg"
+        public_key.write_text(APPROVAL_PUBLIC_KEY_PEM, encoding="ascii")
+        signature_path.write_bytes(signature)
+        message_path.write_bytes(message)
+        try:
+            result = subprocess.run([
+                "openssl", "pkeyutl", "-verify", "-rawin", "-pubin",
+                "-inkey", str(public_key), "-sigfile", str(signature_path),
+                "-in", str(message_path),
+            ], text=True, capture_output=True)
+        except FileNotFoundError as exc:
+            raise RuntimeError("G3_APPROVAL_SIGNATURE_VERIFIER_UNAVAILABLE") from exc
+    if result.returncode != 0:
+        raise RuntimeError("G3_APPROVAL_SIGNATURE_NOT_TRUSTED")
+
 def load_json_file(path: Path, code):
     try:
         metadata = path.lstat()
@@ -168,10 +203,44 @@ def verify_approved_authority(packet_path: Path, approval_path: Path, preparatio
         "schemaVersion", "approvalId", "approvalSource", "approvalRef",
         "approvedActionId", "approvedAuthorityTargetDigest", "approvalEvidenceDigest",
         "authorizationReceivedBeforeExecution", "schema11CutoverAuthorized",
-        "normalWriterReadmissionAuthorized",
+        "normalWriterReadmissionAuthorized", "signatureAlgorithm",
+        "signingKeyId", "signatureBase64",
     }, "G3_APPROVAL_RECORD_KEYS_INVALID")
-    if approval.get("schemaVersion") != 1       or approval.get("approvalSource") != APPROVAL_SOURCE       or approval.get("approvedActionId") != APPROVED_ACTION_ID       or approval.get("approvalRef") != authorization.get("approvalRef")       or approval.get("approvedAuthorityTargetDigest") != computed       or approval.get("approvalEvidenceDigest") != authorization.get("approvalEvidenceDigest")       or approval.get("authorizationReceivedBeforeExecution") is not True       or approval.get("schema11CutoverAuthorized") is not True       or approval.get("normalWriterReadmissionAuthorized") is not False:
+    if approval.get("schemaVersion") != 1 \
+      or approval.get("approvalSource") != APPROVAL_SOURCE \
+      or approval.get("approvedActionId") != APPROVED_ACTION_ID \
+      or approval.get("approvalRef") != authorization.get("approvalRef") \
+      or approval.get("approvedAuthorityTargetDigest") != computed \
+      or approval.get("authorizationReceivedBeforeExecution") is not True \
+      or approval.get("schema11CutoverAuthorized") is not True \
+      or approval.get("normalWriterReadmissionAuthorized") is not False \
+      or approval.get("signatureAlgorithm") != APPROVAL_SIGNATURE_ALGORITHM \
+      or approval.get("signingKeyId") != APPROVAL_SIGNING_KEY_ID \
+      or not isinstance(approval.get("signatureBase64"), str):
         raise RuntimeError("G3_APPROVAL_RECORD_NOT_TRUSTED")
+
+    approval_core = {
+        "schemaVersion": approval["schemaVersion"],
+        "approvalId": approval["approvalId"],
+        "approvalSource": approval["approvalSource"],
+        "approvalRef": approval["approvalRef"],
+        "approvedActionId": approval["approvedActionId"],
+        "approvedAuthorityTargetDigest": approval["approvedAuthorityTargetDigest"],
+        "authorizationReceivedBeforeExecution": approval["authorizationReceivedBeforeExecution"],
+        "schema11CutoverAuthorized": approval["schema11CutoverAuthorized"],
+        "normalWriterReadmissionAuthorized": approval["normalWriterReadmissionAuthorized"],
+        "signatureAlgorithm": approval["signatureAlgorithm"],
+        "signingKeyId": approval["signingKeyId"],
+    }
+    approval_payload = canonical_json({
+        "domain": "g3-schema11-human-approval-v1",
+        "approval": approval_core,
+    }).encode("utf-8")
+    approval_evidence_digest = "sha256:" + hashlib.sha256(approval_payload).hexdigest()
+    if approval.get("approvalEvidenceDigest") != approval_evidence_digest \
+      or authorization.get("approvalEvidenceDigest") != approval_evidence_digest:
+        raise RuntimeError("G3_APPROVAL_EVIDENCE_DIGEST_MISMATCH")
+    verify_approval_signature(approval_payload, approval["signatureBase64"])
 
     return computed
 
@@ -345,9 +414,26 @@ def claim_attempt(authority_target_digest: str):
     fsync_dir(attempts)
     return path
 
+def verify_migration_user_workdir_access():
+    CONTROL_ROOT.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".uid1000-preflight-", dir=CONTROL_ROOT) as td:
+        probe_dir = Path(td)
+        os.chown(probe_dir, MIGRATION_UID, MIGRATION_GID)
+        os.chmod(probe_dir, 0o750)
+        subprocess.run([
+            "docker", "run", "--rm", "--network", "none", "--read-only",
+            "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
+            "--user", f"{MIGRATION_UID}:{MIGRATION_GID}",
+            "-v", f"{probe_dir}:/cutover:rw",
+            "--entrypoint", "node", IMAGE_DIGEST,
+            "-e", "const fs=require('node:fs'); fs.writeFileSync('/cutover/.probe','ok'); fs.unlinkSync('/cutover/.probe');",
+        ], check=True)
+
 def migrate_isolated_candidate(workdir: Path):
     candidate = workdir / "candidate.sqlite"
     shutil.copy2(ACTIVE_DB, candidate)
+    os.chown(candidate, MIGRATION_UID, MIGRATION_GID)
+    os.chmod(candidate, 0o600)
     fsync_file(candidate)
     fsync_dir(workdir)
     if sha256_file(candidate) != EXPECTED_SCHEMA10_SHA256:
@@ -357,7 +443,7 @@ def migrate_isolated_candidate(workdir: Path):
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
         "--pids-limit", "64", "--memory", "256m", "--cpus", "1",
         "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=16m",
-        "--user", "1000:1000",
+        "--user", f"{MIGRATION_UID}:{MIGRATION_GID}",
         "-v", f"{workdir}:/cutover:rw",
         "--entrypoint", "node", IMAGE_DIGEST,
         "--input-type=module", "-e", NODE_MIGRATE,
@@ -391,11 +477,14 @@ def execute(packet_path: Path, approval_path: Path, preparation_path: Path):
     verify_image()
     if os.stat(ACTIVE_DB).st_dev != os.stat(ACTIVE_DB.parent).st_dev:
         raise RuntimeError("G3_ACTIVE_DB_DEVICE_MISMATCH")
+    verify_migration_user_workdir_access()
     attempt = claim_attempt(authority_target_digest)
     workdir = CONTROL_ROOT / OPERATION_ID
     if workdir.exists():
         raise RuntimeError("RECONCILIATION_REQUIRED")
-    workdir.mkdir(parents=True, mode=0o700)
+    workdir.mkdir(parents=True, mode=0o750)
+    os.chown(workdir, MIGRATION_UID, MIGRATION_GID)
+    os.chmod(workdir, 0o750)
     fsync_dir(CONTROL_ROOT)
     try:
         candidate, candidate_sha = migrate_isolated_candidate(workdir)
@@ -430,6 +519,16 @@ def execute(packet_path: Path, approval_path: Path, preparation_path: Path):
             }, sort_keys=True))
         raise
 
+def self_test_approval_signature():
+    verify_approval_signature(
+        APPROVAL_SIGNATURE_SELF_TEST_MESSAGE,
+        APPROVAL_SIGNATURE_SELF_TEST_B64,
+    )
+    print(json.dumps({
+        "status": "G3_APPROVAL_SIGNATURE_SELF_TEST_PASS",
+        "signingKeyId": APPROVAL_SIGNING_KEY_ID,
+    }, sort_keys=True))
+
 def self_test_exchange():
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -445,15 +544,20 @@ def self_test_exchange():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--self-test-exchange", action="store_true")
+    parser.add_argument("--self-test-approval-signature", action="store_true")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--approved-packet")
     parser.add_argument("--approval-record")
     parser.add_argument("--preparation-record")
     args = parser.parse_args()
-    if args.self_test_exchange:
-        if args.execute or args.approved_packet or args.approval_record or args.preparation_record:
+    if args.self_test_exchange or args.self_test_approval_signature:
+        if args.execute or args.approved_packet or args.approval_record or args.preparation_record \
+          or (args.self_test_exchange and args.self_test_approval_signature):
             raise SystemExit("self-test must be isolated")
-        self_test_exchange()
+        if args.self_test_exchange:
+            self_test_exchange()
+        else:
+            self_test_approval_signature()
         return
     if not args.execute or not args.approved_packet or not args.approval_record or not args.preparation_record:
         raise SystemExit(

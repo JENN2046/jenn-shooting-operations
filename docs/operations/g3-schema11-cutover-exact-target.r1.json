@@ -84,7 +84,7 @@
   "executionBoundaryEvidence": {
     "boundaryId": "G3_SCHEMA11_ATOMIC_EXCHANGE_R1",
     "executorPath": "scripts/g3-schema11-cutover-executor.py",
-    "executorSha256": "sha256:0516bb2ea28ef5a360f8fd7ee8c615efcd455614123ca8f9b7445bc21b28335a",
+    "executorSha256": "sha256:b24b1c7f4d9a700d32d822f2ee235867f2fffb2982319066c050b94077cd8160",
     "imageArchiveSha256": "sha256:7e6e707d11fab6c317851ad21fbc1a4ccdde0ff1dda4d6dba7535b3b37303dff",
     "imageArchiveSize": 63533056,
     "exactImageDigest": "sha256:581e9fa25e04b582aa39c2fdaa291f6db3e80fc3f3ac15a8a4afa06622442144",
@@ -104,7 +104,12 @@
       "networkMode": "none",
       "rootFilesystemReadOnly": true,
       "capDropAll": true,
-      "noNewPrivileges": true
+      "noNewPrivileges": true,
+      "migrationUid": 1000,
+      "migrationGid": 1000,
+      "preclaimWorkdirWriteProbeRequired": true,
+      "workdirMode": "0750",
+      "candidateMode": "0600"
     },
     "candidateMigrationVerification": {
       "localSyntheticPass": true,
@@ -137,7 +142,10 @@
       "separateApprovalRecordRequired": true,
       "arbitraryAuthorityTargetDigestCliAllowed": false,
       "approvedPacketMustMatchFrozenPreparation": true,
-      "approvalSource": "EXPLICIT_HUMAN_CHAT_AUTHORIZATION"
+      "approvalSource": "EXPLICIT_HUMAN_CHAT_AUTHORIZATION",
+      "cryptographicApprovalRequired": true,
+      "signatureAlgorithm": "Ed25519",
+      "signingKeyId": "sha256:0d9c964a35c05842b5aafbe261fb5e020427ad5c635357e6955201da56100bae"
     },
     "targetRuntimeVerification": {
       "hostname": "VM-0-12-ubuntu",
@@ -157,7 +165,7 @@
       "checkedImmediatelyBeforeExchange": true
     }
   },
-  "executionBoundaryProofDigest": "sha256:795f45f4881d891f073b42d559b463265f4682ddc22f25fc05df514acbcbac17",
+  "executionBoundaryProofDigest": "sha256:423c5799df2f5fb6ca32ec623a7241f61e25fe3e16d9cd5307838cfa318f600e",
   "authorityTarget": {
     "authorityHead": "a4199fdb14808ebb866943148a222b0d4300d66e",
     "artifact": {
@@ -186,7 +194,7 @@
       "inFlightWriterCount": 0,
       "drainProofDigest": "sha256:7d4de65434606b1c4557536deee386ed25fc6f26c05919bc5e18f7bad1e7081f",
       "processLifetimeIsAuthority": false,
-      "executionBoundaryProofDigest": "sha256:795f45f4881d891f073b42d559b463265f4682ddc22f25fc05df514acbcbac17",
+      "executionBoundaryProofDigest": "sha256:423c5799df2f5fb6ca32ec623a7241f61e25fe3e16d9cd5307838cfa318f600e",
       "unknownExecutorHasAuthoritativeWriteCapability": false,
       "nonDatabaseProductionMutationAllowed": false
     },
@@ -196,7 +204,7 @@
       "automaticRetryAllowed": false
     }
   },
-  "authorityTargetDigest": "sha256:f6affea16a2e5b963c395a6dfa99c352fd5f182fb565461a14dca3acbb9cc1f0",
+  "authorityTargetDigest": "sha256:0f764dd5f9ffc3b86ac1d01f2cdc561db833d51860ccd59c64f1a71268380513",
   "humanApproval": {
     "status": "NOT_REQUESTED",
     "humanApprovalRequired": true,

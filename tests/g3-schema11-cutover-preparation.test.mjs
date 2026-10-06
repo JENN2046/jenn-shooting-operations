@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import { digestCanonicalJsonSchedulingV1 } from '../src/scheduling-contract-v1.mjs';
@@ -60,12 +62,14 @@ test('exact physical executor is pinned and rename-exchange self-test passes', a
   const bytes = await readFile(new URL('../scripts/g3-schema11-cutover-executor.py', import.meta.url));
   assert.equal('sha256:' + createHash('sha256').update(bytes).digest('hex'),
     record.executionBoundaryEvidence.executorSha256);
-  const run = spawnSync('python3', [
-    new URL('../scripts/g3-schema11-cutover-executor.py', import.meta.url).pathname,
-    '--self-test-exchange',
-  ], { encoding: 'utf8' });
+  const path = new URL('../scripts/g3-schema11-cutover-executor.py', import.meta.url).pathname;
+  const run = spawnSync('python3', [path, '--self-test-exchange'], { encoding: 'utf8' });
   assert.equal(run.status, 0, run.stderr);
   assert.match(run.stdout, /G3_RENAME_EXCHANGE_SELF_TEST_PASS/);
+
+  const approval = spawnSync('python3', [path, '--self-test-approval-signature'], { encoding: 'utf8' });
+  assert.equal(approval.status, 0, approval.stderr);
+  assert.match(approval.stdout, /G3_APPROVAL_SIGNATURE_SELF_TEST_PASS/);
 });
 
 test('executor requires approved packet/approval and rejects free-form authority digests', async () => {
@@ -89,6 +93,75 @@ test('executor requires approved packet/approval and rejects free-form authority
   assert.match(missingApproval.stderr, /approved-packet/);
 });
 
+test('forged approval JSON cannot self-authorize execution', async () => {
+  const executor = new URL('../scripts/g3-schema11-cutover-executor.py', import.meta.url).pathname;
+  const root = await mkdtemp(join(tmpdir(), 'g3-forged-approval-'));
+  try {
+    const approvalCore = {
+      schemaVersion: 1,
+      approvalId: 'FORGED-APPROVAL',
+      approvalSource: 'EXPLICIT_HUMAN_CHAT_AUTHORIZATION',
+      approvalRef: 'FORGED-REF',
+      approvedActionId: 'G3_SCHEMA11_CUTOVER',
+      approvedAuthorityTargetDigest: record.authorityTargetDigest,
+      authorizationReceivedBeforeExecution: true,
+      schema11CutoverAuthorized: true,
+      normalWriterReadmissionAuthorized: false,
+      signatureAlgorithm: 'Ed25519',
+      signingKeyId: record.executionBoundaryEvidence.approvalGate.signingKeyId,
+    };
+    const approvalEvidenceDigest = digestCanonicalJsonSchedulingV1({
+      domain: 'g3-schema11-human-approval-v1',
+      approval: approvalCore,
+    });
+    const approval = {
+      ...approvalCore,
+      approvalEvidenceDigest,
+      signatureBase64: Buffer.alloc(64).toString('base64'),
+    };
+    const packet = {
+      schemaVersion: 1,
+      packetId: record.proposedPacketId,
+      contractId: 'G2_MINIMAL_RELEASE_CONTRACT_V1',
+      authorityTarget: record.authorityTarget,
+      authorityTargetDigest: record.authorityTargetDigest,
+      authorization: {
+        status: 'APPROVED',
+        humanApprovalRequired: true,
+        approvalRef: approval.approvalRef,
+        approvedAuthorityTargetDigest: record.authorityTargetDigest,
+        approvalEvidenceDigest,
+      },
+    };
+    const preparationPath = join(root, 'preparation.json');
+    const packetPath = join(root, 'packet.json');
+    const approvalPath = join(root, 'approval.json');
+    await writeFile(preparationPath, JSON.stringify(record));
+    await writeFile(packetPath, JSON.stringify(packet));
+    await writeFile(approvalPath, JSON.stringify(approval));
+    const run = spawnSync('python3', [executor, '--execute',
+      '--approved-packet', packetPath,
+      '--approval-record', approvalPath,
+      '--preparation-record', preparationPath,
+    ], { encoding: 'utf8' });
+    assert.notEqual(run.status, 0);
+    assert.match(run.stderr, /G3_APPROVAL_SIGNATURE_NOT_TRUSTED/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('migration-user workdir access is proven before the one-shot claim', async () => {
+  const source = await readFile(new URL('../scripts/g3-schema11-cutover-executor.py', import.meta.url), 'utf8');
+  const preflight = source.indexOf('verify_migration_user_workdir_access()');
+  const claim = source.indexOf('attempt = claim_attempt(authority_target_digest)');
+  assert.ok(preflight >= 0 && claim > preflight);
+  assert.match(source, /os\.chown\(workdir, MIGRATION_UID, MIGRATION_GID\)/);
+  assert.match(source, /os\.chmod\(workdir, 0o750\)/);
+  assert.match(source, /os\.chown\(candidate, MIGRATION_UID, MIGRATION_GID\)/);
+  assert.match(source, /os\.chmod\(candidate, 0o600\)/);
+});
+
 test('execution boundary freezes physical target and non-Docker drain verification', () => {
   const boundary = record.executionBoundaryEvidence;
   assert.deepEqual(boundary.approvalGate, {
@@ -97,7 +170,15 @@ test('execution boundary freezes physical target and non-Docker drain verificati
     arbitraryAuthorityTargetDigestCliAllowed: false,
     approvedPacketMustMatchFrozenPreparation: true,
     approvalSource: 'EXPLICIT_HUMAN_CHAT_AUTHORIZATION',
+    cryptographicApprovalRequired: true,
+    signatureAlgorithm: 'Ed25519',
+    signingKeyId: 'sha256:0d9c964a35c05842b5aafbe261fb5e020427ad5c635357e6955201da56100bae',
   });
+  assert.equal(boundary.candidateIsolation.migrationUid, 1000);
+  assert.equal(boundary.candidateIsolation.migrationGid, 1000);
+  assert.equal(boundary.candidateIsolation.preclaimWorkdirWriteProbeRequired, true);
+  assert.equal(boundary.candidateIsolation.workdirMode, '0750');
+  assert.equal(boundary.candidateIsolation.candidateMode, '0600');
   assert.deepEqual(boundary.targetRuntimeVerification, {
     hostname: 'VM-0-12-ubuntu',
     instanceIdMetadataEndpoint: 'http://169.254.0.23/latest/meta-data/instance-id',
