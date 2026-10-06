@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "contractId": "G2_MINIMAL_RELEASE_CONTRACT_V1",
+  "status": "FROZEN_NOT_EXECUTABLE",
+  "authority": {
+    "canonicalBranch": "codex/v2-1-architecture-freeze",
+    "g1MergeCommit": "175586e2c67c94ad61fae6c5964c106f0966dda8",
+    "productionMutationAuthorized": false,
+    "schema11CutoverAuthorized": false
+  },
+  "transition": {
+    "sourceSchemaVersion": 10,
+    "targetSchemaVersion": 11,
+    "migrationName": "business_calendar_and_reschedule",
+    "migrationChecksum": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8",
+    "ordinaryRuntimeMayPerformTransition": false
+  },
+  "invariants": [
+    {
+      "id": "G2_I1_DURABLE_WRITER_CONTAINMENT",
+      "durableNormalWriterDisableRequired": true,
+      "inFlightWriterDrainRequired": true,
+      "processLifetimeMayCarryAuthority": false,
+      "unprovenContainmentOutcome": "UNKNOWN"
+    },
+    {
+      "id": "G2_I2_EXACT_ARTIFACT_BINDING",
+      "exactSourceCommitRequired": true,
+      "exactImageDigestRequired": true,
+      "exactMigrationChecksumRequired": true,
+      "exactAuthorityTargetDigestRequired": true,
+      "artifactDriftAllowed": false
+    },
+    {
+      "id": "G2_I3_VERIFIED_PRESTATE_RECOVERY",
+      "activeDatabaseFamilyDigestRequired": true,
+      "recoveryArtifactRequired": true,
+      "recoveryReadbackRequired": true,
+      "recoveryReadbackMustMatchArtifact": true,
+      "integrityCheckRequired": true,
+      "foreignKeyCheckRequired": true
+    },
+    {
+      "id": "G2_I4_EXPLICIT_CUTOVER_ENTRY",
+      "entrypointId": "G3_SCHEMA11_CUTOVER",
+      "ordinaryRuntimeCutoverAllowed": false,
+      "migrationWorkerMayWriteActiveFamilyBeforePublication": false,
+      "unprovenBoundaryOutcome": "UNKNOWN"
+    },
+    {
+      "id": "G2_I5_TERMINAL_OUTCOME_MODEL",
+      "allowedOutcomes": [
+        "COMMITTED",
+        "ROLLED_BACK",
+        "UNKNOWN"
+      ],
+      "automaticRetryAllowed": false,
+      "otherOutcomesAllowed": false
+    },
+    {
+      "id": "G2_I6_UNKNOWN_BLOCKS_READMISSION",
+      "unknownKeepsNormalWritesDisabled": true,
+      "humanReconciliationRequired": true,
+      "freshReadmissionEvidenceRequired": true,
+      "automaticReenableAllowed": false
+    }
+  ],
+  "g3PacketSchema": "contracts/g3-schema11-cutover-packet.v1.schema.json",
+  "currentPacketStatus": "NOT_CREATED",
+  "nextGate": "G3_SCHEMA11_CUTOVER",
+  "prohibitions": [
+    "NO_PRODUCTION_ACTION_IN_G2",
+    "NO_SCHEMA11_CUTOVER_IN_G2",
+    "NO_AUTOMATIC_RETRY_AFTER_UNKNOWN",
+    "NO_PROCESS_LIFETIME_AS_DURABLE_AUTHORITY",
+    "NO_NEW_GATE_FAMILY"
+  ]
+}

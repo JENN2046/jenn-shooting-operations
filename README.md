@@ -19,16 +19,16 @@ Jenn Shooting Operations 是 `jenn-shooting-planner` 的独立协作服务边界
 
 ## 当前阶段
 
-当前源码以 `b781fef9e4717263d42ec0d5d14d1249b8603723` 为已合并基线，并正在收敛
-**JSO Core Canonical R1**：Schema 11 业务日历、工作安排、单场改期和 JSO 侧 Agent
-服务边界。仓库内保留既有生产部署与 PROD-10 证据，但这些历史记录不能替代当前线上事实；
-任何生产动作前仍必须重新核验 live runtime。本候选本身未部署，也不授权 Schema 11 cutover。
+**G1 CORE_CANONICAL 已关闭**。当前 canonical authority 为
+`codex/v2-1-architecture-freeze @ 175586e2c67c94ad61fae6c5964c106f0966dda8`。
 
-当前收官只使用 G0-G4 五个 Gate。历史 PROD/GF 编号继续作为 provenance，不自动成为当前
-next action。VCPToolBox transport/plugin 由其独立 owner 维护，不进入 JSO Core。
+当前 Gate 是 **G2 MINIMAL_RELEASE_CONTRACT**：只冻结 Schema 10→11 cutover 的六条安全不变式和
+未来 G3 packet 结构，不执行生产迁移、不授权生产写，也不重新引入 C01/custody/launch-custody。
+仓库内历史 PROD/GF 记录只作为 provenance，不能替代 fresh production facts 或当前 G0-G4 roadmap。
 
 ## 入口
 
+- [G2 Minimal Release Contract](docs/operations/G2_MINIMAL_RELEASE_CONTRACT.md)
 - [JSO Core Canonical R1](docs/JSO_CORE_CANONICAL_R1.md)
 - [执行计划（历史初始阶段计划）](docs/EXECUTION_PLAN.md)
 - [部署前检清单](docs/DEPLOYMENT_PREFLIGHT.md)
