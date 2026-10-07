@@ -120,6 +120,15 @@ try {
   const sv = terminal.schemaVerificationEvidence;
   const ps = terminal.postStateEvidence;
   const at = ps.attempt;
+  const parseInstant = value => {
+    if (typeof value !== 'string') return Number.NaN;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : Number.NaN;
+  };
+  const attemptClaimedAtMs = parseInstant(attemptRecord.claimedAt);
+  const schemaObservedAtMs = parseInstant(sv.observedAt);
+  const postStateClassifiedAtMs = parseInstant(ps.classifiedAt);
+  const receiptClassifiedAtMs = parseInstant(receipt.classifiedAt);
   const productionDbPath = EXPECTED.productionDbPath;
   const expectedPrestatePath =
     `/mnt/datadisk0/g3-schema11-cutover/${packet.authorityTarget.execution.operationId}/candidate.sqlite`;
@@ -133,6 +142,15 @@ try {
     || terminal.schemaVerificationDigest !== schemaVerificationDigest
     || terminal.postStateDigest !== postStateDigest
     || terminal.contractReplayKey !== contractReplayKey
+    || !Number.isFinite(attemptClaimedAtMs)
+    || !Number.isFinite(schemaObservedAtMs)
+    || !Number.isFinite(postStateClassifiedAtMs)
+    || !Number.isFinite(receiptClassifiedAtMs)
+    || receipt.classifiedAt !== ps.classifiedAt
+    || ps.classifiedAt !== sv.observedAt
+    || receiptClassifiedAtMs !== postStateClassifiedAtMs
+    || postStateClassifiedAtMs !== schemaObservedAtMs
+    || attemptClaimedAtMs >= schemaObservedAtMs
     || sv.schemaVersionObserved !== 11
     || sv.migrationCount !== 11
     || sv.migration11Count !== 1
