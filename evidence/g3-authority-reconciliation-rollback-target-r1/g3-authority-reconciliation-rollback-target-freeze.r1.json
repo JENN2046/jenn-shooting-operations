@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "freezeId": "G3_AUTH_RECON_ROLLBACK_TARGET_FREEZE_20261007_R1",
+  "status": "FROZEN_AWAITING_EXPLICIT_HUMAN_APPROVAL",
+  "canonicalAuthority": {
+    "branch": "codex/v2-1-architecture-freeze",
+    "head": "50fe31cff4ab72bfaabaa0e63927a08bde681111",
+    "mustRemainUnchangedThroughApprovalAndExecution": true
+  },
+  "target": {
+    "recordPath": "evidence/g3-authority-reconciliation-rollback-target-r1/g3-authority-reconciliation-rollback-target.r1.json",
+    "recordSha256": "sha256:cf2e0aa94a47eb601e4caea4cab31a7f696549001fe12e31a0e0ed39be563d3e",
+    "rollbackTargetDigest": "sha256:b71d4853f47c8f2404b331c8a9e810747ba211a867353607819ee70ff15bf509",
+    "executorSha256": "sha256:b510e978e3b3e2cc3f10a008d23921a2a44eecd0c9c8496c871eab2a500c10fd"
+  },
+  "freshFreezeEvidence": {
+    "observedAt": "2026-10-07T10:58:47Z",
+    "mergedExecutorReadOnlyPreflight": "PASS",
+    "activeSchema11Sha256": "sha256:0eae48b85f362cf1064f92e14511865fe7fd68dbc13a85d4c6efd6e656e736d9",
+    "preservedSchema10Sha256": "sha256:5d65282b197350c2d6175fef2ccfa641c40908ecd9c053e296182f65e7bfede7",
+    "rollbackControlRootPresent": false,
+    "productionServiceContainerPresent": false
+  },
+  "authorization": {
+    "humanApprovalStatus": "NOT_REQUESTED",
+    "approvedPacketStatus": "NOT_CREATED",
+    "approvalRecordStatus": "NOT_CREATED",
+    "rollbackAuthorized": false
+  },
+  "prohibitions": [
+    "NO_CANONICAL_HEAD_CHANGE_BEFORE_ROLLBACK_EXECUTION",
+    "NO_APPROVAL_WITHOUT_EXACT_ROLLBACK_TARGET_DIGEST",
+    "NO_EXECUTABLE_PACKET_BEFORE_EXPLICIT_HUMAN_APPROVAL",
+    "NO_ROLLBACK_BEFORE_FRESH_LIVE_READ_ONLY_EXECUTION_PREFLIGHT",
+    "NO_AUTOMATIC_RETRY",
+    "NO_WRITER_READMISSION",
+    "NO_PRODUCTION_SERVICE_START"
+  ]
+}
