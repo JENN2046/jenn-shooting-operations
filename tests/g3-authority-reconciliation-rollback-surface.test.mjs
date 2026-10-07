@@ -76,15 +76,16 @@ test('recovery target must bind the exact prior UNKNOWN attempt', () => {
 test('durable claim is the admission boundary and post-claim path is network-free', () => {
   const body = executor.slice(executor.indexOf('def execute('), executor.indexOf('def self_test_exchange('));
   const preflight = body.indexOf('verify_active_and_preserved_state()');
+  const resolveExchange = body.indexOf('exchange_fn = resolve_rename_exchange()');
   const finalAuthority = body.indexOf('verify_canonical_authority_head(expected_authority_head)');
   const localRevalidation = body.indexOf('verify_post_canonical_local_admission_state()');
   const claim = body.indexOf('attempt = claim_attempt(target_digest, expected_authority_head)');
-  const exchange = body.indexOf('rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)');
+  const exchange = body.indexOf('rename_exchange(exchange_fn, ACTIVE_DB, PRESERVED_SCHEMA10)');
 
-  assert.ok(preflight >= 0 && finalAuthority > preflight && localRevalidation > finalAuthority && claim > localRevalidation && exchange > claim);
+  assert.ok(preflight >= 0 && resolveExchange > preflight && finalAuthority > resolveExchange && localRevalidation > finalAuthority && claim > localRevalidation && exchange > claim);
   assert.equal(body.indexOf('verify_canonical_authority_head(expected_authority_head)', claim), -1);
   assert.equal(body.indexOf('verify_active_and_preserved_state()', claim), -1);
-  assert.equal(body.split('rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)').length - 1, 1);
+  assert.equal(body.split('rename_exchange(exchange_fn, ACTIVE_DB, PRESERVED_SCHEMA10)').length - 1, 1);
 
   const localAdmission = executor.slice(
     executor.indexOf('def verify_post_canonical_local_admission_state():'),
@@ -109,12 +110,21 @@ test('durable claim is the admission boundary and post-claim path is network-fre
     'verify_no_running_volume_users(',
     'verify_no_open_db_users(',
     'verify_approval_signature(',
+    'resolve_rename_exchange(',
+    'ctypes.CDLL(',
+    'getattr(libc',
   ]) {
     assert.equal(postClaim.includes(forbidden), false, forbidden);
   }
-  assert.match(postClaim, /rename_exchange\(ACTIVE_DB, PRESERVED_SCHEMA10\)/);
+  assert.match(postClaim, /rename_exchange\(exchange_fn, ACTIVE_DB, PRESERVED_SCHEMA10\)/);
   assert.match(postClaim, /fsync_dir\(ACTIVE_DB\.parent\)/);
   assert.match(postClaim, /fsync_dir\(PRESERVED_SCHEMA10\.parent\)/);
+});
+
+test('renameat2 is resolved before authority admission and never resolved post-claim', () => {
+  assert.match(executor, /def resolve_rename_exchange\(\):/);
+  assert.match(executor, /exchange_fn = resolve_rename_exchange\(\)/);
+  assert.match(executor, /rename_exchange\(exchange_fn, ACTIVE_DB, PRESERVED_SCHEMA10\)/);
 });
 
 test('claim durability ambiguity is fail-closed and never proceeds to exchange', () => {

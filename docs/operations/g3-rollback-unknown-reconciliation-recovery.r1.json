@@ -47,7 +47,7 @@
   },
   "recoveryAuthoritySurface": {
     "executorPath": "scripts/g3-authority-reconciliation-rollback-executor.py",
-    "executorSha256": "sha256:df57f7d1d70ce2b34ff200a3ddd4b956fdad7ba5faa63cc912e563cf836e4723",
+    "executorSha256": "sha256:67ed0b02e0dca7887b191b1959efbeab39c40dc2d3f5dc643a9b286761b36233",
     "actionId": "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_UNKNOWN_RECOVERY_TO_10",
     "operationId": "G3-AUTH-RECON-ROLLBACK-RECOVERY-20261007-R1",
     "packetId": "G3-AUTH-RECON-ROLLBACK-RECOVERY-PACKET-20261007-R1",
@@ -77,10 +77,12 @@
     "recoveryAuthorized": false,
     "targetId": "G3-AUTH-RECON-ROLLBACK-RECOVERY-TARGET-20261007-R1",
     "terminalVerifierPath": "scripts/g3-authority-reconciliation-rollback-recovery-terminal-verifier.py",
-    "terminalVerifierSha256": "sha256:b111227d5d1bf4a2427971509d22676db7d719d50b90d622a48a2cdda3d1ff86",
+    "terminalVerifierSha256": "sha256:1842f3333e0c71641cf31cd1c9b666037382be7671c769fc7b90c8741720fdbc",
     "terminalVerifierStatus": "DEFINED_READ_ONLY",
     "postCanonicalPreClaimLocalRevalidationRequired": true,
-    "postCanonicalExternalDependencyAllowed": false
+    "postCanonicalExternalDependencyAllowed": false,
+    "exchangeSyscallResolvedBeforeClaimRequired": true,
+    "postClaimDynamicSyscallResolutionAllowed": false
   },
   "sequence": [
     "MERGE_RECOVERY_AUTHORITY_SURFACE",

@@ -22,8 +22,8 @@ const EXPECTED = Object.freeze({
   priorRollbackTarget: 'sha256:b71d4853f47c8f2404b331c8a9e810747ba211a867353607819ee70ff15bf509',
   priorRollbackAttempt: 'sha256:bfd40da521d2a3871ffcf4b4913de260d51c368eeca0ca775c4bda6b25b5645a',
   priorRollbackTerminalEvidence: 'sha256:7e04e137efa425361bf0a400017bf4452bc45cf2e9daae6c6b49c767f341ebb1',
-  recoveryExecutor: 'sha256:df57f7d1d70ce2b34ff200a3ddd4b956fdad7ba5faa63cc912e563cf836e4723',
-  recoveryVerifier: 'sha256:b111227d5d1bf4a2427971509d22676db7d719d50b90d622a48a2cdda3d1ff86',
+  recoveryExecutor: 'sha256:67ed0b02e0dca7887b191b1959efbeab39c40dc2d3f5dc643a9b286761b36233',
+  recoveryVerifier: 'sha256:1842f3333e0c71641cf31cd1c9b666037382be7671c769fc7b90c8741720fdbc',
   recoveryAction: 'G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_UNKNOWN_RECOVERY_TO_10',
   recoveryOperation: 'G3-AUTH-RECON-ROLLBACK-RECOVERY-20261007-R1',
   recoveryPacket: 'G3-AUTH-RECON-ROLLBACK-RECOVERY-PACKET-20261007-R1',
@@ -164,6 +164,8 @@ try {
     || surface.freshCanonicalHeadVerificationImmediatelyBeforeClaimRequired !== true
     || surface.postCanonicalPreClaimLocalRevalidationRequired !== true
     || surface.postCanonicalExternalDependencyAllowed !== false
+    || surface.exchangeSyscallResolvedBeforeClaimRequired !== true
+    || surface.postClaimDynamicSyscallResolutionAllowed !== false
     || surface.postClaimCanonicalVerificationAllowed !== false
     || surface.postClaimNetworkDependencyAllowed !== false
     || surface.exactRecoveryTargetStatus !== 'NOT_CREATED'
@@ -203,14 +205,15 @@ try {
 
   const execute = executor.slice(executor.indexOf('def execute('), executor.indexOf('def self_test_exchange('));
   const preflight = execute.indexOf('verify_active_and_preserved_state()');
+  const resolveExchange = execute.indexOf('exchange_fn = resolve_rename_exchange()');
   const finalAuthority = execute.indexOf('verify_canonical_authority_head(expected_authority_head)');
   const localRevalidation = execute.indexOf('verify_post_canonical_local_admission_state()');
   const claim = execute.indexOf('attempt = claim_attempt(target_digest, expected_authority_head)');
-  const exchange = execute.indexOf('rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)');
-  if (preflight < 0 || finalAuthority <= preflight || localRevalidation <= finalAuthority || claim <= localRevalidation || exchange <= claim
+  const exchange = execute.indexOf('rename_exchange(exchange_fn, ACTIVE_DB, PRESERVED_SCHEMA10)');
+  if (preflight < 0 || resolveExchange <= preflight || finalAuthority <= resolveExchange || localRevalidation <= finalAuthority || claim <= localRevalidation || exchange <= claim
     || execute.indexOf('verify_canonical_authority_head(expected_authority_head)', claim) !== -1
     || execute.indexOf('verify_active_and_preserved_state()', claim) !== -1
-    || execute.split('rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)').length - 1 !== 1) {
+    || execute.split('rename_exchange(exchange_fn, ACTIVE_DB, PRESERVED_SCHEMA10)').length - 1 !== 1) {
     fail('RECOVERY_ADMISSION_BOUNDARY_ORDER_DRIFT');
   }
 
@@ -237,6 +240,9 @@ try {
     'verify_no_running_volume_users(',
     'verify_no_open_db_users(',
     'verify_approval_signature(',
+    'resolve_rename_exchange(',
+    'ctypes.CDLL(',
+    'getattr(libc',
   ]) {
     if (postClaim.includes(forbidden)) fail('POST_CLAIM_EXTERNAL_DEPENDENCY:' + forbidden);
   }
@@ -265,6 +271,8 @@ try {
     || preferred.canonicalHeadMustMatchApprovedTargetImmediatelyBeforeClaim !== true
     || preferred.postCanonicalPreClaimLocalRevalidationRequired !== true
     || preferred.postCanonicalExternalDependencyAllowed !== false
+    || preferred.exchangeSyscallResolvedBeforeClaimRequired !== true
+    || preferred.postClaimDynamicSyscallResolutionAllowed !== false
     || preferred.postClaimCanonicalLookupAllowed !== false
     || preferred.postClaimNetworkDependencyAllowed !== false
     || preferred.nextAction !== 'MERGE_RECOVERY_AUTHORITY_SURFACE_THEN_FREEZE_EXACT_RECOVERY_TARGET') {

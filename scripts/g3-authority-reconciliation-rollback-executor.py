@@ -53,7 +53,7 @@ OPERATION_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-20261007-R1"
 PACKET_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-PACKET-20261007-R1"
 CONTRACT_ID = "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_RECOVERY_V1"
 TARGET_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-TARGET-20261007-R1"
-EXPECTED_TERMINAL_VERIFIER_SHA256 = "sha256:b111227d5d1bf4a2427971509d22676db7d719d50b90d622a48a2cdda3d1ff86"
+EXPECTED_TERMINAL_VERIFIER_SHA256 = "sha256:1842f3333e0c71641cf31cd1c9b666037382be7671c769fc7b90c8741720fdbc"
 
 PRIOR_UNKNOWN_OPERATION_ID = "G3-AUTH-RECON-ROLLBACK-20261007-R1"
 PRIOR_UNKNOWN_PACKET_ID = "G3-AUTH-RECON-ROLLBACK-PACKET-20261007-R1"
@@ -258,6 +258,8 @@ def verify_approved_authority(packet_path: Path, approval_path: Path, target_rec
         "freshCanonicalHeadVerificationRequiredImmediatelyBeforeClaim": True,
         "postCanonicalPreClaimLocalRevalidationRequired": True,
         "postCanonicalExternalDependencyAllowed": False,
+        "exchangeSyscallResolvedBeforeClaimRequired": True,
+        "postClaimDynamicSyscallResolutionAllowed": False,
         "postClaimCanonicalVerificationAllowed": False,
         "postClaimNetworkDependencyAllowed": False,
     }
@@ -673,13 +675,20 @@ def claim_attempt(rollback_target_digest_value, authority_head):
     return path
 
 
-def rename_exchange(left: Path, right: Path):
-    libc = ctypes.CDLL(None, use_errno=True)
+def resolve_rename_exchange():
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+    except OSError as exc:
+        raise RuntimeError("ROLLBACK_RENAMEAT2_UNAVAILABLE") from exc
     fn = getattr(libc, "renameat2", None)
     if fn is None:
         raise RuntimeError("ROLLBACK_RENAMEAT2_UNAVAILABLE")
     fn.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
     fn.restype = ctypes.c_int
+    return fn
+
+
+def rename_exchange(fn, left: Path, right: Path):
     rc = fn(AT_FDCWD, os.fsencode(left), AT_FDCWD, os.fsencode(right), RENAME_EXCHANGE)
     if rc != 0:
         err = ctypes.get_errno()
@@ -699,6 +708,7 @@ def execute(packet_path, approval_path, target_record_path):
     # admitted and no network lookup is allowed to strand the consumed replay
     # identity.
     verify_active_and_preserved_state()
+    exchange_fn = resolve_rename_exchange()
     verify_canonical_authority_head(expected_authority_head)
     # Close the physical-state window introduced by the final remote authority
     # lookup without introducing any further external dependency.
@@ -727,7 +737,7 @@ def execute(packet_path, approval_path, target_record_path):
         # one local atomic exchange, then durability fsyncs. A later canonical
         # branch movement cannot retroactively revoke an already-admitted
         # attempt.
-        rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)
+        rename_exchange(exchange_fn, ACTIVE_DB, PRESERVED_SCHEMA10)
         exchanged = True
         fsync_dir(ACTIVE_DB.parent)
         fsync_dir(PRESERVED_SCHEMA10.parent)
@@ -767,7 +777,7 @@ def self_test_exchange():
         right = root / "right"
         left.write_bytes(b"schema11")
         right.write_bytes(b"schema10")
-        rename_exchange(left, right)
+        rename_exchange(resolve_rename_exchange(), left, right)
         if left.read_bytes() != b"schema10" or right.read_bytes() != b"schema11":
             raise RuntimeError("ROLLBACK_RENAME_EXCHANGE_SELF_TEST_FAILED")
     print(json.dumps({"status": "G3_RECONCILIATION_ROLLBACK_EXCHANGE_SELF_TEST_PASS"}))

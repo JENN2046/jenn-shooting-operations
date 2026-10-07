@@ -256,6 +256,8 @@ def verify_authority_inputs(target_path: Path, packet_path: Path, approval_path:
         "freshCanonicalHeadVerificationRequiredImmediatelyBeforeClaim": True,
         "postCanonicalPreClaimLocalRevalidationRequired": True,
         "postCanonicalExternalDependencyAllowed": False,
+        "exchangeSyscallResolvedBeforeClaimRequired": True,
+        "postClaimDynamicSyscallResolutionAllowed": False,
         "postClaimCanonicalVerificationAllowed": False,
         "postClaimNetworkDependencyAllowed": False,
     }

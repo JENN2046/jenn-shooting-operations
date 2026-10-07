@@ -113,6 +113,8 @@ If any of those checks fail, no new recovery claim is consumed.
 
 Immediately after the final canonical equality check, the executor performs one bounded local exact revalidation of the prior UNKNOWN ledger, both DB inode/hash identities and SQLite sidecar absence. This revalidation has no network, metadata-service, Docker, process-discovery, approval or Git dependency. If it passes, the executor creates the durable new recovery claim.
 
+The renameat2 libc symbol is resolved and configured during preflight before the final canonical check and durable claim. The post-claim path receives the already-resolved function and performs no dynamic syscall resolution.
+
 After a durable claim, the executor is deliberately network-free. It may only:
 
 ```text
@@ -185,14 +187,14 @@ Recovery executor candidate:
 
 ```text
 scripts/g3-authority-reconciliation-rollback-executor.py
-sha256:df57f7d1d70ce2b34ff200a3ddd4b956fdad7ba5faa63cc912e563cf836e4723
+sha256:67ed0b02e0dca7887b191b1959efbeab39c40dc2d3f5dc643a9b286761b36233
 ```
 
 Read-only recovery terminal verifier candidate:
 
 ```text
 scripts/g3-authority-reconciliation-rollback-recovery-terminal-verifier.py
-sha256:b111227d5d1bf4a2427971509d22676db7d719d50b90d622a48a2cdda3d1ff86
+sha256:1842f3333e0c71641cf31cd1c9b666037382be7671c769fc7b90c8741720fdbc
 ```
 
 The future exact recovery target must bind both digests. The verifier classifies the admitted attempt from the durable `authorityHeadAtAdmission` stored in the attempt record and performs no post-claim GitHub canonical lookup.
