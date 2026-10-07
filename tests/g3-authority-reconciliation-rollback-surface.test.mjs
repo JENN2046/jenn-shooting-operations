@@ -91,12 +91,16 @@ test('durable claim is the admission boundary and post-claim path is network-fre
     executor.indexOf('def verify_post_canonical_local_admission_state():'),
     executor.indexOf('class AttemptClaimDurabilityUnknown'),
   );
+  for (const required of [
+    'verify_production_service_absent()',
+    'verify_no_running_volume_users()',
+    'verify_no_open_db_users()',
+  ]) {
+    assert.equal(localAdmission.includes(required), true, required);
+  }
   for (const forbidden of [
     'read_current_canonical_head(',
     'read_instance_id(',
-    'docker_json(',
-    'verify_no_running_volume_users(',
-    'verify_no_open_db_users(',
     'verify_approval_signature(',
   ]) {
     assert.equal(localAdmission.includes(forbidden), false, forbidden);

@@ -53,7 +53,7 @@ OPERATION_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-20261007-R1"
 PACKET_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-PACKET-20261007-R1"
 CONTRACT_ID = "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_RECOVERY_V1"
 TARGET_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-TARGET-20261007-R1"
-EXPECTED_TERMINAL_VERIFIER_SHA256 = "sha256:1842f3333e0c71641cf31cd1c9b666037382be7671c769fc7b90c8741720fdbc"
+EXPECTED_TERMINAL_VERIFIER_SHA256 = "sha256:2493bd2f66fd14f821a84d99048a9b633afcb6bc380a6c85df846a8e07a2f434"
 
 PRIOR_UNKNOWN_OPERATION_ID = "G3-AUTH-RECON-ROLLBACK-20261007-R1"
 PRIOR_UNKNOWN_PACKET_ID = "G3-AUTH-RECON-ROLLBACK-PACKET-20261007-R1"
@@ -257,7 +257,8 @@ def verify_approved_authority(packet_path: Path, approval_path: Path, target_rec
         "canonicalHeadMustMatchApprovedTargetImmediatelyBeforeClaim": True,
         "freshCanonicalHeadVerificationRequiredImmediatelyBeforeClaim": True,
         "postCanonicalPreClaimLocalRevalidationRequired": True,
-        "postCanonicalExternalDependencyAllowed": False,
+        "postCanonicalLocalContainmentRevalidationRequired": True,
+        "postCanonicalRemoteDependencyAllowed": False,
         "exchangeSyscallResolvedBeforeClaimRequired": True,
         "postClaimDynamicSyscallResolutionAllowed": False,
         "postClaimCanonicalVerificationAllowed": False,
@@ -633,6 +634,12 @@ def verify_post_canonical_local_admission_state():
     verify_no_sidecars(PRESERVED_SCHEMA10)
     if ACTIVE_DB.stat().st_dev != PRESERVED_SCHEMA10.stat().st_dev:
         raise RuntimeError("ROLLBACK_NOT_SAME_FILESYSTEM")
+    # The remote canonical lookup may take seconds. Re-close every mutable
+    # local containment condition after it returns, while claim is still
+    # unconsumed. These checks may fail safely because they are pre-claim.
+    verify_production_service_absent()
+    verify_no_running_volume_users()
+    verify_no_open_db_users()
 
 
 class AttemptClaimDurabilityUnknown(RuntimeError):

@@ -22,8 +22,8 @@ const EXPECTED = Object.freeze({
   priorRollbackTarget: 'sha256:b71d4853f47c8f2404b331c8a9e810747ba211a867353607819ee70ff15bf509',
   priorRollbackAttempt: 'sha256:bfd40da521d2a3871ffcf4b4913de260d51c368eeca0ca775c4bda6b25b5645a',
   priorRollbackTerminalEvidence: 'sha256:7e04e137efa425361bf0a400017bf4452bc45cf2e9daae6c6b49c767f341ebb1',
-  recoveryExecutor: 'sha256:67ed0b02e0dca7887b191b1959efbeab39c40dc2d3f5dc643a9b286761b36233',
-  recoveryVerifier: 'sha256:1842f3333e0c71641cf31cd1c9b666037382be7671c769fc7b90c8741720fdbc',
+  recoveryExecutor: 'sha256:f221bb57c496571c28a74807047d73f271d1cbb8e2ac93b29cc242bbf1df7874',
+  recoveryVerifier: 'sha256:2493bd2f66fd14f821a84d99048a9b633afcb6bc380a6c85df846a8e07a2f434',
   recoveryAction: 'G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_UNKNOWN_RECOVERY_TO_10',
   recoveryOperation: 'G3-AUTH-RECON-ROLLBACK-RECOVERY-20261007-R1',
   recoveryPacket: 'G3-AUTH-RECON-ROLLBACK-RECOVERY-PACKET-20261007-R1',
@@ -163,7 +163,8 @@ try {
     || surface.canonicalHeadMustMatchApprovedTargetImmediatelyBeforeClaim !== true
     || surface.freshCanonicalHeadVerificationImmediatelyBeforeClaimRequired !== true
     || surface.postCanonicalPreClaimLocalRevalidationRequired !== true
-    || surface.postCanonicalExternalDependencyAllowed !== false
+    || surface.postCanonicalLocalContainmentRevalidationRequired !== true
+    || surface.postCanonicalRemoteDependencyAllowed !== false
     || surface.exchangeSyscallResolvedBeforeClaimRequired !== true
     || surface.postClaimDynamicSyscallResolutionAllowed !== false
     || surface.postClaimCanonicalVerificationAllowed !== false
@@ -221,15 +222,19 @@ try {
     executor.indexOf('def verify_post_canonical_local_admission_state():'),
     executor.indexOf('class AttemptClaimDurabilityUnknown'),
   );
+  for (const required of [
+    'verify_production_service_absent()',
+    'verify_no_running_volume_users()',
+    'verify_no_open_db_users()',
+  ]) {
+    if (!localAdmission.includes(required)) fail('POST_CANONICAL_LOCAL_CONTAINMENT_MISSING:' + required);
+  }
   for (const forbidden of [
     'read_current_canonical_head(',
     'read_instance_id(',
-    'docker_json(',
-    'verify_no_running_volume_users(',
-    'verify_no_open_db_users(',
     'verify_approval_signature(',
   ]) {
-    if (localAdmission.includes(forbidden)) fail('POST_CANONICAL_LOCAL_REVALIDATION_EXTERNAL_DEPENDENCY:' + forbidden);
+    if (localAdmission.includes(forbidden)) fail('POST_CANONICAL_REMOTE_DEPENDENCY:' + forbidden);
   }
 
   const postClaim = execute.slice(claim);
@@ -270,7 +275,8 @@ try {
     || preferred.authorityAdmissionBoundary !== 'DURABLE_ONE_SHOT_CLAIM'
     || preferred.canonicalHeadMustMatchApprovedTargetImmediatelyBeforeClaim !== true
     || preferred.postCanonicalPreClaimLocalRevalidationRequired !== true
-    || preferred.postCanonicalExternalDependencyAllowed !== false
+    || preferred.postCanonicalLocalContainmentRevalidationRequired !== true
+    || preferred.postCanonicalRemoteDependencyAllowed !== false
     || preferred.exchangeSyscallResolvedBeforeClaimRequired !== true
     || preferred.postClaimDynamicSyscallResolutionAllowed !== false
     || preferred.postClaimCanonicalLookupAllowed !== false

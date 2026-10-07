@@ -96,7 +96,7 @@
   "rollbackAuthoritySurface": {
     "status": "RECOVERY_FREEZE_CANDIDATE_NOT_EXECUTABLE",
     "executorPath": "scripts/g3-authority-reconciliation-rollback-executor.py",
-    "executorSha256": "sha256:67ed0b02e0dca7887b191b1959efbeab39c40dc2d3f5dc643a9b286761b36233",
+    "executorSha256": "sha256:f221bb57c496571c28a74807047d73f271d1cbb8e2ac93b29cc242bbf1df7874",
     "actionId": "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_UNKNOWN_RECOVERY_TO_10",
     "operationId": "G3-AUTH-RECON-ROLLBACK-RECOVERY-20261007-R1",
     "packetId": "G3-AUTH-RECON-ROLLBACK-RECOVERY-PACKET-20261007-R1",
@@ -130,12 +130,13 @@
     "targetFreezeMustBindPostMergeCanonicalHead": true,
     "targetId": "G3-AUTH-RECON-ROLLBACK-RECOVERY-TARGET-20261007-R1",
     "terminalVerifierPath": "scripts/g3-authority-reconciliation-rollback-recovery-terminal-verifier.py",
-    "terminalVerifierSha256": "sha256:1842f3333e0c71641cf31cd1c9b666037382be7671c769fc7b90c8741720fdbc",
+    "terminalVerifierSha256": "sha256:2493bd2f66fd14f821a84d99048a9b633afcb6bc380a6c85df846a8e07a2f434",
     "terminalVerifierStatus": "DEFINED_READ_ONLY",
     "postCanonicalPreClaimLocalRevalidationRequired": true,
-    "postCanonicalExternalDependencyAllowed": false,
     "exchangeSyscallResolvedBeforeClaimRequired": true,
-    "postClaimDynamicSyscallResolutionAllowed": false
+    "postClaimDynamicSyscallResolutionAllowed": false,
+    "postCanonicalLocalContainmentRevalidationRequired": true,
+    "postCanonicalRemoteDependencyAllowed": false
   },
   "preferredResolution": {
     "actionId": "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_UNKNOWN_RECOVERY_TO_10",
@@ -163,9 +164,10 @@
     "postClaimNetworkDependencyAllowed": false,
     "nextAction": "MERGE_RECOVERY_AUTHORITY_SURFACE_THEN_FREEZE_EXACT_RECOVERY_TARGET",
     "postCanonicalPreClaimLocalRevalidationRequired": true,
-    "postCanonicalExternalDependencyAllowed": false,
     "exchangeSyscallResolvedBeforeClaimRequired": true,
-    "postClaimDynamicSyscallResolutionAllowed": false
+    "postClaimDynamicSyscallResolutionAllowed": false,
+    "postCanonicalLocalContainmentRevalidationRequired": true,
+    "postCanonicalRemoteDependencyAllowed": false
   },
   "prohibitions": [
     "NO_RETROACTIVE_APPROVAL",

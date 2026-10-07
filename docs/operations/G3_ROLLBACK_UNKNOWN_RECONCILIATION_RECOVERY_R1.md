@@ -111,7 +111,7 @@ Before the claim, the executor must complete every external or fallible admissio
 
 If any of those checks fail, no new recovery claim is consumed.
 
-Immediately after the final canonical equality check, the executor performs one bounded local exact revalidation of the prior UNKNOWN ledger, both DB inode/hash identities and SQLite sidecar absence. This revalidation has no network, metadata-service, Docker, process-discovery, approval or Git dependency. If it passes, the executor creates the durable new recovery claim.
+Immediately after the final canonical equality check, the executor performs one bounded local revalidation before consuming the claim. It rechecks the prior UNKNOWN ledger, both DB inode/hash identities, SQLite sidecar absence, production-service absence, Docker volume access, and `lsof` / `fuser` open-user containment. This phase may fail safely because the new replay identity is still unclaimed. It has no GitHub, metadata-service, approval, or other remote-network dependency. If it passes, the executor creates the durable new recovery claim.
 
 The renameat2 libc symbol is resolved and configured during preflight before the final canonical check and durable claim. The post-claim path receives the already-resolved function and performs no dynamic syscall resolution.
 
@@ -187,14 +187,14 @@ Recovery executor candidate:
 
 ```text
 scripts/g3-authority-reconciliation-rollback-executor.py
-sha256:67ed0b02e0dca7887b191b1959efbeab39c40dc2d3f5dc643a9b286761b36233
+sha256:f221bb57c496571c28a74807047d73f271d1cbb8e2ac93b29cc242bbf1df7874
 ```
 
 Read-only recovery terminal verifier candidate:
 
 ```text
 scripts/g3-authority-reconciliation-rollback-recovery-terminal-verifier.py
-sha256:1842f3333e0c71641cf31cd1c9b666037382be7671c769fc7b90c8741720fdbc
+sha256:2493bd2f66fd14f821a84d99048a9b633afcb6bc380a6c85df846a8e07a2f434
 ```
 
 The future exact recovery target must bind both digests. The verifier classifies the admitted attempt from the durable `authorityHeadAtAdmission` stored in the attempt record and performs no post-claim GitHub canonical lookup.
