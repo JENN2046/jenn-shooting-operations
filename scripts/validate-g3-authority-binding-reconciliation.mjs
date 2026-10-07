@@ -22,8 +22,8 @@ const EXPECTED = Object.freeze({
   priorRollbackTarget: 'sha256:b71d4853f47c8f2404b331c8a9e810747ba211a867353607819ee70ff15bf509',
   priorRollbackAttempt: 'sha256:bfd40da521d2a3871ffcf4b4913de260d51c368eeca0ca775c4bda6b25b5645a',
   priorRollbackTerminalEvidence: 'sha256:7e04e137efa425361bf0a400017bf4452bc45cf2e9daae6c6b49c767f341ebb1',
-  recoveryExecutor: 'sha256:f221bb57c496571c28a74807047d73f271d1cbb8e2ac93b29cc242bbf1df7874',
-  recoveryVerifier: 'sha256:2493bd2f66fd14f821a84d99048a9b633afcb6bc380a6c85df846a8e07a2f434',
+  recoveryExecutor: 'sha256:12baf3eaf378a8ef3f26ffc52127fdae3a6c791f607f875abfda11e3a811ac1b',
+  recoveryVerifier: 'sha256:8188711d16c7e2e2b48c8ee3760273cedbc3506be675a9eb087a4da0dc27419c',
   recoveryAction: 'G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_UNKNOWN_RECOVERY_TO_10',
   recoveryOperation: 'G3-AUTH-RECON-ROLLBACK-RECOVERY-20261007-R1',
   recoveryPacket: 'G3-AUTH-RECON-ROLLBACK-RECOVERY-PACKET-20261007-R1',
@@ -188,6 +188,7 @@ try {
     || !executor.includes('PRIOR_UNKNOWN_ATTEMPT_SHA256 = "' + EXPECTED.priorRollbackAttempt + '"')
     || !executor.includes('EXPECTED_TERMINAL_VERIFIER_SHA256 = "' + EXPECTED.recoveryVerifier + '"')
     || !executor.includes('"terminalVerifierSha256"')
+    || !executor.includes('target.get("terminalVerifierSha256") != EXPECTED_TERMINAL_VERIFIER_SHA256')
     || !executor.includes('"priorUnknownAttempt"')
     || !executor.includes('verify_prior_unknown_attempt()')
     || !executor.includes('ROLLBACK_ATTEMPT_CLAIM_DURABILITY_UNKNOWN')) {
@@ -235,6 +236,24 @@ try {
     'verify_approval_signature(',
   ]) {
     if (localAdmission.includes(forbidden)) fail('POST_CANONICAL_REMOTE_DEPENDENCY:' + forbidden);
+  }
+
+  const executorContainment = executor.slice(
+    executor.indexOf('def verify_no_running_volume_users():'),
+    executor.indexOf('def verify_no_open_db_users():'),
+  );
+  if (!executorContainment.includes('mount_identity_for_path(ACTIVE_DB, daemon_mountinfo)')
+    || !executorContainment.includes('mount_identity_for_path(PRESERVED_SCHEMA10, daemon_mountinfo)')) {
+    fail('RECOVERY_EXECUTOR_DOCKER_CONTAINMENT_INCOMPLETE');
+  }
+
+  const verifierContainment = terminalVerifier.slice(
+    terminalVerifier.indexOf('def verify_no_running_volume_users():'),
+    terminalVerifier.indexOf('def verify_no_open_db_users('),
+  );
+  if (!verifierContainment.includes('mount_identity_for_path(ACTIVE_DB, daemon_mountinfo)')
+    || !verifierContainment.includes('mount_identity_for_path(EXCHANGED_OUT_SCHEMA11, daemon_mountinfo)')) {
+    fail('RECOVERY_VERIFIER_DOCKER_CONTAINMENT_INCOMPLETE');
   }
 
   const postClaim = execute.slice(claim);

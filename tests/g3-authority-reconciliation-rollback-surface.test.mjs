@@ -63,6 +63,7 @@ test('recovery target must bind the exact prior UNKNOWN attempt', () => {
   assert.match(executor, /TARGET_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-TARGET-20261007-R1"/);
   assert.equal(executor.includes('EXPECTED_TERMINAL_VERIFIER_SHA256 = "' + verifierSha + '"'), true);
   assert.match(executor, /"terminalVerifierSha256"/);
+  assert.match(executor, /target\.get\("terminalVerifierSha256"\) != EXPECTED_TERMINAL_VERIFIER_SHA256/);
   assert.match(executor, /PRIOR_UNKNOWN_OPERATION_ID = "G3-AUTH-RECON-ROLLBACK-20261007-R1"/);
   assert.match(executor, /PRIOR_UNKNOWN_PACKET_ID = "G3-AUTH-RECON-ROLLBACK-PACKET-20261007-R1"/);
   assert.match(executor, /PRIOR_UNKNOWN_TARGET_DIGEST = "sha256:b71d4853/);
@@ -71,6 +72,22 @@ test('recovery target must bind the exact prior UNKNOWN attempt', () => {
   assert.match(executor, /"priorUnknownAttempt"/);
   assert.match(executor, /verify_prior_unknown_attempt\(\)/);
   assert.match(executor, /ROLLBACK_PRIOR_UNKNOWN_ATTEMPT_MISMATCH/);
+});
+
+test('Docker containment covers both active and preserved database paths', () => {
+  const executorContainment = executor.slice(
+    executor.indexOf('def verify_no_running_volume_users():'),
+    executor.indexOf('def verify_no_open_db_users():'),
+  );
+  assert.match(executorContainment, /mount_identity_for_path\(ACTIVE_DB, daemon_mountinfo\)/);
+  assert.match(executorContainment, /mount_identity_for_path\(PRESERVED_SCHEMA10, daemon_mountinfo\)/);
+
+  const verifierContainment = verifier.slice(
+    verifier.indexOf('def verify_no_running_volume_users():'),
+    verifier.indexOf('def verify_no_open_db_users('),
+  );
+  assert.match(verifierContainment, /mount_identity_for_path\(ACTIVE_DB, daemon_mountinfo\)/);
+  assert.match(verifierContainment, /mount_identity_for_path\(EXCHANGED_OUT_SCHEMA11, daemon_mountinfo\)/);
 });
 
 test('durable claim is the admission boundary and post-claim path is network-free', () => {

@@ -187,14 +187,14 @@ Recovery executor candidate:
 
 ```text
 scripts/g3-authority-reconciliation-rollback-executor.py
-sha256:f221bb57c496571c28a74807047d73f271d1cbb8e2ac93b29cc242bbf1df7874
+sha256:12baf3eaf378a8ef3f26ffc52127fdae3a6c791f607f875abfda11e3a811ac1b
 ```
 
 Read-only recovery terminal verifier candidate:
 
 ```text
 scripts/g3-authority-reconciliation-rollback-recovery-terminal-verifier.py
-sha256:2493bd2f66fd14f821a84d99048a9b633afcb6bc380a6c85df846a8e07a2f434
+sha256:8188711d16c7e2e2b48c8ee3760273cedbc3506be675a9eb087a4da0dc27419c
 ```
 
 The future exact recovery target must bind both digests. The verifier classifies the admitted attempt from the durable `authorityHeadAtAdmission` stored in the attempt record and performs no post-claim GitHub canonical lookup.

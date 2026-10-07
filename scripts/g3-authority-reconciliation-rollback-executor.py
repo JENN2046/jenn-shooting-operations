@@ -53,7 +53,7 @@ OPERATION_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-20261007-R1"
 PACKET_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-PACKET-20261007-R1"
 CONTRACT_ID = "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_RECOVERY_V1"
 TARGET_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-TARGET-20261007-R1"
-EXPECTED_TERMINAL_VERIFIER_SHA256 = "sha256:2493bd2f66fd14f821a84d99048a9b633afcb6bc380a6c85df846a8e07a2f434"
+EXPECTED_TERMINAL_VERIFIER_SHA256 = "sha256:8188711d16c7e2e2b48c8ee3760273cedbc3506be675a9eb087a4da0dc27419c"
 
 PRIOR_UNKNOWN_OPERATION_ID = "G3-AUTH-RECON-ROLLBACK-20261007-R1"
 PRIOR_UNKNOWN_PACKET_ID = "G3-AUTH-RECON-ROLLBACK-PACKET-20261007-R1"
@@ -191,7 +191,8 @@ def verify_approved_authority(packet_path: Path, approval_path: Path, target_rec
       or not COMMIT_RE.fullmatch(str(target.get("authorityHead", ""))) \
       or target.get("actionId") != ACTION_ID \
       or target.get("operationId") != OPERATION_ID \
-      or target.get("executorSha256") != executor_sha256():
+      or target.get("executorSha256") != executor_sha256() \
+      or target.get("terminalVerifierSha256") != EXPECTED_TERMINAL_VERIFIER_SHA256:
         raise RuntimeError("ROLLBACK_TARGET_IDENTITY_MISMATCH")
 
     expected_prior_unknown = {
@@ -435,7 +436,10 @@ def mountinfo_can_access_filesystem_path(mountinfo_text, db_device, db_fs_path):
 def verify_no_running_volume_users():
     ids = subprocess.check_output(["docker", "ps", "-q"], text=True).split()
     daemon_mountinfo = docker_daemon_mountinfo_text()
-    db_device, db_fs_path = mount_identity_for_path(ACTIVE_DB, daemon_mountinfo)
+    protected_paths = [
+        mount_identity_for_path(ACTIVE_DB, daemon_mountinfo),
+        mount_identity_for_path(PRESERVED_SCHEMA10, daemon_mountinfo),
+    ]
     users = []
     for cid in ids:
         mounts = json.loads(docker_json(["inspect", cid, "--format", "{{json .Mounts}}"]))
@@ -449,7 +453,10 @@ def verify_no_running_volume_users():
             container_mountinfo = Path(f"/proc/{pid}/mountinfo").read_text()
         except OSError as exc:
             raise RuntimeError("ROLLBACK_DOCKER_CONTAINER_MOUNTINFO_UNAVAILABLE") from exc
-        if mountinfo_can_access_filesystem_path(container_mountinfo, db_device, db_fs_path):
+        if any(
+            mountinfo_can_access_filesystem_path(container_mountinfo, device, fs_path)
+            for device, fs_path in protected_paths
+        ):
             users.append(cid)
     if users:
         raise RuntimeError("ROLLBACK_RUNNING_VOLUME_USERS:" + ",".join(users))

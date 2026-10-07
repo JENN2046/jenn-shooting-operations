@@ -469,7 +469,10 @@ def mountinfo_can_access_filesystem_path(mountinfo_text, db_device, db_fs_path):
 def verify_no_running_volume_users():
     ids = subprocess.check_output(["docker", "ps", "-q"], text=True).split()
     daemon_mountinfo = docker_daemon_mountinfo_text()
-    db_device, db_fs_path = mount_identity_for_path(ACTIVE_DB, daemon_mountinfo)
+    protected_paths = [
+        mount_identity_for_path(ACTIVE_DB, daemon_mountinfo),
+        mount_identity_for_path(EXCHANGED_OUT_SCHEMA11, daemon_mountinfo),
+    ]
     users = []
     for cid in ids:
         mounts = json.loads(docker_json(["inspect", cid, "--format", "{{json .Mounts}}"]))
@@ -483,7 +486,10 @@ def verify_no_running_volume_users():
             container_mountinfo = Path(f"/proc/{pid}/mountinfo").read_text()
         except OSError as exc:
             raise RuntimeError("TERMINAL_DOCKER_CONTAINER_MOUNTINFO_UNAVAILABLE") from exc
-        if mountinfo_can_access_filesystem_path(container_mountinfo, db_device, db_fs_path):
+        if any(
+            mountinfo_can_access_filesystem_path(container_mountinfo, device, fs_path)
+            for device, fs_path in protected_paths
+        ):
             users.append(cid)
     if users:
         raise RuntimeError("TERMINAL_RUNNING_VOLUME_USERS:" + ",".join(users))
