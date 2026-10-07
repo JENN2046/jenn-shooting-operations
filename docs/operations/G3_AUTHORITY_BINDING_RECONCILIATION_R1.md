@@ -79,6 +79,24 @@ The reconciliation must not rewrite history:
 - do not reuse the old one-shot replay identity;
 - do not classify this defect away by treating current Schema11 as if it were admitted under a target that did not exist at approval time.
 
+## Evidence provenance boundary
+
+The checked-in terminal JSON, attempt record and their repository-pinned hashes prove internal consistency and byte integrity. They do **not**, by themselves, prove that the artifacts originated from production: a repository author can create a file and then record its hash in the same change.
+
+This reconciliation therefore does not allow repository evidence alone to authorize any production mutation.
+
+A fresh live read-only production observation has independently confirmed the current active Schema11 hash, preserved Schema10 hash and durable attempt-record hash, with zero open DB users. That live observation is operational evidence, not a cryptographic production attestation, and it must be repeated immediately before any reconciliation rollback.
+
+Therefore:
+
+```text
+repository evidence alone = insufficient for production mutation authority
+fresh live read-only verification = mandatory before rollback
+cryptographic production attestation = not claimed
+```
+
+This explicitly absorbs the terminal-provenance finding surfaced on the superseded #50 verification line.
+
 ## Preferred resolution
 
 Because normal writers and the production service have remained disabled, the active Schema11 database is still byte-identical to the atomic-exchange candidate. No post-cutover production writes need to be preserved.

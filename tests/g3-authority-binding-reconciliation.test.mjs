@@ -39,4 +39,17 @@ test('preferred repair restores exact Schema10 and requires a fresh operation an
   assert.equal(record.preferredResolution.newPreExecutionApprovalRequired, true);
   assert.equal(record.preferredResolution.explicitHumanAuthorizationRequired, true);
   assert.equal(record.preferredResolution.writerReadmissionAfterRollbackAllowed, false);
+  assert.equal(record.preferredResolution.freshLiveReadOnlyVerificationImmediatelyBeforeRollbackRequired, true);
+  assert.equal(record.preferredResolution.repositoryEvidenceMaySubstituteForLiveVerification, false);
+});
+
+test('repository terminal evidence cannot self-authorize reconciliation mutation', () => {
+  assert.equal(record.evidenceTrust.repositoryTerminalArtifactsProvideIntegrity, true);
+  assert.equal(record.evidenceTrust.repositoryTerminalArtifactsProvideProductionProvenance, false);
+  assert.equal(record.evidenceTrust.repositoryEvidenceAloneCanAuthorizeReconciliationMutation, false);
+  assert.equal(record.evidenceTrust.freshLiveReadOnlyProductionVerificationRequired, true);
+  assert.equal(record.evidenceTrust.cryptographicProductionAttestationPresent, false);
+  assert.equal(record.evidenceTrust.latestLiveActiveDatabaseSha256, record.physicalState.activeDatabaseSha256);
+  assert.equal(record.evidenceTrust.latestLivePreservedPrestateSha256, record.preservedPrestate.sha256);
+  assert.equal(record.evidenceTrust.latestLiveAttemptRecordSha256, record.execution.attemptRecordSha256);
 });

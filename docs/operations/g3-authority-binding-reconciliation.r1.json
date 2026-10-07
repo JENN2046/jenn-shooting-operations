@@ -69,7 +69,9 @@
     "newOperationIdRequired": true,
     "newAuthorityTargetDigestRequired": true,
     "newPreExecutionApprovalRequired": true,
-    "writerReadmissionAfterRollbackAllowed": false
+    "writerReadmissionAfterRollbackAllowed": false,
+    "freshLiveReadOnlyVerificationImmediatelyBeforeRollbackRequired": true,
+    "repositoryEvidenceMaySubstituteForLiveVerification": false
   },
   "prohibitions": [
     "NO_RETROACTIVE_APPROVAL",
@@ -77,6 +79,22 @@
     "NO_NORMAL_WRITER_READMISSION",
     "NO_PRODUCTION_SERVICE_START",
     "NO_RETRY_OF_PRIOR_G3_ATTEMPT",
+    "NO_RECONCILIATION_MUTATION_FROM_REPOSITORY_EVIDENCE_ALONE",
     "NO_ROLLBACK_WITHOUT_SEPARATE_EXPLICIT_AUTHORIZATION"
-  ]
+  ],
+  "evidenceTrust": {
+    "repositoryTerminalArtifactsProvideIntegrity": true,
+    "repositoryTerminalArtifactsProvideProductionProvenance": false,
+    "repositoryEvidenceAloneCanAuthorizeReconciliationMutation": false,
+    "freshLiveReadOnlyProductionVerificationRequired": true,
+    "latestLiveObservationAt": "2026-10-07T06:38:54Z",
+    "latestLiveActiveDatabaseSha256": "sha256:0eae48b85f362cf1064f92e14511865fe7fd68dbc13a85d4c6efd6e656e736d9",
+    "latestLivePreservedPrestateSha256": "sha256:5d65282b197350c2d6175fef2ccfa641c40908ecd9c053e296182f65e7bfede7",
+    "latestLiveAttemptRecordSha256": "sha256:b398b83229bdece61032e7fa64f03d01594a3aa59abcc96954036871a8c4ed37",
+    "latestLiveSchemaVersion": 11,
+    "latestLiveMigration11Count": 1,
+    "latestLiveOpenDatabaseFileUsers": 0,
+    "latestLiveFuserDatabasePids": 0,
+    "cryptographicProductionAttestationPresent": false
+  }
 }

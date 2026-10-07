@@ -85,6 +85,18 @@ try {
     || record.governance.g4Allowed !== false
     || record.governance.normalWriterReadmissionAllowed !== false
     || record.governance.productionServiceStartAllowed !== false
+    || record.evidenceTrust.repositoryTerminalArtifactsProvideIntegrity !== true
+    || record.evidenceTrust.repositoryTerminalArtifactsProvideProductionProvenance !== false
+    || record.evidenceTrust.repositoryEvidenceAloneCanAuthorizeReconciliationMutation !== false
+    || record.evidenceTrust.freshLiveReadOnlyProductionVerificationRequired !== true
+    || record.evidenceTrust.latestLiveActiveDatabaseSha256 !== EXPECTED.activeDb
+    || record.evidenceTrust.latestLivePreservedPrestateSha256 !== EXPECTED.prestateDb
+    || record.evidenceTrust.latestLiveAttemptRecordSha256 !== EXPECTED.attempt
+    || record.evidenceTrust.latestLiveSchemaVersion !== 11
+    || record.evidenceTrust.latestLiveMigration11Count !== 1
+    || record.evidenceTrust.latestLiveOpenDatabaseFileUsers !== 0
+    || record.evidenceTrust.latestLiveFuserDatabasePids !== 0
+    || record.evidenceTrust.cryptographicProductionAttestationPresent !== false
     || record.preferredResolution.actionId !== 'G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_TO_10'
     || record.preferredResolution.strategy
       !== 'ROLLBACK_TO_EXACT_SCHEMA10_THEN_REEXECUTE_UNDER_POST_MERGE_FROZEN_AUTHORITY'
@@ -95,7 +107,9 @@ try {
     || record.preferredResolution.newOperationIdRequired !== true
     || record.preferredResolution.newAuthorityTargetDigestRequired !== true
     || record.preferredResolution.newPreExecutionApprovalRequired !== true
-    || record.preferredResolution.writerReadmissionAfterRollbackAllowed !== false) {
+    || record.preferredResolution.writerReadmissionAfterRollbackAllowed !== false
+    || record.preferredResolution.freshLiveReadOnlyVerificationImmediatelyBeforeRollbackRequired !== true
+    || record.preferredResolution.repositoryEvidenceMaySubstituteForLiveVerification !== false) {
     fail('SEMANTIC_INVARIANT_FAILED');
   }
 
@@ -105,6 +119,7 @@ try {
     'NO_NORMAL_WRITER_READMISSION',
     'NO_PRODUCTION_SERVICE_START',
     'NO_RETRY_OF_PRIOR_G3_ATTEMPT',
+    'NO_RECONCILIATION_MUTATION_FROM_REPOSITORY_EVIDENCE_ALONE',
     'NO_ROLLBACK_WITHOUT_SEPARATE_EXPLICIT_AUTHORIZATION',
   ];
   if (JSON.stringify(record.prohibitions) !== JSON.stringify(requiredProhibitions)) {
