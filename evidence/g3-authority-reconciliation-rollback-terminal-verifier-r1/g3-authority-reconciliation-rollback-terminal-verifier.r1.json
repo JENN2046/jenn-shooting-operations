@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "verifierId": "G3_AUTH_RECON_ROLLBACK_TERMINAL_VERIFIER_R1",
+  "status": "FROZEN_REVIEW_ONLY_NOT_AUTHORITY",
+  "authority": {
+    "canonicalBranch": "codex/v2-1-architecture-freeze",
+    "canonicalHead": "50fe31cff4ab72bfaabaa0e63927a08bde681111",
+    "g2TerminalModel": "G2_I5_TERMINAL_OUTCOME_MODEL",
+    "productionMutationAuthorized": false,
+    "writerReadmissionAuthorized": false,
+    "productionServiceStartAuthorized": false
+  },
+  "targetBinding": {
+    "evidenceBranch": "evidence/g3-auth-recon-rollback-target-r1",
+    "evidenceHead": "d4377d36e09344b5899f80bc492d7e14190364b9",
+    "targetRecordSha256": "sha256:cf2e0aa94a47eb601e4caea4cab31a7f696549001fe12e31a0e0ed39be563d3e",
+    "rollbackTargetDigest": "sha256:b71d4853f47c8f2404b331c8a9e810747ba211a867353607819ee70ff15bf509",
+    "rollbackExecutorSha256": "sha256:b510e978e3b3e2cc3f10a008d23921a2a44eecd0c9c8496c871eab2a500c10fd",
+    "operationId": "G3-AUTH-RECON-ROLLBACK-20261007-R1",
+    "packetId": "G3-AUTH-RECON-ROLLBACK-PACKET-20261007-R1"
+  },
+  "verifier": {
+    "path": "evidence/g3-authority-reconciliation-rollback-terminal-verifier-r1/g3-authority-reconciliation-rollback-terminal-verifier.py",
+    "sha256": "sha256:7285636557833bfe2dc2e731a4c00a56283346969bf32b05d2db8cfbf22f0f30",
+    "importsRollbackExecutor": false,
+    "productionMutationCapability": false,
+    "databaseOpenMode": "ro+immutable",
+    "receiptWrittenByVerifier": false,
+    "receiptEmission": "stdout-only"
+  },
+  "terminalModel": {
+    "attemptRequiredBeforeClassification": true,
+    "notStartedDisposition": "NOT_STARTED_NO_TERMINAL_OUTCOME",
+    "successfulRollbackOutcome": "ROLLED_BACK",
+    "ambiguousStartedAttemptOutcome": "UNKNOWN",
+    "committedOutcomeUsedByThisVerifier": false,
+    "automaticRetryAllowed": false,
+    "unknownRequiresReconciliation": true,
+    "unknownAllowsWriterReadmission": false,
+    "unknownAllowsProductionServiceStart": false
+  },
+  "rolledBackRequirements": {
+    "activePathRestoredToExactSchema10": true,
+    "activeSchema10Sha256": "sha256:5d65282b197350c2d6175fef2ccfa641c40908ecd9c053e296182f65e7bfede7",
+    "exchangedOutPathContainsExactPriorSchema11": true,
+    "exchangedOutSchema11Sha256": "sha256:0eae48b85f362cf1064f92e14511865fe7fd68dbc13a85d4c6efd6e656e736d9",
+    "schema10IntegrityRequired": true,
+    "schema10ForeignKeyViolationsRequired": 0,
+    "schema11IntegrityRequired": true,
+    "schema11ForeignKeyViolationsRequired": 0,
+    "migration11IdentityRequired": true,
+    "sidecarsAbsentRequired": true,
+    "productionServiceAbsentRequired": true,
+    "runningDatabaseContainerUsersRequired": 0,
+    "openDatabaseFileUsersRequired": 0,
+    "fuserDatabasePidsRequired": 0,
+    "canonicalAuthorityHeadMustMatch": true,
+    "exactAttemptLedgerRequired": true
+  },
+  "receiptProfile": {
+    "contractId": "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_V1",
+    "successEvidenceFields": [
+      "restoredPrestateDigest",
+      "restorationVerificationDigest",
+      "integrityCheck",
+      "foreignKeyViolationCount",
+      "authoritativeWriteCapabilityAbsent",
+      "normalWritesDisabledAtClassification"
+    ],
+    "unknownEvidenceFields": [
+      "ambiguityEvidenceDigest",
+      "authoritativeWriteCapabilityAbsent",
+      "normalWritesDisabledAtClassification",
+      "reconciliationRequired",
+      "freshReadmissionEvidenceRequired",
+      "automaticRetryAllowed"
+    ],
+    "restoredPrestateDigestMeaning": "exact preserved Schema10 database sha256 frozen in rollback target"
+  },
+  "prohibitions": [
+    "NO_CANONICAL_MUTATION",
+    "NO_TARGET_MUTATION",
+    "NO_PACKET_CREATION",
+    "NO_APPROVAL_CREATION",
+    "NO_ATTEMPT_CLAIM",
+    "NO_RENAME_EXCHANGE",
+    "NO_DATABASE_WRITE",
+    "NO_SERVICE_START",
+    "NO_WRITER_READMISSION",
+    "NO_AUTOMATIC_RETRY"
+  ]
+}
