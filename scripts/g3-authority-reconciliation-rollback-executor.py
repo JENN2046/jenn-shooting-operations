@@ -2,6 +2,7 @@
 import argparse
 import base64
 import ctypes
+import datetime as dt
 import hashlib
 import json
 import os
@@ -47,10 +48,18 @@ EXPECTED_SCHEMA10_GID = 1000
 MIGRATION11_NAME = "business_calendar_and_reschedule"
 MIGRATION11_CHECKSUM = "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8"
 
-ACTION_ID = "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_TO_10"
-OPERATION_ID = "G3-AUTH-RECON-ROLLBACK-20261007-R1"
-PACKET_ID = "G3-AUTH-RECON-ROLLBACK-PACKET-20261007-R1"
-CONTRACT_ID = "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_V1"
+ACTION_ID = "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_UNKNOWN_RECOVERY_TO_10"
+OPERATION_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-20261007-R1"
+PACKET_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-PACKET-20261007-R1"
+CONTRACT_ID = "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_RECOVERY_V1"
+TARGET_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-TARGET-20261007-R1"
+
+PRIOR_UNKNOWN_OPERATION_ID = "G3-AUTH-RECON-ROLLBACK-20261007-R1"
+PRIOR_UNKNOWN_PACKET_ID = "G3-AUTH-RECON-ROLLBACK-PACKET-20261007-R1"
+PRIOR_UNKNOWN_TARGET_DIGEST = "sha256:b71d4853f47c8f2404b331c8a9e810747ba211a867353607819ee70ff15bf509"
+PRIOR_UNKNOWN_ATTEMPT = CONTROL_ROOT / "attempts" / "9840b86cf035c61b2f804305a97a98f98771103cb33f799b22e0fdf698190912.json"
+PRIOR_UNKNOWN_ATTEMPT_SHA256 = "sha256:bfd40da521d2a3871ffcf4b4913de260d51c368eeca0ca775c4bda6b25b5645a"
+PRIOR_UNKNOWN_TERMINAL_EVIDENCE_DIGEST = "sha256:7e04e137efa425361bf0a400017bf4452bc45cf2e9daae6c6b49c767f341ebb1"
 
 APPROVAL_SOURCE = "EXPLICIT_HUMAN_CHAT_AUTHORIZATION"
 APPROVAL_SIGNATURE_ALGORITHM = "Ed25519"
@@ -89,7 +98,7 @@ def canonical_digest(value):
 
 def rollback_target_digest(target):
     return canonical_digest({
-        "domain": "g3-authority-binding-reconciliation-rollback-target-v1",
+        "domain": "g3-authority-binding-reconciliation-rollback-recovery-target-v1",
         "rollbackTarget": target,
     })
 
@@ -164,7 +173,7 @@ def verify_approved_authority(packet_path: Path, approval_path: Path, target_rec
         "schemaVersion", "targetId", "status", "rollbackTarget",
         "rollbackTargetDigest", "replay",
     }, "ROLLBACK_TARGET_RECORD_KEYS_INVALID")
-    if target_record.get("schemaVersion") != 1       or target_record.get("status") != "FROZEN_AWAITING_EXPLICIT_HUMAN_APPROVAL":
+    if target_record.get("schemaVersion") != 1       or target_record.get("targetId") != TARGET_ID       or target_record.get("status") != "FROZEN_AWAITING_EXPLICIT_HUMAN_APPROVAL":
         raise RuntimeError("ROLLBACK_TARGET_RECORD_STATE_INVALID")
 
     target = target_record.get("rollbackTarget")
@@ -174,7 +183,7 @@ def verify_approved_authority(packet_path: Path, approval_path: Path, target_rec
 
     exact_keys(target, {
         "canonicalBranch", "authorityHead", "actionId", "operationId", "executorSha256",
-        "activeSchema11", "preservedSchema10", "containment", "execution",
+        "priorUnknownAttempt", "activeSchema11", "preservedSchema10", "containment", "execution",
     }, "ROLLBACK_TARGET_KEYS_INVALID")
     if target.get("canonicalBranch") != CANONICAL_BRANCH \
       or not COMMIT_RE.fullmatch(str(target.get("authorityHead", ""))) \
@@ -183,6 +192,19 @@ def verify_approved_authority(packet_path: Path, approval_path: Path, target_rec
       or target.get("executorSha256") != executor_sha256():
         raise RuntimeError("ROLLBACK_TARGET_IDENTITY_MISMATCH")
 
+    expected_prior_unknown = {
+        "operationId": PRIOR_UNKNOWN_OPERATION_ID,
+        "packetId": PRIOR_UNKNOWN_PACKET_ID,
+        "rollbackTargetDigest": PRIOR_UNKNOWN_TARGET_DIGEST,
+        "attemptRecordPath": str(PRIOR_UNKNOWN_ATTEMPT),
+        "attemptRecordSha256": PRIOR_UNKNOWN_ATTEMPT_SHA256,
+        "terminalOutcome": "UNKNOWN",
+        "terminalEvidenceDigest": PRIOR_UNKNOWN_TERMINAL_EVIDENCE_DIGEST,
+        "exchangeObserved": False,
+        "automaticRetryAllowed": False,
+        "replayIdentityReusable": False,
+        "humanReconciliationRequired": True,
+    }
     expected_active = {
         "path": str(ACTIVE_DB),
         "sha256": "sha256:" + EXPECTED_ACTIVE_SCHEMA11_SHA256,
@@ -229,10 +251,13 @@ def verify_approved_authority(packet_path: Path, approval_path: Path, target_rec
         "writerReadmissionAllowed": False,
         "productionServiceStartAllowed": False,
         "independentTerminalVerificationRequired": True,
-        "canonicalHeadMustRemainUnchangedThroughExecution": True,
-        "freshCanonicalHeadVerificationRequiredImmediatelyBeforeExecution": True,
+        "authorityAdmissionBoundary": "DURABLE_ONE_SHOT_CLAIM",
+        "canonicalHeadMustMatchApprovedTargetImmediatelyBeforeClaim": True,
+        "freshCanonicalHeadVerificationRequiredImmediatelyBeforeClaim": True,
+        "postClaimCanonicalVerificationAllowed": False,
+        "postClaimNetworkDependencyAllowed": False,
     }
-    if target.get("activeSchema11") != expected_active       or target.get("preservedSchema10") != expected_preserved       or target.get("containment") != expected_containment       or target.get("execution") != expected_execution:
+    if target.get("priorUnknownAttempt") != expected_prior_unknown       or target.get("activeSchema11") != expected_active       or target.get("preservedSchema10") != expected_preserved       or target.get("containment") != expected_containment       or target.get("execution") != expected_execution:
         raise RuntimeError("ROLLBACK_TARGET_SCOPE_MISMATCH")
 
     exact_keys(packet, {
@@ -275,7 +300,7 @@ def verify_approved_authority(packet_path: Path, approval_path: Path, target_rec
         "signingKeyId": approval["signingKeyId"],
     }
     payload = canonical_json({
-        "domain": "g3-authority-binding-reconciliation-rollback-approval-v1",
+        "domain": "g3-authority-binding-reconciliation-rollback-recovery-approval-v1",
         "approval": approval_core,
     }).encode("utf-8")
     evidence_digest = "sha256:" + hashlib.sha256(payload).hexdigest()
@@ -516,9 +541,43 @@ def verify_physical_target():
         raise RuntimeError("ROLLBACK_FILESYSTEM_BINDING_MISMATCH")
 
 
-def verify_active_and_preserved_state(expected_authority_head):
-    verify_canonical_authority_head(expected_authority_head)
+def verify_root_controlled_directory(path):
+    metadata = path.lstat()
+    if not stat.S_ISDIR(metadata.st_mode) or path.is_symlink():
+        raise RuntimeError("ROLLBACK_CONTROL_DIRECTORY_IDENTITY_INVALID")
+    if metadata.st_uid != 0 or metadata.st_gid != 0 or stat.S_IMODE(metadata.st_mode) & 0o022:
+        raise RuntimeError("ROLLBACK_CONTROL_DIRECTORY_NOT_ROOT_CONTROLLED")
+
+
+def verify_prior_unknown_attempt():
+    for directory in (
+        CONTROL_ROOT.parent,
+        CONTROL_ROOT,
+        CONTROL_ROOT / "attempts",
+    ):
+        verify_root_controlled_directory(directory)
+    if PRIOR_UNKNOWN_ATTEMPT.is_symlink() or not PRIOR_UNKNOWN_ATTEMPT.is_file():
+        raise RuntimeError("ROLLBACK_PRIOR_UNKNOWN_ATTEMPT_IDENTITY_INVALID")
+    metadata = PRIOR_UNKNOWN_ATTEMPT.stat()
+    if (metadata.st_nlink != 1 or metadata.st_uid != 0 or metadata.st_gid != 0
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+            or "sha256:" + sha256_file(PRIOR_UNKNOWN_ATTEMPT) != PRIOR_UNKNOWN_ATTEMPT_SHA256):
+        raise RuntimeError("ROLLBACK_PRIOR_UNKNOWN_ATTEMPT_IDENTITY_MISMATCH")
+    record = load_json_file(PRIOR_UNKNOWN_ATTEMPT, "ROLLBACK_PRIOR_UNKNOWN_ATTEMPT_INVALID")
+    exact_keys(record, {
+        "packetId", "operationId", "rollbackTargetDigest",
+    }, "ROLLBACK_PRIOR_UNKNOWN_ATTEMPT_KEYS_INVALID")
+    if record != {
+        "packetId": PRIOR_UNKNOWN_PACKET_ID,
+        "operationId": PRIOR_UNKNOWN_OPERATION_ID,
+        "rollbackTargetDigest": PRIOR_UNKNOWN_TARGET_DIGEST,
+    }:
+        raise RuntimeError("ROLLBACK_PRIOR_UNKNOWN_ATTEMPT_MISMATCH")
+
+
+def verify_active_and_preserved_state():
     verify_physical_target()
+    verify_prior_unknown_attempt()
     verify_production_service_absent()
     verify_file_identity(
         ACTIVE_DB,
@@ -548,9 +607,15 @@ def verify_active_and_preserved_state(expected_authority_head):
     verify_no_open_db_users()
 
 
-def claim_attempt(rollback_target_digest_value):
+class AttemptClaimDurabilityUnknown(RuntimeError):
+    pass
+
+
+def claim_attempt(rollback_target_digest_value, authority_head):
+    if not DIGEST_RE.fullmatch(str(rollback_target_digest_value)) or not COMMIT_RE.fullmatch(str(authority_head)):
+        raise RuntimeError("ROLLBACK_ATTEMPT_CLAIM_IDENTITY_INVALID")
     attempts = CONTROL_ROOT / "attempts"
-    attempts.mkdir(parents=True, exist_ok=True)
+    verify_root_controlled_directory(attempts)
     replay = hashlib.sha256(
         f"{OPERATION_ID}\n{rollback_target_digest_value}".encode("utf-8")
     ).hexdigest()
@@ -559,16 +624,26 @@ def claim_attempt(rollback_target_digest_value):
         "packetId": PACKET_ID,
         "operationId": OPERATION_ID,
         "rollbackTargetDigest": rollback_target_digest_value,
+        "authorityHeadAtAdmission": authority_head,
+        "claimedAt": dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
     }, sort_keys=True, separators=(",", ":")) + "\n"
+    created = False
     try:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        created = True
+        with os.fdopen(fd, "w") as handle:
+            handle.write(body)
+            handle.flush()
+            os.fsync(handle.fileno())
+        fsync_dir(attempts)
     except FileExistsError as exc:
         raise RuntimeError("RECONCILIATION_REQUIRED") from exc
-    with os.fdopen(fd, "w") as handle:
-        handle.write(body)
-        handle.flush()
-        os.fsync(handle.fileno())
-    fsync_dir(attempts)
+    except Exception as exc:
+        if created:
+            raise AttemptClaimDurabilityUnknown(
+                "ROLLBACK_ATTEMPT_CLAIM_DURABILITY_UNKNOWN"
+            ) from exc
+        raise
     return path
 
 
@@ -591,30 +666,54 @@ def execute(packet_path, approval_path, target_record_path):
     target_digest, expected_authority_head = verify_approved_authority(
         packet_path, approval_path, target_record_path
     )
-    verify_active_and_preserved_state(expected_authority_head)
-    attempt = claim_attempt(target_digest)
-    claimed = True
+
+    # Everything that can depend on external services or slow observation is
+    # completed before the durable one-shot claim. The final canonical lookup
+    # is the authority-admission check. Once the claim is durable, authority is
+    # admitted and no network lookup is allowed to strand the consumed replay
+    # identity.
+    verify_active_and_preserved_state()
+    verify_canonical_authority_head(expected_authority_head)
+
     try:
-        verify_active_and_preserved_state(expected_authority_head)
-        # Close the authority TOCTOU window created by the slower physical
-        # verification above. Canonical authority must still match on the
-        # final instruction immediately before the atomic exchange.
-        verify_canonical_authority_head(expected_authority_head)
+        attempt = claim_attempt(target_digest, expected_authority_head)
+        claimed = True
+    except AttemptClaimDurabilityUnknown as exc:
+        print(json.dumps({
+            "status": "UNKNOWN",
+            "operationId": OPERATION_ID,
+            "packetId": PACKET_ID,
+            "rollbackTargetDigest": target_digest,
+            "claimMayHaveOccurred": True,
+            "exchangeMayHaveOccurred": False,
+            "automaticRetryAllowed": False,
+            "writerReadmissionAuthorized": False,
+            "reconciliationRequired": True,
+            "errorClass": type(exc).__name__,
+        }, sort_keys=True))
+        raise
+
+    try:
+        # Post-claim execution is deliberately network-free and minimal:
+        # one local atomic exchange, then durability fsyncs. A later canonical
+        # branch movement cannot retroactively revoke an already-admitted
+        # attempt.
         rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)
         exchanged = True
         fsync_dir(ACTIVE_DB.parent)
         fsync_dir(PRESERVED_SCHEMA10.parent)
         print(json.dumps({
-            "status": "G3_AUTHORITY_RECONCILIATION_ROLLBACK_EXCHANGE_COMPLETE_UNCLASSIFIED",
+            "status": "G3_AUTHORITY_RECONCILIATION_ROLLBACK_RECOVERY_EXCHANGE_COMPLETE_UNCLASSIFIED",
             "operationId": OPERATION_ID,
             "packetId": PACKET_ID,
             "rollbackTargetDigest": target_digest,
+            "authorityHeadAtAdmission": expected_authority_head,
             "attemptRecord": str(attempt),
             "expectedActiveSchema10Sha256": EXPECTED_SCHEMA10_SHA256,
             "exchangedOutSchema11Path": str(PRESERVED_SCHEMA10),
             "automaticRetryAllowed": False,
             "writerReadmissionAuthorized": False,
-            "next": "INDEPENDENT_ROLLBACK_TERMINAL_VERIFICATION_REQUIRED",
+            "next": "INDEPENDENT_ROLLBACK_RECOVERY_TERMINAL_VERIFICATION_REQUIRED",
         }, sort_keys=True))
     except Exception as exc:
         if claimed:

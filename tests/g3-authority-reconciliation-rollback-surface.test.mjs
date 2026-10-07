@@ -6,73 +6,101 @@ import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 const root = new URL('../', import.meta.url);
-const record = JSON.parse(await readFile(new URL(
-  'docs/operations/g3-authority-binding-reconciliation.r1.json', root), 'utf8'));
+const readJson = async path => JSON.parse(await readFile(new URL(path, root), 'utf8'));
+const [record, recovery] = await Promise.all([
+  readJson('docs/operations/g3-authority-binding-reconciliation.r1.json'),
+  readJson('docs/operations/g3-rollback-unknown-reconciliation-recovery.r1.json'),
+]);
 const executorUrl = new URL('scripts/g3-authority-reconciliation-rollback-executor.py', root);
 const executorBytes = await readFile(executorUrl);
 const executor = executorBytes.toString('utf8');
+const executorSha = 'sha256:' + createHash('sha256').update(executorBytes).digest('hex');
 
-test('rollback authority surface is exact but not executable yet', async () => {
+test('UNKNOWN rollback is sealed and recovery surface is exact but not executable', async () => {
+  assert.equal(record.rollbackUnknownRecovery.priorRollbackTerminalOutcome, 'UNKNOWN');
+  assert.equal(record.rollbackUnknownRecovery.priorRollbackReplayIdentityReusable, false);
+  assert.equal(recovery.priorUnknownAttempt.automaticRetryAllowed, false);
+  assert.equal(recovery.priorUnknownAttempt.replayIdentityReusable, false);
+
   const surface = record.rollbackAuthoritySurface;
-  assert.equal(surface.status, 'DEFINED_NOT_EXECUTABLE');
-  assert.equal(surface.executorSha256,
-    'sha256:' + createHash('sha256').update(executorBytes).digest('hex'));
-  assert.equal(surface.operationId, 'G3-AUTH-RECON-ROLLBACK-20261007-R1');
-  assert.equal(surface.packetId, 'G3-AUTH-RECON-ROLLBACK-PACKET-20261007-R1');
+  assert.equal(surface.status, 'RECOVERY_FREEZE_CANDIDATE_NOT_EXECUTABLE');
+  assert.equal(surface.executorSha256, executorSha);
+  assert.equal(recovery.recoveryAuthoritySurface.executorSha256, executorSha);
+  assert.equal(surface.operationId, 'G3-AUTH-RECON-ROLLBACK-RECOVERY-20261007-R1');
+  assert.equal(surface.packetId, 'G3-AUTH-RECON-ROLLBACK-RECOVERY-PACKET-20261007-R1');
+  assert.equal(surface.targetId, 'G3-AUTH-RECON-ROLLBACK-RECOVERY-TARGET-20261007-R1');
+  assert.equal(surface.priorUnknownAttemptBindingRequired, true);
   assert.equal(surface.replayIdentity, 'operationId+rollbackTargetDigest');
   assert.equal(surface.durableOneShotRequired, true);
   assert.equal(surface.automaticRetryAllowed, false);
-  assert.equal(surface.packetIdPartitionsReplayIdentity, false);
-  assert.equal(surface.targetFreezeMustBindPostMergeCanonicalHead, true);
-  assert.equal(surface.canonicalHeadMustRemainUnchangedThroughExecution, true);
-  assert.equal(surface.freshCanonicalHeadVerificationImmediatelyBeforeExecutionRequired, true);
-  assert.equal(surface.exactRollbackTargetStatus, 'NOT_CREATED');
+  assert.equal(surface.authorityAdmissionBoundary, 'DURABLE_ONE_SHOT_CLAIM');
+  assert.equal(surface.canonicalHeadMustMatchApprovedTargetImmediatelyBeforeClaim, true);
+  assert.equal(surface.postClaimCanonicalVerificationAllowed, false);
+  assert.equal(surface.postClaimNetworkDependencyAllowed, false);
+  assert.equal(surface.exactRecoveryTargetStatus, 'NOT_CREATED');
   assert.equal(surface.approvedPacketStatus, 'NOT_CREATED');
   assert.equal(surface.approvalRecordStatus, 'NOT_CREATED');
-  assert.equal(surface.rollbackAuthorized, false);
+  assert.equal(surface.recoveryAuthorized, false);
   assert.equal(surface.approvalRequestAllowedBeforeExactTargetFreeze, false);
 
   for (const relative of [
-    'docs/operations/g3-authority-binding-rollback-target.r1.json',
-    'docs/operations/g3-authority-binding-rollback-approved-packet.r1.json',
-    'docs/operations/g3-authority-binding-rollback-approval.r1.json',
+    'docs/operations/g3-authority-binding-rollback-recovery-target.r1.json',
+    'docs/operations/g3-authority-binding-rollback-recovery-approved-packet.r1.json',
+    'docs/operations/g3-authority-binding-rollback-recovery-approval.r1.json',
   ]) {
     await assert.rejects(access(new URL(relative, root), constants.F_OK));
   }
 });
 
-test('rollback executor requires signed exact target and has an independent one-shot claim', () => {
-  assert.doesNotMatch(executor, /--rollback-target-digest/);
-  assert.match(executor, /--approved-packet/);
-  assert.match(executor, /--approval-record/);
-  assert.match(executor, /--target-record/);
-  assert.match(executor, /CONTROL_ROOT = Path\("\/mnt\/datadisk0\/g3-authority-binding-reconciliation\/rollback"\)/);
-  assert.match(executor, /OPERATION_ID = "G3-AUTH-RECON-ROLLBACK-20261007-R1"/);
-  assert.match(executor, /CANONICAL_BRANCH = "codex\/v2-1-architecture-freeze"/);
-  assert.match(executor, /git", "ls-remote"/);
-  assert.match(executor, /ROLLBACK_CANONICAL_AUTHORITY_HEAD_MISMATCH/);
-
-  const body = executor.slice(executor.indexOf('def execute('));
-  const firstVerify = body.indexOf('verify_active_and_preserved_state(expected_authority_head)');
-  const claim = body.indexOf('attempt = claim_attempt(target_digest)');
-  const secondVerify = body.indexOf(
-    'verify_active_and_preserved_state(expected_authority_head)', firstVerify + 1,
-  );
-  const finalAuthorityVerify = body.indexOf(
-    'verify_canonical_authority_head(expected_authority_head)', secondVerify + 1,
-  );
-  const exchange = body.indexOf('rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)');
-  assert.ok(firstVerify >= 0
-    && claim > firstVerify
-    && secondVerify > claim
-    && finalAuthorityVerify > secondVerify
-    && exchange > finalAuthorityVerify);
-  assert.equal(body.split('rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)').length - 1, 1);
-  assert.match(body, /automaticRetryAllowed": False/);
-  assert.match(body, /writerReadmissionAuthorized": False/);
+test('recovery target must bind the exact prior UNKNOWN attempt', () => {
+  assert.match(executor, /TARGET_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-TARGET-20261007-R1"/);
+  assert.match(executor, /PRIOR_UNKNOWN_OPERATION_ID = "G3-AUTH-RECON-ROLLBACK-20261007-R1"/);
+  assert.match(executor, /PRIOR_UNKNOWN_PACKET_ID = "G3-AUTH-RECON-ROLLBACK-PACKET-20261007-R1"/);
+  assert.match(executor, /PRIOR_UNKNOWN_TARGET_DIGEST = "sha256:b71d4853/);
+  assert.match(executor, /PRIOR_UNKNOWN_ATTEMPT_SHA256 = "sha256:bfd40da5/);
+  assert.match(executor, /PRIOR_UNKNOWN_TERMINAL_EVIDENCE_DIGEST = "sha256:7e04e137/);
+  assert.match(executor, /"priorUnknownAttempt"/);
+  assert.match(executor, /verify_prior_unknown_attempt\(\)/);
+  assert.match(executor, /ROLLBACK_PRIOR_UNKNOWN_ATTEMPT_MISMATCH/);
 });
 
-test('rollback executor public self-tests pass without production access', () => {
+test('durable claim is the admission boundary and post-claim path is network-free', () => {
+  const body = executor.slice(executor.indexOf('def execute('), executor.indexOf('def self_test_exchange('));
+  const preflight = body.indexOf('verify_active_and_preserved_state()');
+  const finalAuthority = body.indexOf('verify_canonical_authority_head(expected_authority_head)');
+  const claim = body.indexOf('attempt = claim_attempt(target_digest, expected_authority_head)');
+  const exchange = body.indexOf('rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)');
+
+  assert.ok(preflight >= 0 && finalAuthority > preflight && claim > finalAuthority && exchange > claim);
+  assert.equal(body.indexOf('verify_canonical_authority_head(expected_authority_head)', claim), -1);
+  assert.equal(body.indexOf('verify_active_and_preserved_state()', claim), -1);
+  assert.equal(body.split('rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)').length - 1, 1);
+
+  const postClaim = body.slice(claim);
+  for (const forbidden of [
+    'git", "ls-remote',
+    'INSTANCE_ID_URL',
+    'docker_json(',
+    'verify_no_running_volume_users(',
+    'verify_no_open_db_users(',
+    'verify_approval_signature(',
+  ]) {
+    assert.equal(postClaim.includes(forbidden), false, forbidden);
+  }
+  assert.match(postClaim, /rename_exchange\(ACTIVE_DB, PRESERVED_SCHEMA10\)/);
+  assert.match(postClaim, /fsync_dir\(ACTIVE_DB\.parent\)/);
+  assert.match(postClaim, /fsync_dir\(PRESERVED_SCHEMA10\.parent\)/);
+});
+
+test('claim durability ambiguity is fail-closed and never proceeds to exchange', () => {
+  assert.match(executor, /class AttemptClaimDurabilityUnknown/);
+  assert.match(executor, /ROLLBACK_ATTEMPT_CLAIM_DURABILITY_UNKNOWN/);
+  assert.match(executor, /"claimMayHaveOccurred": True/);
+  assert.match(executor, /"exchangeMayHaveOccurred": False/);
+  assert.match(executor, /"automaticRetryAllowed": False/);
+});
+
+test('rollback recovery executor public self-tests pass without production access', () => {
   const path = executorUrl.pathname;
   const exchange = spawnSync('python3', [path, '--self-test-exchange'], { encoding: 'utf8' });
   assert.equal(exchange.status, 0, exchange.stderr);
@@ -91,16 +119,17 @@ test('rollback executor public self-tests pass without production access', () =>
   assert.match(missing.stderr, /approved-packet/);
 });
 
-test('rollback approval cannot be requested before the post-merge exact target exists', () => {
+test('recovery cannot be requested before the post-merge exact target exists', () => {
   const preferred = record.preferredResolution;
   assert.equal(preferred.authoritySurfaceMustMergeBeforeExactTargetFreeze, true);
-  assert.equal(preferred.exactRollbackTargetMustFreezeBeforeApprovalRequest, true);
-  assert.equal(preferred.exactRollbackTargetStatus, 'NOT_CREATED');
-  assert.equal(preferred.rollbackApprovalRequestAllowed, false);
+  assert.equal(preferred.exactRecoveryTargetMustFreezeBeforeApprovalRequest, true);
+  assert.equal(preferred.exactRecoveryTargetStatus, 'NOT_CREATED');
+  assert.equal(preferred.recoveryApprovalRequestAllowed, false);
   assert.equal(preferred.approvalRequestRequiresExactRollbackTargetDigest, true);
   assert.equal(preferred.targetFreezeMustBindPostMergeCanonicalHead, true);
-  assert.equal(preferred.canonicalHeadMustRemainUnchangedThroughExecution, true);
-  assert.equal(preferred.freshCanonicalHeadVerificationImmediatelyBeforeRollbackRequired, true);
+  assert.equal(preferred.priorRollbackReplayIdentityReusable, false);
+  assert.equal(preferred.recoveryActionIsAutomaticRetry, false);
+  assert.equal(preferred.postClaimCanonicalLookupAllowed, false);
   assert.equal(preferred.nextAction,
-    'MERGE_RECONCILIATION_AUTHORITY_SURFACE_THEN_FREEZE_EXACT_ROLLBACK_TARGET');
+    'MERGE_RECOVERY_AUTHORITY_SURFACE_THEN_FREEZE_EXACT_RECOVERY_TARGET');
 });
