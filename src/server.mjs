@@ -17,6 +17,7 @@ import { createBusinessSchedulingApplication } from './business-scheduling-appli
 import { createBusinessRuntimeOptionsFromEnv } from './business-runtime-auth-v1.mjs';
 import { ScheduleStore } from './store.mjs';
 import { createWriteAdmissionControl, normalizeWriteAdmissionMode } from './write-admission-v1.mjs';
+import { assertG3AuthorityReconciliationStartupAllowed } from './g3-authority-reconciliation-startup-gate-v1.mjs';
 
 export function createKioskV2Application({
   store,
@@ -188,6 +189,7 @@ export function createOperationsServer({
   schedulingAllowedBriefHosts = [],
   writeAdmissionMode = 'enabled',
 }) {
+  assertG3AuthorityReconciliationStartupAllowed({ databasePath });
   requireKioskServiceBindingV1(kioskServiceBinding);
   if (kioskAuthenticate === undefined && kioskServiceBinding.mode === 'PROD11_SMOKE_ONLY') {
     throw new Error('KIOSK_SMOKE_CONFIG_REQUIRED');
@@ -317,7 +319,9 @@ const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLT
 if (invokedDirectly) {
   const host = process.env.HOST || '127.0.0.1';
   const port = Number(process.env.PORT || 3800);
-  const databasePath = resolve(process.env.DATABASE_PATH || './data/shooting-operations.sqlite');
+  let databasePath = process.env.DATABASE_PATH || './data/shooting-operations.sqlite';
+  assertG3AuthorityReconciliationStartupAllowed({ databasePath });
+  databasePath = resolve(databasePath);
   const uploadRoot = resolve(process.env.UPLOAD_ROOT || './data/uploads');
   const tokens = {
     viewer: process.env.VIEWER_TOKEN,
