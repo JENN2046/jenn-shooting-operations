@@ -121,6 +121,9 @@ try {
   const ps = terminal.postStateEvidence;
   const at = ps.attempt;
   const productionDbPath = EXPECTED.productionDbPath;
+  const expectedPrestatePath =
+    `/mnt/datadisk0/g3-schema11-cutover/${packet.authorityTarget.execution.operationId}/candidate.sqlite`;
+  const frozenPrestateIdentity = prep.targetBindingEvidence.activeFileIdentity;
   const expectedAttemptPath =
     '/mnt/datadisk0/g3-schema11-cutover/attempts/aa9c7a4c2ad48ed6e808a48c6e24790ff0c5d25883536ab2bfd27e0f6447b6c6.json';
   const attemptKeys = Object.keys(attemptRecord).sort();
@@ -147,11 +150,17 @@ try {
     || ps.hostname !== 'VM-0-12-ubuntu'
     || ps.instanceId !== 'ins-mi85f3my'
     || ps.activeDatabase.sha256 !== EXPECTED.activeDb
+    || ps.preservedPrestate.path !== expectedPrestatePath
+    || ps.preservedPrestate.device !== frozenPrestateIdentity.device
+    || ps.preservedPrestate.inode !== frozenPrestateIdentity.inode
     || ps.preservedPrestate.sha256 !== EXPECTED.prestateDb
     || ps.preservedPrestate.schemaVersion !== 10
     || ps.preservedPrestate.migration11Count !== 0
     || ps.preservedPrestate.integrityCheck !== 'ok'
     || ps.preservedPrestate.foreignKeyViolationCount !== 0
+    || ps.containment.walPresent !== false
+    || ps.containment.shmPresent !== false
+    || ps.containment.journalPresent !== false
     || ps.containment.productionServiceContainerPresent !== false
     || ps.containment.runningContainersWithDatabaseAccess !== 0
     || ps.containment.openDatabaseFileUsers !== 0
