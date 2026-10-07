@@ -153,7 +153,7 @@ Next action is:
 REVIEW_AND_MERGE_RECOVERY_AUTHORITY_SURFACE
 ```
 
-Only after merge may a new exact recovery target bind the post-merge canonical head, new executor digest, prior UNKNOWN attempt, current Schema11/Schema10 identities and containment evidence.
+Only after merge may a new exact recovery target bind the post-merge canonical head, new executor digest, prior UNKNOWN attempt, current Schema11/Schema10 identities, the exact read-only recovery terminal verifier, and containment evidence.
 
 The machine-readable authority for this record is:
 `docs/operations/g3-authority-binding-reconciliation.r1.json`.

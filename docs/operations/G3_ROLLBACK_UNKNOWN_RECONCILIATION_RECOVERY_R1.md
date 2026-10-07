@@ -75,11 +75,12 @@ A future exact recovery target must bind:
 
 1. the post-merge canonical authority head;
 2. the exact recovery executor digest;
-3. the exact prior UNKNOWN attempt identity and attempt-record digest;
-4. the exact current active Schema11 identity;
-5. the exact preserved Schema10 identity;
-6. fresh containment requirements;
-7. the new recovery replay identity.
+3. the exact read-only terminal verifier digest;
+4. the exact prior UNKNOWN attempt identity and attempt-record digest;
+5. the exact current active Schema11 identity;
+6. the exact preserved Schema10 identity;
+7. fresh containment requirements;
+8. the new recovery replay identity.
 
 The target must be frozen before approval. A fresh explicit human approval and Ed25519 signature must bind the new exact target digest.
 
@@ -110,7 +111,7 @@ Before the claim, the executor must complete every external or fallible admissio
 
 If any of those checks fail, no new recovery claim is consumed.
 
-Immediately after the final canonical equality check, the executor creates the durable new recovery claim.
+Immediately after the final canonical equality check, the executor performs one bounded local exact revalidation of the prior UNKNOWN ledger, both DB inode/hash identities and SQLite sidecar absence. This revalidation has no network, metadata-service, Docker, process-discovery, approval or Git dependency. If it passes, the executor creates the durable new recovery claim.
 
 After a durable claim, the executor is deliberately network-free. It may only:
 
@@ -184,5 +185,14 @@ Recovery executor candidate:
 
 ```text
 scripts/g3-authority-reconciliation-rollback-executor.py
-sha256:8e0a10a5493a3e7d63c3b2e379b0222030f19dc97143343f5ae3036a94e16fb8
+sha256:df57f7d1d70ce2b34ff200a3ddd4b956fdad7ba5faa63cc912e563cf836e4723
 ```
+
+Read-only recovery terminal verifier candidate:
+
+```text
+scripts/g3-authority-reconciliation-rollback-recovery-terminal-verifier.py
+sha256:b111227d5d1bf4a2427971509d22676db7d719d50b90d622a48a2cdda3d1ff86
+```
+
+The future exact recovery target must bind both digests. The verifier classifies the admitted attempt from the durable `authorityHeadAtAdmission` stored in the attempt record and performs no post-claim GitHub canonical lookup.

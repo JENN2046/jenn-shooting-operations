@@ -12,9 +12,12 @@ const [record, recovery] = await Promise.all([
   readJson('docs/operations/g3-rollback-unknown-reconciliation-recovery.r1.json'),
 ]);
 const executorUrl = new URL('scripts/g3-authority-reconciliation-rollback-executor.py', root);
-const executorBytes = await readFile(executorUrl);
+const verifierUrl = new URL('scripts/g3-authority-reconciliation-rollback-recovery-terminal-verifier.py', root);
+const [executorBytes, verifierBytes] = await Promise.all([readFile(executorUrl), readFile(verifierUrl)]);
 const executor = executorBytes.toString('utf8');
+const verifier = verifierBytes.toString('utf8');
 const executorSha = 'sha256:' + createHash('sha256').update(executorBytes).digest('hex');
+const verifierSha = 'sha256:' + createHash('sha256').update(verifierBytes).digest('hex');
 
 test('UNKNOWN rollback is sealed and recovery surface is exact but not executable', async () => {
   assert.equal(record.rollbackUnknownRecovery.priorRollbackTerminalOutcome, 'UNKNOWN');
@@ -26,6 +29,10 @@ test('UNKNOWN rollback is sealed and recovery surface is exact but not executabl
   assert.equal(surface.status, 'RECOVERY_FREEZE_CANDIDATE_NOT_EXECUTABLE');
   assert.equal(surface.executorSha256, executorSha);
   assert.equal(recovery.recoveryAuthoritySurface.executorSha256, executorSha);
+  assert.equal(surface.terminalVerifierPath, 'scripts/g3-authority-reconciliation-rollback-recovery-terminal-verifier.py');
+  assert.equal(surface.terminalVerifierSha256, verifierSha);
+  assert.equal(recovery.recoveryAuthoritySurface.terminalVerifierSha256, verifierSha);
+  assert.equal(surface.terminalVerifierStatus, 'DEFINED_READ_ONLY');
   assert.equal(surface.operationId, 'G3-AUTH-RECON-ROLLBACK-RECOVERY-20261007-R1');
   assert.equal(surface.packetId, 'G3-AUTH-RECON-ROLLBACK-RECOVERY-PACKET-20261007-R1');
   assert.equal(surface.targetId, 'G3-AUTH-RECON-ROLLBACK-RECOVERY-TARGET-20261007-R1');
@@ -54,6 +61,8 @@ test('UNKNOWN rollback is sealed and recovery surface is exact but not executabl
 
 test('recovery target must bind the exact prior UNKNOWN attempt', () => {
   assert.match(executor, /TARGET_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-TARGET-20261007-R1"/);
+  assert.equal(executor.includes('EXPECTED_TERMINAL_VERIFIER_SHA256 = "' + verifierSha + '"'), true);
+  assert.match(executor, /"terminalVerifierSha256"/);
   assert.match(executor, /PRIOR_UNKNOWN_OPERATION_ID = "G3-AUTH-RECON-ROLLBACK-20261007-R1"/);
   assert.match(executor, /PRIOR_UNKNOWN_PACKET_ID = "G3-AUTH-RECON-ROLLBACK-PACKET-20261007-R1"/);
   assert.match(executor, /PRIOR_UNKNOWN_TARGET_DIGEST = "sha256:b71d4853/);
@@ -68,13 +77,29 @@ test('durable claim is the admission boundary and post-claim path is network-fre
   const body = executor.slice(executor.indexOf('def execute('), executor.indexOf('def self_test_exchange('));
   const preflight = body.indexOf('verify_active_and_preserved_state()');
   const finalAuthority = body.indexOf('verify_canonical_authority_head(expected_authority_head)');
+  const localRevalidation = body.indexOf('verify_post_canonical_local_admission_state()');
   const claim = body.indexOf('attempt = claim_attempt(target_digest, expected_authority_head)');
   const exchange = body.indexOf('rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)');
 
-  assert.ok(preflight >= 0 && finalAuthority > preflight && claim > finalAuthority && exchange > claim);
+  assert.ok(preflight >= 0 && finalAuthority > preflight && localRevalidation > finalAuthority && claim > localRevalidation && exchange > claim);
   assert.equal(body.indexOf('verify_canonical_authority_head(expected_authority_head)', claim), -1);
   assert.equal(body.indexOf('verify_active_and_preserved_state()', claim), -1);
   assert.equal(body.split('rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)').length - 1, 1);
+
+  const localAdmission = executor.slice(
+    executor.indexOf('def verify_post_canonical_local_admission_state():'),
+    executor.indexOf('class AttemptClaimDurabilityUnknown'),
+  );
+  for (const forbidden of [
+    'read_current_canonical_head(',
+    'read_instance_id(',
+    'docker_json(',
+    'verify_no_running_volume_users(',
+    'verify_no_open_db_users(',
+    'verify_approval_signature(',
+  ]) {
+    assert.equal(localAdmission.includes(forbidden), false, forbidden);
+  }
 
   const postClaim = body.slice(claim);
   for (const forbidden of [
@@ -98,6 +123,27 @@ test('claim durability ambiguity is fail-closed and never proceeds to exchange',
   assert.match(executor, /"claimMayHaveOccurred": True/);
   assert.match(executor, /"exchangeMayHaveOccurred": False/);
   assert.match(executor, /"automaticRetryAllowed": False/);
+});
+
+test('read-only recovery terminal verifier binds the admitted head and has no GitHub dependency', () => {
+  assert.match(verifier, /TARGET_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-TARGET-20261007-R1"/);
+  assert.match(verifier, /"terminalVerifierSha256"/);
+  assert.match(verifier, /verifier_sha256\(\)/);
+  assert.match(verifier, /authorityHeadAtAdmission/);
+  assert.match(verifier, /DURABLE_RECOVERY_CLAIM/);
+  assert.equal(verifier.includes('git", "ls-remote'), false);
+  assert.equal(verifier.includes('CANONICAL_REPO_URL'), false);
+});
+
+test('recovery terminal verifier public self-tests pass without production access', () => {
+  const path = verifierUrl.pathname;
+  const classification = spawnSync('python3', [path, '--self-test-classification'], { encoding: 'utf8' });
+  assert.equal(classification.status, 0, classification.stderr);
+  assert.match(classification.stdout, /G3_AUTH_RECON_ROLLBACK_RECOVERY_TERMINAL_CLASSIFICATION_SELF_TEST_PASS/);
+
+  const approval = spawnSync('python3', [path, '--self-test-approval-signature'], { encoding: 'utf8' });
+  assert.equal(approval.status, 0, approval.stderr);
+  assert.match(approval.stdout, /G3_AUTH_RECON_ROLLBACK_RECOVERY_TERMINAL_APPROVAL_SELF_TEST_PASS/);
 });
 
 test('rollback recovery executor public self-tests pass without production access', () => {

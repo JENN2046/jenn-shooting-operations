@@ -22,7 +22,8 @@ const EXPECTED = Object.freeze({
   priorRollbackTarget: 'sha256:b71d4853f47c8f2404b331c8a9e810747ba211a867353607819ee70ff15bf509',
   priorRollbackAttempt: 'sha256:bfd40da521d2a3871ffcf4b4913de260d51c368eeca0ca775c4bda6b25b5645a',
   priorRollbackTerminalEvidence: 'sha256:7e04e137efa425361bf0a400017bf4452bc45cf2e9daae6c6b49c767f341ebb1',
-  recoveryExecutor: 'sha256:8e0a10a5493a3e7d63c3b2e379b0222030f19dc97143343f5ae3036a94e16fb8',
+  recoveryExecutor: 'sha256:df57f7d1d70ce2b34ff200a3ddd4b956fdad7ba5faa63cc912e563cf836e4723',
+  recoveryVerifier: 'sha256:b111227d5d1bf4a2427971509d22676db7d719d50b90d622a48a2cdda3d1ff86',
   recoveryAction: 'G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_UNKNOWN_RECOVERY_TO_10',
   recoveryOperation: 'G3-AUTH-RECON-ROLLBACK-RECOVERY-20261007-R1',
   recoveryPacket: 'G3-AUTH-RECON-ROLLBACK-RECOVERY-PACKET-20261007-R1',
@@ -33,7 +34,7 @@ const EXPECTED = Object.freeze({
 try {
   const [
     record, recovery, packet, terminal, receipt, attemptBytes,
-    rollbackExecutorBytes, startupGateBytes, serverBytes, storeBytes, composeBytes, dockerfileBytes,
+    rollbackExecutorBytes, terminalVerifierBytes, startupGateBytes, serverBytes, storeBytes, composeBytes, dockerfileBytes,
   ] = await Promise.all([
     readJson('docs/operations/g3-authority-binding-reconciliation.r1.json'),
     readJson('docs/operations/g3-rollback-unknown-reconciliation-recovery.r1.json'),
@@ -42,6 +43,7 @@ try {
     readJson('docs/operations/g3-schema11-terminal-receipt.r1.json'),
     readFile(new URL('docs/operations/g3-schema11-attempt-record.r1.json', ROOT)),
     readFile(new URL('scripts/g3-authority-reconciliation-rollback-executor.py', ROOT)),
+    readFile(new URL('scripts/g3-authority-reconciliation-rollback-recovery-terminal-verifier.py', ROOT)),
     readFile(new URL('src/g3-authority-reconciliation-startup-gate-v1.mjs', ROOT)),
     readFile(new URL('src/server.mjs', ROOT)),
     readFile(new URL('src/store.mjs', ROOT)),
@@ -50,6 +52,7 @@ try {
   ]);
   const attempt = JSON.parse(attemptBytes.toString('utf8'));
   const executor = rollbackExecutorBytes.toString('utf8');
+  const terminalVerifier = terminalVerifierBytes.toString('utf8');
   const startupGate = startupGateBytes.toString('utf8');
   const server = serverBytes.toString('utf8');
   const store = storeBytes.toString('utf8');
@@ -143,6 +146,11 @@ try {
     || surface.executorSha256 !== EXPECTED.recoveryExecutor
     || recoverySurface.executorSha256 !== EXPECTED.recoveryExecutor
     || sha256(rollbackExecutorBytes) !== EXPECTED.recoveryExecutor
+    || surface.terminalVerifierPath !== 'scripts/g3-authority-reconciliation-rollback-recovery-terminal-verifier.py'
+    || surface.terminalVerifierSha256 !== EXPECTED.recoveryVerifier
+    || surface.terminalVerifierStatus !== 'DEFINED_READ_ONLY'
+    || recoverySurface.terminalVerifierSha256 !== EXPECTED.recoveryVerifier
+    || sha256(terminalVerifierBytes) !== EXPECTED.recoveryVerifier
     || surface.actionId !== EXPECTED.recoveryAction
     || surface.operationId !== EXPECTED.recoveryOperation
     || surface.packetId !== EXPECTED.recoveryPacket
@@ -154,6 +162,8 @@ try {
     || surface.authorityAdmissionBoundary !== 'DURABLE_ONE_SHOT_CLAIM'
     || surface.canonicalHeadMustMatchApprovedTargetImmediatelyBeforeClaim !== true
     || surface.freshCanonicalHeadVerificationImmediatelyBeforeClaimRequired !== true
+    || surface.postCanonicalPreClaimLocalRevalidationRequired !== true
+    || surface.postCanonicalExternalDependencyAllowed !== false
     || surface.postClaimCanonicalVerificationAllowed !== false
     || surface.postClaimNetworkDependencyAllowed !== false
     || surface.exactRecoveryTargetStatus !== 'NOT_CREATED'
@@ -173,22 +183,50 @@ try {
     || !executor.includes('PRIOR_UNKNOWN_OPERATION_ID = "' + EXPECTED.priorRollbackOperation + '"')
     || !executor.includes('PRIOR_UNKNOWN_TARGET_DIGEST = "' + EXPECTED.priorRollbackTarget + '"')
     || !executor.includes('PRIOR_UNKNOWN_ATTEMPT_SHA256 = "' + EXPECTED.priorRollbackAttempt + '"')
+    || !executor.includes('EXPECTED_TERMINAL_VERIFIER_SHA256 = "' + EXPECTED.recoveryVerifier + '"')
+    || !executor.includes('"terminalVerifierSha256"')
     || !executor.includes('"priorUnknownAttempt"')
     || !executor.includes('verify_prior_unknown_attempt()')
     || !executor.includes('ROLLBACK_ATTEMPT_CLAIM_DURABILITY_UNKNOWN')) {
     fail('RECOVERY_EXECUTOR_BINDING_DRIFT');
   }
 
+  if (!terminalVerifier.includes('TARGET_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-TARGET-20261007-R1"')
+    || !terminalVerifier.includes('"terminalVerifierSha256"')
+    || !terminalVerifier.includes('verifier_sha256()')
+    || !terminalVerifier.includes('authorityHeadAtAdmission')
+    || !terminalVerifier.includes('DURABLE_RECOVERY_CLAIM')
+    || terminalVerifier.includes('git", "ls-remote')
+    || terminalVerifier.includes('CANONICAL_REPO_URL')) {
+    fail('RECOVERY_TERMINAL_VERIFIER_DRIFT');
+  }
+
   const execute = executor.slice(executor.indexOf('def execute('), executor.indexOf('def self_test_exchange('));
   const preflight = execute.indexOf('verify_active_and_preserved_state()');
   const finalAuthority = execute.indexOf('verify_canonical_authority_head(expected_authority_head)');
+  const localRevalidation = execute.indexOf('verify_post_canonical_local_admission_state()');
   const claim = execute.indexOf('attempt = claim_attempt(target_digest, expected_authority_head)');
   const exchange = execute.indexOf('rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)');
-  if (preflight < 0 || finalAuthority <= preflight || claim <= finalAuthority || exchange <= claim
+  if (preflight < 0 || finalAuthority <= preflight || localRevalidation <= finalAuthority || claim <= localRevalidation || exchange <= claim
     || execute.indexOf('verify_canonical_authority_head(expected_authority_head)', claim) !== -1
     || execute.indexOf('verify_active_and_preserved_state()', claim) !== -1
     || execute.split('rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)').length - 1 !== 1) {
     fail('RECOVERY_ADMISSION_BOUNDARY_ORDER_DRIFT');
+  }
+
+  const localAdmission = executor.slice(
+    executor.indexOf('def verify_post_canonical_local_admission_state():'),
+    executor.indexOf('class AttemptClaimDurabilityUnknown'),
+  );
+  for (const forbidden of [
+    'read_current_canonical_head(',
+    'read_instance_id(',
+    'docker_json(',
+    'verify_no_running_volume_users(',
+    'verify_no_open_db_users(',
+    'verify_approval_signature(',
+  ]) {
+    if (localAdmission.includes(forbidden)) fail('POST_CANONICAL_LOCAL_REVALIDATION_EXTERNAL_DEPENDENCY:' + forbidden);
   }
 
   const postClaim = execute.slice(claim);
@@ -225,6 +263,8 @@ try {
     || preferred.targetFreezeMustBindPostMergeCanonicalHead !== true
     || preferred.authorityAdmissionBoundary !== 'DURABLE_ONE_SHOT_CLAIM'
     || preferred.canonicalHeadMustMatchApprovedTargetImmediatelyBeforeClaim !== true
+    || preferred.postCanonicalPreClaimLocalRevalidationRequired !== true
+    || preferred.postCanonicalExternalDependencyAllowed !== false
     || preferred.postClaimCanonicalLookupAllowed !== false
     || preferred.postClaimNetworkDependencyAllowed !== false
     || preferred.nextAction !== 'MERGE_RECOVERY_AUTHORITY_SURFACE_THEN_FREEZE_EXACT_RECOVERY_TARGET') {
@@ -255,6 +295,7 @@ try {
     authorityAdmissionStatus: 'RECONCILIATION_REQUIRED',
     recoveryAuthoritySurfaceStatus: surface.status,
     recoveryExecutorSha256: surface.executorSha256,
+    recoveryTerminalVerifierSha256: surface.terminalVerifierSha256,
     exactRecoveryTargetStatus: surface.exactRecoveryTargetStatus,
     recoveryApprovalRequestAllowed: false,
     productionStartupAllowed: false,

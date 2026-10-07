@@ -47,7 +47,7 @@
   },
   "recoveryAuthoritySurface": {
     "executorPath": "scripts/g3-authority-reconciliation-rollback-executor.py",
-    "executorSha256": "sha256:8e0a10a5493a3e7d63c3b2e379b0222030f19dc97143343f5ae3036a94e16fb8",
+    "executorSha256": "sha256:df57f7d1d70ce2b34ff200a3ddd4b956fdad7ba5faa63cc912e563cf836e4723",
     "actionId": "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_UNKNOWN_RECOVERY_TO_10",
     "operationId": "G3-AUTH-RECON-ROLLBACK-RECOVERY-20261007-R1",
     "packetId": "G3-AUTH-RECON-ROLLBACK-RECOVERY-PACKET-20261007-R1",
@@ -75,7 +75,12 @@
     "approvedPacketStatus": "NOT_CREATED",
     "approvalRecordStatus": "NOT_CREATED",
     "recoveryAuthorized": false,
-    "targetId": "G3-AUTH-RECON-ROLLBACK-RECOVERY-TARGET-20261007-R1"
+    "targetId": "G3-AUTH-RECON-ROLLBACK-RECOVERY-TARGET-20261007-R1",
+    "terminalVerifierPath": "scripts/g3-authority-reconciliation-rollback-recovery-terminal-verifier.py",
+    "terminalVerifierSha256": "sha256:b111227d5d1bf4a2427971509d22676db7d719d50b90d622a48a2cdda3d1ff86",
+    "terminalVerifierStatus": "DEFINED_READ_ONLY",
+    "postCanonicalPreClaimLocalRevalidationRequired": true,
+    "postCanonicalExternalDependencyAllowed": false
   },
   "sequence": [
     "MERGE_RECOVERY_AUTHORITY_SURFACE",
@@ -93,7 +98,8 @@
     "ambiguousOutcome": "UNKNOWN",
     "writerReadmissionAfterRolledBackAllowed": false,
     "productionServiceStartAfterRolledBackAllowed": false,
-    "automaticRetryAfterUnknownAllowed": false
+    "automaticRetryAfterUnknownAllowed": false,
+    "terminalVerifierCanonicalNetworkLookupAllowed": false
   },
   "nextAction": "REVIEW_AND_MERGE_RECOVERY_AUTHORITY_SURFACE_THEN_FREEZE_EXACT_RECOVERY_TARGET",
   "prohibitions": [

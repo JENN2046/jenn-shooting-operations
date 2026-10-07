@@ -53,6 +53,7 @@ OPERATION_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-20261007-R1"
 PACKET_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-PACKET-20261007-R1"
 CONTRACT_ID = "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_RECOVERY_V1"
 TARGET_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-TARGET-20261007-R1"
+EXPECTED_TERMINAL_VERIFIER_SHA256 = "sha256:b111227d5d1bf4a2427971509d22676db7d719d50b90d622a48a2cdda3d1ff86"
 
 PRIOR_UNKNOWN_OPERATION_ID = "G3-AUTH-RECON-ROLLBACK-20261007-R1"
 PRIOR_UNKNOWN_PACKET_ID = "G3-AUTH-RECON-ROLLBACK-PACKET-20261007-R1"
@@ -183,7 +184,8 @@ def verify_approved_authority(packet_path: Path, approval_path: Path, target_rec
 
     exact_keys(target, {
         "canonicalBranch", "authorityHead", "actionId", "operationId", "executorSha256",
-        "priorUnknownAttempt", "activeSchema11", "preservedSchema10", "containment", "execution",
+        "terminalVerifierSha256", "priorUnknownAttempt", "activeSchema11",
+        "preservedSchema10", "containment", "execution",
     }, "ROLLBACK_TARGET_KEYS_INVALID")
     if target.get("canonicalBranch") != CANONICAL_BRANCH \
       or not COMMIT_RE.fullmatch(str(target.get("authorityHead", ""))) \
@@ -254,6 +256,8 @@ def verify_approved_authority(packet_path: Path, approval_path: Path, target_rec
         "authorityAdmissionBoundary": "DURABLE_ONE_SHOT_CLAIM",
         "canonicalHeadMustMatchApprovedTargetImmediatelyBeforeClaim": True,
         "freshCanonicalHeadVerificationRequiredImmediatelyBeforeClaim": True,
+        "postCanonicalPreClaimLocalRevalidationRequired": True,
+        "postCanonicalExternalDependencyAllowed": False,
         "postClaimCanonicalVerificationAllowed": False,
         "postClaimNetworkDependencyAllowed": False,
     }
@@ -607,6 +611,28 @@ def verify_active_and_preserved_state():
     verify_no_open_db_users()
 
 
+def verify_post_canonical_local_admission_state():
+    verify_prior_unknown_attempt()
+    verify_file_identity(
+        ACTIVE_DB,
+        size=EXPECTED_ACTIVE_SIZE, device=EXPECTED_ACTIVE_DEVICE,
+        inode=EXPECTED_ACTIVE_INODE, mode=EXPECTED_ACTIVE_MODE,
+        uid=EXPECTED_ACTIVE_UID, gid=EXPECTED_ACTIVE_GID,
+        digest=EXPECTED_ACTIVE_SCHEMA11_SHA256,
+    )
+    verify_file_identity(
+        PRESERVED_SCHEMA10,
+        size=EXPECTED_SCHEMA10_SIZE, device=EXPECTED_SCHEMA10_DEVICE,
+        inode=EXPECTED_SCHEMA10_INODE, mode=EXPECTED_SCHEMA10_MODE,
+        uid=EXPECTED_SCHEMA10_UID, gid=EXPECTED_SCHEMA10_GID,
+        digest=EXPECTED_SCHEMA10_SHA256,
+    )
+    verify_no_sidecars(ACTIVE_DB)
+    verify_no_sidecars(PRESERVED_SCHEMA10)
+    if ACTIVE_DB.stat().st_dev != PRESERVED_SCHEMA10.stat().st_dev:
+        raise RuntimeError("ROLLBACK_NOT_SAME_FILESYSTEM")
+
+
 class AttemptClaimDurabilityUnknown(RuntimeError):
     pass
 
@@ -674,6 +700,9 @@ def execute(packet_path, approval_path, target_record_path):
     # identity.
     verify_active_and_preserved_state()
     verify_canonical_authority_head(expected_authority_head)
+    # Close the physical-state window introduced by the final remote authority
+    # lookup without introducing any further external dependency.
+    verify_post_canonical_local_admission_state()
 
     try:
         attempt = claim_attempt(target_digest, expected_authority_head)
