@@ -113,7 +113,7 @@ If any of those checks fail, no new recovery claim is consumed.
 
 Immediately after the final canonical equality check, the executor performs one bounded local revalidation before consuming the claim. It rechecks the prior UNKNOWN ledger, both DB inode/hash identities, SQLite sidecar absence, production-service absence, Docker volume access, and `lsof` / `fuser` open-user containment. This phase may fail safely because the new replay identity is still unclaimed. It has no GitHub, metadata-service, approval, or other remote-network dependency. If it passes, the executor creates the durable new recovery claim.
 
-The renameat2 libc symbol is resolved and configured during preflight before the final canonical check and durable claim. The post-claim path receives the already-resolved function and performs no dynamic syscall resolution.
+The renameat2 libc symbol is resolved and configured during preflight before the final canonical check and durable claim. The pre-claim metadata check also binds the verified production instance ID into the root-owned durable attempt record. The post-claim path receives the already-resolved function and performs no dynamic syscall resolution; independent terminal verification reads the admitted instance identity from that durable record and performs no metadata-service request.
 
 After a durable claim, the executor is deliberately network-free. It may only:
 
@@ -187,14 +187,14 @@ Recovery executor candidate:
 
 ```text
 scripts/g3-authority-reconciliation-rollback-executor.py
-sha256:12baf3eaf378a8ef3f26ffc52127fdae3a6c791f607f875abfda11e3a811ac1b
+sha256:0f529e686ac9bcd07274ab7b74c9f741064264d87014f4b49df5ca82a8e3eb09
 ```
 
 Read-only recovery terminal verifier candidate:
 
 ```text
 scripts/g3-authority-reconciliation-rollback-recovery-terminal-verifier.py
-sha256:8188711d16c7e2e2b48c8ee3760273cedbc3506be675a9eb087a4da0dc27419c
+sha256:5360e45311aa237246e0cf5eab4ce9302e0ef554832dad1311b70584773ee5fc
 ```
 
-The future exact recovery target must bind both digests. The verifier classifies the admitted attempt from the durable `authorityHeadAtAdmission` stored in the attempt record and performs no post-claim GitHub canonical lookup.
+The future exact recovery target must bind both digests. The verifier classifies the admitted attempt from the durable `authorityHeadAtAdmission` and `instanceIdAtAdmission` stored in the attempt record and performs no post-claim GitHub canonical lookup or metadata-service request.

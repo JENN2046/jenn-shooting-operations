@@ -53,7 +53,7 @@ OPERATION_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-20261007-R1"
 PACKET_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-PACKET-20261007-R1"
 CONTRACT_ID = "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_RECOVERY_V1"
 TARGET_ID = "G3-AUTH-RECON-ROLLBACK-RECOVERY-TARGET-20261007-R1"
-EXPECTED_TERMINAL_VERIFIER_SHA256 = "sha256:8188711d16c7e2e2b48c8ee3760273cedbc3506be675a9eb087a4da0dc27419c"
+EXPECTED_TERMINAL_VERIFIER_SHA256 = "sha256:5360e45311aa237246e0cf5eab4ce9302e0ef554832dad1311b70584773ee5fc"
 
 PRIOR_UNKNOWN_OPERATION_ID = "G3-AUTH-RECON-ROLLBACK-20261007-R1"
 PRIOR_UNKNOWN_PACKET_ID = "G3-AUTH-RECON-ROLLBACK-PACKET-20261007-R1"
@@ -264,6 +264,8 @@ def verify_approved_authority(packet_path: Path, approval_path: Path, target_rec
         "postClaimDynamicSyscallResolutionAllowed": False,
         "postClaimCanonicalVerificationAllowed": False,
         "postClaimNetworkDependencyAllowed": False,
+        "instanceIdentityBoundInClaimRequired": True,
+        "postClaimMetadataRequestAllowed": False,
     }
     if target.get("priorUnknownAttempt") != expected_prior_unknown       or target.get("activeSchema11") != expected_active       or target.get("preservedSchema10") != expected_preserved       or target.get("containment") != expected_containment       or target.get("execution") != expected_execution:
         raise RuntimeError("ROLLBACK_TARGET_SCOPE_MISMATCH")
@@ -543,7 +545,7 @@ def verify_physical_target():
         raise RuntimeError("ROLLBACK_ROOT_EXECUTION_REQUIRED")
     if socket.gethostname() != EXPECTED_HOSTNAME:
         raise RuntimeError("ROLLBACK_HOSTNAME_MISMATCH")
-    read_instance_id()
+    instance_id = read_instance_id()
     mountpoint = docker_json(["volume", "inspect", VOLUME_NAME, "--format", "{{.Mountpoint}}"])
     if Path(mountpoint) != EXPECTED_VOLUME_MOUNTPOINT:
         raise RuntimeError("ROLLBACK_VOLUME_MOUNTPOINT_MISMATCH")
@@ -553,6 +555,7 @@ def verify_physical_target():
     ).split()
     if fs[:2] != [EXPECTED_FILESYSTEM_SOURCE, EXPECTED_FILESYSTEM_TYPE]:
         raise RuntimeError("ROLLBACK_FILESYSTEM_BINDING_MISMATCH")
+    return instance_id
 
 
 def verify_root_controlled_directory(path):
@@ -590,7 +593,7 @@ def verify_prior_unknown_attempt():
 
 
 def verify_active_and_preserved_state():
-    verify_physical_target()
+    instance_id = verify_physical_target()
     verify_prior_unknown_attempt()
     verify_production_service_absent()
     verify_file_identity(
@@ -619,6 +622,7 @@ def verify_active_and_preserved_state():
         raise RuntimeError("ROLLBACK_NOT_SAME_FILESYSTEM")
     verify_no_running_volume_users()
     verify_no_open_db_users()
+    return instance_id
 
 
 def verify_post_canonical_local_admission_state():
@@ -653,8 +657,10 @@ class AttemptClaimDurabilityUnknown(RuntimeError):
     pass
 
 
-def claim_attempt(rollback_target_digest_value, authority_head):
-    if not DIGEST_RE.fullmatch(str(rollback_target_digest_value)) or not COMMIT_RE.fullmatch(str(authority_head)):
+def claim_attempt(rollback_target_digest_value, authority_head, instance_id):
+    if (not DIGEST_RE.fullmatch(str(rollback_target_digest_value))
+            or not COMMIT_RE.fullmatch(str(authority_head))
+            or instance_id != EXPECTED_INSTANCE_ID):
         raise RuntimeError("ROLLBACK_ATTEMPT_CLAIM_IDENTITY_INVALID")
     attempts = CONTROL_ROOT / "attempts"
     verify_root_controlled_directory(attempts)
@@ -667,6 +673,7 @@ def claim_attempt(rollback_target_digest_value, authority_head):
         "operationId": OPERATION_ID,
         "rollbackTargetDigest": rollback_target_digest_value,
         "authorityHeadAtAdmission": authority_head,
+        "instanceIdAtAdmission": instance_id,
         "claimedAt": dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
     }, sort_keys=True, separators=(",", ":")) + "\n"
     created = False
@@ -721,7 +728,7 @@ def execute(packet_path, approval_path, target_record_path):
     # is the authority-admission check. Once the claim is durable, authority is
     # admitted and no network lookup is allowed to strand the consumed replay
     # identity.
-    verify_active_and_preserved_state()
+    instance_id_at_admission = verify_active_and_preserved_state()
     exchange_fn = resolve_rename_exchange()
     verify_canonical_authority_head(expected_authority_head)
     # Close the physical-state window introduced by the final remote authority
@@ -729,7 +736,9 @@ def execute(packet_path, approval_path, target_record_path):
     verify_post_canonical_local_admission_state()
 
     try:
-        attempt = claim_attempt(target_digest, expected_authority_head)
+        attempt = claim_attempt(
+            target_digest, expected_authority_head, instance_id_at_admission
+        )
         claimed = True
     except AttemptClaimDurabilityUnknown as exc:
         print(json.dumps({
@@ -761,6 +770,7 @@ def execute(packet_path, approval_path, target_record_path):
             "packetId": PACKET_ID,
             "rollbackTargetDigest": target_digest,
             "authorityHeadAtAdmission": expected_authority_head,
+            "instanceIdAtAdmission": instance_id_at_admission,
             "attemptRecord": str(attempt),
             "expectedActiveSchema10Sha256": EXPECTED_SCHEMA10_SHA256,
             "exchangedOutSchema11Path": str(PRESERVED_SCHEMA10),

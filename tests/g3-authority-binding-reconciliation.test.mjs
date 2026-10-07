@@ -60,6 +60,8 @@ test('preferred repair is a new exact recovery operation with a fresh approval',
   assert.equal(record.preferredResolution.canonicalHeadMustMatchApprovedTargetImmediatelyBeforeClaim, true);
   assert.equal(record.preferredResolution.postClaimCanonicalLookupAllowed, false);
   assert.equal(record.preferredResolution.postClaimNetworkDependencyAllowed, false);
+  assert.equal(record.preferredResolution.instanceIdentityBoundInClaimRequired, true);
+  assert.equal(record.preferredResolution.postClaimMetadataRequestAllowed, false);
 });
 
 test('repository evidence cannot self-authorize recovery mutation', () => {

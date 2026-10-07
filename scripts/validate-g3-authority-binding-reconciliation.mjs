@@ -22,8 +22,8 @@ const EXPECTED = Object.freeze({
   priorRollbackTarget: 'sha256:b71d4853f47c8f2404b331c8a9e810747ba211a867353607819ee70ff15bf509',
   priorRollbackAttempt: 'sha256:bfd40da521d2a3871ffcf4b4913de260d51c368eeca0ca775c4bda6b25b5645a',
   priorRollbackTerminalEvidence: 'sha256:7e04e137efa425361bf0a400017bf4452bc45cf2e9daae6c6b49c767f341ebb1',
-  recoveryExecutor: 'sha256:12baf3eaf378a8ef3f26ffc52127fdae3a6c791f607f875abfda11e3a811ac1b',
-  recoveryVerifier: 'sha256:8188711d16c7e2e2b48c8ee3760273cedbc3506be675a9eb087a4da0dc27419c',
+  recoveryExecutor: 'sha256:0f529e686ac9bcd07274ab7b74c9f741064264d87014f4b49df5ca82a8e3eb09',
+  recoveryVerifier: 'sha256:5360e45311aa237246e0cf5eab4ce9302e0ef554832dad1311b70584773ee5fc',
   recoveryAction: 'G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_UNKNOWN_RECOVERY_TO_10',
   recoveryOperation: 'G3-AUTH-RECON-ROLLBACK-RECOVERY-20261007-R1',
   recoveryPacket: 'G3-AUTH-RECON-ROLLBACK-RECOVERY-PACKET-20261007-R1',
@@ -169,6 +169,8 @@ try {
     || surface.postClaimDynamicSyscallResolutionAllowed !== false
     || surface.postClaimCanonicalVerificationAllowed !== false
     || surface.postClaimNetworkDependencyAllowed !== false
+    || surface.instanceIdentityBoundInClaimRequired !== true
+    || surface.postClaimMetadataRequestAllowed !== false
     || surface.exactRecoveryTargetStatus !== 'NOT_CREATED'
     || surface.approvedPacketStatus !== 'NOT_CREATED'
     || surface.approvalRecordStatus !== 'NOT_CREATED'
@@ -190,6 +192,7 @@ try {
     || !executor.includes('"terminalVerifierSha256"')
     || !executor.includes('target.get("terminalVerifierSha256") != EXPECTED_TERMINAL_VERIFIER_SHA256')
     || !executor.includes('"priorUnknownAttempt"')
+    || !executor.includes('"instanceIdAtAdmission"')
     || !executor.includes('verify_prior_unknown_attempt()')
     || !executor.includes('ROLLBACK_ATTEMPT_CLAIM_DURABILITY_UNKNOWN')) {
     fail('RECOVERY_EXECUTOR_BINDING_DRIFT');
@@ -199,9 +202,13 @@ try {
     || !terminalVerifier.includes('"terminalVerifierSha256"')
     || !terminalVerifier.includes('verifier_sha256()')
     || !terminalVerifier.includes('authorityHeadAtAdmission')
+    || !terminalVerifier.includes('instanceIdAtAdmission')
     || !terminalVerifier.includes('DURABLE_RECOVERY_CLAIM')
     || terminalVerifier.includes('git", "ls-remote')
-    || terminalVerifier.includes('CANONICAL_REPO_URL')) {
+    || terminalVerifier.includes('CANONICAL_REPO_URL')
+    || terminalVerifier.includes('INSTANCE_ID_URL')
+    || terminalVerifier.includes('urllib.request')
+    || terminalVerifier.includes('read_instance_id(')) {
     fail('RECOVERY_TERMINAL_VERIFIER_DRIFT');
   }
 
@@ -210,7 +217,7 @@ try {
   const resolveExchange = execute.indexOf('exchange_fn = resolve_rename_exchange()');
   const finalAuthority = execute.indexOf('verify_canonical_authority_head(expected_authority_head)');
   const localRevalidation = execute.indexOf('verify_post_canonical_local_admission_state()');
-  const claim = execute.indexOf('attempt = claim_attempt(target_digest, expected_authority_head)');
+  const claim = execute.indexOf('attempt = claim_attempt(');
   const exchange = execute.indexOf('rename_exchange(exchange_fn, ACTIVE_DB, PRESERVED_SCHEMA10)');
   if (preflight < 0 || resolveExchange <= preflight || finalAuthority <= resolveExchange || localRevalidation <= finalAuthority || claim <= localRevalidation || exchange <= claim
     || execute.indexOf('verify_canonical_authority_head(expected_authority_head)', claim) !== -1
@@ -300,6 +307,8 @@ try {
     || preferred.postClaimDynamicSyscallResolutionAllowed !== false
     || preferred.postClaimCanonicalLookupAllowed !== false
     || preferred.postClaimNetworkDependencyAllowed !== false
+    || preferred.instanceIdentityBoundInClaimRequired !== true
+    || preferred.postClaimMetadataRequestAllowed !== false
     || preferred.nextAction !== 'MERGE_RECOVERY_AUTHORITY_SURFACE_THEN_FREEZE_EXACT_RECOVERY_TARGET') {
     fail('RECOVERY_SEQUENCE_DRIFT');
   }

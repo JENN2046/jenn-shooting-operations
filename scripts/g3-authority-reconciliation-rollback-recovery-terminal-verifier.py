@@ -13,7 +13,6 @@ import sqlite3
 import stat
 import subprocess
 import tempfile
-import urllib.request
 
 ACTIVE_DB = Path("/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data/shooting-operations.sqlite")
 EXCHANGED_OUT_SCHEMA11 = Path("/mnt/datadisk0/g3-schema11-cutover/G3-SCHEMA11-OP-20261006-R1/candidate.sqlite")
@@ -22,7 +21,6 @@ EXPECTED_VOLUME_MOUNTPOINT = Path("/mnt/datadisk0/docker/volumes/jenn-shooting-o
 CONTROL_ROOT = Path("/mnt/datadisk0/g3-authority-binding-reconciliation/rollback")
 EXPECTED_HOSTNAME = "VM-0-12-ubuntu"
 EXPECTED_INSTANCE_ID = "ins-mi85f3my"
-INSTANCE_ID_URL = "http://169.254.0.23/latest/meta-data/instance-id"
 EXPECTED_FILESYSTEM_SOURCE = "/dev/vdb"
 EXPECTED_FILESYSTEM_TYPE = "ext4"
 
@@ -261,6 +259,8 @@ def verify_authority_inputs(target_path: Path, packet_path: Path, approval_path:
         "postClaimDynamicSyscallResolutionAllowed": False,
         "postClaimCanonicalVerificationAllowed": False,
         "postClaimNetworkDependencyAllowed": False,
+        "instanceIdentityBoundInClaimRequired": True,
+        "postClaimMetadataRequestAllowed": False,
     }
     if (target.get("priorUnknownAttempt") != expected_prior_unknown
             or target.get("activeSchema11") != expected_active
@@ -350,18 +350,6 @@ def verify_authority_inputs(target_path: Path, packet_path: Path, approval_path:
     return target, packet, approval, computed
 
 
-def read_instance_id():
-    try:
-        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        with opener.open(INSTANCE_ID_URL, timeout=2) as response:
-            value = response.read(256).decode("utf-8").strip()
-    except Exception as exc:
-        raise RuntimeError("TERMINAL_INSTANCE_METADATA_UNAVAILABLE") from exc
-    if value != EXPECTED_INSTANCE_ID:
-        raise RuntimeError("TERMINAL_INSTANCE_ID_MISMATCH")
-    return value
-
-
 def docker_json(args):
     return subprocess.check_output(["docker", *args], text=True).strip()
 
@@ -371,7 +359,6 @@ def verify_physical_target():
         raise RuntimeError("TERMINAL_ROOT_EXECUTION_REQUIRED")
     if socket.gethostname() != EXPECTED_HOSTNAME:
         raise RuntimeError("TERMINAL_HOSTNAME_MISMATCH")
-    read_instance_id()
     mountpoint = docker_json(["volume", "inspect", VOLUME_NAME, "--format", "{{.Mountpoint}}"])
     if Path(mountpoint) != EXPECTED_VOLUME_MOUNTPOINT:
         raise RuntimeError("TERMINAL_VOLUME_MOUNTPOINT_MISMATCH")
@@ -675,12 +662,13 @@ def verify_attempt_record(target_digest, authority_head):
             raise RuntimeError("TERMINAL_ATTEMPT_RECORD_INVALID") from exc
         exact_keys(record, {
             "packetId", "operationId", "rollbackTargetDigest",
-            "authorityHeadAtAdmission", "claimedAt",
+            "authorityHeadAtAdmission", "instanceIdAtAdmission", "claimedAt",
         }, "TERMINAL_ATTEMPT_RECORD_KEYS_INVALID")
         if (record.get("packetId") != PACKET_ID
                 or record.get("operationId") != OPERATION_ID
                 or record.get("rollbackTargetDigest") != target_digest
                 or record.get("authorityHeadAtAdmission") != authority_head
+                or record.get("instanceIdAtAdmission") != EXPECTED_INSTANCE_ID
                 or not isinstance(record.get("claimedAt"), str)):
             raise RuntimeError("TERMINAL_ATTEMPT_RECORD_MISMATCH")
         try:
@@ -749,7 +737,7 @@ def observe_terminal_snapshot(attempt, active_fd, exchanged_fd, target):
         },
         "host": {
             "hostname": socket.gethostname(),
-            "instanceId": EXPECTED_INSTANCE_ID,
+            "instanceId": attempt["record"]["instanceIdAtAdmission"],
             "filesystemSource": EXPECTED_FILESYSTEM_SOURCE,
             "filesystemType": EXPECTED_FILESYSTEM_TYPE,
         },
@@ -969,6 +957,9 @@ def self_test_classification():
                 "packetId": PACKET_ID,
                 "operationId": OPERATION_ID,
                 "rollbackTargetDigest": "sha256:" + "a" * 64,
+                "authorityHeadAtAdmission": "a" * 40,
+                "instanceIdAtAdmission": EXPECTED_INSTANCE_ID,
+                "claimedAt": "2026-10-07T12:00:00Z",
             },
         },
         "containment": {

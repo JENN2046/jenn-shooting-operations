@@ -44,6 +44,8 @@ test('UNKNOWN rollback is sealed and recovery surface is exact but not executabl
   assert.equal(surface.canonicalHeadMustMatchApprovedTargetImmediatelyBeforeClaim, true);
   assert.equal(surface.postClaimCanonicalVerificationAllowed, false);
   assert.equal(surface.postClaimNetworkDependencyAllowed, false);
+  assert.equal(surface.instanceIdentityBoundInClaimRequired, true);
+  assert.equal(surface.postClaimMetadataRequestAllowed, false);
   assert.equal(surface.exactRecoveryTargetStatus, 'NOT_CREATED');
   assert.equal(surface.approvedPacketStatus, 'NOT_CREATED');
   assert.equal(surface.approvalRecordStatus, 'NOT_CREATED');
@@ -70,6 +72,7 @@ test('recovery target must bind the exact prior UNKNOWN attempt', () => {
   assert.match(executor, /PRIOR_UNKNOWN_ATTEMPT_SHA256 = "sha256:bfd40da5/);
   assert.match(executor, /PRIOR_UNKNOWN_TERMINAL_EVIDENCE_DIGEST = "sha256:7e04e137/);
   assert.match(executor, /"priorUnknownAttempt"/);
+  assert.match(executor, /"instanceIdAtAdmission"/);
   assert.match(executor, /verify_prior_unknown_attempt\(\)/);
   assert.match(executor, /ROLLBACK_PRIOR_UNKNOWN_ATTEMPT_MISMATCH/);
 });
@@ -96,7 +99,7 @@ test('durable claim is the admission boundary and post-claim path is network-fre
   const resolveExchange = body.indexOf('exchange_fn = resolve_rename_exchange()');
   const finalAuthority = body.indexOf('verify_canonical_authority_head(expected_authority_head)');
   const localRevalidation = body.indexOf('verify_post_canonical_local_admission_state()');
-  const claim = body.indexOf('attempt = claim_attempt(target_digest, expected_authority_head)');
+  const claim = body.indexOf('attempt = claim_attempt(');
   const exchange = body.indexOf('rename_exchange(exchange_fn, ACTIVE_DB, PRESERVED_SCHEMA10)');
 
   assert.ok(preflight >= 0 && resolveExchange > preflight && finalAuthority > resolveExchange && localRevalidation > finalAuthority && claim > localRevalidation && exchange > claim);
@@ -161,9 +164,13 @@ test('read-only recovery terminal verifier binds the admitted head and has no Gi
   assert.match(verifier, /"terminalVerifierSha256"/);
   assert.match(verifier, /verifier_sha256\(\)/);
   assert.match(verifier, /authorityHeadAtAdmission/);
+  assert.match(verifier, /instanceIdAtAdmission/);
   assert.match(verifier, /DURABLE_RECOVERY_CLAIM/);
   assert.equal(verifier.includes('git", "ls-remote'), false);
   assert.equal(verifier.includes('CANONICAL_REPO_URL'), false);
+  assert.equal(verifier.includes('INSTANCE_ID_URL'), false);
+  assert.equal(verifier.includes('urllib.request'), false);
+  assert.equal(verifier.includes('read_instance_id('), false);
 });
 
 test('recovery terminal verifier public self-tests pass without production access', () => {
