@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "targetId": "G3-AUTH-RECON-ROLLBACK-TARGET-20261007-R1",
+  "status": "FROZEN_AWAITING_EXPLICIT_HUMAN_APPROVAL",
+  "rollbackTarget": {
+    "canonicalBranch": "codex/v2-1-architecture-freeze",
+    "authorityHead": "50fe31cff4ab72bfaabaa0e63927a08bde681111",
+    "actionId": "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_TO_10",
+    "operationId": "G3-AUTH-RECON-ROLLBACK-20261007-R1",
+    "executorSha256": "sha256:b510e978e3b3e2cc3f10a008d23921a2a44eecd0c9c8496c871eab2a500c10fd",
+    "activeSchema11": {
+      "path": "/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data/shooting-operations.sqlite",
+      "sha256": "sha256:0eae48b85f362cf1064f92e14511865fe7fd68dbc13a85d4c6efd6e656e736d9",
+      "size": 540672,
+      "device": 64784,
+      "inode": 2229903,
+      "mode": "0600",
+      "uid": 1000,
+      "gid": 1000,
+      "schemaVersion": 11,
+      "migration11Name": "business_calendar_and_reschedule",
+      "migration11Checksum": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8"
+    },
+    "preservedSchema10": {
+      "path": "/mnt/datadisk0/g3-schema11-cutover/G3-SCHEMA11-OP-20261006-R1/candidate.sqlite",
+      "sha256": "sha256:5d65282b197350c2d6175fef2ccfa641c40908ecd9c053e296182f65e7bfede7",
+      "size": 512000,
+      "device": 64784,
+      "inode": 1835048,
+      "mode": "0644",
+      "uid": 1000,
+      "gid": 1000,
+      "schemaVersion": 10,
+      "migration11Count": 0
+    },
+    "containment": {
+      "productionServiceContainerPresent": false,
+      "openDatabaseFileUsers": 0,
+      "fuserDatabasePids": 0,
+      "walPresent": false,
+      "shmPresent": false,
+      "journalPresent": false,
+      "freshLiveReadOnlyVerificationRequiredImmediatelyBeforeExecution": true,
+      "repositoryEvidenceMaySubstituteForLiveVerification": false
+    },
+    "execution": {
+      "entrypointId": "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_TO_10",
+      "syscall": "renameat2",
+      "flag": "RENAME_EXCHANGE",
+      "sameFilesystemRequired": true,
+      "durableOneShotRequired": true,
+      "replayIdentity": "operationId+rollbackTargetDigest",
+      "automaticRetryAllowed": false,
+      "writerReadmissionAllowed": false,
+      "productionServiceStartAllowed": false,
+      "independentTerminalVerificationRequired": true,
+      "canonicalHeadMustRemainUnchangedThroughExecution": true,
+      "freshCanonicalHeadVerificationRequiredImmediatelyBeforeExecution": true
+    }
+  },
+  "rollbackTargetDigest": "sha256:b71d4853f47c8f2404b331c8a9e810747ba211a867353607819ee70ff15bf509",
+  "replay": {
+    "operationId": "G3-AUTH-RECON-ROLLBACK-20261007-R1",
+    "identity": "operationId+rollbackTargetDigest",
+    "packetIdPartitionsReplayIdentity": false,
+    "automaticRetryAllowed": false
+  }
+}

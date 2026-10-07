@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "approvalId": "G3_AUTH_RECON_ROLLBACK_APPROVAL_20261007_R1",
+  "approvalSource": "EXPLICIT_HUMAN_CHAT_AUTHORIZATION",
+  "approvalRef": "CHAT-2026-10-07-G3-AUTH-RECON-ROLLBACK-B71D4853",
+  "approvedActionId": "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_TO_10",
+  "approvedRollbackTargetDigest": "sha256:b71d4853f47c8f2404b331c8a9e810747ba211a867353607819ee70ff15bf509",
+  "authorizationReceivedBeforeExecution": true,
+  "rollbackAuthorized": true,
+  "writerReadmissionAuthorized": false,
+  "productionServiceStartAuthorized": false,
+  "signatureAlgorithm": "Ed25519",
+  "signingKeyId": "sha256:0d9c964a35c05842b5aafbe261fb5e020427ad5c635357e6955201da56100bae",
+  "approvalEvidenceDigest": "sha256:243c64e100502f3d60ac9bafe466c8b4724dc4be546ae0e5697ce9e34a241dae",
+  "signatureBase64": "V5j+tio9ZBBjDi766BPYUIO+mXa7TQ0/Lswf/gWmzglUaslGDncDVtOpuzmOWhz63THmX9/r18KoJCz2Sn2ZDQ=="
+}
