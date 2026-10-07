@@ -451,21 +451,30 @@ def verify_no_running_volume_users():
         raise RuntimeError("TERMINAL_RUNNING_VOLUME_USERS:" + ",".join(users))
 
 
-def verify_no_open_db_users():
+def verify_no_open_db_users(allowed_pids=None):
     if shutil.which("lsof") is None or shutil.which("fuser") is None:
         raise RuntimeError("TERMINAL_OPEN_USER_VERIFIER_UNAVAILABLE")
+    allowed = set(allowed_pids or ())
     for path in (ACTIVE_DB, EXCHANGED_OUT_SCHEMA11):
-        lsof = subprocess.run(["lsof", str(path)], text=True, capture_output=True)
+        lsof = subprocess.run(["lsof", "-t", "--", str(path)], text=True, capture_output=True)
         if lsof.returncode not in (0, 1):
             raise RuntimeError("TERMINAL_LSOF_FAILED")
-        if lsof.returncode == 0 and lsof.stdout.strip():
+        lsof_pids = {int(value) for value in lsof.stdout.split() if value.isdigit()}
+        if lsof_pids - allowed:
             raise RuntimeError("TERMINAL_OPEN_DATABASE_USERS")
+
         fuser = subprocess.run(["fuser", str(path)], text=True, capture_output=True)
         if fuser.returncode not in (0, 1):
             raise RuntimeError("TERMINAL_FUSER_FAILED")
-        if fuser.returncode == 0 and (fuser.stdout.strip() or fuser.stderr.strip()):
+        # procps fuser emits the PID list on stdout and filename labels on
+        # stderr. Parse stdout only: our database paths contain numeric date
+        # components that must never be mistaken for PIDs.
+        fuser_pids = {
+            int(value) for value in re.findall(r"(?<![A-Za-z0-9_])(\d+)(?![A-Za-z0-9_])",
+                                               fuser.stdout)
+        }
+        if fuser_pids - allowed:
             raise RuntimeError("TERMINAL_FUSER_DATABASE_USERS")
-
 
 def verify_no_sidecars(path):
     for suffix in ("-wal", "-shm", "-journal"):
@@ -473,13 +482,44 @@ def verify_no_sidecars(path):
             raise RuntimeError("TERMINAL_SQLITE_SIDECAR_PRESENT")
 
 
-def file_identity(path):
-    metadata = path.lstat()
+def open_pinned_regular_file(path, code):
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        raise RuntimeError(code) from exc
+    try:
+        metadata = os.fstat(fd)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            raise RuntimeError(code)
+        return fd
+    except Exception:
+        os.close(fd)
+        raise
+
+
+def sha256_fd(fd):
+    digest = hashlib.sha256()
+    dup = os.dup(fd)
+    try:
+        os.lseek(dup, 0, os.SEEK_SET)
+        while True:
+            chunk = os.read(dup, 1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    finally:
+        os.close(dup)
+    return "sha256:" + digest.hexdigest()
+
+
+def file_identity_fd(fd, path):
+    metadata = os.fstat(fd)
     if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
         raise RuntimeError("TERMINAL_FILE_IDENTITY_INVALID")
     return {
         "path": str(path),
-        "sha256": sha256_file(path),
+        "sha256": sha256_fd(fd),
         "size": metadata.st_size,
         "device": metadata.st_dev,
         "inode": metadata.st_ino,
@@ -489,8 +529,9 @@ def file_identity(path):
     }
 
 
-def inspect_db(path):
-    con = sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True)
+def inspect_db_fd(fd):
+    proc_path = f"/proc/self/fd/{fd}"
+    con = sqlite3.connect(f"file:{proc_path}?mode=ro&immutable=1", uri=True)
     try:
         rows = con.execute("SELECT version,name,checksum FROM schema_migrations ORDER BY version").fetchall()
         integrity = con.execute("PRAGMA integrity_check").fetchall()
@@ -507,83 +548,159 @@ def inspect_db(path):
         }
     finally:
         con.close()
+
+
+def revalidate_pinned_path(path, fd, expected_identity):
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        current_fd = os.open(path, flags)
+    except OSError as exc:
+        raise RuntimeError("TERMINAL_SNAPSHOT_UNSTABLE") from exc
+    try:
+        pinned = os.fstat(fd)
+        current = os.fstat(current_fd)
+        if not stat.S_ISREG(current.st_mode) or current.st_nlink != 1:
+            raise RuntimeError("TERMINAL_SNAPSHOT_UNSTABLE")
+        if (current.st_dev, current.st_ino) != (pinned.st_dev, pinned.st_ino):
+            raise RuntimeError("TERMINAL_SNAPSHOT_UNSTABLE")
+        if file_identity_fd(fd, path) != expected_identity:
+            raise RuntimeError("TERMINAL_SNAPSHOT_UNSTABLE")
+        if sha256_fd(current_fd) != expected_identity["sha256"]:
+            raise RuntimeError("TERMINAL_SNAPSHOT_UNSTABLE")
+    finally:
+        os.close(current_fd)
+
+
+def inspect_db(path):
+    fd = open_pinned_regular_file(path, "TERMINAL_FILE_IDENTITY_INVALID")
+    try:
+        return inspect_db_fd(fd)
+    finally:
+        os.close(fd)
+
 def expected_attempt_path(target_digest):
     replay = hashlib.sha256(f"{OPERATION_ID}\n{target_digest}".encode("utf-8")).hexdigest()
     return CONTROL_ROOT / "attempts" / f"{replay}.json"
 
 
+def verify_root_controlled_directory(path):
+    metadata = path.lstat()
+    if not stat.S_ISDIR(metadata.st_mode) or path.is_symlink():
+        raise RuntimeError("TERMINAL_ATTEMPT_DIRECTORY_IDENTITY_INVALID")
+    if metadata.st_uid != 0 or stat.S_IMODE(metadata.st_mode) & 0o022:
+        raise RuntimeError("TERMINAL_ATTEMPT_DIRECTORY_NOT_ROOT_CONTROLLED")
+    return metadata
+
+
 def verify_attempt_record(target_digest):
     path = expected_attempt_path(target_digest)
-    if not path.exists():
-        raise RuntimeError("TERMINAL_ATTEMPT_NOT_FOUND")
-    for directory in (CONTROL_ROOT, CONTROL_ROOT / "attempts"):
-        metadata = directory.lstat()
-        if not stat.S_ISDIR(metadata.st_mode) or directory.is_symlink():
-            raise RuntimeError("TERMINAL_ATTEMPT_DIRECTORY_IDENTITY_INVALID")
-    metadata = path.lstat()
-    if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1       or stat.S_IMODE(metadata.st_mode) != 0o600:
-        raise RuntimeError("TERMINAL_ATTEMPT_RECORD_IDENTITY_INVALID")
-    record = load_json_file(path, "TERMINAL_ATTEMPT_RECORD_INVALID")
-    exact_keys(record, {
-        "packetId", "operationId", "rollbackTargetDigest",
-    }, "TERMINAL_ATTEMPT_RECORD_KEYS_INVALID")
-    expected = {
-        "packetId": PACKET_ID,
-        "operationId": OPERATION_ID,
-        "rollbackTargetDigest": target_digest,
-    }
-    if record != expected:
-        raise RuntimeError("TERMINAL_ATTEMPT_RECORD_MISMATCH")
-    return {
-        "path": str(path),
-        "sha256": sha256_file(path),
-        "size": metadata.st_size,
-        "mode": "0600",
-        "record": record,
-    }
+    chain = [
+        Path("/mnt/datadisk0"),
+        CONTROL_ROOT.parent,
+        CONTROL_ROOT,
+        CONTROL_ROOT / "attempts",
+    ]
+    for directory in chain:
+        verify_root_controlled_directory(directory)
 
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags)
+    except FileNotFoundError as exc:
+        raise RuntimeError("TERMINAL_ATTEMPT_NOT_FOUND") from exc
+    except OSError as exc:
+        raise RuntimeError("TERMINAL_ATTEMPT_RECORD_IDENTITY_INVALID") from exc
+    try:
+        metadata = os.fstat(fd)
+        if (not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_nlink != 1
+                or metadata.st_uid != 0
+                or stat.S_IMODE(metadata.st_mode) != 0o600):
+            raise RuntimeError("TERMINAL_ATTEMPT_RECORD_IDENTITY_INVALID")
+        chunks = []
+        while True:
+            chunk = os.read(fd, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        raw = b"".join(chunks)
+        try:
+            record = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("TERMINAL_ATTEMPT_RECORD_INVALID") from exc
+        exact_keys(record, {
+            "packetId", "operationId", "rollbackTargetDigest",
+        }, "TERMINAL_ATTEMPT_RECORD_KEYS_INVALID")
+        expected = {
+            "packetId": PACKET_ID,
+            "operationId": OPERATION_ID,
+            "rollbackTargetDigest": target_digest,
+        }
+        if record != expected:
+            raise RuntimeError("TERMINAL_ATTEMPT_RECORD_MISMATCH")
+        return {
+            "path": str(path),
+            "sha256": "sha256:" + hashlib.sha256(raw).hexdigest(),
+            "size": metadata.st_size,
+            "mode": "0600",
+            "uid": metadata.st_uid,
+            "gid": metadata.st_gid,
+            "record": record,
+        }
+    finally:
+        os.close(fd)
 
-def observe_terminal_snapshot(attempt):
-    canonical_head = read_current_canonical_head()
-    if canonical_head != EXPECTED_AUTHORITY_HEAD:
-        raise RuntimeError("TERMINAL_CANONICAL_AUTHORITY_HEAD_MISMATCH")
-    verify_physical_target()
+def verify_terminal_containment(allowed_pids):
     verify_production_service_absent()
     verify_no_sidecars(ACTIVE_DB)
     verify_no_sidecars(EXCHANGED_OUT_SCHEMA11)
     verify_no_running_volume_users()
-    verify_no_open_db_users()
+    verify_no_open_db_users(allowed_pids=allowed_pids)
 
-    active = file_identity(ACTIVE_DB)
-    exchanged = file_identity(EXCHANGED_OUT_SCHEMA11)
+
+def observe_terminal_snapshot(attempt, active_fd, exchanged_fd):
+    canonical_head = read_current_canonical_head()
+    if canonical_head != EXPECTED_AUTHORITY_HEAD:
+        raise RuntimeError("TERMINAL_CANONICAL_AUTHORITY_HEAD_MISMATCH")
+    verify_physical_target()
+
+    allowed_pids = {os.getpid()}
+    verify_terminal_containment(allowed_pids)
+
+    active = file_identity_fd(active_fd, ACTIVE_DB)
+    exchanged = file_identity_fd(exchanged_fd, EXCHANGED_OUT_SCHEMA11)
     if active["device"] != exchanged["device"]:
         raise RuntimeError("TERMINAL_NOT_SAME_FILESYSTEM")
-    active_db = inspect_db(ACTIVE_DB)
-    exchanged_db = inspect_db(EXCHANGED_OUT_SCHEMA11)
+    active_db = inspect_db_fd(active_fd)
+    exchanged_db = inspect_db_fd(exchanged_fd)
 
-    # Re-sample after the slow SQLite and container checks. A terminal
-    # classification is valid only when the exact bytes and schema facts are
-    # stable across independent observations.
-    verify_no_sidecars(ACTIVE_DB)
-    verify_no_sidecars(EXCHANGED_OUT_SCHEMA11)
-    verify_no_running_volume_users()
-    verify_no_open_db_users()
-    active_second = file_identity(ACTIVE_DB)
-    exchanged_second = file_identity(EXCHANGED_OUT_SCHEMA11)
-    active_db_second = inspect_db(ACTIVE_DB)
-    exchanged_db_second = inspect_db(EXCHANGED_OUT_SCHEMA11)
-    if active_second != active or exchanged_second != exchanged       or active_db_second != active_db or exchanged_db_second != exchanged_db:
+    # Independent second sample, still through the pinned descriptors.
+    verify_terminal_containment(allowed_pids)
+    revalidate_pinned_path(ACTIVE_DB, active_fd, active)
+    revalidate_pinned_path(EXCHANGED_OUT_SCHEMA11, exchanged_fd, exchanged)
+    active_second = file_identity_fd(active_fd, ACTIVE_DB)
+    exchanged_second = file_identity_fd(exchanged_fd, EXCHANGED_OUT_SCHEMA11)
+    active_db_second = inspect_db_fd(active_fd)
+    exchanged_db_second = inspect_db_fd(exchanged_fd)
+    if (active_second != active or exchanged_second != exchanged
+            or active_db_second != active_db or exchanged_db_second != exchanged_db):
         raise RuntimeError("TERMINAL_SNAPSHOT_UNSTABLE")
 
+    # The remote authority lookup is intentionally followed by one last
+    # containment/path/hash validation so its network latency cannot create a
+    # success-classification window.
     final_authority_head = read_current_canonical_head()
     if final_authority_head != EXPECTED_AUTHORITY_HEAD:
         raise RuntimeError("TERMINAL_CANONICAL_AUTHORITY_HEAD_MISMATCH")
+    verify_terminal_containment(allowed_pids)
+    revalidate_pinned_path(ACTIVE_DB, active_fd, active)
+    revalidate_pinned_path(EXCHANGED_OUT_SCHEMA11, exchanged_fd, exchanged)
 
     snapshot = {
         "stableAcrossIndependentSamples": True,
         "canonicalAuthority": {
             "branch": CANONICAL_BRANCH,
-            "head": canonical_head,
+            "head": final_authority_head,
         },
         "host": {
             "hostname": socket.gethostname(),
@@ -619,7 +736,6 @@ def observe_terminal_snapshot(attempt):
         },
     }
     return snapshot
-
 
 def rolled_back_snapshot_matches(snapshot):
     active = snapshot["activeDatabase"]
@@ -728,23 +844,42 @@ def verify(target_record, approved_packet, approval_record, executor):
     )
     target_digest = rollback_target_digest(target)
     attempt = verify_attempt_record(target_digest)
+
+    active_fd = open_pinned_regular_file(
+        ACTIVE_DB, "TERMINAL_ACTIVE_DATABASE_PIN_FAILED",
+    )
     try:
-        snapshot = observe_terminal_snapshot(attempt)
-    except Exception as exc:
-        return {
-            "status": "G3_AUTH_RECON_ROLLBACK_TERMINAL_EVIDENCE_UNAVAILABLE",
-            "outcome": "UNKNOWN",
-            "receiptGenerated": False,
-            "reconciliationRequired": True,
-            "freshReadmissionEvidenceRequired": True,
-            "automaticRetryAllowed": False,
-            "writerReadmissionAuthorized": False,
-            "productionServiceStartAuthorized": False,
-            "errorClass": type(exc).__name__,
-            "error": str(exc),
-        }
-    classified_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    return build_terminal_result(snapshot, classified_at)
+        exchanged_fd = open_pinned_regular_file(
+            EXCHANGED_OUT_SCHEMA11, "TERMINAL_EXCHANGED_DATABASE_PIN_FAILED",
+        )
+    except Exception:
+        os.close(active_fd)
+        raise
+
+    try:
+        try:
+            snapshot = observe_terminal_snapshot(attempt, active_fd, exchanged_fd)
+        except Exception as exc:
+            return {
+                "status": "G3_AUTH_RECON_ROLLBACK_TERMINAL_EVIDENCE_UNAVAILABLE",
+                "outcome": "UNKNOWN",
+                "receiptGenerated": False,
+                "reconciliationRequired": True,
+                "freshReadmissionEvidenceRequired": True,
+                "automaticRetryAllowed": False,
+                "writerReadmissionAuthorized": False,
+                "productionServiceStartAuthorized": False,
+                "errorClass": type(exc).__name__,
+                "error": str(exc),
+            }
+
+        # Keep both immutable evidence descriptors pinned until classification
+        # and receipt assembly are complete.
+        classified_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        return build_terminal_result(snapshot, classified_at)
+    finally:
+        os.close(exchanged_fd)
+        os.close(active_fd)
 
 
 def self_test_classification():

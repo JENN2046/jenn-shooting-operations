@@ -21,12 +21,16 @@
   },
   "verifier": {
     "path": "evidence/g3-authority-reconciliation-rollback-terminal-verifier-r1/g3-authority-reconciliation-rollback-terminal-verifier.py",
-    "sha256": "sha256:a663c339ef078539e041b3d86ea389246c90d4060ed99f4ad6cc1d33b70b2e08",
+    "sha256": "sha256:38fdfa8d2187ed7ad2ef8cebe84e53a4407bad7a7006365ccd3de5487e52baa6",
     "importsRollbackExecutor": false,
     "productionMutationCapability": false,
     "databaseOpenMode": "ro+immutable",
     "receiptWrittenByVerifier": false,
-    "receiptEmission": "stdout-only"
+    "receiptEmission": "stdout-only",
+    "pinnedDatabaseDescriptorsThroughClassification": true,
+    "postAuthorityContainmentRevalidationRequired": true,
+    "attemptLedgerRootControlledRequired": true,
+    "attemptRecordReadFromPinnedDescriptor": true
   },
   "terminalModel": {
     "attemptRequiredBeforeClassification": true,
@@ -57,7 +61,10 @@
     "canonicalAuthorityHeadMustMatch": true,
     "finalCanonicalAuthorityRecheckRequired": true,
     "stableAcrossIndependentSamplesRequired": true,
-    "exactAttemptLedgerRequired": true
+    "exactAttemptLedgerRequired": true,
+    "pinnedPathIdentityRevalidationRequired": true,
+    "postAuthorityContainmentRevalidationRequired": true,
+    "attemptLedgerRootOwnershipRequired": true
   },
   "receiptProfile": {
     "contractId": "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_V1",
