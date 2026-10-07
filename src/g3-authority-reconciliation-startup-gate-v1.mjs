@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const RECONCILIATION_RECORD_URL = new URL(
@@ -26,9 +26,41 @@ function loadFrozenReconciliationRecord() {
   return value;
 }
 
+function fileIdentity(path) {
+  try {
+    const realpath = realpathSync(resolve(path));
+    const metadata = statSync(realpath);
+    if (!metadata.isFile()) return null;
+    return Object.freeze({
+      realpath,
+      device: metadata.dev,
+      inode: metadata.ino,
+    });
+  } catch {
+    return null;
+  }
+}
+
+export function pathsReferToSameFile(left, right) {
+  const leftIdentity = fileIdentity(left);
+  const rightIdentity = fileIdentity(right);
+  if (!leftIdentity || !rightIdentity) return false;
+  return leftIdentity.realpath === rightIdentity.realpath
+    || (leftIdentity.device === rightIdentity.device
+      && leftIdentity.inode === rightIdentity.inode);
+}
+
 export function isFrozenProductionDatabasePath(databasePath) {
   if (typeof databasePath !== 'string' || databasePath.length === 0) return false;
-  return PRODUCTION_DATABASE_PATHS.has(resolve(databasePath));
+  const resolved = resolve(databasePath);
+  if (PRODUCTION_DATABASE_PATHS.has(resolved)) return true;
+
+  let realpath = null;
+  try { realpath = realpathSync(resolved); } catch {}
+  if (realpath && PRODUCTION_DATABASE_PATHS.has(realpath)) return true;
+
+  return [...PRODUCTION_DATABASE_PATHS]
+    .some(productionPath => pathsReferToSameFile(resolved, productionPath));
 }
 
 export function assertG3AuthorityReconciliationStartupAllowed({

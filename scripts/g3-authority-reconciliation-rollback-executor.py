@@ -596,6 +596,10 @@ def execute(packet_path, approval_path, target_record_path):
     claimed = True
     try:
         verify_active_and_preserved_state(expected_authority_head)
+        # Close the authority TOCTOU window created by the slower physical
+        # verification above. Canonical authority must still match on the
+        # final instruction immediately before the atomic exchange.
+        verify_canonical_authority_head(expected_authority_head)
         rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)
         exchanged = True
         fsync_dir(ACTIVE_DB.parent)

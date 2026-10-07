@@ -10,6 +10,7 @@ import {
   createWriteAdmissionControl,
   writeAdmissionFailure,
 } from './write-admission-v1.mjs';
+import { assertG3AuthorityReconciliationStartupAllowed } from './g3-authority-reconciliation-startup-gate-v1.mjs';
 
 function isoNow(clock) {
   return clock().toISOString();
@@ -302,6 +303,9 @@ export class ScheduleStore {
     writeAdmissionMode = 'enabled',
     writeAdmissionControl,
   }) {
+    if (!readOnly) {
+      assertG3AuthorityReconciliationStartupAllowed({ databasePath: filename });
+    }
     const cleanupMode = readOnly ? 'inherit' : normalizeOrphanCleanupMode(orphanCleanupMode);
     const admissionControl = writeAdmissionControl
       ?? createWriteAdmissionControl({ initialMode: writeAdmissionMode });

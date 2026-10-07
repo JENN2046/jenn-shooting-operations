@@ -83,12 +83,19 @@
     "directProductionServiceStartupBlockedWhileReconciliationRequired": true,
     "composeWriteAdmissionDefault": "disabled",
     "composeOrphanCleanupDefault": "disabled",
-    "callerMayOverrideReconciliationBlock": false
+    "callerMayOverrideReconciliationBlock": false,
+    "writableScheduleStoreProductionOpenBlocked": true,
+    "symlinkAndHardlinkAliasesBlocked": true,
+    "productionDatabaseIdentityChecks": [
+      "resolvedPath",
+      "realpath",
+      "device+inode"
+    ]
   },
   "rollbackAuthoritySurface": {
     "status": "DEFINED_NOT_EXECUTABLE",
     "executorPath": "scripts/g3-authority-reconciliation-rollback-executor.py",
-    "executorSha256": "sha256:50f1f538d0143510ac4ff1f178da8dadb78fd58025d7649461e57fa5e911df26",
+    "executorSha256": "sha256:b510e978e3b3e2cc3f10a008d23921a2a44eecd0c9c8496c871eab2a500c10fd",
     "actionId": "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_TO_10",
     "operationId": "G3-AUTH-RECON-ROLLBACK-20261007-R1",
     "packetId": "G3-AUTH-RECON-ROLLBACK-PACKET-20261007-R1",

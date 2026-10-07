@@ -17,7 +17,7 @@ const EXPECTED = Object.freeze({
   prestateDb: 'sha256:5d65282b197350c2d6175fef2ccfa641c40908ecd9c053e296182f65e7bfede7',
   attempt: 'sha256:b398b83229bdece61032e7fa64f03d01594a3aa59abcc96954036871a8c4ed37',
   migration11: 'sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8',
-  rollbackExecutor: 'sha256:50f1f538d0143510ac4ff1f178da8dadb78fd58025d7649461e57fa5e911df26',
+  rollbackExecutor: 'sha256:b510e978e3b3e2cc3f10a008d23921a2a44eecd0c9c8496c871eab2a500c10fd',
   rollbackOperation: 'G3-AUTH-RECON-ROLLBACK-20261007-R1',
   rollbackPacket: 'G3-AUTH-RECON-ROLLBACK-PACKET-20261007-R1',
 });
@@ -25,7 +25,7 @@ const EXPECTED = Object.freeze({
 try {
   const [
     record, packet, terminal, receipt, attemptBytes,
-    rollbackExecutorBytes, startupGateBytes, serverBytes, composeBytes, dockerfileBytes,
+    rollbackExecutorBytes, startupGateBytes, serverBytes, storeBytes, composeBytes, dockerfileBytes,
   ] = await Promise.all([
     readJson('docs/operations/g3-authority-binding-reconciliation.r1.json'),
     readJson('docs/operations/g3-schema11-cutover-approved-packet.r2.json'),
@@ -35,6 +35,7 @@ try {
     readFile(new URL('scripts/g3-authority-reconciliation-rollback-executor.py', ROOT)),
     readFile(new URL('src/g3-authority-reconciliation-startup-gate-v1.mjs', ROOT)),
     readFile(new URL('src/server.mjs', ROOT)),
+    readFile(new URL('src/store.mjs', ROOT)),
     readFile(new URL('compose.yaml', ROOT)),
     readFile(new URL('Dockerfile', ROOT)),
   ]);
@@ -42,6 +43,7 @@ try {
   const rollbackExecutorText = rollbackExecutorBytes.toString('utf8');
   const startupGateText = startupGateBytes.toString('utf8');
   const serverText = serverBytes.toString('utf8');
+  const storeText = storeBytes.toString('utf8');
   const composeText = composeBytes.toString('utf8');
   const dockerfileText = dockerfileBytes.toString('utf8');
 
@@ -122,16 +124,43 @@ try {
     || startup.composeWriteAdmissionDefault !== 'disabled'
     || startup.composeOrphanCleanupDefault !== 'disabled'
     || startup.callerMayOverrideReconciliationBlock !== false
+    || startup.writableScheduleStoreProductionOpenBlocked !== true
+    || startup.symlinkAndHardlinkAliasesBlocked !== true
+    || JSON.stringify(startup.productionDatabaseIdentityChecks)
+      !== JSON.stringify(['resolvedPath', 'realpath', 'device+inode'])
     || !startup.productionDatabasePaths.includes('/app/data/shooting-operations.sqlite')
     || !startup.productionDatabasePaths.includes(record.physicalState.activeDatabasePath)
     || !startupGateText.includes('G3_AUTHORITY_RECONCILIATION_STARTUP_BLOCKED')
     || !startupGateText.includes("record.status === 'RECONCILIATION_REQUIRED'")
+    || !startupGateText.includes('realpathSync')
+    || !startupGateText.includes('metadata.dev')
+    || !startupGateText.includes('metadata.ino')
     || serverText.split('assertG3AuthorityReconciliationStartupAllowed({ databasePath });').length - 1 < 2
+    || !storeText.includes('assertG3AuthorityReconciliationStartupAllowed({ databasePath: filename });')
     || !composeText.includes('WRITE_ADMISSION_MODE: \${WRITE_ADMISSION_MODE:-disabled}')
     || !composeText.includes('ORPHAN_CLEANUP_MODE: \${ORPHAN_CLEANUP_MODE:-disabled}')
     || !dockerfileText.includes('g3-authority-binding-reconciliation.r1.json')) {
     fail('STARTUP_GATE_DRIFT');
   }
+
+  const rollbackExecuteText = rollbackExecutorText.slice(
+    rollbackExecutorText.indexOf('def execute('),
+  );
+  const firstStateVerify = rollbackExecuteText.indexOf(
+    'verify_active_and_preserved_state(expected_authority_head)',
+  );
+  const attemptClaim = rollbackExecuteText.indexOf('attempt = claim_attempt(target_digest)');
+  const secondStateVerify = rollbackExecuteText.indexOf(
+    'verify_active_and_preserved_state(expected_authority_head)',
+    firstStateVerify + 1,
+  );
+  const finalAuthorityVerify = rollbackExecuteText.indexOf(
+    'verify_canonical_authority_head(expected_authority_head)',
+    secondStateVerify + 1,
+  );
+  const rollbackExchange = rollbackExecuteText.indexOf(
+    'rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)',
+  );
 
   const surface = record.rollbackAuthoritySurface;
   if (surface.status !== 'DEFINED_NOT_EXECUTABLE'
@@ -161,9 +190,12 @@ try {
     || !rollbackExecutorText.includes('ROLLBACK_CANONICAL_AUTHORITY_HEAD_MISMATCH')
     || !rollbackExecutorText.includes('OPERATION_ID = "' + EXPECTED.rollbackOperation + '"')
     || !rollbackExecutorText.includes('PACKET_ID = "' + EXPECTED.rollbackPacket + '"')
-    || !rollbackExecutorText.includes('claim_attempt(target_digest)')
-    || rollbackExecutorText.split('verify_active_and_preserved_state(expected_authority_head)').length - 1 < 2
-    || !rollbackExecutorText.includes('rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)')
+    || firstStateVerify < 0
+    || attemptClaim <= firstStateVerify
+    || secondStateVerify <= attemptClaim
+    || finalAuthorityVerify <= secondStateVerify
+    || rollbackExchange <= finalAuthorityVerify
+    || rollbackExecutorText.split('rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)').length - 1 !== 1
     || !rollbackExecutorText.includes('--target-record')
     || rollbackExecutorText.includes('--rollback-target-digest')) {
     fail('ROLLBACK_AUTHORITY_SURFACE_DRIFT');

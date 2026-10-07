@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { link, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
   assertG3AuthorityReconciliationStartupAllowed,
   isFrozenProductionDatabasePath,
+  pathsReferToSameFile,
 } from '../src/g3-authority-reconciliation-startup-gate-v1.mjs';
 import { createOperationsServer } from '../src/server.mjs';
+import { ScheduleStore } from '../src/store.mjs';
 
 const record = JSON.parse(await readFile(new URL(
   '../docs/operations/g3-authority-binding-reconciliation.r1.json', import.meta.url), 'utf8'));
@@ -25,6 +29,26 @@ test('reconciliation blocks both frozen production database paths', () => {
   }
 });
 
+test('reconciliation startup gate normalizes production path aliases', () => {
+  assert.equal(isFrozenProductionDatabasePath('/app/data/../data/shooting-operations.sqlite'), true);
+});
+
+test('same-file identity catches symlink and hardlink aliases', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'g3-startup-alias-'));
+  try {
+    const target = join(root, 'target.sqlite');
+    const symlinkAlias = join(root, 'symlink.sqlite');
+    const hardlinkAlias = join(root, 'hardlink.sqlite');
+    await writeFile(target, 'sqlite-placeholder');
+    await symlink(target, symlinkAlias);
+    await link(target, hardlinkAlias);
+    assert.equal(pathsReferToSameFile(target, symlinkAlias), true);
+    assert.equal(pathsReferToSameFile(target, hardlinkAlias), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('reconciliation startup gate does not block non-production database paths', () => {
   assert.equal(isFrozenProductionDatabasePath('/tmp/jso-test.sqlite'), false);
   assert.deepEqual(
@@ -33,6 +57,17 @@ test('reconciliation startup gate does not block non-production database paths',
       reconciliationRecord: record,
     }),
     { allowed: true, reason: 'NON_PRODUCTION_DATABASE_PATH' },
+  );
+});
+
+test('writable ScheduleStore cannot bypass reconciliation with the frozen production database', () => {
+  assert.throws(
+    () => new ScheduleStore({
+      filename: '/app/data/shooting-operations.sqlite',
+      writeAdmissionMode: 'enabled',
+      orphanCleanupMode: 'inherit',
+    }),
+    /G3_AUTHORITY_RECONCILIATION_STARTUP_BLOCKED/,
   );
 });
 

@@ -58,8 +58,16 @@ test('rollback executor requires signed exact target and has an independent one-
   const secondVerify = body.indexOf(
     'verify_active_and_preserved_state(expected_authority_head)', firstVerify + 1,
   );
+  const finalAuthorityVerify = body.indexOf(
+    'verify_canonical_authority_head(expected_authority_head)', secondVerify + 1,
+  );
   const exchange = body.indexOf('rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)');
-  assert.ok(firstVerify >= 0 && claim > firstVerify && secondVerify > claim && exchange > secondVerify);
+  assert.ok(firstVerify >= 0
+    && claim > firstVerify
+    && secondVerify > claim
+    && finalAuthorityVerify > secondVerify
+    && exchange > finalAuthorityVerify);
+  assert.equal(body.split('rename_exchange(ACTIVE_DB, PRESERVED_SCHEMA10)').length - 1, 1);
   assert.match(body, /automaticRetryAllowed": False/);
   assert.match(body, /writerReadmissionAuthorized": False/);
 });
