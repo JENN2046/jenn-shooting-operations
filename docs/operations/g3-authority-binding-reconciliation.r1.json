@@ -59,29 +59,6 @@
     "normalWriterReadmissionAllowed": false,
     "productionServiceStartAllowed": false
   },
-  "preferredResolution": {
-    "actionId": "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_TO_10",
-    "strategy": "ROLLBACK_TO_EXACT_SCHEMA10_THEN_REEXECUTE_UNDER_POST_MERGE_FROZEN_AUTHORITY",
-    "productionMutationRequired": true,
-    "explicitHumanAuthorizationRequired": true,
-    "rollbackTargetSha256": "sha256:5d65282b197350c2d6175fef2ccfa641c40908ecd9c053e296182f65e7bfede7",
-    "oldReplayIdentityReusable": false,
-    "newOperationIdRequired": true,
-    "newAuthorityTargetDigestRequired": true,
-    "newPreExecutionApprovalRequired": true,
-    "writerReadmissionAfterRollbackAllowed": false,
-    "freshLiveReadOnlyVerificationImmediatelyBeforeRollbackRequired": true,
-    "repositoryEvidenceMaySubstituteForLiveVerification": false
-  },
-  "prohibitions": [
-    "NO_RETROACTIVE_APPROVAL",
-    "NO_G4_ENTRY_BEFORE_RECONCILIATION",
-    "NO_NORMAL_WRITER_READMISSION",
-    "NO_PRODUCTION_SERVICE_START",
-    "NO_RETRY_OF_PRIOR_G3_ATTEMPT",
-    "NO_RECONCILIATION_MUTATION_FROM_REPOSITORY_EVIDENCE_ALONE",
-    "NO_ROLLBACK_WITHOUT_SEPARATE_EXPLICIT_AUTHORIZATION"
-  ],
   "evidenceTrust": {
     "repositoryTerminalArtifactsProvideIntegrity": true,
     "repositoryTerminalArtifactsProvideProductionProvenance": false,
@@ -96,5 +73,72 @@
     "latestLiveOpenDatabaseFileUsers": 0,
     "latestLiveFuserDatabasePids": 0,
     "cryptographicProductionAttestationPresent": false
-  }
+  },
+  "runtimeStartupGate": {
+    "status": "ENFORCED_BY_AUTHORITY_SURFACE",
+    "productionDatabasePaths": [
+      "/app/data/shooting-operations.sqlite",
+      "/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data/shooting-operations.sqlite"
+    ],
+    "directProductionServiceStartupBlockedWhileReconciliationRequired": true,
+    "composeWriteAdmissionDefault": "disabled",
+    "composeOrphanCleanupDefault": "disabled",
+    "callerMayOverrideReconciliationBlock": false
+  },
+  "rollbackAuthoritySurface": {
+    "status": "DEFINED_NOT_EXECUTABLE",
+    "executorPath": "scripts/g3-authority-reconciliation-rollback-executor.py",
+    "executorSha256": "sha256:50f1f538d0143510ac4ff1f178da8dadb78fd58025d7649461e57fa5e911df26",
+    "actionId": "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_TO_10",
+    "operationId": "G3-AUTH-RECON-ROLLBACK-20261007-R1",
+    "packetId": "G3-AUTH-RECON-ROLLBACK-PACKET-20261007-R1",
+    "contractId": "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_V1",
+    "controlRoot": "/mnt/datadisk0/g3-authority-binding-reconciliation/rollback",
+    "replayIdentity": "operationId+rollbackTargetDigest",
+    "durableOneShotRequired": true,
+    "automaticRetryAllowed": false,
+    "exactRollbackTargetStatus": "NOT_CREATED",
+    "approvedPacketStatus": "NOT_CREATED",
+    "approvalRecordStatus": "NOT_CREATED",
+    "rollbackAuthorized": false,
+    "authorityHeadBinding": "FREEZE_POST_MERGE_AUTHORITY_HEAD_IN_SEPARATE_EXACT_TARGET",
+    "approvalRequestAllowedBeforeExactTargetFreeze": false,
+    "packetIdPartitionsReplayIdentity": false,
+    "targetFreezeMustBindPostMergeCanonicalHead": true,
+    "canonicalHeadMustRemainUnchangedThroughExecution": true,
+    "freshCanonicalHeadVerificationImmediatelyBeforeExecutionRequired": true
+  },
+  "preferredResolution": {
+    "actionId": "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_TO_10",
+    "strategy": "ROLLBACK_TO_EXACT_SCHEMA10_THEN_REEXECUTE_UNDER_POST_MERGE_FROZEN_AUTHORITY",
+    "productionMutationRequired": true,
+    "explicitHumanAuthorizationRequired": true,
+    "rollbackTargetSha256": "sha256:5d65282b197350c2d6175fef2ccfa641c40908ecd9c053e296182f65e7bfede7",
+    "oldReplayIdentityReusable": false,
+    "newOperationIdRequired": true,
+    "newAuthorityTargetDigestRequired": true,
+    "newPreExecutionApprovalRequired": true,
+    "writerReadmissionAfterRollbackAllowed": false,
+    "freshLiveReadOnlyVerificationImmediatelyBeforeRollbackRequired": true,
+    "repositoryEvidenceMaySubstituteForLiveVerification": false,
+    "authoritySurfaceMustMergeBeforeExactTargetFreeze": true,
+    "exactRollbackTargetMustFreezeBeforeApprovalRequest": true,
+    "exactRollbackTargetStatus": "NOT_CREATED",
+    "rollbackApprovalRequestAllowed": false,
+    "nextAction": "MERGE_RECONCILIATION_AUTHORITY_SURFACE_THEN_FREEZE_EXACT_ROLLBACK_TARGET",
+    "approvalRequestRequiresExactRollbackTargetDigest": true,
+    "targetFreezeMustBindPostMergeCanonicalHead": true,
+    "canonicalHeadMustRemainUnchangedThroughExecution": true,
+    "freshCanonicalHeadVerificationImmediatelyBeforeRollbackRequired": true
+  },
+  "prohibitions": [
+    "NO_RETROACTIVE_APPROVAL",
+    "NO_G4_ENTRY_BEFORE_RECONCILIATION",
+    "NO_NORMAL_WRITER_READMISSION",
+    "NO_PRODUCTION_SERVICE_START",
+    "NO_RETRY_OF_PRIOR_G3_ATTEMPT",
+    "NO_RECONCILIATION_MUTATION_FROM_REPOSITORY_EVIDENCE_ALONE",
+    "NO_ROLLBACK_APPROVAL_BEFORE_EXACT_TARGET_FREEZE",
+    "NO_ROLLBACK_WITHOUT_SEPARATE_EXPLICIT_AUTHORIZATION"
+  ]
 }

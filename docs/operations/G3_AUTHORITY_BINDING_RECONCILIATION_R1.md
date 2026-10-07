@@ -105,19 +105,21 @@ The preferred clean repair is therefore:
 
 `G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_TO_10`
 
-1. obtain a separate explicit human authorization for the reconciliation rollback;
-2. revalidate that the active Schema11 hash is still exactly `0eae48...`;
-3. revalidate that the preserved Schema10 hash is still exactly `5d6528...`;
-4. require zero active DB users and no SQLite sidecars;
-5. perform one bounded same-filesystem atomic exchange to restore the exact Schema10 prestate;
-6. independently verify Schema10 / integrity / FK / exact hash;
-7. keep writers disabled;
-8. merge/freeze the complete re-execution authority surface first;
-9. generate a **new** G3 operation ID and authority target whose `authorityHead` is that post-merge frozen authority head;
-10. obtain a fresh exact human approval before the new attempt;
-11. re-execute 10→11 once and independently classify the terminal result.
+The rollback itself is **not yet requestable**. The authority surface must be frozen before any human approval:
 
-The prior replay identity and approval are never reused.
+1. merge this reconciliation authority-surface PR first, including the startup gate, exact rollback executor, executor digest, rollback action/operation/packet identities, and independent one-shot replay contract;
+2. from that merged canonical head, create the exact rollback target **without changing the authority surface**, binding that post-merge canonical `authorityHead`, the exact executor digest, active Schema11 identity, preserved Schema10 identity, containment requirements and replay identity;
+3. prohibit any rollback approval request until the exact rollback target digest exists; no action-ID-only or free-form approval is valid;
+4. after target freeze, require the canonical authority head to remain unchanged through approval and execution; any head drift invalidates the target and requires a fresh freeze and fresh approval;
+5. obtain a separate explicit human approval bound to that exact rollback-target digest;
+6. immediately before execution, perform fresh live read-only verification of both authority and production state: canonical head, active Schema11 hash, preserved Schema10 hash, zero active DB users, absent SQLite sidecars and stopped production service;
+7. durably claim the new rollback one-shot replay identity before the atomic exchange; packet IDs cannot partition replay identity and automatic retry is forbidden;
+8. perform one bounded same-filesystem `renameat2(RENAME_EXCHANGE)` to restore the exact Schema10 prestate;
+9. independently verify exact Schema10 restoration, integrity/FK, preserved exchanged-out Schema11 and continued writer containment;
+10. keep writers disabled and production service stopped;
+11. only after rollback terminal classification, freeze/merge a **new** G3 re-execution authority surface, generate a new operation/target, obtain a fresh exact pre-execution approval, and execute 10→11 once under that new authority.
+
+The prior G3 replay identity and approval are never reused. The rollback replay identity is also single-use and cannot be reused to toggle the files a second time.
 
 ## Current hard stop
 
@@ -128,8 +130,17 @@ NO G4
 NO writer readmission
 NO production service start
 NO automatic retry
+NO rollback approval before exact target freeze
 NO rollback
 ```
+
+Next action is **not** a production authorization request. It is:
+
+```text
+MERGE_RECONCILIATION_AUTHORITY_SURFACE_THEN_FREEZE_EXACT_ROLLBACK_TARGET
+```
+
+Only after that exact target exists, binds the post-merge canonical head, and passes fresh authority/production verification may an exact rollback approval be requested.
 
 The machine-readable authority for this record is:
 `docs/operations/g3-authority-binding-reconciliation.r1.json`.
