@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "reconciliationId": "G3_AUTHORITY_BINDING_RECONCILIATION_R1",
+  "status": "RECONCILIATION_REQUIRED",
+  "trigger": {
+    "source": "PR_50_CODEX_P1",
+    "code": "EXECUTION_AUTHORITY_HEAD_MISMATCH",
+    "approvedAuthorityHead": "a4199fdb14808ebb866943148a222b0d4300d66e",
+    "executionCanonicalHead": "b9dd595eb52bd09f7a8e2115a48ac401389f5b73",
+    "approvedAuthorityTargetDigest": "sha256:10ce21ebeb207afa556a48c215439077736af242cd312a49783b1136fe046ab5",
+    "authorityHeadsMatch": false
+  },
+  "execution": {
+    "operationId": "G3-SCHEMA11-OP-20261006-R1",
+    "packetId": "G3-SCHEMA11-CUTOVER-20261006-R1",
+    "attemptClaimedAt": "2026-10-06T21:03:07.102087Z",
+    "attemptRecordSha256": "sha256:b398b83229bdece61032e7fa64f03d01594a3aa59abcc96954036871a8c4ed37",
+    "automaticRetryAllowed": false
+  },
+  "physicalState": {
+    "outcome": "COMMITTED",
+    "activeDatabasePath": "/mnt/datadisk0/docker/volumes/jenn-shooting-operations_shooting_data/_data/shooting-operations.sqlite",
+    "activeSchemaVersion": 11,
+    "activeDatabaseSha256": "sha256:0eae48b85f362cf1064f92e14511865fe7fd68dbc13a85d4c6efd6e656e736d9",
+    "migration11Name": "business_calendar_and_reschedule",
+    "migration11Checksum": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8",
+    "integrityCheck": "ok",
+    "foreignKeyViolationCount": 0,
+    "walPresent": false,
+    "shmPresent": false,
+    "journalPresent": false,
+    "freshObservationAt": "2026-10-07T06:38:54Z",
+    "activeDatabaseUnchangedSinceAtomicExchange": true
+  },
+  "preservedPrestate": {
+    "path": "/mnt/datadisk0/g3-schema11-cutover/G3-SCHEMA11-OP-20261006-R1/candidate.sqlite",
+    "schemaVersion": 10,
+    "migration11Count": 0,
+    "sha256": "sha256:5d65282b197350c2d6175fef2ccfa641c40908ecd9c053e296182f65e7bfede7",
+    "device": 64784,
+    "inode": 1835048,
+    "integrityCheck": "ok",
+    "foreignKeyViolationCount": 0,
+    "exactRollbackSourceAvailable": true
+  },
+  "containment": {
+    "productionServiceRunning": false,
+    "normalWritesDisabled": true,
+    "openDatabaseFileUsers": 0,
+    "fuserDatabasePids": 0,
+    "authoritativeWriteCapabilityAbsent": true
+  },
+  "governance": {
+    "terminalPhysicalClassification": "COMMITTED",
+    "authorityAdmissionReconciliationRequired": true,
+    "retroactiveApprovalAllowed": false,
+    "g3GovernanceClosureAllowed": false,
+    "g4Allowed": false,
+    "normalWriterReadmissionAllowed": false,
+    "productionServiceStartAllowed": false
+  },
+  "preferredResolution": {
+    "actionId": "G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_TO_10",
+    "strategy": "ROLLBACK_TO_EXACT_SCHEMA10_THEN_REEXECUTE_UNDER_POST_MERGE_FROZEN_AUTHORITY",
+    "productionMutationRequired": true,
+    "explicitHumanAuthorizationRequired": true,
+    "rollbackTargetSha256": "sha256:5d65282b197350c2d6175fef2ccfa641c40908ecd9c053e296182f65e7bfede7",
+    "oldReplayIdentityReusable": false,
+    "newOperationIdRequired": true,
+    "newAuthorityTargetDigestRequired": true,
+    "newPreExecutionApprovalRequired": true,
+    "writerReadmissionAfterRollbackAllowed": false
+  },
+  "prohibitions": [
+    "NO_RETROACTIVE_APPROVAL",
+    "NO_G4_ENTRY_BEFORE_RECONCILIATION",
+    "NO_NORMAL_WRITER_READMISSION",
+    "NO_PRODUCTION_SERVICE_START",
+    "NO_RETRY_OF_PRIOR_G3_ATTEMPT",
+    "NO_ROLLBACK_WITHOUT_SEPARATE_EXPLICIT_AUTHORIZATION"
+  ]
+}
