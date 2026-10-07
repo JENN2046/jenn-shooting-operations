@@ -83,7 +83,22 @@ No normal-writer readmission is authorized by this terminal result.
 
 ## Machine-verified terminal digests
 
+The trusted semantic boundary reads two independent raw evidence artifacts rather
+than trusting the classification record itself:
+
 ```text
+production attempt file sha256 =
+sha256:b398b83229bdece61032e7fa64f03d01594a3aa59abcc96954036871a8c4ed37
+
+attemptEvidenceDigest =
+sha256:8596a29034f0a73b6949e709edb108b29ae3027af6ba83fd1ed44972315e9158
+
+production observation file sha256 =
+sha256:2269ce7552057b89d72c81f204e39b0d0be584b840f90be2df1ccdb58cb65d25
+
+productionObservationDigest =
+sha256:0ee2a96becab19de15c190d6d76465bc535d7c5c894b0d3de52cb71d9b2e6ef6
+
 approvalEvidenceDigest =
 sha256:21c4a02bf69fbe2ab8cd6e1cc178b87e74900f9bb547cf1dd69809433332aa4b
 
