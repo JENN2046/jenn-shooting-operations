@@ -33,6 +33,31 @@ test('reconciliation startup gate normalizes production path aliases', () => {
   assert.equal(isFrozenProductionDatabasePath('/app/data/../data/shooting-operations.sqlite'), true);
 });
 
+test('reconciliation startup gate blocks SQLite file URI aliases of production', () => {
+  for (const databasePath of [
+    'file:%2Fapp%2Fdata%2Fshooting-operations.sqlite',
+    'file:/app/data/shooting-operations.sqlite',
+    'file:///app/data/shooting-operations.sqlite',
+    'file://localhost/app/data/shooting-operations.sqlite',
+    'file:%2Fapp%2Fdata%2Fshooting-operations.sqlite?mode=rw&cache=private',
+    'file:/app/data/%73hooting-operations.sqlite#ignored',
+  ]) {
+    assert.equal(isFrozenProductionDatabasePath(databasePath), true, databasePath);
+    assert.throws(
+      () => assertG3AuthorityReconciliationStartupAllowed({
+        databasePath,
+        reconciliationRecord: record,
+      }),
+      /G3_AUTHORITY_RECONCILIATION_STARTUP_BLOCKED/,
+    );
+  }
+
+  assert.throws(
+    () => isFrozenProductionDatabasePath('file://evil/app/data/shooting-operations.sqlite'),
+    /G3_AUTHORITY_RECONCILIATION_DATABASE_URI_INVALID/,
+  );
+});
+
 test('same-file identity catches symlink and hardlink aliases', async () => {
   const root = await mkdtemp(join(tmpdir(), 'g3-startup-alias-'));
   try {
@@ -50,53 +75,73 @@ test('same-file identity catches symlink and hardlink aliases', async () => {
 });
 
 test('reconciliation startup gate does not block non-production database paths', () => {
-  assert.equal(isFrozenProductionDatabasePath('/tmp/jso-test.sqlite'), false);
-  assert.deepEqual(
-    assertG3AuthorityReconciliationStartupAllowed({
-      databasePath: '/tmp/jso-test.sqlite',
-      reconciliationRecord: record,
-    }),
-    { allowed: true, reason: 'NON_PRODUCTION_DATABASE_PATH' },
-  );
+  for (const databasePath of [
+    '/tmp/jso-test.sqlite',
+    'file:%2Ftmp%2Fjso-test.sqlite?mode=rw',
+  ]) {
+    assert.equal(isFrozenProductionDatabasePath(databasePath), false);
+    assert.deepEqual(
+      assertG3AuthorityReconciliationStartupAllowed({
+        databasePath,
+        reconciliationRecord: record,
+      }),
+      { allowed: true, reason: 'NON_PRODUCTION_DATABASE_PATH' },
+    );
+  }
 });
 
 test('writable ScheduleStore cannot bypass reconciliation with the frozen production database', () => {
-  assert.throws(
-    () => new ScheduleStore({
-      filename: '/app/data/shooting-operations.sqlite',
-      writeAdmissionMode: 'enabled',
-      orphanCleanupMode: 'inherit',
-    }),
-    /G3_AUTHORITY_RECONCILIATION_STARTUP_BLOCKED/,
-  );
+  for (const filename of [
+    '/app/data/shooting-operations.sqlite',
+    'file:%2Fapp%2Fdata%2Fshooting-operations.sqlite',
+  ]) {
+    assert.throws(
+      () => new ScheduleStore({
+        filename,
+        writeAdmissionMode: 'enabled',
+        orphanCleanupMode: 'inherit',
+      }),
+      /G3_AUTHORITY_RECONCILIATION_STARTUP_BLOCKED/,
+    );
+  }
 });
 
 test('server factory cannot bypass reconciliation with the frozen production database', () => {
-  assert.throws(
-    () => createOperationsServer({
-      databasePath: '/app/data/shooting-operations.sqlite',
-      writeAdmissionMode: 'enabled',
-      orphanCleanupMode: 'inherit',
-    }),
-    /G3_AUTHORITY_RECONCILIATION_STARTUP_BLOCKED/,
-  );
+  for (const databasePath of [
+    '/app/data/shooting-operations.sqlite',
+    'file:%2Fapp%2Fdata%2Fshooting-operations.sqlite',
+  ]) {
+    assert.throws(
+      () => createOperationsServer({
+        databasePath,
+        writeAdmissionMode: 'enabled',
+        orphanCleanupMode: 'inherit',
+      }),
+      /G3_AUTHORITY_RECONCILIATION_STARTUP_BLOCKED/,
+    );
+  }
 });
 
 test('direct server startup fails before opening the frozen production database', () => {
   const root = new URL('../', import.meta.url).pathname;
-  const run = spawnSync(process.execPath, ['src/server.mjs'], {
-    cwd: root,
-    encoding: 'utf8',
-    env: {
-      ...process.env,
-      DATABASE_PATH: '/app/data/shooting-operations.sqlite',
-      WRITE_ADMISSION_MODE: 'enabled',
-      ORPHAN_CLEANUP_MODE: 'inherit',
-    },
-  });
-  assert.notEqual(run.status, 0);
-  assert.match(run.stderr, /G3_AUTHORITY_RECONCILIATION_STARTUP_BLOCKED/);
-  assert.doesNotMatch(run.stdout, /Jenn Shooting Operations listening/);
+  for (const databasePath of [
+    '/app/data/shooting-operations.sqlite',
+    'file:%2Fapp%2Fdata%2Fshooting-operations.sqlite',
+  ]) {
+    const run = spawnSync(process.execPath, ['src/server.mjs'], {
+      cwd: root,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        DATABASE_PATH: databasePath,
+        WRITE_ADMISSION_MODE: 'enabled',
+        ORPHAN_CLEANUP_MODE: 'inherit',
+      },
+    });
+    assert.notEqual(run.status, 0);
+    assert.match(run.stderr, /G3_AUTHORITY_RECONCILIATION_STARTUP_BLOCKED/);
+    assert.doesNotMatch(run.stdout, /Jenn Shooting Operations listening/);
+  }
 });
 
 test('compose and image preserve fail-closed reconciliation defaults', async () => {

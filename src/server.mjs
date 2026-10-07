@@ -319,8 +319,9 @@ const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLT
 if (invokedDirectly) {
   const host = process.env.HOST || '127.0.0.1';
   const port = Number(process.env.PORT || 3800);
-  const databasePath = resolve(process.env.DATABASE_PATH || './data/shooting-operations.sqlite');
+  let databasePath = process.env.DATABASE_PATH || './data/shooting-operations.sqlite';
   assertG3AuthorityReconciliationStartupAllowed({ databasePath });
+  databasePath = resolve(databasePath);
   const uploadRoot = resolve(process.env.UPLOAD_ROOT || './data/uploads');
   const tokens = {
     viewer: process.env.VIEWER_TOKEN,

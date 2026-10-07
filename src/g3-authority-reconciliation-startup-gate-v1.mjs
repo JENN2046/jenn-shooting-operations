@@ -26,6 +26,31 @@ function loadFrozenReconciliationRecord() {
   return value;
 }
 
+function sqliteFilenamePath(databasePath) {
+  if (!databasePath.startsWith('file:')) return databasePath;
+
+  let encodedPath = databasePath.slice('file:'.length);
+  const suffixIndex = encodedPath.search(/[?#]/u);
+  if (suffixIndex >= 0) encodedPath = encodedPath.slice(0, suffixIndex);
+
+  if (encodedPath.startsWith('//localhost/')) {
+    encodedPath = encodedPath.slice('//localhost'.length);
+  } else if (encodedPath.startsWith('//') && !encodedPath.startsWith('///')) {
+    throw new Error('G3_AUTHORITY_RECONCILIATION_DATABASE_URI_INVALID');
+  }
+
+  let decodedPath;
+  try {
+    decodedPath = decodeURIComponent(encodedPath);
+  } catch {
+    throw new Error('G3_AUTHORITY_RECONCILIATION_DATABASE_URI_INVALID');
+  }
+  if (decodedPath.includes('\0')) {
+    throw new Error('G3_AUTHORITY_RECONCILIATION_DATABASE_URI_INVALID');
+  }
+  return decodedPath;
+}
+
 function fileIdentity(path) {
   try {
     const realpath = realpathSync(resolve(path));
@@ -52,7 +77,7 @@ export function pathsReferToSameFile(left, right) {
 
 export function isFrozenProductionDatabasePath(databasePath) {
   if (typeof databasePath !== 'string' || databasePath.length === 0) return false;
-  const resolved = resolve(databasePath);
+  const resolved = resolve(sqliteFilenamePath(databasePath));
   if (PRODUCTION_DATABASE_PATHS.has(resolved)) return true;
 
   let realpath = null;

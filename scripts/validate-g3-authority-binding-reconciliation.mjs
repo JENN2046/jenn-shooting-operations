@@ -127,11 +127,14 @@ try {
     || startup.writableScheduleStoreProductionOpenBlocked !== true
     || startup.symlinkAndHardlinkAliasesBlocked !== true
     || JSON.stringify(startup.productionDatabaseIdentityChecks)
-      !== JSON.stringify(['resolvedPath', 'realpath', 'device+inode'])
+      !== JSON.stringify(['sqliteFileUriDecode', 'resolvedPath', 'realpath', 'device+inode'])
     || !startup.productionDatabasePaths.includes('/app/data/shooting-operations.sqlite')
     || !startup.productionDatabasePaths.includes(record.physicalState.activeDatabasePath)
     || !startupGateText.includes('G3_AUTHORITY_RECONCILIATION_STARTUP_BLOCKED')
     || !startupGateText.includes("record.status === 'RECONCILIATION_REQUIRED'")
+    || !startupGateText.includes("databasePath.startsWith('file:')")
+    || !startupGateText.includes('decodeURIComponent(encodedPath)')
+    || !startupGateText.includes('G3_AUTHORITY_RECONCILIATION_DATABASE_URI_INVALID')
     || !startupGateText.includes('realpathSync')
     || !startupGateText.includes('metadata.dev')
     || !startupGateText.includes('metadata.ino')

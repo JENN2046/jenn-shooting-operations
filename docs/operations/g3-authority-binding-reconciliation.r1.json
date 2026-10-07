@@ -87,6 +87,7 @@
     "writableScheduleStoreProductionOpenBlocked": true,
     "symlinkAndHardlinkAliasesBlocked": true,
     "productionDatabaseIdentityChecks": [
+      "sqliteFileUriDecode",
       "resolvedPath",
       "realpath",
       "device+inode"
