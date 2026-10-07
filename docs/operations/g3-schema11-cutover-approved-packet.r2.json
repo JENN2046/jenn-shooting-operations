@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "packetId": "G3-SCHEMA11-CUTOVER-20261006-R1",
+  "contractId": "G2_MINIMAL_RELEASE_CONTRACT_V1",
+  "authorityTarget": {
+    "authorityHead": "a4199fdb14808ebb866943148a222b0d4300d66e",
+    "artifact": {
+      "sourceCommit": "6334e2ae851247cb1558074fbd80cfee06b28c11",
+      "imageDigest": "sha256:581e9fa25e04b582aa39c2fdaa291f6db3e80fc3f3ac15a8a4afa06622442144",
+      "migrationVersion": 11,
+      "migrationName": "business_calendar_and_reschedule",
+      "migrationChecksum": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8"
+    },
+    "target": {
+      "targetBindingDigest": "sha256:30e6c937d5caddac4c575b49dac0d68139c5eff57b1d28c353d99e53c97e9a60",
+      "activeDatabaseFamilyDigest": "sha256:3df22ce713b686313f1c19bbb6fcf6b1af670f610ae46e884e890cb41fbe568e"
+    },
+    "prestate": {
+      "capturedAt": "2026-10-06T10:28:00Z",
+      "recoveryArtifactDigest": "sha256:f2e643317a152600c8bf864648cec095ad57ba398c804feb35f9338a7073cfef",
+      "recoveryReadbackProofDigest": "sha256:97b9fc0635056d1b0e172be337ac81de99667cc7b68703e6aed8815843873ad3",
+      "recoveryReadbackVerified": true,
+      "integrityCheck": "ok",
+      "foreignKeyViolationCount": 0,
+      "capturedDatabaseFamilyDigest": "sha256:3df22ce713b686313f1c19bbb6fcf6b1af670f610ae46e884e890cb41fbe568e",
+      "recoverySourceDatabaseFamilyDigest": "sha256:3df22ce713b686313f1c19bbb6fcf6b1af670f610ae46e884e890cb41fbe568e"
+    },
+    "writerContainment": {
+      "durableDisableReceiptDigest": "sha256:ded7530acd93b8997c08dbc68846f47d641c76e738a180b0a1d0267fc8103f7e",
+      "inFlightWriterCount": 0,
+      "drainProofDigest": "sha256:7d4de65434606b1c4557536deee386ed25fc6f26c05919bc5e18f7bad1e7081f",
+      "processLifetimeIsAuthority": false,
+      "executionBoundaryProofDigest": "sha256:2a5ac8063097c18dd693cb3709f051958e58d00524c0dcaad5c362bd66af90e1",
+      "unknownExecutorHasAuthoritativeWriteCapability": false,
+      "nonDatabaseProductionMutationAllowed": false
+    },
+    "execution": {
+      "entrypointId": "G3_SCHEMA11_CUTOVER",
+      "operationId": "G3-SCHEMA11-OP-20261006-R1",
+      "automaticRetryAllowed": false
+    }
+  },
+  "authorityTargetDigest": "sha256:10ce21ebeb207afa556a48c215439077736af242cd312a49783b1136fe046ab5",
+  "authorization": {
+    "status": "APPROVED",
+    "humanApprovalRequired": true,
+    "approvalRef": "CHAT-2026-10-06-G3-SCHEMA11-CUTOVER-10CE21EB",
+    "approvedAuthorityTargetDigest": "sha256:10ce21ebeb207afa556a48c215439077736af242cd312a49783b1136fe046ab5",
+    "approvalEvidenceDigest": "sha256:21c4a02bf69fbe2ab8cd6e1cc178b87e74900f9bb547cf1dd69809433332aa4b"
+  }
+}
