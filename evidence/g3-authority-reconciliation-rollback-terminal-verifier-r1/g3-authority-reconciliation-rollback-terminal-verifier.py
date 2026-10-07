@@ -151,6 +151,12 @@ def verify_authority_inputs(target_path: Path, packet_path: Path, approval_path:
 
     if sha256_file(target_path) != EXPECTED_TARGET_RECORD_SHA256:
         raise RuntimeError("TERMINAL_TARGET_RECORD_SHA_MISMATCH")
+    try:
+        executor_metadata = executor_path.lstat()
+    except OSError as exc:
+        raise RuntimeError("TERMINAL_EXECUTOR_UNAVAILABLE") from exc
+    if not stat.S_ISREG(executor_metadata.st_mode) or executor_metadata.st_nlink != 1:
+        raise RuntimeError("TERMINAL_EXECUTOR_IDENTITY_INVALID")
     if sha256_file(executor_path) != EXPECTED_EXECUTOR_SHA256:
         raise RuntimeError("TERMINAL_EXECUTOR_SHA_MISMATCH")
 
@@ -510,6 +516,10 @@ def verify_attempt_record(target_digest):
     path = expected_attempt_path(target_digest)
     if not path.exists():
         raise RuntimeError("TERMINAL_ATTEMPT_NOT_FOUND")
+    for directory in (CONTROL_ROOT, CONTROL_ROOT / "attempts"):
+        metadata = directory.lstat()
+        if not stat.S_ISDIR(metadata.st_mode) or directory.is_symlink():
+            raise RuntimeError("TERMINAL_ATTEMPT_DIRECTORY_IDENTITY_INVALID")
     metadata = path.lstat()
     if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1       or stat.S_IMODE(metadata.st_mode) != 0o600:
         raise RuntimeError("TERMINAL_ATTEMPT_RECORD_IDENTITY_INVALID")
@@ -548,11 +558,29 @@ def observe_terminal_snapshot(attempt):
     exchanged = file_identity(EXCHANGED_OUT_SCHEMA11)
     if active["device"] != exchanged["device"]:
         raise RuntimeError("TERMINAL_NOT_SAME_FILESYSTEM")
-
     active_db = inspect_db(ACTIVE_DB)
     exchanged_db = inspect_db(EXCHANGED_OUT_SCHEMA11)
 
+    # Re-sample after the slow SQLite and container checks. A terminal
+    # classification is valid only when the exact bytes and schema facts are
+    # stable across independent observations.
+    verify_no_sidecars(ACTIVE_DB)
+    verify_no_sidecars(EXCHANGED_OUT_SCHEMA11)
+    verify_no_running_volume_users()
+    verify_no_open_db_users()
+    active_second = file_identity(ACTIVE_DB)
+    exchanged_second = file_identity(EXCHANGED_OUT_SCHEMA11)
+    active_db_second = inspect_db(ACTIVE_DB)
+    exchanged_db_second = inspect_db(EXCHANGED_OUT_SCHEMA11)
+    if active_second != active or exchanged_second != exchanged       or active_db_second != active_db or exchanged_db_second != exchanged_db:
+        raise RuntimeError("TERMINAL_SNAPSHOT_UNSTABLE")
+
+    final_authority_head = read_current_canonical_head()
+    if final_authority_head != EXPECTED_AUTHORITY_HEAD:
+        raise RuntimeError("TERMINAL_CANONICAL_AUTHORITY_HEAD_MISMATCH")
+
     snapshot = {
+        "stableAcrossIndependentSamples": True,
         "canonicalAuthority": {
             "branch": CANONICAL_BRANCH,
             "head": canonical_head,
@@ -721,6 +749,7 @@ def verify(target_record, approved_packet, approval_record, executor):
 
 def self_test_classification():
     base = {
+        "stableAcrossIndependentSamples": True,
         "canonicalAuthority": {"branch": CANONICAL_BRANCH, "head": EXPECTED_AUTHORITY_HEAD},
         "host": {
             "hostname": EXPECTED_HOSTNAME,

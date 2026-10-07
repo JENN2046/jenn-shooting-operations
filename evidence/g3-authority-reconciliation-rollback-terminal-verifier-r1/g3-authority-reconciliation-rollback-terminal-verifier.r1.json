@@ -21,7 +21,7 @@
   },
   "verifier": {
     "path": "evidence/g3-authority-reconciliation-rollback-terminal-verifier-r1/g3-authority-reconciliation-rollback-terminal-verifier.py",
-    "sha256": "sha256:7285636557833bfe2dc2e731a4c00a56283346969bf32b05d2db8cfbf22f0f30",
+    "sha256": "sha256:a663c339ef078539e041b3d86ea389246c90d4060ed99f4ad6cc1d33b70b2e08",
     "importsRollbackExecutor": false,
     "productionMutationCapability": false,
     "databaseOpenMode": "ro+immutable",
@@ -55,6 +55,8 @@
     "openDatabaseFileUsersRequired": 0,
     "fuserDatabasePidsRequired": 0,
     "canonicalAuthorityHeadMustMatch": true,
+    "finalCanonicalAuthorityRecheckRequired": true,
+    "stableAcrossIndependentSamplesRequired": true,
     "exactAttemptLedgerRequired": true
   },
   "receiptProfile": {

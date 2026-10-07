@@ -35,6 +35,9 @@ assert 'sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True)' in source
 assert "renameat2" in source
 assert '"flag": "RENAME_EXCHANGE"' in source
 assert source.index("attempt = verify_attempt_record(target_digest)") < source.index("snapshot = observe_terminal_snapshot(attempt)")
+assert "TERMINAL_SNAPSHOT_UNSTABLE" in source
+assert source.count("read_current_canonical_head()") >= 2
+assert "stableAcrossIndependentSamples" in source
 assert "parser.add_argument(\"--output\")" not in source
 
 for arg, marker in [
