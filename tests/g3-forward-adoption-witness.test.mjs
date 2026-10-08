@@ -54,8 +54,8 @@ function fixture() {
     runtime: { python: '3.14.4', sqlite: '3.46.1' },
     sampling: 'PINNED_READONLY_FD_IN_MEMORY_SQLITE',
     comparedLegacyTables: 38,
-    schemaMigrationPrefixSha256: prestateSha,
-    activeMigrationPrefixSha256: prestateSha,
+    schemaMigrationPrefixSha256: 'sha256:20e76fece64d733d50e68f852c98a665d2dd77f0f258e9b05c0739f8003f1445',
+    activeMigrationPrefixSha256: 'sha256:20e76fece64d733d50e68f852c98a665d2dd77f0f258e9b05c0739f8003f1445',
     migration11Marker: [11, 'business_calendar_and_reschedule',
       'sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8',
       '2026-10-08T00:00:00.000Z'],
@@ -309,4 +309,27 @@ test('a validly signed witness cannot alter original migration history or the ne
     delete payload.migration11Marker;
   });
   assert.throws(() => verifyWitnessEnvelope(markerMissing), /OBSERVATION_PAYLOAD_SHAPE_INVALID/);
+});
+
+test('equal invented migration-prefix digests cannot replace the frozen historical digest', () => {
+  const { opts, privateKey } = fixture();
+  const forged = resignFixture(opts, privateKey, payload => {
+    payload.schemaMigrationPrefixSha256 = 'sha256:' + 'c'.repeat(64);
+    payload.activeMigrationPrefixSha256 = 'sha256:' + 'c'.repeat(64);
+  });
+  assert.throws(() => verifyWitnessEnvelope(forged), /MIGRATION_PREFIX_FROZEN_DIGEST_MISMATCH/);
+});
+
+test('migration11 calendar-invalid UTC timestamps fail despite valid signature', () => {
+  for (const impossible of [
+    '2026-99-99T99:99:99.999Z',
+    '2026-02-30T00:00:00.000Z',
+    '2026-10-08T25:00:00.000Z'
+  ]) {
+    const { opts, privateKey } = fixture();
+    const forged = resignFixture(opts, privateKey, payload => {
+      payload.migration11Marker[3] = impossible;
+    });
+    assert.throws(() => verifyWitnessEnvelope(forged), /MIGRATION11_MARKER_INVALID/);
+  }
 });

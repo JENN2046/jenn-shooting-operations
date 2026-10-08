@@ -4,6 +4,8 @@ import { openSync, closeSync, fstatSync, readSync, constants } from 'node:fs';
 const MAX_ENVELOPE_BYTES = 1024 * 1024;
 const MAX_PAYLOAD_BYTES = 768 * 1024;
 const SHA256 = /^sha256:[a-f0-9]{64}$/;
+// Independently observed and frozen exact historical Schema10 migration prefix.
+const G3_ORIGINAL_PREFIX_SHA256 = 'sha256:20e76fece64d733d50e68f852c98a665d2dd77f0f258e9b05c0739f8003f1445';
 
 export function readBoundedUtf8(path, maxBytes) {
   const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -207,12 +209,17 @@ function assertCompleteCapturedSchema(payload) {
   if (payload.schemaMigrationPrefixSha256 !== payload.activeMigrationPrefixSha256) {
     throw new Error('MIGRATION_PREFIX_PARITY_MISMATCH');
   }
+  if (payload.schemaMigrationPrefixSha256 !== G3_ORIGINAL_PREFIX_SHA256) {
+    throw new Error('MIGRATION_PREFIX_FROZEN_DIGEST_MISMATCH');
+  }
   const marker = payload.migration11Marker;
   if (!Array.isArray(marker) || marker.length !== 4 || marker[0] !== 11
       || marker[1] !== 'business_calendar_and_reschedule'
       || marker[2] !== 'sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8'
       || typeof marker[3] !== 'string'
-      || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$/.test(marker[3])) {
+      || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$/.test(marker[3])
+      || !Number.isFinite(Date.parse(marker[3]))
+      || new Date(marker[3]).toISOString() !== marker[3]) {
     throw new Error('MIGRATION11_MARKER_INVALID');
   }
   // Recompute determinable semantics, not merely the signer's problems: [] claim.
