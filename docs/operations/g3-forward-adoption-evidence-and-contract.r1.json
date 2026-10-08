@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "contractId": "G3_FORWARD_ADOPTION_EVIDENCE_AND_CONTRACT_R1",
+  "status": "FROZEN_NON_EXECUTABLE_REVIEW_CANDIDATE",
+  "role": "PROSPECTIVE_G3_RECONCILIATION_SUBACTION_ONLY",
+  "reviewBaseAuthorityHead": "371bf8982b0cd0df579b0e981964b27f9d0319fc",
+  "executableAuthorityTargetStatus": "NOT_CREATED",
+  "governanceExceptionApproved": false,
+  "productionOriginTrustRootStatus": "NOT_BOUND",
+  "containmentAttestationStatus": "NOT_CREATED",
+  "signedProductionWitnessStatus": "NOT_CREATED",
+  "approvedHumanTargetStatus": "NOT_REQUESTED",
+  "historicalFacts": {
+    "g3PhysicalOutcome": "COMMITTED",
+    "g3GovernanceStatus": "RECONCILIATION_REQUIRED",
+    "g3ApprovalHead": "a4199fdb14808ebb866943148a222b0d4300d66e",
+    "g3ExecutionHead": "b9dd595eb52bd09f7a8e2115a48ac401389f5b73",
+    "historicalBindingCompliant": false,
+    "originalExecutionReplayIdentityReusable": false,
+    "oldRollbackOutcome": "UNKNOWN",
+    "oldRollbackAttemptSha256": "sha256:bfd40da521d2a3871ffcf4b4913de260d51c368eeca0ca775c4bda6b25b5645a",
+    "oldRollbackReplayIdentityReusable": false,
+    "historicalReceiptsMutable": false
+  },
+  "verifiedCode": {
+    "observationVerifier": "scripts/g3-forward-adoption-readonly-witness.py",
+    "observationVerifierSha256": "sha256:bdff9a254ec56625bfc4be34189c038fdc0f1bc94be69d25cc39e3247141aeff",
+    "ed25519EnvelopeVerifier": "scripts/verify-g3-forward-adoption-witness-signature.mjs",
+    "ed25519EnvelopeVerifierSha256": "sha256:f97f80436ac0cd662619c4bb8457e9566de994215445be347b4fe55396b808d5",
+    "exactOriginalMigrationChecksum": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8",
+    "originalMigrationImageSha256": "sha256:581e9fa25e04b582aa39c2fdaa291f6db3e80fc3f3ac15a8a4afa06622442144",
+    "maxDatabaseBytes": 67108864,
+    "noProductionFileDefaultPath": true
+  },
+  "threeProofObligations": {
+    "P1_DURABLE_TWO_FILE_CONTAINMENT": {
+      "mandatory": true,
+      "liveContainmentClaimFromCurrentReadOnlySnapshotsPermitted": false,
+      "requiredDatabasePaths": [
+        "ACTIVE_SCHEMA11",
+        "PRESERVED_SCHEMA10"
+      ],
+      "includeEveryAccessibleAliasAndMountNamespace": true,
+      "existingOrphanHelperWriteCapabilityMustBeAbsent": true,
+      "allAuthorizedWritersAndRestoreHelpersDurablyRevoked": true,
+      "revocationReceiptMustBeIndependentlyAttestedAndDurable": true,
+      "reopenedWriteCapabilityPreClaimDisallowed": true,
+      "privilegedCustodyThreatModelMustBeDeclared": true,
+      "openedFdFstatAndHashBeforeAfterRequired": true,
+      "sidecarsAndPathAliasesCheckedBeforeAfterRequired": true,
+      "proofCoherentWithIndependentOriginSignature": true,
+      "unknownOrStaleOrMissingAttestationOutcome": "BLOCKED",
+      "observableCurrentStatus": "NOT_PROVEN"
+    },
+    "P2_REPRODUCIBLE_ORIGIN_SIGNED_WITNESS": {
+      "mandatory": true,
+      "verifierHashPinned": true,
+      "runtimeAndSQLiteVersionCaptured": true,
+      "tableRosterRowCountsAndOrderIndependentDigestsRequired": true,
+      "typeAndRowidAndDuplicateSensitivityRequired": true,
+      "canonicalTranscriptAndCaptureDigestRequired": true,
+      "signerAlgorithm": "Ed25519",
+      "signerKeyFingerprintMustBeIndependentlyApproved": true,
+      "externalTrustAnchorCannotBeSelfAsserted": true,
+      "signerCannotRetroactivelyAuthorizeHistoricalG3": true,
+      "transcriptMustBindBothOpenedFileIdentitiesAndHashes": true,
+      "signedEnvelopeWithoutAuthorizedTrustAnchorCannotAdmit": true,
+      "captureSignedButNoContainmentStillCannotAdmit": true,
+      "negativeSyntheticFixtureCoverage": true,
+      "rawProductionRowsMayBeExported": false,
+      "currentResult": "NOT_YET_ATTESTED"
+    },
+    "P2_SQLITE_METADATA_EQUIVALENCE": {
+      "mandatory": true,
+      "compare": [
+        "sqlite_schema.type_name_table_sql",
+        "pragma.table_xinfo",
+        "pragma.index_xinfo",
+        "pragma.index_list",
+        "pragma.foreign_key_list",
+        "pragma.table_list",
+        "pragma.application_id",
+        "pragma.user_version",
+        "pragma.encoding",
+        "pragma.page_size",
+        "pragma.auto_vacuum",
+        "SQLite_file_header_read_write_format",
+        "legacy_rowid_and_typed_rowsets",
+        "schema_migrations_full_prefix",
+        "sqlite_sequence",
+        "sqlite_stat_tables_if_present",
+        "integrity_check",
+        "foreign_key_check",
+        "WAL_SHM_journal_sidecar_absence"
+      ],
+      "explicitlyExcludedFromSemanticParity": {
+        "schema_version": "migration changes schema cookie",
+        "page_count": "physical page allocation not a business semantic",
+        "freelist_count": "physical free-list allocation not a business semantic",
+        "cache_size": "connection-local",
+        "synchronous": "connection-local policy independently enforced",
+        "data_version": "connection-local counter",
+        "journal_mode": "in-memory SQLite handle cannot attest source journal mode; check file header and sidecars instead",
+        "migration11_applied_at": "only new marker timestamp, exact UTC-millisecond syntax"
+      },
+      "pinnedKnownProjectDDLManifestSha256": {
+        "schema10": "sha256:c9dc6643560b4439f2a635bbc71107eca3b2130589f453dbeb472d2101117e39",
+        "schema11": "sha256:06a1e4b55b0f022bce9d8b2427bd844be6e8b7afe4afa0d6c49547c5ce0c753d"
+      },
+      "databaseByteIdentityNotRequired": true,
+      "testOnNewSyntheticOnly": true
+    }
+  },
+  "forwardOnlyGovernance": {
+    "actionId": "G3_FORWARD_SCHEMA11_BASELINE_ADOPTION_R1",
+    "createsNewTopLevelGate": false,
+    "requiresExplicitVersionedHumanApprovedException": true,
+    "requiresIndependentReviewAndMergeBeforeTargetFreeze": true,
+    "canonicalHeadFreezeAfterAuthoritySurfaceMerge": true,
+    "newUniqueOperationAndReplayIdentityRequired": true,
+    "signedExactHumanApprovalMustPrecedeNewClaim": true,
+    "separateAppendOnlyRootControlledReceiptRequired": true,
+    "historicalG3AndRollbackRecordsPreserved": true,
+    "futureEffectiveAdmissionOnly": true,
+    "productionDatabaseWritesAllowed": false,
+    "resetHistoricalReconciliationStatusAllowed": false,
+    "automaticReadmissionAllowed": false,
+    "serviceStartAllowed": false,
+    "g4Allowed": false,
+    "negativeOrUnknownDisposition": "FAIL_CLOSED"
+  },
+  "admissibility": {
+    "currentPhysicalEvidence": "STRONG_SUPPORT_ONLY",
+    "trustedProductionOrigin": "NOT_PROVEN",
+    "durableWriteContainment": "NOT_PROVEN",
+    "methodAdoption": "CONDITIONALLY_ACCEPTABLE_SUBJECT_TO_INDEPENDENT_APPROVAL",
+    "currentG3ClosureAllowed": false,
+    "canConstructExecutableTargetNow": false,
+    "nextAction": "REVIEW_THREE_PROOF_GATES_AND_MINIMAL_FORWARD_ONLY_CONTRACT"
+  }
+}

@@ -89,6 +89,10 @@ The following items are NOT claimed:
 
 Therefore, although the presently observed full row-set and DDL comparisons strongly support **semantic parity**, they do not satisfy every method and provenance gate in Issue #55. A future independent reviewer must either (a) obtain the missing **authorized** exact real-prestate replay and trustworthy attestation, or (b) expressly approve this non-exfiltrating full-state comparison methodology as an equivalent proof standard through a separate versioned governance decision. An authorization request cannot be constructed from this report alone.
 
+## 4A. Follow-up R1: bounded proof surface, not production attestation
+
+The three independent review deficits are now addressed as **reviewable implementation/contract candidates** in `G3_FORWARD_ADOPTION_EVIDENCE_AND_CONTRACT_R1.md` and its machine-readable companion. Two pinned, side-effect-free verifier programs and synthetic negative tests now exist. They were **not** run against live production files as an approved trusted origin witness. No approved signer/containment receipt exists, and the original data-equivalence capture is still not an independently signed attestation. This historical evidence report remains correctly `BLOCKED_INSUFFICIENT_EVIDENCE` pending the future admission proof.
+
 ## 5. Decision
 
 ~~~text

@@ -91,6 +91,10 @@ The placeholders are deliberate. No exact target digest exists, and none may be 
 - Prefer no new daemon, new public API, or new DB columns. An independent read-only verifier plus an append-only root-controlled governance event/receipt may suffice, subject to threat-model audit.
 - Authority and data proof must be separated: healthy DB state does not prove historical authorization, and valid new approval does not substitute for an independently verified healthy database.
 
+## D1. Independent review remediation (strictly scoped)
+
+The P1 two-database durable containment proof, P2 independently signed verifier transcript and P2 SQLite metadata domain are frozen as explicit **non-executable requirements** in `G3_FORWARD_ADOPTION_EVIDENCE_AND_CONTRACT_R1.md` and `g3-forward-adoption-evidence-and-contract.r1.json`. A valid observational transcript or a correctly verified Ed25519 signature **alone** never passes durable containment, governance exception approval or writer readmission. The existing reconciliation validator and runtime startup gate are untouched. The historical G3 physical `COMMITTED` and governance `RECONCILIATION_REQUIRED` continue to coexist without rewriting evidence.
+
 ## E. Attack/negative matrix
 
 | Adversarial case | Required result |
