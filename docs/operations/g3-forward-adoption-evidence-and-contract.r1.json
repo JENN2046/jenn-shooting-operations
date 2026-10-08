@@ -51,7 +51,7 @@
       "unknownOrStaleContainmentDisposition": "BLOCKED",
       "observableCurrentStatus": "NOT_PROVEN"
     },
-    "P2_REPRODUCIBLE_ORIGIN_SIGNED_WITNESS": {
+    "P2_REPRODUCIBLE_TRUSTED_PROVENANCE": {
       "mandatory": true,
       "independentlyTrustedProductionProvenanceRequired": true,
       "approvedProofMethodAndTrustModelRequired": true,
@@ -65,7 +65,8 @@
       "existingEd25519VerifierRemainsOptionalTool": true,
       "ifUsingEd25519IndependentApprovedKeyPinRequired": true,
       "negativeSyntheticFixtureCoverage": true,
-      "currentResult": "NOT_YET_ATTESTED"
+      "currentResult": "NOT_YET_ATTESTED",
+      "originSignatureRequiredOnlyIfApprovedMethodUsesIt": true
     },
     "P2_SQLITE_METADATA_EQUIVALENCE": {
       "mandatory": true,
@@ -99,7 +100,6 @@
     "canonicalHeadFreezeAfterAuthoritySurfaceMerge": true,
     "newUniqueOperationAndReplayIdentityRequired": true,
     "signedExactHumanApprovalMustPrecedeNewClaim": true,
-    "separateAppendOnlyRootControlledReceiptRequired": true,
     "historicalG3AndRollbackRecordsPreserved": true,
     "futureEffectiveAdmissionOnly": true,
     "productionDatabaseWritesAllowed": false,
@@ -107,7 +107,10 @@
     "automaticReadmissionAllowed": false,
     "serviceStartAllowed": false,
     "g4Allowed": false,
-    "negativeOrUnknownDisposition": "FAIL_CLOSED"
+    "negativeOrUnknownDisposition": "FAIL_CLOSED",
+    "separateDurableAppendOnlyReconciliationReceiptRequired": true,
+    "receiptCustodySelectedByApprovedTrustModel": true,
+    "rootControlSufficientWithoutApprovedTCB": false
   },
   "admissibility": {
     "currentPhysicalEvidence": "STRONG_SUPPORT_ONLY",

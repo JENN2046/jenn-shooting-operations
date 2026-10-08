@@ -88,7 +88,7 @@ The placeholders are deliberate. No exact target digest exists, and none may be 
 - Do not change or weaken the present startup gate or existing validator as part of Issue #55.
 - A future minimal versioned reconciliation reader could check a separately signed **adoption receipt** and trusted operational readmission receipt in addition to immutable historical evidence; mere repository JSON or caller-provided boolean must never release the gate.
 - The old blocked reconciliation record remains permanently auditable; old receipts, old operation IDs, and old rollback UNKNOWN are never updated or deleted.
-- Prefer no new daemon, new public API, or new DB columns. An independent read-only verifier plus an append-only root-controlled governance event/receipt may suffice, subject to threat-model audit.
+- Prefer no new daemon, new public API, or new DB columns. An independent read-only verifier plus a durable, append-only governance event/receipt under custody explicitly approved for the selected trust model may suffice, subject to threat-model audit.
 - Authority and data proof must be separated: healthy DB state does not prove historical authorization, and valid new approval does not substitute for an independently verified healthy database.
 
 ## D1. Independent review remediation (strictly scoped)

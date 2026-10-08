@@ -163,12 +163,16 @@ test('the minimal future-only G3 contract pins exact verifier bytes and remains 
   assert.equal(contract.historicalFacts.g3ExecutionHead, records.trigger.executionCanonicalHead);
   assert.equal(contract.historicalFacts.oldRollbackOutcome, 'UNKNOWN');
   assert.equal(contract.threeProofObligations.P1_DURABLE_TWO_FILE_CONTAINMENT.observableCurrentStatus, 'NOT_PROVEN');
-  assert.equal(contract.threeProofObligations.P2_REPRODUCIBLE_ORIGIN_SIGNED_WITNESS.currentResult, 'NOT_YET_ATTESTED');
+  assert.equal(contract.threeProofObligations.P2_REPRODUCIBLE_TRUSTED_PROVENANCE.currentResult, 'NOT_YET_ATTESTED');
   assert.equal(contract.threeProofObligations.P2_SQLITE_METADATA_EQUIVALENCE.databaseByteIdentityNotRequired, true);
   assert.equal(contract.forwardOnlyGovernance.actionId, 'G3_FORWARD_SCHEMA11_BASELINE_ADOPTION_R1');
   assert.equal(contract.forwardOnlyGovernance.resetHistoricalReconciliationStatusAllowed, false);
   assert.equal(contract.forwardOnlyGovernance.createsNewTopLevelGate, false);
   assert.equal(contract.forwardOnlyGovernance.automaticReadmissionAllowed, false);
+  assert.equal(contract.forwardOnlyGovernance.separateDurableAppendOnlyReconciliationReceiptRequired, true);
+  assert.equal(contract.forwardOnlyGovernance.receiptCustodySelectedByApprovedTrustModel, true);
+  assert.equal(contract.forwardOnlyGovernance.rootControlSufficientWithoutApprovedTCB, false);
+  assert.equal(contract.threeProofObligations.P2_REPRODUCIBLE_TRUSTED_PROVENANCE.offhostEd25519SignerMandatoryForAllMethods, false);
   for (const field of [
     'governanceExceptionApproved','executableAuthorityTargetStatus','approvedHumanTargetStatus',
     'productionOriginTrustRootStatus','containmentAttestationStatus','signedProductionWitnessStatus'
