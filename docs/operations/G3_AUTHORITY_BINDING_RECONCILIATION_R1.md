@@ -97,50 +97,63 @@ cryptographic production attestation = not claimed
 
 This explicitly absorbs the terminal-provenance finding surfaced on the superseded #50 verification line.
 
-## Preferred resolution
+## Current recovery resolution
 
-Because normal writers and the production service have remained disabled, the active Schema11 database is still byte-identical to the atomic-exchange candidate. No post-cutover production writes need to be preserved.
+The first exact reconciliation rollback authority was frozen and explicitly approved, but its one-shot attempt entered `UNKNOWN` before `RENAME_EXCHANGE`.
 
-The preferred clean repair is therefore:
+Read-only forensics established:
 
-`G3_AUTHORITY_BINDING_RECONCILIATION_ROLLBACK_TO_10`
+```text
+old rollback attempt = DURABLY CLAIMED
+old terminal outcome = UNKNOWN
+failure = post-claim canonical GitHub lookup timeout
+RENAME_EXCHANGE = NOT EXECUTED
+active Schema11 bytes = unchanged
+preserved Schema10 bytes = unchanged
+```
 
-The rollback itself is **not yet requestable**. The authority surface must be frozen before any human approval:
+The old rollback replay identity is permanently consumed and must never be retried or reused.
 
-1. merge this reconciliation authority-surface PR first, including the startup gate, exact rollback executor, executor digest, rollback action/operation/packet identities, and independent one-shot replay contract;
-2. from that merged canonical head, create the exact rollback target **without changing the authority surface**, binding that post-merge canonical `authorityHead`, the exact executor digest, active Schema11 identity, preserved Schema10 identity, containment requirements and replay identity;
-3. prohibit any rollback approval request until the exact rollback target digest exists; no action-ID-only or free-form approval is valid;
-4. after target freeze, require the canonical authority head to remain unchanged through approval and execution; any head drift invalidates the target and requires a fresh freeze and fresh approval;
-5. obtain a separate explicit human approval bound to that exact rollback-target digest;
-6. immediately before execution, perform fresh live read-only verification of both authority and production state: canonical head, active Schema11 hash, preserved Schema10 hash, zero active DB users, absent SQLite sidecars and stopped production service;
-7. durably claim the new rollback one-shot replay identity before the atomic exchange; packet IDs cannot partition replay identity and automatic retry is forbidden;
-8. perform one bounded same-filesystem `renameat2(RENAME_EXCHANGE)` to restore the exact Schema10 prestate;
-9. independently verify exact Schema10 restoration, integrity/FK, preserved exchanged-out Schema11 and continued writer containment;
-10. keep writers disabled and production service stopped;
-11. only after rollback terminal classification, freeze/merge a **new** G3 re-execution authority surface, generate a new operation/target, obtain a fresh exact pre-execution approval, and execute 10→11 once under that new authority.
+The current repair is therefore a **new human reconciliation operation**, defined by:
 
-The prior G3 replay identity and approval are never reused. The rollback replay identity is also single-use and cannot be reused to toggle the files a second time.
+`G3_ROLLBACK_UNKNOWN_RECONCILIATION_RECOVERY_R1`
+
+Its authority surface uses a new action, operation, packet and target digest. It must bind the exact prior UNKNOWN attempt as evidence and requires a fresh explicit human approval after the post-merge exact recovery target is frozen.
+
+The executor boundary is also corrected. All external and fallible authority checks, including the final canonical GitHub lookup, occur **before** the durable one-shot claim. The claim is the authority-admission boundary. After a durable claim, the executor performs no network or remote authority lookup and may only execute the local atomic exchange, durability fsyncs and unclassified output.
+
+This is not an automatic retry. It is a new, separately authorized reconciliation operation.
+
+See:
+
+`docs/operations/G3_ROLLBACK_UNKNOWN_RECONCILIATION_RECOVERY_R1.md`
+
+and:
+
+`docs/operations/g3-rollback-unknown-reconciliation-recovery.r1.json`.
 
 ## Current hard stop
 
-Until reconciliation is explicitly authorized and completed:
+Until the recovery authority surface is reviewed and merged, then an exact post-merge recovery target is frozen and separately approved:
 
 ```text
 NO G4
 NO writer readmission
 NO production service start
 NO automatic retry
-NO rollback approval before exact target freeze
-NO rollback
+NO reuse of the prior rollback replay identity
+NO mutation of the prior attempt ledger
+NO recovery approval before exact target freeze
+NO recovery
 ```
 
-Next action is **not** a production authorization request. It is:
+Next action is:
 
 ```text
-MERGE_RECONCILIATION_AUTHORITY_SURFACE_THEN_FREEZE_EXACT_ROLLBACK_TARGET
+REVIEW_AND_MERGE_RECOVERY_AUTHORITY_SURFACE
 ```
 
-Only after that exact target exists, binds the post-merge canonical head, and passes fresh authority/production verification may an exact rollback approval be requested.
+Only after merge may a new exact recovery target bind the post-merge canonical head, new executor digest, prior UNKNOWN attempt, current Schema11/Schema10 identities, the exact read-only recovery terminal verifier, and containment evidence.
 
 The machine-readable authority for this record is:
 `docs/operations/g3-authority-binding-reconciliation.r1.json`.

@@ -5,10 +5,11 @@ import test from 'node:test';
 const root = new URL('../', import.meta.url);
 const readJson = async path => JSON.parse(await readFile(new URL(path, root), 'utf8'));
 
-const [record, packet, terminal] = await Promise.all([
+const [record, packet, terminal, recovery] = await Promise.all([
   readJson('docs/operations/g3-authority-binding-reconciliation.r1.json'),
   readJson('docs/operations/g3-schema11-cutover-approved-packet.r2.json'),
   readJson('docs/operations/g3-schema11-terminal-evidence.r1.json'),
+  readJson('docs/operations/g3-rollback-unknown-reconciliation-recovery.r1.json'),
 ]);
 
 test('G3 reconciliation preserves physical COMMITTED while blocking governance closure', () => {
@@ -30,10 +31,24 @@ test('G3 reconciliation captures the exact pre-execution authority mismatch', ()
   assert.equal(record.governance.retroactiveApprovalAllowed, false);
 });
 
-test('preferred repair restores exact Schema10 and requires a fresh operation and approval', () => {
+test('prior rollback UNKNOWN is sealed instead of converted into a retry', () => {
+  assert.equal(record.rollbackUnknownRecovery.priorRollbackTerminalOutcome, 'UNKNOWN');
+  assert.equal(record.rollbackUnknownRecovery.priorRollbackReplayIdentityReusable, false);
+  assert.equal(record.rollbackUnknownRecovery.productionAuthorityGranted, false);
+  assert.equal(recovery.priorUnknownAttempt.terminalOutcome, 'UNKNOWN');
+  assert.equal(recovery.priorUnknownAttempt.automaticRetryAllowed, false);
+  assert.equal(recovery.recoverySemantics.sameAttemptRetryAllowed, false);
+  assert.equal(recovery.recoverySemantics.sameReplayIdentityReusable, false);
+  assert.equal(recovery.recoverySemantics.recoveryActionIsAutomaticRetry, false);
+  assert.equal(recovery.recoverySemantics.newOperationRequired, true);
+  assert.equal(recovery.recoverySemantics.newExplicitHumanApprovalRequired, true);
+});
+
+test('preferred repair is a new exact recovery operation with a fresh approval', () => {
   assert.equal(record.preservedPrestate.exactRollbackSourceAvailable, true);
   assert.equal(record.preferredResolution.rollbackTargetSha256, record.preservedPrestate.sha256);
-  assert.equal(record.preferredResolution.oldReplayIdentityReusable, false);
+  assert.equal(record.preferredResolution.priorRollbackReplayIdentityReusable, false);
+  assert.equal(record.preferredResolution.recoveryActionIsAutomaticRetry, false);
   assert.equal(record.preferredResolution.newOperationIdRequired, true);
   assert.equal(record.preferredResolution.newAuthorityTargetDigestRequired, true);
   assert.equal(record.preferredResolution.newPreExecutionApprovalRequired, true);
@@ -41,15 +56,23 @@ test('preferred repair restores exact Schema10 and requires a fresh operation an
   assert.equal(record.preferredResolution.writerReadmissionAfterRollbackAllowed, false);
   assert.equal(record.preferredResolution.freshLiveReadOnlyVerificationImmediatelyBeforeRollbackRequired, true);
   assert.equal(record.preferredResolution.repositoryEvidenceMaySubstituteForLiveVerification, false);
+  assert.equal(record.preferredResolution.authorityAdmissionBoundary, 'DURABLE_ONE_SHOT_CLAIM');
+  assert.equal(record.preferredResolution.canonicalHeadMustMatchApprovedTargetImmediatelyBeforeClaim, true);
+  assert.equal(record.preferredResolution.postClaimCanonicalLookupAllowed, false);
+  assert.equal(record.preferredResolution.postClaimNetworkDependencyAllowed, false);
+  assert.equal(record.preferredResolution.instanceIdentityBoundInClaimRequired, true);
+  assert.equal(record.preferredResolution.postClaimMetadataRequestAllowed, false);
 });
 
-test('repository terminal evidence cannot self-authorize reconciliation mutation', () => {
+test('repository evidence cannot self-authorize recovery mutation', () => {
   assert.equal(record.evidenceTrust.repositoryTerminalArtifactsProvideIntegrity, true);
   assert.equal(record.evidenceTrust.repositoryTerminalArtifactsProvideProductionProvenance, false);
   assert.equal(record.evidenceTrust.repositoryEvidenceAloneCanAuthorizeReconciliationMutation, false);
   assert.equal(record.evidenceTrust.freshLiveReadOnlyProductionVerificationRequired, true);
   assert.equal(record.evidenceTrust.cryptographicProductionAttestationPresent, false);
-  assert.equal(record.evidenceTrust.latestLiveActiveDatabaseSha256, record.physicalState.activeDatabaseSha256);
-  assert.equal(record.evidenceTrust.latestLivePreservedPrestateSha256, record.preservedPrestate.sha256);
-  assert.equal(record.evidenceTrust.latestLiveAttemptRecordSha256, record.execution.attemptRecordSha256);
+  assert.equal(recovery.productionAuthorityGranted, false);
+  assert.equal(recovery.recoveryAuthoritySurface.exactRecoveryTargetStatus, 'NOT_CREATED');
+  assert.equal(recovery.recoveryAuthoritySurface.approvedPacketStatus, 'NOT_CREATED');
+  assert.equal(recovery.recoveryAuthoritySurface.approvalRecordStatus, 'NOT_CREATED');
+  assert.equal(recovery.recoveryAuthoritySurface.recoveryAuthorized, false);
 });
