@@ -1,74 +1,65 @@
 # G3 Forward Adoption Evidence and Contract R1
 
-**Status: FROZEN NON-EXECUTABLE REVIEW CANDIDATE / ADMISSION BLOCKED**
+**Status: NON-EXECUTABLE REVIEW CANDIDATE / ADMISSION BLOCKED**
 
-This is a *G3 reconciliation sub-action proposal*, not another top-level gate, G3 cutover, rollback, writer startup, service start, or G4 entry. It addresses only the P1 + two P2 findings on Draft PR #56 (Issue #55). Review base is canonical `371bf8982b0cd0df579b0e981964b27f9d0319fc`; the exact final authority head must be captured **after any future reviewed merge**. No executable target, signer trust root, signed production witness, human approval or new one-shot claim is being created.
+This proposed sub-action would accept an existing, physically committed Schema11 as a **prospective** baseline. It does **not** replay Schema10→11, backdate approval, amend the historical G3 receipt, invoke #54, or authorize production startup or writes.
 
-## 1. The only three proof corrections
+**Scope authority for this proposal:** `G3_MINIMUM_CLOSURE_SCOPE_R1.md`. The three original P1/P2 findings remain open until their **proof obligations** are met. Prior ext4-immutable and off-host-signing implementations were examples, not mandatory choices from frozen G2. The six G2 invariants and existing production runtime gate remain unchanged.
 
-### P1. Durable containment of *both* original physical database files
+## 1. Minimum evidence obligations
 
-Before any forward-adoption claim, an **independently trusted, durable containment attestation** must prove that every authorized production writer, rollback helper and other pre-existing capability able to modify **either** active Schema11 or preserved Schema10, including bind mounts, aliases and container mount namespaces, has been effectively revoked or is otherwise physically fenced. Ordinary process/service absence, `lsof`/`fuser`, read-only SQLite connections, `immutable=1`, or an unlocked helper PID is **not** that proof. A writable alias or idle volume-capable process is a hard block. State the privileged administrator/root-custody threat model explicitly; a root-controlled script cannot claim that it neutralizes an untrusted hostile root.
+### E1. Durable normal-writer exclusion plus coherent two-file observations
 
-The witness opens both paths with `O_RDONLY | O_NOFOLLOW`, pins regular-file descriptors with `fstat`, bounds file sizes, checks sidecars, reads only via `pread`, rejects changed identity or bytes and verifies the same opened descriptors and path identities after SQLite comparison. Its SQLite execution is on **in-memory deserialized snapshots** of those bytes, never on writable production SQLite handles. These checks improve snapshot coherence but do **not** establish durable capability revocation by themselves. No such attestation exists in this PR; consequently all captured observations remain **non-admissible** for production approval.
+The future claim needs independently checkable evidence that normal JSO writers are durably disabled, in-flight writes have drained, old rollback helpers cannot resume an unauthorized mutation, and untrusted writer/alias/namespace paths capable of changing either original evidence DB are fenced **through the observation and claim**. A missing process, `flock`, `lsof` or an `immutable=1` SQLite URI does not satisfy this requirement by itself.
 
-The eventual trusted containment witness must bind two exact dev/inode/size/hash/mode/owner identities, all reachable filesystem aliases and mount namespaces, the previously consumed rollback attempt, pre/post stability, the independently approved signer, and a durable revocation proof immediately before a future one-shot claim. If a capability cannot be fenced or its status is uncertain, do not claim and do not approve. No production containment settings are modified in this review.
+Bind fresh Schema11/Schema10 path and opened-file identity, content hash, migration prestate and poststate; reject drift, sidecars and ambiguous writers. Preserve the Schema10 recovery reference. The implementation need **not** require both file inodes to remain ext4 immutable after the event. No permanent file-attribute changes are approved here. Admin/root trust model remains unchosen; under adversarial-root assumptions, these local-only protections are insufficient and this route remains BLOCKED.
 
-### P2. Reproducible verifier and independently origin-signed transcript
+### E2. Independently trusted, reproducible production evidence
 
-Added only two offline-compatible, non-admission scripts:
+The provided read-only observation script `scripts/g3-forward-adoption-readonly-witness.py` pins exact source code/runtime and both opened original database identities, uses bounded `pread` and in-memory SQLite only, and emits canonical digests/counts, not raw business rows. Existing synthetic tests challenge type changes, multiplicity, rowid, metadata, sidecars and path ambiguity.
 
-- `scripts/g3-forward-adoption-readonly-witness.py`: a bounded and fail-closed read-only observation program. Its output captures verified open-file identities, verifier and runtime identities, precise table list/counts/order-independent typed row-set hashes (including NULL, BLOB, float, duplicates and rowid), complete observed DDL/column digests, index_xinfo/foreign key/index-list/table-list summaries and header policy. **No raw production rows are exported.** All errors are `WITNESS_FAIL_CLOSED`.
-- `scripts/verify-g3-forward-adoption-witness-signature.mjs`: validates an external Ed25519 signature on a canonical transcript, explicit signer SPKI fingerprint, capture digest and verifier digest. Even a valid signature **only means the bytes were signed by the matching key**. A caller-supplied key is not a trusted production-origin attestation; the key must be pinned by independently authorized governance evidence, currently **NOT_BOUND**. Verification only emits `SIGNED_READONLY_OBSERVATION_NOT_ADMISSION` and never opens any write gate.
+The provided `scripts/verify-g3-forward-adoption-witness-signature.mjs` is an **available** Ed25519 integrity-verification option and checks the pinned verifier digest, production target hashes, true 40/42-table roster, cross-side rowset equality, exact first-ten-migration digest and the version11 checksum/timestamp. A signed JSON document or author-supplied public key **alone** is not verified production provenance or a human authorization.
 
-The signature verifier also rejects any roster not matching the **exact 40/42 table names generated by the pinned original image**; recomputes cross-side column, row-count and row-set parity for each unchanged table; separately checks the original 10 migration records via matching signed prefix digests **also equal to the frozen previously observed historical prefix SHA256**, migration-table columns, and the exact version11 marker identity with a calendar-valid ISO UTC-millisecond round-trip timestamp; requires matching database header metadata; and rejects non-regular or oversized evidence files using nonblocking opens and bounded Base64 decoding. A valid signature on mismatched data or invented table names is rejected. The signed record still does not prove its own production origin.
+G2 calls for **trusted verification**, not a particular off-host signing infrastructure. The implementation route must be explicitly reviewed under a chosen trust model, with an independently verified witness source and capture provenance. If an external signing route is chosen, its public-key/trust-anchor/anti-replay protocol must be separately approved and actually proven. No trusted live-origin capture exists yet; repository summaries and local synthetic test successes cannot substitute.
 
-Both exact SHA256 code digests are pinned in `g3-forward-adoption-evidence-and-contract.r1.json`. No production private signing key exists or is requested here. The reviewed verifier and signed capture must be executed by an independently authorized origin witness in a later, separate task. The previous repository-authored 38/38 summary and existing clean GitHub CI are valuable evidence but **not** that independently signed witness.
+### E3. Application-semantic Schema11 equivalence
 
-### P2. Explicit SQLite semantic equivalence domain
+The minimum proof fixes the original pinned migration identity and checks all application-relevant schema, typed business records, duplicates, migration markers (complete Schema10 prefix and exact version11), necessary indexes/constraints, integrity and foreign keys. Preserved Schema10 and active Schema11 are compared without exporting raw business rows.
 
-The observation includes **all** user and SQLite internal tables (including `sqlite_sequence` and `sqlite_stat*` if present), row multiplicity and rowid where supported, exact migration-record prefix and bounded version11 timestamp checks, `sqlite_schema`, `table_xinfo`, `index_xinfo`, `index_list`, `foreign_key_list`, `table_list`, `application_id`, `user_version`, `encoding`, `page_size`, `auto_vacuum`, file-header format read/write bytes, integrity and FK checks. Exact schema/column manifest hashes for both versions are already pinned from the original immutable image comparison. If the pinned schema object inventory or required field drifts, the project G3 profile reports failure.
+Byte-for-byte equality of distinct Schema versions is **not** expected. Physical page allocation, free-list layout, planner statistics and connection-local values need explicit relevance/exclusion treatment, not automatic universal equivalence obligations. The existing stricter metadata-checking tool may be reused without making every optional SQLite internal field a new G3 release gate. Unknown material differences or unreviewed exclusions ⇒ FAIL_CLOSED.
 
-**Deliberate exclusions:** `schema_version` is changed by the migration; `page_count` and `freelist_count` represent physical page allocation rather than logical database semantics. `cache_size`, `synchronous` and `data_version` are connection-local/runtime policy values; source `journal_mode` is not inferred from an in-memory SQLite handle and must instead be checked through the source file's header read/write versions and absence of sidecars. The newly created Migration11 `applied_at` is non-deterministic, but the first ten full migration rows (including timestamps) must match byte-for-byte. Any excluded field whose materiality becomes relevant must be explicitly reviewed, not silently ignored.
+The previous live observations supported 38/38 unchanged business row sets, verified original migration identity and sound SQLite integrity. They remain **supporting evidence**, not independent production-origin authorization.
 
-The witness does **not** claim byte-identical Schema10 and Schema11 files. It targets bounded *application-semantic* parity, with explicit physical non-equivalence where Migration11 changes schema/allocation.
+## 2. Minimum future-only G3 reconciliation authority
 
-## 2. Minimum future-only G3 reconciliation contract
+**Proposed action:** `G3_FORWARD_SCHEMA11_BASELINE_ADOPTION_R1`, currently NOT admitted by the frozen G2/G3 execution contract. A separately reviewed and explicitly approved **versioned G3 reconciliation exception** is required. No new top-level gate family or rewrite of the original `G3_SCHEMA11_CUTOVER` operation is permitted.
 
-Proposed action: `G3_FORWARD_SCHEMA11_BASELINE_ADOPTION_R1`.
+After that authority surface is reviewed and merged, an executable target, if ever proposed, must bind a fresh canonical head; approved evidence method and trust boundary; pinned source/image/migration; live active and preserved DB identities; verified provenance/containment/equivalence; historical G3 `COMMITTED / RECONCILIATION_REQUIRED` and the consumed rollback `UNKNOWN`; new operation/replay identity and exact target digest. Only then may a **new, prior-to-action, explicit human approval** be requested.
 
-Only after the review surface is merged and separately approved, a future exact target would bind:
-- then-current canonical authority head, approved contract/version/digest, approved signer identity, exact observer and signature verifier code digests and runtime;
-- fresh active Schema11 and preserved Schema10 file identities, trusted parity evidence and durable two-file containment attestation;
-- historical original G3 physical `COMMITTED` but governance `RECONCILIATION_REQUIRED`, old approved/execution authority-head mismatch and the permanently consumed rollback `UNKNOWN`;
-- a new unique operation/replay identity, a new pre-claim signed **explicit human approval** for the exact target digest, and a root-controlled append-only audit receipt effective *only from new admission time*.
+A new distinct durable, append-only *governance reconciliation* record would become effective only from its independently verified new admission time; it must **not write the production SQLite database** or label the original cutover authorized. Old attempt ledgers and receipts remain immutable. Any UNCERTAIN/UNKNOWN state blocks automatic retry and readmission.
 
-There can be **no** reuse of original G3/rollback identities, re-dating of approval, mutation or relabeling of historical receipts, default release of normal writes, automatic service startup, or G4 entry. A new receipt may say `RECONCILED_FORWARD_ONLY` without changing the old `RECONCILIATION_REQUIRED` incident. The old G2/G3 contract does not itself authorize this new action: a separately signed, reviewed **versioned G3 governance exception/amendment** must explicitly permit this G3 sub-action while preserving G2's historical invariants and `NO_NEW_GATE_FAMILY`.
+A future accepted baseline is **not** writer admission, service startup, file-custody release or G4. Those are separately reviewed and separately authorized production actions.
 
-After any successful future-only baseline adoption, **writer readmission, service startup and G4 still require separate fresh evidence and human authorization**. The existing source startup gate and G3 validator remain unchanged and fail-closed in this PR.
+## 3. Current gated status
 
-## 3. Explicit audit outcomes
-
-| Proof requirement | Code or evidence present here | Authority disposition |
+| Obligation | Code/design surface | Production admission evidence |
 | --- | --- | --- |
-| P1 durable two-file capability revocation | Exact mandatory predicate and pinned read-only snapshot implementation; independent durable witness not yet available | **BLOCKED** |
-| P2 exact comparator / signed transcript | Frozen scripts and adversarial synthetic tests; external origin signer not bound, no signed live capture | **BLOCKED** |
-| P2 SQLite metadata coverage | Deterministic comparison domain + explicit exclusions and negative synthetic fixtures | **IMPLEMENTED AS REVIEW CANDIDATE** |
-| G3 prospective governance exception | Minimal versioned non-executable contract; no authorized exception/target/approval | **BLOCKED** |
+| E1 durable writer containment and both file identities | Required predicate defined; specific ext4 mechanism optional | **NOT PROVEN** |
+| E2 trusted capture/provenance | Reviewed witness and optional signing verifier; no independently accepted live origin/trust path | **NOT PROVEN** |
+| E3 semantic parity | Frozen reproducible comparator + prior read-only support | **METHOD CANDIDATE**, fresh approved evidence still missing |
+| Prospective G3 exception/approval | Minimal non-executable contract | **NOT APPROVED** |
 
 ```text
-TECHNICAL_METHOD_STATUS      = FROZEN_REVIEW_CANDIDATE
-ORIGIN_TRUST_ANCHOR          = NOT_BOUND
-DURABLE_TWO_FILE_CONTAINMENT = NOT_PROVEN
-SIGNED_PRODUCTION_WITNESS    = NOT_CREATED
-FORWARD_ADOPTION_TARGET      = NOT_CREATED
-HUMAN_APPROVAL               = NOT_REQUESTED
-HISTORICAL_G3_GOVERNANCE     = RECONCILIATION_REQUIRED
-OLD_ROLLBACK                 = UNKNOWN
-WRITER_READMISSION           = BLOCKED
-PRODUCTION_SERVICE           = BLOCKED
-G4                           = BLOCKED
-PHYSICAL_ROLLBACK            = NOT_PERFORMED
+HISTORICAL_G3_GOVERNANCE      = RECONCILIATION_REQUIRED
+HISTORICAL_ROLLBACK           = UNKNOWN; REPLAY CONSUMED
+TRUST_MODEL                   = UNSELECTED
+E1_WRITER_CONTAINMENT         = NOT_PROVEN
+E2_TRUSTED_ORIGIN             = NOT_PROVEN
+E3_ADMISSIBLE_LIVE_PROOF      = NOT_OBTAINED
+VERSIONED_G3_EXCEPTION        = NOT_APPROVED
+HUMAN_FORWARD_ADOPTION_TARGET = NOT_CREATED
+WRITER / SERVICE / G4         = BLOCKED
+PRODUCTION_DB_MUTATION        = NONE
 ```
 
-**Review boundary:** Do not broaden this patch into a general G3 redesign or production activation. Reject future admission if any of the three proof requirements or explicit prospective human authority is missing. Evidence-only validation success never substitutes for a legally admitted production operation.
+**Do not mistake a narrower implementation contract for permission to release any G2/G3 hard stop.** The non-executable code/tests remain usable, but neither an off-host signer nor a two-inode ext4 immutable feature is prescribed unconditionally.

@@ -93,7 +93,7 @@ The placeholders are deliberate. No exact target digest exists, and none may be 
 
 ## D1. Independent review remediation (strictly scoped)
 
-The P1 two-database durable containment proof, P2 independently signed verifier transcript and P2 SQLite metadata domain are frozen as explicit **non-executable requirements** in `G3_FORWARD_ADOPTION_EVIDENCE_AND_CONTRACT_R1.md` and `g3-forward-adoption-evidence-and-contract.r1.json`. A valid observational transcript or a correctly verified Ed25519 signature **alone** never passes durable containment, governance exception approval or writer readmission. The existing reconciliation validator and runtime startup gate are untouched. The historical G3 physical `COMMITTED` and governance `RECONCILIATION_REQUIRED` continue to coexist without rewriting evidence.
+The three production evidence **obligations** remain: durable normal-writer containment and two-file integrity, independently trusted/reproducible live evidence, and application-semantic SQLite equivalence. See `G3_MINIMUM_CLOSURE_SCOPE_R1.md` and the revised `G3_FORWARD_ADOPTION_EVIDENCE_AND_CONTRACT_R1.md`: they expressly separate those hard requirements from **optional implementation choices** such as two ext4 immutable flags, an off-host Ed25519 signer or defending against a malicious trusted root. No trust model is selected or independently approved here. A valid signed observation alone still never grants governance, writer or service authority. The existing reconciliation validator and startup gate are untouched; original G3 physical `COMMITTED`, governance `RECONCILIATION_REQUIRED` and prior rollback `UNKNOWN` remain unaltered.
 
 ## E. Attack/negative matrix
 
