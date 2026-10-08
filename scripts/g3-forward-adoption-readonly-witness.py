@@ -301,6 +301,8 @@ def capture(prestate_path, active_path, profile):
             },
             "comparedLegacyTables": len(legacy),
             "schemaMigrationPrefixSha256": digest(pre["markers"]),
+            "activeMigrationPrefixSha256": digest(active["markers"][:len(pre["markers"])]),
+            "migration11Marker": active["markers"][-1] if len(active["markers"]) == 11 else None,
             "excludedMetadata": HEADER_EXCLUDED,
             "problems": problems,
             "durableWriteCapabilityRevocation": "NOT_ATTESTED",

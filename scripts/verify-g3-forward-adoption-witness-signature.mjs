@@ -132,6 +132,7 @@ function assertCompleteCapturedSchema(payload) {
   const fields = [
     'domain','profile','verifierSha256','runtime','sampling','fileIdentities',
     'prestate','active','comparedLegacyTables','schemaMigrationPrefixSha256',
+    'activeMigrationPrefixSha256','migration11Marker',
     'excludedMetadata','problems','durableWriteCapabilityRevocation',
     'productionOriginSignature','historicalG3Governance','oldRollbackStatus',
     'adoptionAuthorityAllowed','writerReadmissionAllowed','serviceStartAllowed',
@@ -144,6 +145,7 @@ function assertCompleteCapturedSchema(payload) {
       || payload.sampling !== 'PINNED_READONLY_FD_IN_MEMORY_SQLITE'
       || payload.comparedLegacyTables !== 38
       || !SHA256.test(payload.schemaMigrationPrefixSha256)
+      || !SHA256.test(payload.activeMigrationPrefixSha256)
       || payload.productionOriginSignature !== 'NOT_PRESENT'
       || !exactKeys(payload.excludedMetadata, [
         'schema_version','page_count','freelist_count','cache_size',
@@ -195,6 +197,23 @@ function assertCompleteCapturedSchema(payload) {
       || payload.active.tables.agent_grant_attempts.rowCount !== 0
       || payload.active.tables.schedule_reschedule_operations.rowCount !== 0) {
     throw new Error('OBSERVATION_NEW_TABLE_SET_INVALID');
+  }
+  // Check the entire original migration prefix, rather than skipping its history
+  // merely because the appended version-11 marker changes the full rowset.
+  if (canonical(payload.prestate.tables.schema_migrations.columns)
+      !== canonical(payload.active.tables.schema_migrations.columns)) {
+    throw new Error('MIGRATION_COLUMN_PARITY_MISMATCH');
+  }
+  if (payload.schemaMigrationPrefixSha256 !== payload.activeMigrationPrefixSha256) {
+    throw new Error('MIGRATION_PREFIX_PARITY_MISMATCH');
+  }
+  const marker = payload.migration11Marker;
+  if (!Array.isArray(marker) || marker.length !== 4 || marker[0] !== 11
+      || marker[1] !== 'business_calendar_and_reschedule'
+      || marker[2] !== 'sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8'
+      || typeof marker[3] !== 'string'
+      || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$/.test(marker[3])) {
+    throw new Error('MIGRATION11_MARKER_INVALID');
   }
   // Recompute determinable semantics, not merely the signer's problems: [] claim.
   for (const table of G3_PRESTATE_TABLES) {

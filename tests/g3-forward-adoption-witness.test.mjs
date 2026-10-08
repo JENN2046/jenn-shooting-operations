@@ -55,6 +55,10 @@ function fixture() {
     sampling: 'PINNED_READONLY_FD_IN_MEMORY_SQLITE',
     comparedLegacyTables: 38,
     schemaMigrationPrefixSha256: prestateSha,
+    activeMigrationPrefixSha256: prestateSha,
+    migration11Marker: [11, 'business_calendar_and_reschedule',
+      'sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8',
+      '2026-10-08T00:00:00.000Z'],
     excludedMetadata: {
       schema_version: 'migration change modifies schema cookie',
       page_count: 'page allocation is not a business semantic',
@@ -279,4 +283,30 @@ catch (e) { console.log(e.message); process.exit(42); }`;
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('a validly signed witness cannot alter original migration history or the new marker', () => {
+  const a = fixture();
+  const prefixChanged = resignFixture(a.opts, a.privateKey, payload => {
+    payload.activeMigrationPrefixSha256 = 'sha256:' + 'c'.repeat(64);
+  });
+  assert.throws(() => verifyWitnessEnvelope(prefixChanged), /MIGRATION_PREFIX_PARITY_MISMATCH/);
+
+  const b = fixture();
+  const columnsChanged = resignFixture(b.opts, b.privateKey, payload => {
+    payload.active.tables.schema_migrations.columns = ['changed', 'version', 'checksum'];
+  });
+  assert.throws(() => verifyWitnessEnvelope(columnsChanged), /MIGRATION_COLUMN_PARITY_MISMATCH/);
+
+  const c = fixture();
+  const markerChanged = resignFixture(c.opts, c.privateKey, payload => {
+    payload.migration11Marker[2] = 'sha256:' + 'd'.repeat(64);
+  });
+  assert.throws(() => verifyWitnessEnvelope(markerChanged), /MIGRATION11_MARKER_INVALID/);
+
+  const d = fixture();
+  const markerMissing = resignFixture(d.opts, d.privateKey, payload => {
+    delete payload.migration11Marker;
+  });
+  assert.throws(() => verifyWitnessEnvelope(markerMissing), /OBSERVATION_PAYLOAD_SHAPE_INVALID/);
 });

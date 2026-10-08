@@ -24,9 +24,9 @@
   },
   "verifiedCode": {
     "observationVerifier": "scripts/g3-forward-adoption-readonly-witness.py",
-    "observationVerifierSha256": "sha256:b34dc8cf3971f2dec64a48ea5c9c7a0376e23f4ce6e7b40bbe3777022463c353",
+    "observationVerifierSha256": "sha256:1fa0d54c567cb96236247a095b12ed987d5e0c4e7e917dd8fb5248233abe5fdd",
     "ed25519EnvelopeVerifier": "scripts/verify-g3-forward-adoption-witness-signature.mjs",
-    "ed25519EnvelopeVerifierSha256": "sha256:07d09eb57b5a483d9072fb4dac0bfdea0d06b4f4a15a66a066c671146b411d6f",
+    "ed25519EnvelopeVerifierSha256": "sha256:80fc4b3bc01f529276c58b5e06f9d3ec09c19fd40b126a878506d2c094471800",
     "exactOriginalMigrationChecksum": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8",
     "originalMigrationImageSha256": "sha256:581e9fa25e04b582aa39c2fdaa291f6db3e80fc3f3ac15a8a4afa06622442144",
     "maxDatabaseBytes": 67108864,
@@ -73,7 +73,9 @@
       "currentResult": "NOT_YET_ATTESTED",
       "signedTableRosterMustMatchPinnedProjectNames": true,
       "signatureVerifierMustRecomputeCommonTableParityAndHeaderParity": true,
-      "nonblockingRegularFileInputRequired": true
+      "nonblockingRegularFileInputRequired": true,
+      "signedOriginalMigrationPrefixParityRequired": true,
+      "signedExactMigration11MarkerRequired": true
     },
     "P2_SQLITE_METADATA_EQUIVALENCE": {
       "mandatory": true,
