@@ -6,7 +6,7 @@ const MAX_PAYLOAD_BYTES = 768 * 1024;
 const SHA256 = /^sha256:[a-f0-9]{64}$/;
 
 export function readBoundedUtf8(path, maxBytes) {
-  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const before = fstatSync(fd);
     if (!before.isFile() || before.nlink !== 1 || before.size < 1 || before.size > maxBytes) {
@@ -70,6 +70,64 @@ function base64Strict(text, maxBytes) {
   return data;
 }
 
+// Pinned from the exact original migration image (immutable source revision).
+// Do not infer schema rosters from caller-authored signed evidence.
+export const G3_PRESTATE_TABLES = Object.freeze([
+  'audit_log',
+  'empty_db_initialization',
+  'empty_db_maintenance_operations',
+  'gf15_command_packets',
+  'gf15_control_receipts',
+  'gf15_outbox_isolation',
+  'gf15_scheduling_leases',
+  'kiosk_smoke_binding',
+  'kiosk_smoke_outbox_isolation',
+  'kiosk_smoke_phases',
+  'kiosk_smoke_runtime_session',
+  'kiosk_smoke_stop',
+  'legacy_asset_entries',
+  'legacy_compat_fragments',
+  'migration_batches',
+  'notification_outbox',
+  'operations',
+  'product_catalog_entries',
+  'production_events',
+  'production_runs',
+  'requests_v2',
+  'revision_counters',
+  'run_event_id_owners',
+  'run_event_reviews',
+  'schedule_item_tasks',
+  'schedule_items',
+  'schedule_state',
+  'scheduling_active_config',
+  'scheduling_admin_operations',
+  'scheduling_config_activations',
+  'scheduling_config_versions',
+  'scheduling_proposal_decisions',
+  'scheduling_proposals',
+  'scheduling_request_requirements',
+  'scheduling_resources',
+  'scheduling_run_context_snapshots',
+  'schema_migrations',
+  'snapshot_projections',
+  'sqlite_sequence',
+  'uploads',
+]);
+const G3_ACTIVE_TABLES = Object.freeze([
+  ...G3_PRESTATE_TABLES, 'agent_grant_attempts', 'schedule_reschedule_operations'
+].sort());
+const G3_SCHEMA_MANIFESTS = Object.freeze({
+  prestate: Object.freeze({
+    schema: 'sha256:c9dc6643560b4439f2a635bbc71107eca3b2130589f453dbeb472d2101117e39',
+    columns: 'sha256:2af54e93c3ed07ca86aa43a2b1a4aad8a263fef2aaefc45c7867939d01b72bf2'
+  }),
+  active: Object.freeze({
+    schema: 'sha256:06a1e4b55b0f022bce9d8b2427bd844be6e8b7afe4afa0d6c49547c5ce0c753d',
+    columns: 'sha256:eb832e1a61e67fda4327ba31dd4a162e9b9e8a965e1318a28f2d5a2041f9d204'
+  })
+});
+
 function assertCompleteCapturedSchema(payload) {
   const fields = [
     'domain','profile','verifierSha256','runtime','sampling','fileIdentities',
@@ -96,6 +154,10 @@ function assertCompleteCapturedSchema(payload) {
   const rosters = {};
   for (const side of ['prestate', 'active']) {
     const view = payload[side];
+    if (view?.schemaSha256 !== G3_SCHEMA_MANIFESTS[side].schema
+        || view?.columnSha256 !== G3_SCHEMA_MANIFESTS[side].columns) {
+      throw new Error('PINNED_SCHEMA_MANIFEST_MISMATCH');
+    }
     if (!exactKeys(view.headers, ['application_id','user_version','encoding','page_size','auto_vacuum'])
         || !Number.isSafeInteger(view.headers.application_id)
         || !Number.isSafeInteger(view.headers.user_version)
@@ -106,9 +168,8 @@ function assertCompleteCapturedSchema(payload) {
       throw new Error('OBSERVATION_SQLITE_METADATA_INCOMPLETE');
     }
     const names = Object.keys(view.tables).sort();
-    if (names.length !== (side === 'prestate' ? 40 : 42)
-        || names.some(n => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(n))
-        || !names.includes('schema_migrations') || !names.includes('sqlite_sequence')) {
+    const pinnedNames = side === 'prestate' ? G3_PRESTATE_TABLES : G3_ACTIVE_TABLES;
+    if (JSON.stringify(names) !== JSON.stringify(pinnedNames)) {
       throw new Error('OBSERVATION_TABLE_ROSTER_INCOMPLETE');
     }
     for (const name of names) {
@@ -134,6 +195,16 @@ function assertCompleteCapturedSchema(payload) {
       || payload.active.tables.agent_grant_attempts.rowCount !== 0
       || payload.active.tables.schedule_reschedule_operations.rowCount !== 0) {
     throw new Error('OBSERVATION_NEW_TABLE_SET_INVALID');
+  }
+  // Recompute determinable semantics, not merely the signer's problems: [] claim.
+  for (const table of G3_PRESTATE_TABLES) {
+    if (table === 'schema_migrations') continue; // version 11 adds a marker.
+    if (canonical(payload.prestate.tables[table]) !== canonical(payload.active.tables[table])) {
+      throw new Error('COMMON_TABLE_PARITY_MISMATCH:' + table);
+    }
+  }
+  if (canonical(payload.prestate.headers) !== canonical(payload.active.headers)) {
+    throw new Error('HEADER_PARITY_MISMATCH');
   }
 }
 

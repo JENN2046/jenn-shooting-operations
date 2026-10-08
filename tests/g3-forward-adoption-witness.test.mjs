@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { readBoundedUtf8, verifyWitnessEnvelope } from '../scripts/verify-g3-forward-adoption-witness-signature.mjs';
+import { G3_PRESTATE_TABLES, readBoundedUtf8, verifyWitnessEnvelope } from '../scripts/verify-g3-forward-adoption-witness-signature.mjs';
 
 const signatureScript = new URL('../scripts/verify-g3-forward-adoption-witness-signature.mjs', import.meta.url);
 const witnessScript = new URL('../scripts/g3-forward-adoption-readonly-witness.py', import.meta.url);
@@ -28,9 +28,11 @@ function fixture() {
     device: 3, inode, size: 4096, mode: 384, uid: 1000, gid: 1000, nlink: 1, sha256,
     fileFormatRead: 1, fileFormatWrite: 1, headerPageSizeBytes: 4096
   });
-  const business = Array.from({ length: 38 }, (_, i) => `business_${i}`);
+  const business = G3_PRESTATE_TABLES.filter(t => !['schema_migrations', 'sqlite_sequence'].includes(t));
   const view = side => ({
-    schemaSha256: prestateSha, columnSha256: prestateSha, indexXinfoSha256: prestateSha,
+    schemaSha256: side === 'prestate' ? 'sha256:c9dc6643560b4439f2a635bbc71107eca3b2130589f453dbeb472d2101117e39' : 'sha256:06a1e4b55b0f022bce9d8b2427bd844be6e8b7afe4afa0d6c49547c5ce0c753d',
+    columnSha256: side === 'prestate' ? 'sha256:2af54e93c3ed07ca86aa43a2b1a4aad8a263fef2aaefc45c7867939d01b72bf2' : 'sha256:eb832e1a61e67fda4327ba31dd4a162e9b9e8a965e1318a28f2d5a2041f9d204',
+    indexXinfoSha256: prestateSha,
     foreignKeysSha256: prestateSha, indexListSha256: prestateSha, tableListSha256: prestateSha,
     headers: { application_id: 0, user_version: 0, encoding: 'UTF-8', page_size: 4096, auto_vacuum: 0 },
     tables: Object.fromEntries(
@@ -198,7 +200,7 @@ test('signed transcript with missing runtime or table columns is rejected after 
     /OBSERVATION_PAYLOAD_SHAPE_INVALID/);
   const b = fixture();
   assert.throws(() => verifyWitnessEnvelope(resignFixture(b.opts, b.privateKey, p => {
-    delete p.active.tables.business_0.columns;
+    delete p.active.tables.audit_log.columns;
   })), /OBSERVATION_TABLE_ROWS_INCOMPLETE/);
   const c = fixture();
   assert.throws(() => verifyWitnessEnvelope(resignFixture(c.opts, c.privateKey, p => {
@@ -217,6 +219,63 @@ test('oversized base64 and malformed oversized envelope files fail closed before
     const large = join(root, 'huge-envelope.json');
     writeFileSync(large, Buffer.alloc(1024 * 1024 + 1, 65));
     assert.throws(() => readBoundedUtf8(large, 1024 * 1024), /INPUT_SIZE_BOUND/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the frozen G3 roster is the exact original-image Schema10 roster', () => {
+  assert.equal(G3_PRESTATE_TABLES.length, 40);
+  assert.equal(sha256(Buffer.from(JSON.stringify(G3_PRESTATE_TABLES))),
+    'sha256:d18986eb4d2be140d991f7bd600f14a59c6c07c752b311ef1aa6ed797179131d');
+  assert.ok(G3_PRESTATE_TABLES.includes('scheduling_config_versions'));
+  assert.ok(G3_PRESTATE_TABLES.includes('sqlite_sequence'));
+});
+
+test('signed invented table names cannot substitute the pinned real project roster', () => {
+  const { opts, privateKey } = fixture();
+  const forged = resignFixture(opts, privateKey, payload => {
+    payload.active.tables.invented_business_table = payload.active.tables.audit_log;
+    delete payload.active.tables.audit_log;
+  });
+  assert.throws(() => verifyWitnessEnvelope(forged), /OBSERVATION_TABLE_ROSTER_INCOMPLETE/);
+});
+
+test('validly signed unequal rowsets, columns or metadata are not equivalent', () => {
+  for (const edit of [
+    payload => { payload.active.tables.audit_log.rowSetSha256 = 'sha256:' + 'c'.repeat(64); },
+    payload => { payload.active.tables.audit_log.rowCount += 1; },
+    payload => { payload.active.tables.audit_log.columns = ['rowid', 'changed']; }
+  ]) {
+    const { opts, privateKey } = fixture();
+    const altered = resignFixture(opts, privateKey, edit);
+    assert.throws(() => verifyWitnessEnvelope(altered), /COMMON_TABLE_PARITY_MISMATCH:audit_log/);
+  }
+  const { opts, privateKey } = fixture();
+  const headerDrift = resignFixture(opts, privateKey, payload => {
+    payload.active.headers.user_version = 12;
+  });
+  assert.throws(() => verifyWitnessEnvelope(headerDrift), /HEADER_PARITY_MISMATCH/);
+  const obj = fixture();
+  const invalidDDL = resignFixture(obj.opts, obj.privateKey, payload => {
+    payload.active.schemaSha256 = 'sha256:' + 'd'.repeat(64);
+  });
+  assert.throws(() => verifyWitnessEnvelope(invalidDDL), /PINNED_SCHEMA_MANIFEST_MISMATCH/);
+});
+
+test('FIFO path rejection is nonblocking even with no writer', () => {
+  const root = mkdtempSync(join(tmpdir(), 'g3-witness-nonblock-'));
+  try {
+    const fifo = join(root, 'untrusted-evidence.fifo');
+    execFileSync('mkfifo', [fifo]);
+    const script = `import { readBoundedUtf8 } from ${JSON.stringify(signatureScript.href)};
+try { readBoundedUtf8(process.argv[1], 1024); process.exit(0); }
+catch (e) { console.log(e.message); process.exit(42); }`;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script, fifo],
+      { encoding: 'utf8', timeout: 2000 });
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 42);
+    assert.match(result.stdout, /INPUT_SIZE_BOUND/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

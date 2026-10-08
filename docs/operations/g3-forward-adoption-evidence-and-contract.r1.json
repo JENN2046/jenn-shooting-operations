@@ -26,11 +26,13 @@
     "observationVerifier": "scripts/g3-forward-adoption-readonly-witness.py",
     "observationVerifierSha256": "sha256:b34dc8cf3971f2dec64a48ea5c9c7a0376e23f4ce6e7b40bbe3777022463c353",
     "ed25519EnvelopeVerifier": "scripts/verify-g3-forward-adoption-witness-signature.mjs",
-    "ed25519EnvelopeVerifierSha256": "sha256:60974c2b7061ffb5c08001d0db1e62283a368a17b69d60aeb4e6c08b77814343",
+    "ed25519EnvelopeVerifierSha256": "sha256:07d09eb57b5a483d9072fb4dac0bfdea0d06b4f4a15a66a066c671146b411d6f",
     "exactOriginalMigrationChecksum": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8",
     "originalMigrationImageSha256": "sha256:581e9fa25e04b582aa39c2fdaa291f6db3e80fc3f3ac15a8a4afa06622442144",
     "maxDatabaseBytes": 67108864,
-    "noProductionFileDefaultPath": true
+    "noProductionFileDefaultPath": true,
+    "schema10ExactTableRosterSha256": "sha256:d18986eb4d2be140d991f7bd600f14a59c6c07c752b311ef1aa6ed797179131d",
+    "schema11ExactTableRosterSha256": "sha256:05dc686d17dcf8cde781f351b272f99100970d316c78097cd1d4beb24dad724d"
   },
   "threeProofObligations": {
     "P1_DURABLE_TWO_FILE_CONTAINMENT": {
@@ -68,7 +70,10 @@
       "captureSignedButNoContainmentStillCannotAdmit": true,
       "negativeSyntheticFixtureCoverage": true,
       "rawProductionRowsMayBeExported": false,
-      "currentResult": "NOT_YET_ATTESTED"
+      "currentResult": "NOT_YET_ATTESTED",
+      "signedTableRosterMustMatchPinnedProjectNames": true,
+      "signatureVerifierMustRecomputeCommonTableParityAndHeaderParity": true,
+      "nonblockingRegularFileInputRequired": true
     },
     "P2_SQLITE_METADATA_EQUIVALENCE": {
       "mandatory": true,
