@@ -56,7 +56,7 @@ Candidate minimal target fields:
   },
   "independentProof": {
     "method": "<approved exact method>",
-    "trustedEvidenceDigest": "<independent signed witness digest>"
+    "trustedEvidenceDigest": "<digest of evidence independently verified under the approved trust method>"
   },
   "effect": {
     "effectiveOnlyAfterNewAdmission": true,
