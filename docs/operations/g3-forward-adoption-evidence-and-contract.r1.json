@@ -24,9 +24,9 @@
   },
   "verifiedCode": {
     "observationVerifier": "scripts/g3-forward-adoption-readonly-witness.py",
-    "observationVerifierSha256": "sha256:bdff9a254ec56625bfc4be34189c038fdc0f1bc94be69d25cc39e3247141aeff",
+    "observationVerifierSha256": "sha256:b34dc8cf3971f2dec64a48ea5c9c7a0376e23f4ce6e7b40bbe3777022463c353",
     "ed25519EnvelopeVerifier": "scripts/verify-g3-forward-adoption-witness-signature.mjs",
-    "ed25519EnvelopeVerifierSha256": "sha256:f97f80436ac0cd662619c4bb8457e9566de994215445be347b4fe55396b808d5",
+    "ed25519EnvelopeVerifierSha256": "sha256:60974c2b7061ffb5c08001d0db1e62283a368a17b69d60aeb4e6c08b77814343",
     "exactOriginalMigrationChecksum": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8",
     "originalMigrationImageSha256": "sha256:581e9fa25e04b582aa39c2fdaa291f6db3e80fc3f3ac15a8a4afa06622442144",
     "maxDatabaseBytes": 67108864,

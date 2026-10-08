@@ -1,5 +1,34 @@
 import { createHash, createPublicKey, verify as verifySignature } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { openSync, closeSync, fstatSync, readSync, constants } from 'node:fs';
+
+const MAX_ENVELOPE_BYTES = 1024 * 1024;
+const MAX_PAYLOAD_BYTES = 768 * 1024;
+const SHA256 = /^sha256:[a-f0-9]{64}$/;
+
+export function readBoundedUtf8(path, maxBytes) {
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const before = fstatSync(fd);
+    if (!before.isFile() || before.nlink !== 1 || before.size < 1 || before.size > maxBytes) {
+      throw new Error('INPUT_SIZE_BOUND');
+    }
+    const bytes = Buffer.alloc(before.size);
+    let used = 0;
+    while (used < bytes.length) {
+      const count = readSync(fd, bytes, used, bytes.length - used, used);
+      if (!count) throw new Error('INPUT_SHORT_READ');
+      used += count;
+    }
+    const after = fstatSync(fd);
+    if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size
+        || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) {
+      throw new Error('INPUT_CHANGED_DURING_READ');
+    }
+    return bytes.toString('utf8');
+  } finally {
+    closeSync(fd);
+  }
+}
 
 const fail = code => {
   console.error(JSON.stringify({ status: 'G3_FORWARD_WITNESS_SIGNATURE_REJECTED', code, adoptionAuthorityAllowed: false }));
@@ -28,13 +57,84 @@ function exactKeys(obj, keys) {
     && JSON.stringify(Object.keys(obj).sort()) === JSON.stringify([...keys].sort());
 }
 
-function base64Strict(text) {
-  if (typeof text !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(text)) {
+function base64Strict(text, maxBytes) {
+  if (typeof text !== 'string' || text.length > Math.ceil(maxBytes * 4 / 3) + 4) {
+    throw new Error('BASE64_INPUT_SIZE_BOUND');
+  }
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(text)) {
     throw new Error('NONCANONICAL_BASE64');
   }
   const data = Buffer.from(text, 'base64');
+  if (data.length > maxBytes) throw new Error('BASE64_INPUT_SIZE_BOUND');
   if (data.toString('base64') !== text) throw new Error('BASE64_ROUNDTRIP_MISMATCH');
   return data;
+}
+
+function assertCompleteCapturedSchema(payload) {
+  const fields = [
+    'domain','profile','verifierSha256','runtime','sampling','fileIdentities',
+    'prestate','active','comparedLegacyTables','schemaMigrationPrefixSha256',
+    'excludedMetadata','problems','durableWriteCapabilityRevocation',
+    'productionOriginSignature','historicalG3Governance','oldRollbackStatus',
+    'adoptionAuthorityAllowed','writerReadmissionAllowed','serviceStartAllowed',
+    'g4Allowed','captureDigest','status'
+  ];
+  if (!exactKeys(payload, fields)
+      || !exactKeys(payload.runtime, ['python', 'sqlite'])
+      || !/^3[.][0-9]+[.][0-9]+$/.test(payload.runtime.python)
+      || !/^3[.][0-9]+[.][0-9]+$/.test(payload.runtime.sqlite)
+      || payload.sampling !== 'PINNED_READONLY_FD_IN_MEMORY_SQLITE'
+      || payload.comparedLegacyTables !== 38
+      || !SHA256.test(payload.schemaMigrationPrefixSha256)
+      || payload.productionOriginSignature !== 'NOT_PRESENT'
+      || !exactKeys(payload.excludedMetadata, [
+        'schema_version','page_count','freelist_count','cache_size',
+        'synchronous','data_version','journal_mode'
+      ]) || !Object.values(payload.excludedMetadata).every(v => typeof v === 'string' && v.length > 10)) {
+    throw new Error('OBSERVATION_PAYLOAD_SHAPE_INVALID');
+  }
+  const rosters = {};
+  for (const side of ['prestate', 'active']) {
+    const view = payload[side];
+    if (!exactKeys(view.headers, ['application_id','user_version','encoding','page_size','auto_vacuum'])
+        || !Number.isSafeInteger(view.headers.application_id)
+        || !Number.isSafeInteger(view.headers.user_version)
+        || view.headers.encoding !== 'UTF-8'
+        || !Number.isSafeInteger(view.headers.page_size)
+        || !Number.isSafeInteger(view.headers.auto_vacuum)
+        || !view.tables || Array.isArray(view.tables)) {
+      throw new Error('OBSERVATION_SQLITE_METADATA_INCOMPLETE');
+    }
+    const names = Object.keys(view.tables).sort();
+    if (names.length !== (side === 'prestate' ? 40 : 42)
+        || names.some(n => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(n))
+        || !names.includes('schema_migrations') || !names.includes('sqlite_sequence')) {
+      throw new Error('OBSERVATION_TABLE_ROSTER_INCOMPLETE');
+    }
+    for (const name of names) {
+      const table = view.tables[name];
+      if (!exactKeys(table, ['columns','rowCount','rowSetSha256'])
+          || !Array.isArray(table.columns) || table.columns.length === 0
+          || table.columns.length > 512
+          || table.columns.some(c => typeof c !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(c))
+          || !Number.isSafeInteger(table.rowCount)
+          || table.rowCount < 0 || table.rowCount > 250000
+          || typeof table.rowSetSha256 !== 'string' || !SHA256.test(table.rowSetSha256)) {
+        throw new Error('OBSERVATION_TABLE_ROWS_INCOMPLETE');
+      }
+    }
+    if (view.tables.schema_migrations.rowCount !== (side === 'prestate' ? 10 : 11)) {
+      throw new Error('MIGRATION_PREFIX_COUNT_INVALID');
+    }
+    rosters[side] = names;
+  }
+  const added = rosters.active.filter(x => !rosters.prestate.includes(x));
+  const removed = rosters.prestate.filter(x => !rosters.active.includes(x));
+  if (removed.length || JSON.stringify(added) !== JSON.stringify(['agent_grant_attempts','schedule_reschedule_operations'])
+      || payload.active.tables.agent_grant_attempts.rowCount !== 0
+      || payload.active.tables.schedule_reschedule_operations.rowCount !== 0) {
+    throw new Error('OBSERVATION_NEW_TABLE_SET_INVALID');
+  }
 }
 
 export function verifyWitnessEnvelope({ envelope, publicKeyPem, expectedSignerKeyId, expectedCaptureDigest, expectedVerifierDigest, expectedFileSha256 }) {
@@ -52,8 +152,8 @@ export function verifyWitnessEnvelope({ envelope, publicKeyPem, expectedSignerKe
   if (actualSignerId !== expectedSignerKeyId || envelope.signerKeyId !== actualSignerId) {
     throw new Error('SIGNER_KEY_PIN_MISMATCH');
   }
-  const bytes = base64Strict(envelope.payloadCanonicalBase64);
-  const signature = base64Strict(envelope.signatureBase64);
+  const bytes = base64Strict(envelope.payloadCanonicalBase64, MAX_PAYLOAD_BYTES);
+  const signature = base64Strict(envelope.signatureBase64, 64);
   if (signature.length !== 64 || !verifySignature(null, bytes, publicKey, signature)) {
     throw new Error('SIGNATURE_INVALID');
   }
@@ -77,14 +177,18 @@ export function verifyWitnessEnvelope({ envelope, publicKeyPem, expectedSignerKe
       || payload.problems.length !== 0) {
     throw new Error('OBSERVATION_NOT_SUITABLE_FOR_FUTURE_WITNESS');
   }
+  assertCompleteCapturedSchema(payload);
   for (const side of ['prestate', 'active']) {
     const identity = payload.fileIdentities[side];
     const view = payload[side];
     if (!exactKeys(identity, [
       'device','inode','size','mode','uid','gid','nlink','sha256',
       'fileFormatRead','fileFormatWrite','headerPageSizeBytes'
-    ]) || !Number.isSafeInteger(identity.device) || !Number.isSafeInteger(identity.inode)
-      || identity.nlink !== 1 || identity.fileFormatRead !== 1 || identity.fileFormatWrite !== 1
+    ]) || !['device','inode','size','mode','uid','gid','headerPageSizeBytes'].every(k => Number.isSafeInteger(identity[k]) && identity[k] >= 0)
+      || identity.inode < 1 || identity.size < 100 || identity.size > 64 * 1024 * 1024
+      || identity.mode > 0o7777 || identity.nlink !== 1
+      || identity.headerPageSizeBytes !== view.headers.page_size
+      || identity.fileFormatRead !== 1 || identity.fileFormatWrite !== 1
       || identity.sha256 !== expectedFileSha256[side]
       || !exactKeys(view, [
         'schemaSha256','columnSha256','indexXinfoSha256','foreignKeysSha256',
@@ -133,14 +237,14 @@ function parseCli(argv) {
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
   try {
     const args = parseCli(process.argv.slice(2));
-    const envelope = JSON.parse(readFileSync(args['--envelope'], 'utf8'));
-    const publicKeyPem = readFileSync(args['--trusted-public-key'], 'utf8');
+    const envelope = JSON.parse(readBoundedUtf8(args['--envelope'], MAX_ENVELOPE_BYTES));
+    const publicKeyPem = readBoundedUtf8(args['--trusted-public-key'], 8192);
     console.log(JSON.stringify(verifyWitnessEnvelope({
       envelope, publicKeyPem,
       expectedSignerKeyId: args['--expected-signer-key-id'],
       expectedCaptureDigest: args['--expected-capture-digest'],
       expectedVerifierDigest: args['--expected-verifier-digest'],
-      expectedFileSha256: JSON.parse(readFileSync(args['--exact-file-target-json'], 'utf8'))
+      expectedFileSha256: JSON.parse(readBoundedUtf8(args['--exact-file-target-json'], 4096))
     })));
   } catch (error) {
     fail(error.message || 'WITNESS_VERIFY_ERROR');

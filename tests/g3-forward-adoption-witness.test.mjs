@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
-import { verifyWitnessEnvelope } from '../scripts/verify-g3-forward-adoption-witness-signature.mjs';
+import { readBoundedUtf8, verifyWitnessEnvelope } from '../scripts/verify-g3-forward-adoption-witness-signature.mjs';
 
 const signatureScript = new URL('../scripts/verify-g3-forward-adoption-witness-signature.mjs', import.meta.url);
 const witnessScript = new URL('../scripts/g3-forward-adoption-readonly-witness.py', import.meta.url);
@@ -26,17 +28,41 @@ function fixture() {
     device: 3, inode, size: 4096, mode: 384, uid: 1000, gid: 1000, nlink: 1, sha256,
     fileFormatRead: 1, fileFormatWrite: 1, headerPageSizeBytes: 4096
   });
-  const view = () => ({
+  const business = Array.from({ length: 38 }, (_, i) => `business_${i}`);
+  const view = side => ({
     schemaSha256: prestateSha, columnSha256: prestateSha, indexXinfoSha256: prestateSha,
     foreignKeysSha256: prestateSha, indexListSha256: prestateSha, tableListSha256: prestateSha,
-    headers: { application_id: 0 }, tables: { table_one: { rowCount: 1, rowSetSha256: prestateSha } }
+    headers: { application_id: 0, user_version: 0, encoding: 'UTF-8', page_size: 4096, auto_vacuum: 0 },
+    tables: Object.fromEntries(
+      [...business, 'schema_migrations', 'sqlite_sequence',
+        ...(side === 'active' ? ['agent_grant_attempts', 'schedule_reschedule_operations'] : [])
+      ].map(name => [name, {
+        columns: ['rowid', 'value'], rowCount: name === 'schema_migrations' ? (side === 'active' ? 11 : 10)
+          : ['agent_grant_attempts', 'schedule_reschedule_operations'].includes(name) ? 0 : 1,
+        rowSetSha256: prestateSha
+      }])
+    )
   });
   const payload = {
     domain: 'G3_FORWARD_ADOPTION_OBSERVATION_R1',
     profile: 'g3',
     verifierSha256: sha256(readFileSync(witnessScript)),
     fileIdentities: { active: identity(123, activeSha), prestate: identity(456, prestateSha) },
-    active: view(), prestate: view(),
+    active: view('active'), prestate: view('prestate'),
+    runtime: { python: '3.14.4', sqlite: '3.46.1' },
+    sampling: 'PINNED_READONLY_FD_IN_MEMORY_SQLITE',
+    comparedLegacyTables: 38,
+    schemaMigrationPrefixSha256: prestateSha,
+    excludedMetadata: {
+      schema_version: 'migration change modifies schema cookie',
+      page_count: 'page allocation is not a business semantic',
+      freelist_count: 'free pages are not a business semantic',
+      cache_size: 'connection-local cache policy',
+      synchronous: 'connection-local synchronous policy',
+      data_version: 'connection-local read counter',
+      journal_mode: 'in-memory mode differs from source file header'
+    },
+    productionOriginSignature: 'NOT_PRESENT',
     durableWriteCapabilityRevocation: 'NOT_ATTESTED',
     adoptionAuthorityAllowed: false,
     writerReadmissionAllowed: false,
@@ -145,4 +171,53 @@ test('the minimal future-only G3 contract pins exact verifier bytes and remains 
   }
   assert.equal(contract.admissibility.canConstructExecutableTargetNow, false);
   assert.equal(contract.admissibility.currentG3ClosureAllowed, false);
+});
+
+function resignFixture(opts, privateKey, mutate) {
+  const payload = JSON.parse(Buffer.from(opts.envelope.payloadCanonicalBase64, 'base64').toString());
+  mutate(payload);
+  delete payload.captureDigest;
+  delete payload.status;
+  payload.captureDigest = sha256(Buffer.from(canonical(payload)));
+  payload.status = 'READONLY_OBSERVATION_NOT_AUTHORITY';
+  const bytes = Buffer.from(canonical(payload));
+  return {
+    ...opts,
+    expectedCaptureDigest: payload.captureDigest,
+    envelope: {
+      ...opts.envelope,
+      payloadCanonicalBase64: bytes.toString('base64'),
+      signatureBase64: sign(null, bytes, privateKey).toString('base64')
+    }
+  };
+}
+
+test('signed transcript with missing runtime or table columns is rejected after valid signature', () => {
+  const a = fixture();
+  assert.throws(() => verifyWitnessEnvelope(resignFixture(a.opts, a.privateKey, p => { delete p.runtime; })),
+    /OBSERVATION_PAYLOAD_SHAPE_INVALID/);
+  const b = fixture();
+  assert.throws(() => verifyWitnessEnvelope(resignFixture(b.opts, b.privateKey, p => {
+    delete p.active.tables.business_0.columns;
+  })), /OBSERVATION_TABLE_ROWS_INCOMPLETE/);
+  const c = fixture();
+  assert.throws(() => verifyWitnessEnvelope(resignFixture(c.opts, c.privateKey, p => {
+    p.active.tables.agent_grant_attempts.rowCount = 1;
+  })), /OBSERVATION_NEW_TABLE_SET_INVALID/);
+});
+
+test('oversized base64 and malformed oversized envelope files fail closed before decode', () => {
+  const { opts } = fixture();
+  assert.throws(() => verifyWitnessEnvelope({
+    ...opts,
+    envelope: { ...opts.envelope, payloadCanonicalBase64: 'A'.repeat(1_200_000) }
+  }), /BASE64_INPUT_SIZE_BOUND/);
+  const root = mkdtempSync(join(tmpdir(), 'g3-witness-bound-'));
+  try {
+    const large = join(root, 'huge-envelope.json');
+    writeFileSync(large, Buffer.alloc(1024 * 1024 + 1, 65));
+    assert.throws(() => readBoundedUtf8(large, 1024 * 1024), /INPUT_SIZE_BOUND/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

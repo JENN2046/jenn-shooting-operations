@@ -194,8 +194,9 @@ def inspect_database(blob):
 def prove(pre, active, profile):
     problems = []
     common = sorted(set(pre["tables"]) & set(active["tables"]))
-    legacy = [t for t in common if t != "schema_migrations"]
-    for t in legacy:
+    legacy = [t for t in common if t != "schema_migrations" and not t.startswith("sqlite_")]
+    internal = [t for t in common if t.startswith("sqlite_")]
+    for t in legacy + internal:
         if pre["tables"][t] != active["tables"][t]:
             problems.append("LEGACY_TABLE_ROWSET_MISMATCH:" + t)
     for t in set(pre["tables"]) - set(active["tables"]):
