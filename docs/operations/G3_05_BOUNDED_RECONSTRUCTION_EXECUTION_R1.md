@@ -52,7 +52,7 @@ Schema6 精确成员顺序：`.` 目录、`./shooting-operations.sqlite-wal` 609
 
 1. 在 Jenn 新建权限 0700 的本任务存证目录（已有目录则停止），保存 Owner 批准文本、本审批包、工具包摘要、SSH 目标及 UTC 开始时间。对远端 hostname、`sudo -n` 可用性、镜像 ID、无既存本任务目录做只读复核。任何不一致停止。
 2. 通过该 SSH 通道在远端以 `mkdir -m 700 /home/ubuntu/g305-reconstruction-transfer-r1` 原子新建传输目录。用相同 SSH 选项的 scp 传送固定工具包到该目录。核对精确大小及上面的包摘要；不一致停止，绝不执行包内容。
-3. `sudo -n mkdir -m 700 /var/tmp/jso-g305-reconstruction-tool-r1` 原子新建工具目录。仅对已核验工具包执行 `sudo -n tar -xzf /home/ubuntu/g305-reconstruction-transfer-r1/g305-reconstruction-tool-r1.tgz -C /var/tmp/jso-g305-reconstruction-tool-r1 --no-same-owner --no-same-permissions`。进入该目录，`sudo -n sha256sum -c SHA256SUMS` 并与本审批包的两项摘要核对。记录目录及文件身份。
+3. `sudo -n mkdir -m 700 /var/tmp/jso-g305-reconstruction-tool-r1` 原子新建工具目录。仅对已核验工具包执行 `sudo -n tar -xzf /home/ubuntu/g305-reconstruction-transfer-r1/g305-reconstruction-tool-r1.tgz -C /var/tmp/jso-g305-reconstruction-tool-r1 --no-same-owner --no-same-permissions`。执行 `sudo -n sh -c 'cd /var/tmp/jso-g305-reconstruction-tool-r1 && sha256sum -c SHA256SUMS'` 并与本审批包的两项摘要核对。记录目录及文件身份。
 4. 通过同一认证 SSH 通道执行**一次**：
 
    ```sh
