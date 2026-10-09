@@ -49,7 +49,8 @@
         "evidenceContract",
         "g3_02Method",
         "g3_03Acceptance",
-        "historicalRecord"
+        "historicalRecord",
+        "evidenceContractSha256"
       ],
       "properties": {
         "g2Contract": {
@@ -69,6 +70,9 @@
         },
         "historicalRecord": {
           "const": "docs/operations/g3-authority-binding-reconciliation.r1.json"
+        },
+        "evidenceContractSha256": {
+          "const": "sha256:f513522d5c3ebe30fbb5b4b975d49ebdcc6c781f4c937e41c01a3d0f2d27d14e"
         }
       }
     },
@@ -147,7 +151,7 @@
           "const": "PREBOUND_AUTHENTICATED_SSH_ONE_USE_CHALLENGE_EXTERNAL_CUSTODY_STRICT_READBACK"
         },
         "comparison": {
-          "const": "PINNED_RAW_FD_MEMORY_ONLY_WAL_NORMALIZATION_NOATIME_APPLICATION_SEMANTICS"
+          "const": "PINNED_RAW_FD_NOATIME_APPLICATION_SEMANTICS_2_2_DEFERRED"
         },
         "optionalSignatureCompatibility": {
           "const": "DEFER_NOT_SELECTED"

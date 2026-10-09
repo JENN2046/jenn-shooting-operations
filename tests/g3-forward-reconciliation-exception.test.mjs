@@ -17,6 +17,9 @@ const old = json('docs/operations/g3-authority-binding-reconciliation.r1.json');
 const g2 = json('docs/operations/g2-minimal-release-contract.v1.json');
 const evidence = json('docs/operations/g3-forward-adoption-evidence-and-contract.r1.json');
 const mutate = fn => { const copy = structuredClone(design); fn(copy); return copy; };
+const assertEvidenceBytes = bytes => assert.equal(
+  'sha256:' + createHash('sha256').update(bytes).digest('hex'),
+  design.references.evidenceContractSha256, 'EVIDENCE_CONTRACT_DIGEST_MISMATCH');
 
 test('versioned exception is a closed non-executable design, never an existing cutover packet', () => {
   assert.equal(validate(design), true, JSON.stringify(validate.errors));
@@ -37,7 +40,33 @@ test('G2 byte pin and historical facts are checked against existing authority ar
   for (const outcome of design.receiptRequirements.subactionOutcomes) assert.ok(g2.invariants[4].allowedOutcomes.includes(outcome));
 });
 
+test('evidence contract byte pin matches the actual referenced file', () => {
+  assertEvidenceBytes(read(design.references.evidenceContract));
+});
+
+for (const [name, change] of [
+  ['verifier hash changes', e => { e.verifiedCode.observationVerifierSha256 = 'sha256:' + '0'.repeat(64); }],
+  ['proof obligation weakens', e => { e.threeProofObligations.P1_DURABLE_TWO_FILE_CONTAINMENT.mandatory = false; }],
+]) {
+  test('evidence contract rejects ' + name + ' despite unchanged historical facts and action', () => {
+    const changed = structuredClone(evidence);
+    change(changed);
+    assert.deepEqual(changed.historicalFacts, evidence.historicalFacts);
+    assert.equal(changed.forwardOnlyGovernance.actionId, evidence.forwardOnlyGovernance.actionId);
+    assert.throws(() => assertEvidenceBytes(Buffer.from(JSON.stringify(changed, null, 2) + '\n')),
+      /EVIDENCE_CONTRACT_DIGEST_MISMATCH/);
+  });
+}
+
+test('evidence pin is over exact bytes, not reparsed JSON', () => {
+  const bytes = read(design.references.evidenceContract);
+  assert.throws(() => assertEvidenceBytes(Buffer.concat([bytes, Buffer.from('\n')])),
+    /EVIDENCE_CONTRACT_DIGEST_MISMATCH/);
+});
+
 const negatives = [
+  ['missing evidence contract pin', d => { delete d.references.evidenceContractSha256; }],
+  ['replaced evidence contract pin', d => { d.references.evidenceContractSha256 = 'sha256:' + '0'.repeat(64); }],
   ['retroactive legalization', d => { d.historicalFacts.historicalBindingCompliant = true; }],
   ['old UNKNOWN reset', d => { d.historicalFacts.oldRollbackOutcome = 'ROLLED_BACK'; }],
   ['old approval reused', d => { d.approvalRequirements.oldApprovalMayAuthorizeFutureAction = true; }],
