@@ -100,7 +100,7 @@ function fixture() {
 test('synthetic negative witnesses test the read-only comparator, not the production database', () => {
   const output = execFileSync('python3', [
     '-m', 'unittest', 'discover', '-s', new URL('./', import.meta.url).pathname,
-    '-p', 'test_g3_forward_adoption_witness.py', '-v',
+    '-p', 'test_g3*witness*.py', '-v',
   ], { encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' } });
   assert.equal(output, '');

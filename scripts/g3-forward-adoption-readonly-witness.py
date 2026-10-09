@@ -192,13 +192,16 @@ def open_pinned(path, expected_parents=None):
 
 
 def inspect_database(blob):
+    if blob[:16] != b"SQLite format 3\x00" or tuple(blob[18:20]) not in ((1, 1), (2, 2)):
+        raise ValueError("SQLITE_HEADER_OR_JOURNAL_FORMAT_INVALID")
+    # An absent WAL does not prove all committed transactions reached the main file.
+    # No independently bound checkpoint evidence is accepted by this interface yet.
+    # Reject before SQLite inspection; never normalize the header to hide this gap.
+    if blob[18:20] == b"\x02\x02":
+        raise ValueError("WAL_CHECKPOINT_COMPLETENESS_UNPROVEN")
     conn = sqlite3.connect(":memory:", isolation_level=None)
     try:
-        if blob[:16] != b"SQLite format 3\x00" or tuple(blob[18:20]) not in ((1, 1), (2, 2)):
-            raise ValueError("SQLITE_HEADER_OR_JOURNAL_FORMAT_INVALID")
-        # Only the private in-memory copy changes. Raw FD bytes/hash/header stay original.
-        memory_blob = blob[:18] + b"\x01\x01" + blob[20:] if blob[18:20] == b"\x02\x02" else blob
-        conn.deserialize(memory_blob)
+        conn.deserialize(blob)
         conn.execute("PRAGMA query_only=ON")
         schema = [list(r) for r in conn.execute(
             "SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name,tbl_name,sql"

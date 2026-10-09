@@ -1,5 +1,7 @@
 # G3_03_ISOLATED_EVIDENCE_ACCEPTANCE_PACKET_R1 — executed evidence
 
+> Historical results at the recorded old implementation only. The 2/2 acceptance claim is superseded by [the P1 correction](P1_CHECKPOINT_COMPLETENESS_CORRECTION_R1.md); the current witness rejects all 2/2 inputs. The archive remains unchanged and is not current-head acceptance.
+
 Final independent review is reported against the delivery commit in Issue #57 / the separate Draft PR. This source packet itself is not an authority grant.
 
 - Canonical exact head: `371bf8982b0cd0df579b0e981964b27f9d0319fc`.
