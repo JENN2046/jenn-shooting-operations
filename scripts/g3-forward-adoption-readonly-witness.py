@@ -106,7 +106,7 @@ def sample_snapshot(fd, expected_hash=None):
         chunks.append(data)
         h.update(data)
     blob = b"".join(chunks)
-    if blob[:16] != b"SQLite format 3" + bytes([0]) or (blob[18], blob[19]) != (1, 1):
+    if blob[:16] != b"SQLite format 3" + bytes([0]) or (blob[18], blob[19]) not in ((1, 1), (2, 2)):
         raise ValueError("SQLITE_HEADER_OR_JOURNAL_FORMAT_INVALID")
     digest_hex = h.hexdigest()
     if expected_hash and digest_hex != expected_hash:
@@ -125,30 +125,80 @@ def sample_snapshot(fd, expected_hash=None):
     }
 
 
-def open_pinned(path):
+def parent_chain(path):
     p = Path(path)
-    if not p.is_absolute():
-        raise ValueError("PATH_MUST_BE_ABSOLUTE")
-    fd = os.open(str(p), os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK)
-    st = os.fstat(fd)
-    if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1:
+    if not p.is_absolute() or ".." in p.parts:
+        raise ValueError("PATH_MUST_BE_ABSOLUTE_WITHOUT_PARENT_TRAVERSAL")
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    fd = os.open("/", flags)
+    pins = []
+    try:
+        for component in (None, *p.parts[1:-1]):
+            if component is not None:
+                child = os.open(component, flags, dir_fd=fd)
+                os.close(fd)
+                fd = child
+            st = os.fstat(fd)
+            pins.append((st.st_dev, st.st_ino, st.st_uid, st.st_gid, st.st_mode))
+        return fd, tuple(pins)
+    except BaseException:
         os.close(fd)
-        raise ValueError("NONREGULAR_OR_LINKED_DATABASE")
-    path_stat = os.stat(str(p), follow_symlinks=False)
-    if (path_stat.st_dev, path_stat.st_ino) != (st.st_dev, st.st_ino):
-        os.close(fd)
-        raise ValueError("PATH_INODE_RACE")
-    for suffix in ("-wal", "-shm", "-journal"):
-        if os.path.lexists(str(p) + suffix):
-            os.close(fd)
+        raise
+
+
+def check_path(path, fd, expected_parents):
+    parent, pins = parent_chain(path)
+    try:
+        if pins != expected_parents:
+            raise ValueError("PARENT_CHAIN_CHANGED")
+        name = Path(path).name
+        st = os.stat(name, dir_fd=parent, follow_symlinks=False)
+        opened = os.fstat(fd)
+        if (st.st_dev, st.st_ino) != (opened.st_dev, opened.st_ino):
+            raise ValueError("PATH_REBOUND_DURING_PROOF")
+        for suffix in ("-wal", "-shm", "-journal"):
+            try:
+                os.stat(name + suffix, dir_fd=parent, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
             raise ValueError("DATABASE_SIDECAR_PRESENT")
-    return fd
+    finally:
+        os.close(parent)
+
+
+def open_pinned(path, expected_parents=None):
+    noatime = getattr(os, "O_NOATIME", None)
+    if noatime is None:
+        raise ValueError("O_NOATIME_UNAVAILABLE")
+    parent, pins = parent_chain(path)
+    fd = None
+    try:
+        if expected_parents is not None and pins != expected_parents:
+            raise ValueError("PARENT_CHAIN_CHANGED")
+        fd = os.open(Path(path).name,
+                     os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK | noatime,
+                     dir_fd=parent)
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1:
+            raise ValueError("NONREGULAR_OR_LINKED_DATABASE")
+        check_path(path, fd, pins)
+        return fd
+    except BaseException:
+        if fd is not None:
+            os.close(fd)
+        raise
+    finally:
+        os.close(parent)
 
 
 def inspect_database(blob):
     conn = sqlite3.connect(":memory:", isolation_level=None)
     try:
-        conn.deserialize(blob)
+        if blob[:16] != b"SQLite format 3\x00" or tuple(blob[18:20]) not in ((1, 1), (2, 2)):
+            raise ValueError("SQLITE_HEADER_OR_JOURNAL_FORMAT_INVALID")
+        # Only the private in-memory copy changes. Raw FD bytes/hash/header stay original.
+        memory_blob = blob[:18] + b"\x01\x01" + blob[20:] if blob[18:20] == b"\x02\x02" else blob
+        conn.deserialize(memory_blob)
         conn.execute("PRAGMA query_only=ON")
         schema = [list(r) for r in conn.execute(
             "SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY type,name,tbl_name,sql"
@@ -255,9 +305,17 @@ def prove(pre, active, profile):
 
 def capture(prestate_path, active_path, profile):
     fps = []
+    parents = []
+    metadata = []
+    attrs = ("st_dev", "st_ino", "st_size", "st_mode", "st_uid", "st_gid", "st_nlink", "st_atime_ns", "st_mtime_ns", "st_ctime_ns")
     try:
         for path in (prestate_path, active_path):
-            fps.append(open_pinned(path))
+            parent, pins = parent_chain(path)
+            os.close(parent)
+            parents.append(pins)
+            fps.append(open_pinned(path, pins))
+            st = os.fstat(fps[-1])
+            metadata.append(tuple(getattr(st, k) for k in attrs))
         if os.fstat(fps[0]).st_dev == os.fstat(fps[1]).st_dev and os.fstat(fps[0]).st_ino == os.fstat(fps[1]).st_ino:
             raise ValueError("SAME_PHYSICAL_FILE")
         blobs = []
@@ -271,16 +329,15 @@ def capture(prestate_path, active_path, profile):
         problems, legacy = prove(pre, active, profile)
         # Re-read the exact opened descriptors rather than path names; reject any changed
         # identity, path rebind or hash during the read-only SQLite analysis.
-        for fd, path, original in zip(fps, (prestate_path, active_path), identities):
+        for fd, path, original, pins, original_meta in zip(
+                fps, (prestate_path, active_path), identities, parents, metadata):
             _, after = sample_snapshot(fd, original["sha256"].removeprefix("sha256:"))
             if after != original:
                 raise ValueError("FILE_IDENTITY_CHANGED_AFTER_PROOF")
-            st = os.stat(path, follow_symlinks=False)
-            if (st.st_dev, st.st_ino) != (original["device"], original["inode"]):
-                raise ValueError("PATH_REBOUND_DURING_PROOF")
-            for suffix in ("-wal", "-shm", "-journal"):
-                if os.path.lexists(path + suffix):
-                    raise ValueError("DATABASE_SIDECAR_CREATED_DURING_PROOF")
+            check_path(path, fd, pins)
+            st = os.fstat(fd)
+            if tuple(getattr(st, k) for k in attrs) != original_meta:
+                raise ValueError("FILE_METADATA_CHANGED_DURING_PROOF")
         artifact = {
             "domain": DOMAIN, "profile": profile,
             "verifierSha256": "sha256:" + hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),

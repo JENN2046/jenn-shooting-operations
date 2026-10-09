@@ -24,7 +24,7 @@
   },
   "verifiedCode": {
     "observationVerifier": "scripts/g3-forward-adoption-readonly-witness.py",
-    "observationVerifierSha256": "sha256:1fa0d54c567cb96236247a095b12ed987d5e0c4e7e917dd8fb5248233abe5fdd",
+    "observationVerifierSha256": "sha256:f12b9ec94323b11eaafdc5c41ceb1fb4628afc3311ed307eec8272f6c4fcb7ea",
     "ed25519EnvelopeVerifier": "scripts/verify-g3-forward-adoption-witness-signature.mjs",
     "ed25519EnvelopeVerifierSha256": "sha256:5ec8892c4f1b1c14a43ff204d483b3b8ccadfb74b737829ec88ed4097ebc91cb",
     "exactOriginalMigrationChecksum": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8",
