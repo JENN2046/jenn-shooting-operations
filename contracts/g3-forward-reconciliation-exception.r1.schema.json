@@ -1,0 +1,450 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jenn.local/contracts/g3-forward-reconciliation-exception-r1.schema.json",
+  "title": "G3 forward reconciliation exception R1 non-executable policy",
+  "description": "Validates a design document only. It cannot represent an approval, operation, live target, claim or receipt.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "contractId",
+    "status",
+    "gateFamily",
+    "actionId",
+    "scope",
+    "references",
+    "historicalFacts",
+    "method",
+    "targetRequirements",
+    "approvalRequirements",
+    "claimRequirements",
+    "receiptRequirements",
+    "currentAuthority"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "contractId": {
+      "const": "G3_FORWARD_RECONCILIATION_EXCEPTION_R1"
+    },
+    "status": {
+      "const": "NON_EXECUTABLE_DESIGN_REQUIRES_SEPARATE_APPROVAL"
+    },
+    "gateFamily": {
+      "const": "G3"
+    },
+    "actionId": {
+      "const": "G3_FORWARD_SCHEMA11_BASELINE_ADOPTION_R1"
+    },
+    "scope": {
+      "const": "PROSPECTIVE_ADMISSION_OF_EXISTING_SCHEMA11_ONLY"
+    },
+    "references": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "g2Contract",
+        "g2ContractSha256",
+        "evidenceContract",
+        "g3_02Method",
+        "g3_03Acceptance",
+        "historicalRecord",
+        "evidenceContractSha256"
+      ],
+      "properties": {
+        "g2Contract": {
+          "const": "docs/operations/g2-minimal-release-contract.v1.json"
+        },
+        "g2ContractSha256": {
+          "const": "sha256:0caa171096e0447ad5e6cc23043aea9ef129d32eb0375cf903d1be61e92568b9"
+        },
+        "evidenceContract": {
+          "const": "docs/operations/g3-forward-adoption-evidence-and-contract.r1.json"
+        },
+        "g3_02Method": {
+          "const": "https://github.com/JENN2046/jenn-shooting-operations/issues/59#issuecomment-6074360103"
+        },
+        "g3_03Acceptance": {
+          "const": "https://github.com/JENN2046/jenn-shooting-operations/issues/57#issuecomment-6074619277"
+        },
+        "historicalRecord": {
+          "const": "docs/operations/g3-authority-binding-reconciliation.r1.json"
+        },
+        "evidenceContractSha256": {
+          "const": "sha256:f513522d5c3ebe30fbb5b4b975d49ebdcc6c781f4c937e41c01a3d0f2d27d14e"
+        }
+      }
+    },
+    "historicalFacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "g3PhysicalOutcome",
+        "g3GovernanceStatus",
+        "g3ApprovalHead",
+        "g3ExecutionHead",
+        "historicalBindingCompliant",
+        "originalExecutionReplayIdentityReusable",
+        "oldRollbackOutcome",
+        "oldRollbackAttemptSha256",
+        "oldRollbackReplayIdentityReusable",
+        "historicalReceiptsMutable"
+      ],
+      "properties": {
+        "g3PhysicalOutcome": {
+          "const": "COMMITTED"
+        },
+        "g3GovernanceStatus": {
+          "const": "RECONCILIATION_REQUIRED"
+        },
+        "g3ApprovalHead": {
+          "const": "a4199fdb14808ebb866943148a222b0d4300d66e"
+        },
+        "g3ExecutionHead": {
+          "const": "b9dd595eb52bd09f7a8e2115a48ac401389f5b73"
+        },
+        "historicalBindingCompliant": {
+          "const": false
+        },
+        "originalExecutionReplayIdentityReusable": {
+          "const": false
+        },
+        "oldRollbackOutcome": {
+          "const": "UNKNOWN"
+        },
+        "oldRollbackAttemptSha256": {
+          "const": "sha256:bfd40da521d2a3871ffcf4b4913de260d51c368eeca0ca775c4bda6b25b5645a"
+        },
+        "oldRollbackReplayIdentityReusable": {
+          "const": false
+        },
+        "historicalReceiptsMutable": {
+          "const": false
+        }
+      }
+    },
+    "method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trustModel",
+        "trustDecision",
+        "containment",
+        "origin",
+        "comparison",
+        "optionalSignatureCompatibility",
+        "labEvidenceMaySubstituteForProduction",
+        "maliciousTrustedRootDefenseClaimed"
+      ],
+      "properties": {
+        "trustModel": {
+          "const": "TRUSTED_HOST_ADMIN"
+        },
+        "trustDecision": {
+          "const": "https://github.com/JENN2046/jenn-shooting-operations/issues/58#issuecomment-6062729313"
+        },
+        "containment": {
+          "const": "TWO_ORIGINAL_IMMUTABLE_INODES_FULL_PARENT_CUSTODY_AND_EXISTING_WRITER_DENY"
+        },
+        "origin": {
+          "const": "PREBOUND_AUTHENTICATED_SSH_ONE_USE_CHALLENGE_EXTERNAL_CUSTODY_STRICT_READBACK"
+        },
+        "comparison": {
+          "const": "PINNED_RAW_FD_NOATIME_APPLICATION_SEMANTICS_2_2_DEFERRED"
+        },
+        "optionalSignatureCompatibility": {
+          "const": "DEFER_NOT_SELECTED"
+        },
+        "labEvidenceMaySubstituteForProduction": {
+          "const": false
+        },
+        "maliciousTrustedRootDefenseClaimed": {
+          "const": false
+        }
+      }
+    },
+    "targetRequirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bindingDomain",
+        "canonicalEncoding",
+        "digestExcludesApprovalAndReceipts",
+        "requiredBindings",
+        "authorityAndProofMustPrecedeTargetFreeze",
+        "latestCanonicalCheckedBeforeClaim",
+        "postCanonicalLocalRevalidationRequired",
+        "postClaimNetworkDependencyAllowed",
+        "unknownOrDriftDisposition"
+      ],
+      "properties": {
+        "bindingDomain": {
+          "const": "G3_FORWARD_RECONCILIATION_TARGET_R1"
+        },
+        "canonicalEncoding": {
+          "const": "REUSE_EXISTING_SORTED_KEY_UTF8_JSON_AND_SHA256_CONVENTION"
+        },
+        "digestExcludesApprovalAndReceipts": {
+          "const": true
+        },
+        "requiredBindings": {
+          "const": [
+            "exceptionVersionAndExactContractDigest",
+            "postMergeCanonicalHead",
+            "reviewedExecutorAndVerifierSourceImageRuntimeDigests",
+            "approvedTrustMethodAndSourceCustodianAnchors",
+            "freshOriginalActiveAndPreservedFdIdentitiesHashesParentChainsAliasesNamespaces",
+            "verifiedContainmentThroughCaptureAndClaim",
+            "trustedOriginTranscriptAndEvidenceDigest",
+            "semanticParityMigrationIdentityAndRecoveryReadback",
+            "immutableHistoricalG3AndConsumedUnknownRollbackDigests",
+            "newOperationIdAndExactPacketId",
+            "explicitValidityWindow"
+          ]
+        },
+        "authorityAndProofMustPrecedeTargetFreeze": {
+          "const": true
+        },
+        "latestCanonicalCheckedBeforeClaim": {
+          "const": true
+        },
+        "postCanonicalLocalRevalidationRequired": {
+          "const": true
+        },
+        "postClaimNetworkDependencyAllowed": {
+          "const": false
+        },
+        "unknownOrDriftDisposition": {
+          "const": "DO_NOT_CLAIM"
+        }
+      }
+    },
+    "approvalRequirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "separateVersionedExceptionApprovalRequired",
+        "newExactTargetApprovalRequired",
+        "trustedApprovalIdentityAndSemanticValidationRequired",
+        "approvalBindsContractVersionDigestAndTargetDigest",
+        "approvalMustPrecedeClaimAndBeUnexpired",
+        "designTaskOrMergeCountsAsExecutionApproval",
+        "oldApprovalMayAuthorizeFutureAction"
+      ],
+      "properties": {
+        "separateVersionedExceptionApprovalRequired": {
+          "const": true
+        },
+        "newExactTargetApprovalRequired": {
+          "const": true
+        },
+        "trustedApprovalIdentityAndSemanticValidationRequired": {
+          "const": true
+        },
+        "approvalBindsContractVersionDigestAndTargetDigest": {
+          "const": true
+        },
+        "approvalMustPrecedeClaimAndBeUnexpired": {
+          "const": true
+        },
+        "designTaskOrMergeCountsAsExecutionApproval": {
+          "const": false
+        },
+        "oldApprovalMayAuthorizeFutureAction": {
+          "const": false
+        }
+      }
+    },
+    "claimRequirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "durableAppendOnlyLedgerRequired",
+        "replayIdentity",
+        "packetIdPartitionsReplayIdentity",
+        "claimBindsExactPacketIdAndInstance",
+        "newOperationIdCannotEqualAnyHistoricalG3OrRollbackId",
+        "ledgerUnknownOrUnreachableDisposition",
+        "claimMustBeDurableBeforeNewGovernanceAppend",
+        "lostClaimAcknowledgementDisposition",
+        "automaticRetryAllowed",
+        "unknownRequiresSeparateHumanReconciliation"
+      ],
+      "properties": {
+        "durableAppendOnlyLedgerRequired": {
+          "const": true
+        },
+        "replayIdentity": {
+          "const": "operationId+authorityTargetDigest"
+        },
+        "packetIdPartitionsReplayIdentity": {
+          "const": false
+        },
+        "claimBindsExactPacketIdAndInstance": {
+          "const": true
+        },
+        "newOperationIdCannotEqualAnyHistoricalG3OrRollbackId": {
+          "const": true
+        },
+        "ledgerUnknownOrUnreachableDisposition": {
+          "const": "DO_NOT_CLAIM"
+        },
+        "claimMustBeDurableBeforeNewGovernanceAppend": {
+          "const": true
+        },
+        "lostClaimAcknowledgementDisposition": {
+          "const": "UNKNOWN_CONSUMED_NO_RETRY"
+        },
+        "automaticRetryAllowed": {
+          "const": false
+        },
+        "unknownRequiresSeparateHumanReconciliation": {
+          "const": true
+        }
+      }
+    },
+    "receiptRequirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "storage",
+        "requiredBindings",
+        "subactionOutcomes",
+        "committedMeaning",
+        "effectiveAt",
+        "requiredTimeOrder",
+        "noClaimMeansNoTerminalReceipt",
+        "unclassifiableOrMissingEvidenceOutcome",
+        "oldPhysicalOutcomeAndGovernanceRecordsMutable",
+        "rolledBackDoesNotMeanSqliteRestoreInThisSubaction",
+        "normalWritesRemainDisabledForEveryOutcome"
+      ],
+      "properties": {
+        "storage": {
+          "const": "SEPARATE_APPEND_ONLY_GOVERNANCE_RECEIPTS_UNDER_APPROVED_CUSTODY"
+        },
+        "requiredBindings": {
+          "const": [
+            "operationId",
+            "authorityTargetDigest",
+            "exactPacketId",
+            "instanceIdentity",
+            "claimDigest",
+            "exceptionApprovalDigest",
+            "exactHumanApprovalDigest",
+            "productionEvidenceDigest",
+            "historicalG3AndRollbackDigests",
+            "priorAppendDigest",
+            "terminalOutcome",
+            "terminalTime",
+            "independentVerificationDigestAndTime"
+          ]
+        },
+        "subactionOutcomes": {
+          "const": [
+            "COMMITTED",
+            "UNKNOWN"
+          ]
+        },
+        "committedMeaning": {
+          "const": "INDEPENDENTLY_VERIFIED_NEW_GOVERNANCE_ADMISSION_ONLY"
+        },
+        "effectiveAt": {
+          "const": "INDEPENDENT_TERMINAL_VERIFICATION_TIME_NOT_BACKDATED"
+        },
+        "requiredTimeOrder": {
+          "const": [
+            "exceptionAndExactTargetApproval",
+            "durableClaim",
+            "newGovernanceAppend",
+            "independentTerminalVerification"
+          ]
+        },
+        "noClaimMeansNoTerminalReceipt": {
+          "const": true
+        },
+        "unclassifiableOrMissingEvidenceOutcome": {
+          "const": "UNKNOWN"
+        },
+        "oldPhysicalOutcomeAndGovernanceRecordsMutable": {
+          "const": false
+        },
+        "rolledBackDoesNotMeanSqliteRestoreInThisSubaction": {
+          "const": true
+        },
+        "normalWritesRemainDisabledForEveryOutcome": {
+          "const": true
+        }
+      }
+    },
+    "currentAuthority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exceptionApproved",
+        "targetCreated",
+        "exactHumanApprovalCreated",
+        "operationIdentityAllocated",
+        "claimCreated",
+        "receiptCreated",
+        "productionProofAdmitted",
+        "productionDatabaseMutationAllowed",
+        "custodyMutationAllowed",
+        "runtimeGateRelaxationAllowed",
+        "writerReadmissionAllowed",
+        "serviceStartAllowed",
+        "g4Allowed",
+        "mergeAuthorized",
+        "g3_05Authorized"
+      ],
+      "properties": {
+        "exceptionApproved": {
+          "const": false
+        },
+        "targetCreated": {
+          "const": false
+        },
+        "exactHumanApprovalCreated": {
+          "const": false
+        },
+        "operationIdentityAllocated": {
+          "const": false
+        },
+        "claimCreated": {
+          "const": false
+        },
+        "receiptCreated": {
+          "const": false
+        },
+        "productionProofAdmitted": {
+          "const": false
+        },
+        "productionDatabaseMutationAllowed": {
+          "const": false
+        },
+        "custodyMutationAllowed": {
+          "const": false
+        },
+        "runtimeGateRelaxationAllowed": {
+          "const": false
+        },
+        "writerReadmissionAllowed": {
+          "const": false
+        },
+        "serviceStartAllowed": {
+          "const": false
+        },
+        "g4Allowed": {
+          "const": false
+        },
+        "mergeAuthorized": {
+          "const": false
+        },
+        "g3_05Authorized": {
+          "const": false
+        }
+      }
+    }
+  }
+}
