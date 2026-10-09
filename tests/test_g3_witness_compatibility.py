@@ -1,6 +1,8 @@
 """G3-03 bounded regression tests; all database bytes are disposable synthetic data."""
-import hashlib
 import os
+import json
+import subprocess
+import sys
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -32,20 +34,40 @@ class Compatibility(unittest.TestCase):
             self.assertEqual(p.read_bytes()[18:20], b'\x02\x02')
             self.assertFalse(Path(str(p)+'-wal').exists())
 
-    def test_real_checkpointed_wal_preserves_raw_hash_and_metadata(self):
+    def test_checkpointed_wal_without_bound_evidence_is_rejected_unchanged(self):
         self.wal()
-        hashes = [hashlib.sha256(p.read_bytes()).hexdigest() for p in (self.pre,self.active)]
-        for p in (self.pre,self.active):os.utime(p, ns=(1000000000,2000000000))
-        before = [p.stat() for p in (self.pre,self.active)]
-        r = self.capture()
-        self.assertEqual(r['status'],'READONLY_OBSERVATION_NOT_AUTHORITY')
-        for i,k in enumerate(('prestate','active')):
-            self.assertEqual(r['fileIdentities'][k]['sha256'],'sha256:'+hashes[i])
-            self.assertEqual(r['fileIdentities'][k]['fileFormatRead'],2)
-            self.assertEqual(r['fileIdentities'][k]['fileFormatWrite'],2)
-        after = [p.stat() for p in (self.pre,self.active)]
-        self.assertEqual(before,after)
-        self.assertFalse(r['adoptionAuthorityAllowed'])
+        for p in (self.pre, self.active):os.utime(p, ns=(1000000000,2000000000))
+        before = [p.stat() for p in (self.pre, self.active)]
+        with patch.object(w.sqlite3, 'connect', side_effect=AssertionError('SQLite must not open')):
+            with self.assertRaisesRegex(ValueError, '^WAL_CHECKPOINT_COMPLETENESS_UNPROVEN$'):
+                self.capture()
+        self.assertEqual(before, [p.stat() for p in (self.pre, self.active)])
+
+    def test_wal_header_rejected_before_sqlite_interpretation(self):
+        # A main-file header is not evidence of checkpoint completion, regardless
+        # of the remaining bytes. This test does not manufacture a lost-WAL case.
+        blob = self.pre.read_bytes()
+        blob = blob[:18] + b'\x02\x02' + blob[20:]
+        with patch.object(w.sqlite3, 'connect', side_effect=AssertionError('SQLite must not open')):
+            with self.assertRaisesRegex(ValueError, '^WAL_CHECKPOINT_COMPLETENESS_UNPROVEN$'):
+                w.inspect_database(blob)
+
+    def test_active_only_wal_cli_emits_failure_not_observation(self):
+        db = sqlite3.connect(self.active)
+        try:
+            db.execute('PRAGMA journal_mode=WAL')
+            db.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+        finally:
+            db.close()
+        self.assertFalse(Path(str(self.active)+'-wal').exists())
+        result = subprocess.run([sys.executable, w.__file__, '--prestate', str(self.pre),
+                                 '--active', str(self.active), '--profile', 'synthetic'],
+                                capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 2)
+        record = json.loads(result.stdout)
+        self.assertEqual(record, {'status': 'WITNESS_FAIL_CLOSED',
+                                 'code': 'WAL_CHECKPOINT_COMPLETENESS_UNPROVEN',
+                                 'adoptionAuthorityAllowed': False})
 
     def test_mixed_and_unknown_formats(self):
         raw=self.pre.read_bytes()
@@ -115,8 +137,8 @@ class Compatibility(unittest.TestCase):
     def test_atime_drift_during_proof(self):
         self.during_inspection(lambda:os.utime(self.pre,ns=(1,self.pre.stat().st_mtime_ns)),'METADATA_CHANGED')
 
-    def test_wal_still_rejects_semantic_drift(self):
-        self.active.unlink();fixture(self.active,additional=True,changed_type=True);self.wal()
+    def test_delete_format_still_rejects_semantic_drift(self):
+        self.active.unlink();fixture(self.active,additional=True,changed_type=True)
         self.assertIn('LEGACY_TABLE_ROWSET_MISMATCH:repeated',self.capture()['problems'])
 
 if __name__=='__main__':unittest.main()
