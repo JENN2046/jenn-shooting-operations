@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "reviewId": "G3_IN_PLACE_ADOPTION_PROOF_AND_CONTRACT_R1",
+  "decision": "BLOCKED_INSUFFICIENT_EVIDENCE",
+  "feasibilityAssessment": "CONDITIONALLY_FEASIBLE",
+  "authorityGranted": false,
+  "canonicalBase": "371bf8982b0cd0df579b0e981964b27f9d0319fc",
+  "historical": {
+    "physicalOutcome": "COMMITTED",
+    "governanceStatus": "RECONCILIATION_REQUIRED",
+    "originalApprovedHead": "a4199fdb14808ebb866943148a222b0d4300d66e",
+    "executionHead": "b9dd595eb52bd09f7a8e2115a48ac401389f5b73",
+    "approvalHeadsMatch": false,
+    "originalG3ReplayAllowed": false,
+    "priorRollbackOutcome": "UNKNOWN",
+    "priorRollbackReplayAllowed": false,
+    "priorRollbackClaimSha256": "sha256:bfd40da521d2a3871ffcf4b4913de260d51c368eeca0ca775c4bda6b25b5645a"
+  },
+  "observed": {
+    "observationUtc": "2026-10-08T02:14:45Z",
+    "activeSchema": 11,
+    "activeSha256": "sha256:0eae48b85f362cf1064f92e14511865fe7fd68dbc13a85d4c6efd6e656e736d9",
+    "activeInode": 2229903,
+    "activeSize": 540672,
+    "preservedSchema": 10,
+    "preservedSha256": "sha256:5d65282b197350c2d6175fef2ccfa641c40908ecd9c053e296182f65e7bfede7",
+    "preservedInode": 1835048,
+    "preservedSize": 512000,
+    "migrationsPrefixRowsFullyEqual": 10,
+    "migrationsPrefixFullRowsSha256": "sha256:20e76fece64d733d50e68f852c98a665d2dd77f0f258e9b05c0739f8003f1445",
+    "commonUserTables": 39,
+    "legacyCommonTablesWithEqualRowSets": 38,
+    "legacyCommonTableRowSetMismatches": 0,
+    "sqliteSequenceRowsPreserved": 1,
+    "internalTableRowsEqual": true,
+    "newTableRows": {
+      "schedule_reschedule_operations": 0,
+      "agent_grant_attempts": 0
+    },
+    "migration11Checksum": "sha256:13d9f5fc6e09be77742935d0b7e1478c500c69adf7b313eb3b8499c65f0f25e8",
+    "migration11AppliedAtValidUtc": true,
+    "integrityChecks": "ok",
+    "foreignKeyViolations": 0,
+    "sidecarsPresent": false,
+    "productionContainerPresent": false,
+    "observedOpenDbFileUsers": 0
+  },
+  "independentReproduction": {
+    "imageId": "sha256:581e9fa25e04b582aa39c2fdaa291f6db3e80fc3f3ac15a8a4afa06622442144",
+    "imageSourceCommit": "6334e2ae851247cb1558074fbd80cfee06b28c11",
+    "exactOriginalRunnerUsed": true,
+    "offlineDisposableSyntheticSchema10To11Pass": true,
+    "syntheticFixtureHasOneRow": true,
+    "syntheticRebuiltTableRowPreserved": true,
+    "realProductionPrestateReplayPerformed": false,
+    "realProductionDbBytesExported": false,
+    "exactPrestateReplayStatus": "NOT_PERFORMED_SAFETY_BOUNDARY",
+    "productionEvidenceCryptographicallyAttested": false,
+    "ddl": {
+      "schema10": {
+        "objects": 183,
+        "tables": 40,
+        "indexes": 68,
+        "triggers": 75,
+        "manifestSha256": "sha256:c9dc6643560b4439f2a635bbc71107eca3b2130589f453dbeb472d2101117e39",
+        "columnManifestSha256": "sha256:2af54e93c3ed07ca86aa43a2b1a4aad8a263fef2aaefc45c7867939d01b72bf2"
+      },
+      "schema11": {
+        "objects": 194,
+        "tables": 42,
+        "indexes": 71,
+        "triggers": 81,
+        "manifestSha256": "sha256:06a1e4b55b0f022bce9d8b2427bd844be6e8b7afe4afa0d6c49547c5ce0c753d",
+        "columnManifestSha256": "sha256:eb832e1a61e67fda4327ba31dd4a162e9b9e8a965e1318a28f2d5a2041f9d204"
+      },
+      "pinnedSyntheticManifestsMatchLiveForBothVersions": true
+    }
+  },
+  "blockingRequirements": [
+    "NO_TRUE_PRESTATE_REPLAY_IN_INDEPENDENT_PINNED_EXECUTION",
+    "NO_TRUSTED_INDEPENDENT_PRODUCTION_ATTESTATION",
+    "NO_APPROVED_VERSIONED_FORWARD_ADOPTION_GOVERNANCE_EXCEPTION"
+  ],
+  "futurePlan": {
+    "proposedAction": "G3_FORWARD_SCHEMA11_BASELINE_ADOPTION_R1",
+    "actionIsRetroactiveApproval": false,
+    "legalUnderCurrentG2WithoutAmendment": false,
+    "signedExactTargetCreated": false,
+    "explicitHumanApprovalRequested": false
+  },
+  "prohibitions": {
+    "mutateProductionDatabase": false,
+    "runRollback": false,
+    "reusePriorG3Operation": false,
+    "reuseRollbackUnknown": false,
+    "releaseWriters": false,
+    "startProductionService": false,
+    "enterG4": false,
+    "mergeAutomatically": false
+  }
+}
