@@ -337,3 +337,11 @@ test('migration11 calendar-invalid UTC timestamps fail despite valid signature',
     assert.throws(() => verifyWitnessEnvelope(forged), /MIGRATION11_MARKER_INVALID/);
   }
 });
+
+test('R1 signature verifier explicitly refuses R2 even with a valid signature', () => {
+  const { opts, privateKey } = fixture();
+  const changed = resignFixture(opts, privateKey, payload => {
+    payload.domain = 'G3_PRODUCTION_EVIDENCE_R2';
+  });
+  assert.throws(() => verifyWitnessEnvelope(changed));
+});

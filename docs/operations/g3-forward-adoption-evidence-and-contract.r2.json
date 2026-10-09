@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 2,
+  "contractId": "G3_FORWARD_ADOPTION_EVIDENCE_R2",
+  "status": "IMPLEMENTATION_PREPARATION_NOT_PRODUCTION_AUTHORITY",
+  "methodSha256": "e1acba51102404d87e756b0e6a502c6a9cd92bbe4a2136c0f6d8c41b19b6ffd0",
+  "ownerApprovalSha256": "c012e2e599799902a9c4c3ab06c61739cd220a99b137c1ce8770efe5239c38a0",
+  "r1ContractSha256": "f513522d5c3ebe30fbb5b4b975d49ebdcc6c781f4c937e41c01a3d0f2d27d14e",
+  "r1ExceptionSha256": "337c386c6d4d9d11a11d47cfb09c0cd5a1f3f9a617104020bf53d493eb4dad25",
+  "code": {
+    "g3-collect-production-evidence.py": "ce1c7b499c56f3d1525978d9bef32a2cbcb877fe95cc725dd125e65c58810ab5",
+    "g3-forward-adoption-readonly-witness-r2.py": "51cbdbc04e9d2c637c43daf050a9fb6573a979309dba40ba91ddc25ec7c21d42",
+    "g3-forward-adoption-readonly-witness.py": "95ca51db7174eaffc8ce9cee8f85f0440ec1253fb8a2e00dc89b42649775ccfc",
+    "g3_r2_acceptance.py": "12378d7aae20335970a6202c0f5a8fd787ac9e76fcdf82e629a638fc0c74a567",
+    "g3_r2_bootstrap.py": "a0ebeda481c296a281be95b43fcc68b8405c78a14086fc64958f0c6ad934fe17",
+    "g3_r2_collector.py": "171f57e4d5ef10e0250d550e93756a450e2040b3989ce61e5b27eb1f6a9e2007",
+    "g3_r2_common.py": "200541367b498449c4ab7ed199653c111c925962a1047bf7b55f889b3ac802c6",
+    "g3_r2_custody.py": "0899577ad6efab52f606dd2f6de962962b58ba093b7929d8ffac37b4ec29beb2",
+    "g3_r2_snapshot.py": "9ebeed1ee3f58cc512592015ee4e976f8165490e4fc31727d8155f1cd9095d2f",
+    "g3_r2_transport.py": "475d3eced526cb78c8b1124e717a54c23ff964b93055f59dfb6cf56280f56af1",
+    "verify-g3-production-evidence.py": "1cf2aa48314e4daa543731e3e75bf032c5a15d83ca93cf339d1a3d16fb682e1f"
+  },
+  "referencePins": {
+    "schema6Archive": "5c7e9a17d9762e8fb31d534e03ea2285182e44a82ddbaf6863f10b655989b103",
+    "schema10Archive": "f2e643317a152600c8bf864648cec095ad57ba398c804feb35f9338a7073cfef",
+    "schema10Main": "5d65282b197350c2d6175fef2ccfa641c40908ecd9c053e296182f65e7bfede7",
+    "reconstructionReceipt": "e9eb3b6a6e78f554b9c77bad78af165c09e0d642a1d52a301f7043222eee4e56",
+    "independentAcceptance": "6c6e312092107839ab7711bbad3ee32031a9e3ccbd84e2795ccf673aaf83d0f4"
+  },
+  "requirements": {
+    "originalR1RejectsAllWal2_2": true,
+    "fixedReferenceAndIndependentChainOnly": true,
+    "currentOriginalFdFullHashes": true,
+    "twoImmutableInodesAndFullParents": true,
+    "allSidecarsRejectedBeforeAndAfter": true,
+    "actualWritersAndHelpersBound": true,
+    "strictSchemaIndexesForeignKeysTypedMultisets": true,
+    "tenMigrationRecordsExactNoTimestampException": true,
+    "oneUseChallengeConsumedBeforeTransport": true,
+    "ttlFromIssueWallAndMonotonic": true,
+    "completeFsyncedRawStreams": true,
+    "strictIndependentLocalAcceptanceAndReadonlyReplay": true,
+    "expiredEvidenceAuditOnly": true,
+    "partialProtectionRetained": true,
+    "noAutomaticRetry": true,
+    "separateExactMergeApproval": true,
+    "postMergeExactProductionApproval": true,
+    "historicalWalCompleteness": "NOT_PROVEN",
+    "historicalWriterCoverage": "NOT_PROVEN",
+    "fullExecutionProjectionAndCanonicalBound": true,
+    "independentCollectorRuntimeBound": true
+  },
+  "limits": {
+    "copyBytes": 8388608,
+    "addressSpaceBytes": 268435456,
+    "cpuSeconds": 60,
+    "wallSeconds": 120,
+    "stdoutBytes": 1048576,
+    "stderrBytes": 1048576,
+    "challengeSeconds": 300
+  },
+  "currentAuthority": {
+    "adoptionAuthorityAllowed": false,
+    "writerReadmissionAllowed": false,
+    "serviceStartAllowed": false,
+    "g4Allowed": false,
+    "mergeAuthorized": false,
+    "productionExecutionAuthorized": false,
+    "productionEvidenceAdmitted": false,
+    "g3_06Allowed": false
+  },
+  "compatibility": {
+    "r1WitnessSha256": "95ca51db7174eaffc8ce9cee8f85f0440ec1253fb8a2e00dc89b42649775ccfc",
+    "r1Ed25519VerifierSha256": "5ec8892c4f1b1c14a43ff204d483b3b8ccadfb74b737829ec88ed4097ebc91cb",
+    "r2Ed25519Accepted": false
+  }
+}
