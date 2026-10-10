@@ -434,7 +434,7 @@ class SourceBootstrap(unittest.TestCase):
     def test_exact_source_loader_parent_custody_and_no_preloaded_modules(self):
         import g3_r2_bootstrap as b
         root=Path(c.__file__).parent
-        with tempfile.TemporaryDirectory(prefix='jso-r2-bootstrap-',dir=Path(__file__).resolve().parents[1]) as name:
+        with tempfile.TemporaryDirectory(prefix='jso-r2-bootstrap-',dir=Path.home()) as name:
             home=Path(name);store=home/'.local/share/jso/g3-r2';store.mkdir(parents=True,mode=0o700)
             for p in (home/'.local',home/'.local/share',home/'.local/share/jso'):p.chmod(0o700)
             pins={n:c.sha((root/n).read_bytes()) for n in b.CODE_FILES}
