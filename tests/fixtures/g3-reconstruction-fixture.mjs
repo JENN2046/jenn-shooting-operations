@@ -1,0 +1,14 @@
+import fs from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
+import { initializeWritableSchema, initializeRuntimeWritableSchema, MIGRATIONS } from '/app/src/sqlite-schema-v2.mjs';
+fs.mkdirSync('/work/six'); fs.mkdirSync('/work/ten');
+const p='/work/build.sqlite';
+const d=new DatabaseSync(p);
+d.exec('PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; PRAGMA foreign_keys=ON');
+initializeWritableSchema(d,{migrations:MIGRATIONS.slice(0,6),now:()=>new Date('2020-01-01T00:00:00.000Z')});
+d.prepare('INSERT INTO schedule_state(id,revision,updated_at,snapshot_json) VALUES(1,?,?,?)').run(9007199254740993n,'2020-01-01T00:00:00.000Z',Buffer.from([0,255,1,2]));
+for(const ext of ['', '-wal','-shm']) fs.copyFileSync(p+ext,'/work/six/shooting-operations.sqlite'+ext);
+initializeRuntimeWritableSchema(d,{now:()=>new Date('2021-01-01T00:00:00.000Z')});
+d.close();
+fs.copyFileSync(p,'/work/ten/shooting-operations.sqlite');
+console.log(JSON.stringify({synthetic:true,walBytes:fs.statSync('/work/six/shooting-operations.sqlite-wal').size}));

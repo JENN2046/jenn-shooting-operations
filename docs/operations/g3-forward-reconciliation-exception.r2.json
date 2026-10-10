@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 2,
+  "contractId": "G3_FORWARD_RECONCILIATION_EXCEPTION_R2",
+  "status": "IMPLEMENTATION_PREPARATION_NOT_PRODUCTION_AUTHORITY",
+  "methodSha256": "e1acba51102404d87e756b0e6a502c6a9cd92bbe4a2136c0f6d8c41b19b6ffd0",
+  "evidenceContractSha256": "8590ef88b3703eb7f70c8034431a6b8e77fd0a3c076a343eef7697f040a4e1db",
+  "historicalFacts": {
+    "g3PhysicalOutcome": "COMMITTED",
+    "g3GovernanceStatus": "RECONCILIATION_REQUIRED",
+    "g3ApprovalHead": "a4199fdb14808ebb866943148a222b0d4300d66e",
+    "g3ExecutionHead": "b9dd595eb52bd09f7a8e2115a48ac401389f5b73",
+    "historicalBindingCompliant": false,
+    "originalExecutionReplayIdentityReusable": false,
+    "oldRollbackOutcome": "UNKNOWN",
+    "oldRollbackAttemptSha256": "sha256:bfd40da521d2a3871ffcf4b4913de260d51c368eeca0ca775c4bda6b25b5645a",
+    "oldRollbackReplayIdentityReusable": false,
+    "historicalReceiptsMutable": false
+  },
+  "exception": {
+    "scope": "FIXED_CAPTURE_STATE_RESTRICTED_RECOVERY_REFERENCE_ONLY",
+    "historicalWriterCoverage": "NOT_PROVEN",
+    "historicalWalCompleteness": "NOT_PROVEN",
+    "uncapturedCommittedDataMayBeMissing": true,
+    "historicalExecutionLegalized": false,
+    "generalWal2_2Acceptance": false,
+    "governanceAdoptionApproved": false
+  },
+  "currentAuthority": {
+    "adoptionAuthorityAllowed": false,
+    "writerReadmissionAllowed": false,
+    "serviceStartAllowed": false,
+    "g4Allowed": false,
+    "mergeAuthorized": false,
+    "productionExecutionAuthorized": false,
+    "productionEvidenceAdmitted": false,
+    "g3_06Allowed": false
+  }
+}

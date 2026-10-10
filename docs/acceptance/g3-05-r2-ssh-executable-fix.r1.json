@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "task": "G3_05_R2_PR63_P1_SSH_EXECUTABLE_FIX_R1",
+  "scope": "SYNTHETIC_ISOLATED_ONLY_NOT_PRODUCTION",
+  "finding": "https://github.com/JENN2046/jenn-shooting-operations/pull/63#discussion_r4236007536",
+  "priorHead": "65e56f8c020c24661b07f820a6c979a75ba7fabf",
+  "methodSha256": "e1acba51102404d87e756b0e6a502c6a9cd92bbe4a2136c0f6d8c41b19b6ffd0",
+  "contractSha256": "b6eb1d8e10168651b5a6f7007ba492446dd98c6eb2c9ee830c50efe91baf92b5",
+  "exceptionSha256": "df3410635a576cf35a1610314a0b88555b4bc9ff49ed12b5dcdce624545a36ef",
+  "code": {
+    "g3-collect-production-evidence.py": "ce1c7b499c56f3d1525978d9bef32a2cbcb877fe95cc725dd125e65c58810ab5",
+    "g3-forward-adoption-readonly-witness-r2.py": "51cbdbc04e9d2c637c43daf050a9fb6573a979309dba40ba91ddc25ec7c21d42",
+    "g3-forward-adoption-readonly-witness.py": "95ca51db7174eaffc8ce9cee8f85f0440ec1253fb8a2e00dc89b42649775ccfc",
+    "g3_r2_acceptance.py": "12378d7aae20335970a6202c0f5a8fd787ac9e76fcdf82e629a638fc0c74a567",
+    "g3_r2_bootstrap.py": "a0ebeda481c296a281be95b43fcc68b8405c78a14086fc64958f0c6ad934fe17",
+    "g3_r2_collector.py": "126749dc9a7498f4e658187e9bfd9e57856ca519573f104140db418c61fa4bc5",
+    "g3_r2_common.py": "5ec55ed719a63668e0563275fe59e927241a526b20fb1819ecd15cc7079970b6",
+    "g3_r2_custody.py": "0899577ad6efab52f606dd2f6de962962b58ba093b7929d8ffac37b4ec29beb2",
+    "g3_r2_snapshot.py": "9ebeed1ee3f58cc512592015ee4e976f8165490e4fc31727d8155f1cd9095d2f",
+    "g3_r2_transport.py": "4c4222c4908dee6fd752e3a29541fd47c784c6880414df574db1ea2d85d354e1",
+    "verify-g3-production-evidence.py": "1cf2aa48314e4daa543731e3e75bf032c5a15d83ca93cf339d1a3d16fb682e1f"
+  },
+  "validation": {
+    "pythonUnitTests": {
+      "passed": 35,
+      "failed": 0,
+      "addedDefensiveTests": 7
+    },
+    "realIsolatedSshCapture": "PASS",
+    "independentFreshReplay": "PASS",
+    "callerPath": "/nonexistent/jso-p1-path",
+    "sshExecutable": "/usr/bin/ssh",
+    "sshEnvironment": {
+      "LANG": "C",
+      "LC_ALL": "C",
+      "PATH": "/usr/bin:/bin"
+    },
+    "e1CaptureFixtureSetup": [
+      "preflight",
+      "protect",
+      "verify"
+    ],
+    "guestRuntime": {
+      "executableSha256": "1643dacd9feaedc58f3cc581e4d22577dfe25c09b10282936186ccf0f2e61118",
+      "python": "3.12.3",
+      "sqlite": "3.45.1",
+      "sqliteExtensionSha256": "b30bc4b6a8fa3c80fa0ff79b752e811ffda985497155501691c1d169b289b238",
+      "sqliteLibrarySha256": "f2cd05de8b6f71ea9d0495a6f9ff9cae844b15d9c45b7ef49ee0af0f81658cc7"
+    },
+    "collectorRuntime": {
+      "executableSha256": "52e0a13e60a981d8c4b6478be2ba5176f69da07948a056bf49cf6f077e30cb41",
+      "python": "3.14.4",
+      "sqlite": "3.46.1",
+      "sqliteExtensionSha256": "d1cfe7116cd7683b0ec01eb6de449f6d4fe1bee45046ae4c289599d2e4ee69f6",
+      "sqliteLibrarySha256": "4633a4be13fdf05cb0f859e04fb06077a1fe30a90e405721a23873bd1f3d88a8"
+    },
+    "finalGuestTemporaryDirectories": [],
+    "sshExecutableSha256": "c6942676b14478f22ccad4b62c40033d18fae3212b5777fd6941aa6e4db1e183",
+    "fullRepository": {
+      "passed": 1120,
+      "failed": 0,
+      "skipped": 1,
+      "node": "24.21.0",
+      "command": "npm run check (includes npm test)",
+      "pathWorkaround": "BYTE_IDENTICAL_ASCII_CHECKOUT_EXISTING_URL_PATHNAME_LIMITATION"
+    }
+  },
+  "captureResult": {
+    "adoptionAuthorityAllowed": false,
+    "challenge": "b8b4ed1447017ee7ac0d10c64033d649066c58255e3939c2907584841b96eda4",
+    "freshAtThisVerification": true,
+    "g4Allowed": false,
+    "historicalWalCompleteness": "NOT_PROVEN",
+    "manifest": "688a6a134a646834102221aa1b4f1ca75ab8315d24da19e70a744890d5a9b685",
+    "serviceStartAllowed": false,
+    "status": "ISOLATED_R2_ACCEPTED_NOT_PRODUCTION",
+    "transportDigest": "1d38dc0eeba0b2708f01ed216a37e02c90b1049b57d11189ef020ee5d9404962",
+    "version": 2,
+    "writerReadmissionAllowed": false
+  },
+  "cleanup": {
+    "status": "DISPOSABLE_RESOURCES_REMOVED",
+    "scope": "LAB_ONLY",
+    "vmUuid": "3be59667-3c96-4858-aa97-47b7e1614442",
+    "qemuPid": 2552085,
+    "qemuStopped": true,
+    "loopbackPortClosed": true,
+    "workDirectoryRemoved": true,
+    "labHomeRemoved": true,
+    "rawEvidenceArchivedAndByteVerified": true,
+    "retainedManifestSha256": "58fce2ed844646942750f12b9a1f748afb9f874cf7e64a6a22a87871e90cf403",
+    "productionActions": 0
+  },
+  "evidenceLocation": "Jenn artifacts/g3-05-r1/pr63-final-review-closure-r1/p1-ssh-executable (independent local custody; raw records not published to GitHub)",
+  "evidenceSha256": {
+    "unit-tests-final.log": "e8e4a468303227976a54d13e38afb0136450c3c5e5de98f7373303de66c90a18",
+    "vm/positive-p1/e1-preflight.json": "027363b48229ce1f927cd0ae739de0c78e5297ad9a5151d6f54a3f46f3441845",
+    "vm/positive-p1/e1-protect.json": "9484fb4b099d074a33ce01ce80f1a8316fec26b0fd3ae853f52d4cc4ae9c32b1",
+    "vm/positive-p1/e1-verify.json": "cfd06157e59283809b4083d475954837b436997b6cb27cf155378238a97fee3f",
+    "vm/positive-p1/e2-collector.json": "a98b3a3cfc76819838eb001238dba6d3b76928efd4e94e7abd26ae9cdc6a4bbc",
+    "vm/positive-p1/e2-independent-fresh-replay.json": "a98b3a3cfc76819838eb001238dba6d3b76928efd4e94e7abd26ae9cdc6a4bbc",
+    "vm/final-guest-state.json": "f39f83959a288693a36bf64e9c40964c43a79289e3fa72dc333100b16449b4f4",
+    "vm/cleanup-final.json": "88019d695b71438d3a537b33d1dc91870228d638556aae65bcb924a371309594",
+    "vm/retained/manifest.json": "58fce2ed844646942750f12b9a1f748afb9f874cf7e64a6a22a87871e90cf403",
+    "full-check-final.log": "78ebd57c861156749a43641da23b277f457ef024637790568c7bbeb00f4d910d"
+  },
+  "history": "Previous acceptance report and raw receipts preserved unchanged. New transport requires new approval fields and environment binding; old R2 receipts are not upgraded. Historical records are audit evidence, not current fresh admission.",
+  "limits": {
+    "historicalWalCompleteness": "NOT_PROVEN",
+    "historicalWriterCoverage": "NOT_PROVEN",
+    "g3_05": "BLOCKED",
+    "productionActions": 0,
+    "mergeAllowed": false,
+    "g3_06Allowed": false,
+    "writerAllowed": false,
+    "serviceAllowed": false
+  }
+}
