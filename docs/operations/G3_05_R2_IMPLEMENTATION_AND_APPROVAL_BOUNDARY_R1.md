@@ -1,6 +1,6 @@
 # G3-05 R2 实现、证据边界与后续批准
 
-状态：`IMPLEMENTED_FOR_ISOLATED_REVIEW_ONLY`。GitHub P1 SSH 程序绑定修复的增量及证据适用范围见 `G3_05_R2_SSH_EXECUTABLE_REVIEW_FIX_R1.md`。Owner 已批准方法 R2；合并与生产执行均未批准。G3-05 仍 `BLOCKED`，PR #63 保持 Draft。
+状态：`REMOTE_ENTRY_CANDIDATE_BLOCKED_BY_EXISTING_FORWARDING_POLICY`。最新入口候选、真实拒绝与证据适用范围见 [远端入口收口记录](G3_05_R2_REMOTE_ENTRY_CANDIDATE_R1.md)。Owner 已批准方法 R2；旧 head 的合并批准不能沿用到本候选，生产执行未批准。G3-05 仍 `BLOCKED`。
 
 ## 1. 批准来源与不变边界
 
@@ -12,7 +12,7 @@ R1 witness、R1 签名验证器、R1 两份合同保持原字节。R1 合同绑�
 
 ## 2. 合同和执行入口
 
-新增证据合同及例外合同 R2，状态均为 `IMPLEMENTATION_PREPARATION_NOT_PRODUCTION_AUTHORITY`。`validate-g3-r2-preparation.py` 验证方法、Owner 转录、R1 历史、11 个运行源码、引用链、资源限制和全部 false 权限。
+新增证据合同及例外合同 R2，状态均为 `IMPLEMENTATION_PREPARATION_NOT_PRODUCTION_AUTHORITY`。`validate-g3-r2-preparation.py` 验证方法、Owner 转录、R1 历史、13 个运行源码、引用链、资源限制和全部 false 权限。
 
 | 入口 | 行为 |
 |---|---|
@@ -20,7 +20,8 @@ R1 witness、R1 签名验证器、R1 两份合同保持原字节。R1 合同绑�
 | 远端 R2 `protect` | 固定 FD，先 active 后 preserved；任何部分成功保留保护，无解除入口 |
 | 远端 R2 `verify` | 复核两 inode immutable 及全部原绑定 |
 | 远端 R2 `capture` | 精确 proof、运行时、原 FD 摘要与格式检查后，只解释私有 tmpfs 副本 |
-| Jenn `g3-collect-production-evidence.py` | 无调用者授权参数；从固定存证库读取批准，一次挑战、一次认证 SSH、保存原文、严格接受 |
+| root `g3-r2-serve-once.py` | 可信管理员独立启动；固定 root 管理的 Unix socket，一次有界请求后清理退出，无 shell |
+| Jenn `g3-collect-production-evidence.py` | 无调用者授权参数；从固定存证库读取批准，一次挑战、一次无 session 的认证 SSH socket 转发、保存原文、严格接受 |
 | Jenn `verify-g3-production-evidence.py` | 独立进程只读 ledger 回放；`--require-fresh` 同时核对当前时钟和 Jenn boot |
 
 R2 仅处理 preserved `2/2`、active `1/1`。没有已安装且批准的完整 proof 时，在 SQLite 解释前停止。原生产路径不交给 SQLite；不改头、不 checkpoint、不恢复数据库。
@@ -38,11 +39,11 @@ R2 仅处理 preserved `2/2`、active `1/1`。没有已安装且批准的完整 
 
 `release` 精确包含 PR head、批准 base、`postMergeCanonicalHead`、`sourceTree`；必须是实际合并产生的新提交。此实现不接受仍为 PR/base/原方法提交的 canonical。未来合并包应明确采用产生新提交的 GitHub 合并方式。
 
-生产 `merge-record.json` 绑定方法、合同、11 项代码及完整 release；`execution-approval.json` 另外绑定**整个清单的规范编码摘要投影**，仅排除两个批准记录自身摘要，避免循环引用。因此对象、主机、boot、窗口、命令/主机密钥、运行时、参考链或 canonical 任一变化都会使旧批准失效。生产工具不联网查询 GitHub；合并事实和 Owner 原始批准由 Jenn 的受信管理员核验、独立记录并装入固定库。工具不能自行生成批准。
+生产 `merge-record.json` 绑定方法、合同、13 项代码及完整 release；`execution-approval.json` 另外绑定**整个清单的规范编码摘要投影**，仅排除两个批准记录自身摘要，避免循环引用。因此对象、主机、boot、窗口、命令/主机密钥、运行时、参考链或 canonical 任一变化都会使旧批准失效。生产工具不联网查询 GitHub；合并事实和 Owner 原始批准由 Jenn 的受信管理员核验、独立记录并装入固定库。工具不能自行生成批准。
 
 `reference.json` 固定方法、五项历史引用、两个 NOT_PROVEN 和 scope；调用者同时传材料及其自选摘要不能建立权威。`source-index.json` 固定原 receipt、status、stderr、一次消费记录、原授权、transport 源码和独立接受记录。原空 stderr 用明确空 base64 包装进入索引；原文件保持不变。Jenn 校验全部已登记原始材料摘要和原格式，不把历史有限接受当成新生产证据。
 
-源码 bootstrap 在导入前固定完整 11 项源文件集合，拒绝预加载 R2 模块，执行核验过的源码字节而不使用 pyc。最外层入口/bootstrap、Python 系统库、SSH 程序及其启动目录仍属于 `TRUSTED_HOST_ADMIN` 部署责任；执行包必须对其实际部署位置、权限和工件作精确复核。该模型不抵御已获授权的 root/Jenn 主体故意伪造批准。
+源码 bootstrap 在导入前固定完整 13 项源文件集合，拒绝预加载 R2 模块，执行核验过的源码字节而不使用 pyc。最外层入口/bootstrap、Python 系统库、SSH 程序及其启动目录仍属于 `TRUSTED_HOST_ADMIN` 部署责任；执行包必须对其实际部署位置、权限和工件作精确复核。该模型不抵御已获授权的 root/Jenn 主体故意伪造批准。
 
 ## 4. 保护、解释与存证
 
@@ -56,11 +57,17 @@ R2 仅处理 preserved `2/2`、active `1/1`。没有已安装且批准的完整 
 
 Jenn 使用正常认证 SSH，固定主机密钥、身份、实例、boot、命令、代码、两端运行时。客户端固定 `/usr/bin/ssh`；批准清单 transport 必须包含 `sshExecutablePath` 与 `sshExecutableSha256`。启动前和回放时验证 root 保管的完整父链及程序字节，无 PATH 回退。启动环境仅为已固定的 PATH、LANG、LC_ALL，且作为 transport 原文的 `environment` 字段严格核验；不继承调用者环境。挑战从签发开始 300 秒，墙钟和单调时钟都必须有效；先耐久消费再启动传输。原 stdout/stderr、退出和时序先独立保存并 fsync；原记录不得回写。
 
+当前候选使用 `ssh -N -T -n` 连接固定 `/run/jso-g3-r2/capture.sock`，不请求远端 shell、exec 或 subsystem。root 入口由可信管理员通过另行批准的独立通道启动。Jenn 必须先具有经独立审查的 `endpoint-deployment.json` 及 `endpoint-deployment-source`；绑定精确主机/boot、代码、运行时、root 父链和原始部署材料摘要，禁止通过同一未验证采集通道自举这些材料。部署记录摘要只绑定材料，不会使自述成为证明；生产材料当前不存在。
+
+SSH 隧道退出、root witness 退出和清理结果分别记录。帧上限 3 MiB，解码后两路 witness 原文各限 1 MiB；SSH 原文、帧、退出、时序、清理状态同时持久保存。清理未确认、任何流截断或终态未知均拒绝。既有 SSH 策略必须允许固定通道；被拒绝时不得修改权限或回退远端 shell。
+
 ledger 的成功候选写为 `PENDING_FINAL_ACCEPTANCE`，提交并 fsync 后再记录时限内接受决定到只创建一次的 `acceptance.json`。独立回放必须同时验证完整 ledger、接受 seal、原文摘要、挑战、全部语义检查和引用链。单独 PENDING、缺失/未知 seal、迟到成功 JSON 均拒绝。历史回放只证明当时完成接受；不延长有效期，不授予跨 G3 阶段新鲜性。
 
-## 5. 本轮验证与诚实边界
+## 5. 历史验证与诚实边界
 
-结果和逐项摘要见 `../acceptance/g3-05-r2-isolated-validation.r1.json`。原始实验记录、SSH 原文、SQLite ledger、批准清单历史及独立复核保留在 Jenn 本地 `artifacts/g3-05-r1/r2-implementation-r1`。
+以下为原版本的历史实验；不能继承为最新入口候选的真实 E2 PASS。最新候选真实连接被现有策略拒绝，P1 尚未关闭。
+
+原结果和逐项摘要见 `../acceptance/g3-05-r2-isolated-validation.r1.json`。原始实验记录、SSH 原文、SQLite ledger、批准清单历史及独立复核保留在 Jenn 本地 `artifacts/g3-05-r1/r2-implementation-r1`。
 
 实验只使用 Jenn 管理的可丢弃 KVM guest、真实 ext4、真实 loopback SSH 和合成数据库；无共享目录，QEMU restrict 网络，无生产连接。Ubuntu 24.04 guest 实测 Python 3.12.3 / SQLite 3.45.1；Jenn 采集器使用自己的独立固定运行时。
 
@@ -70,7 +77,7 @@ ledger 的成功候选写为 `PENDING_FINAL_ACCEPTANCE`，提交并 fsync 后再
 
 ## 6. 剩余批准与退出条件
 
-下一步仅请求 **批准点二：精确 PR head 与 base 的合并**。代码复审、完整检查和实际隔离结果必须先完成；Owner 批准后再次核对两端无漂移。不同 head/base 不能继承本次批准。
+当前先等待既有策略允许且已经授权的隔离入口验收条件；不得自动放宽当前环境策略。真实入口验收和复核通过后，才请求 **批准点二：精确 PR head 与 base 的合并**。代码复审、完整检查和实际隔离结果必须先完成；Owner 批准后再次核对两端无漂移。不同 head/base 不能继承本次批准。
 
 实际合并后，记录 canonical commit/tree 和工具字节，才形成批准点三的完整生产包。该包必须列出所有固定库文件/部署工件、两端运行时、原对象、完整父链与挂载/别名、责任窗口、旧 helper、writer 排空证据、命令顺序、创建/卸载/清理对象和失败保护保留策略。当前不预填未知 canonical 或生产事实，不用本轮 lab manifest 填充生产批准。
 

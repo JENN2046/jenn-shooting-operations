@@ -10,11 +10,13 @@
     "g3-collect-production-evidence.py": "ce1c7b499c56f3d1525978d9bef32a2cbcb877fe95cc725dd125e65c58810ab5",
     "g3-forward-adoption-readonly-witness-r2.py": "957132a89b3b2e205624f8657cf28f6ebd9acd375245c05f0df831aac1024826",
     "g3-forward-adoption-readonly-witness.py": "95ca51db7174eaffc8ce9cee8f85f0440ec1253fb8a2e00dc89b42649775ccfc",
+    "g3-r2-serve-once.py": "2f6f5b855dd38157501482ed6d4de38e10af91594d5cabc7d413023c1ad31455",
     "g3_r2_acceptance.py": "77f31037b4c7bdec2302ead36ffb304b2b33ee075c93aae0433c7ee31f0e595f",
-    "g3_r2_bootstrap.py": "a0ebeda481c296a281be95b43fcc68b8405c78a14086fc64958f0c6ad934fe17",
-    "g3_r2_collector.py": "126749dc9a7498f4e658187e9bfd9e57856ca519573f104140db418c61fa4bc5",
-    "g3_r2_common.py": "5ec55ed719a63668e0563275fe59e927241a526b20fb1819ecd15cc7079970b6",
+    "g3_r2_bootstrap.py": "af51f07243e080b5138093456e7ba15318103d6c06da45835947e4dfafa1893a",
+    "g3_r2_collector.py": "fc842bb5d8187f8448a391655d132ec1161b59cc2b2a7c4468e3c509ae627637",
+    "g3_r2_common.py": "e1e79257b8714bd3d6099862149932f6a86eeaa5f9daedbd8ff10fccbb51e004",
     "g3_r2_custody.py": "e205b755488e9f1e3c7b71b358adc9335aa4f8dddb8f1a50c2dd19b315de512b",
+    "g3_r2_endpoint.py": "e784691c58bb9aab23948ca9fd0bfba71ff46e0532464ad36f56749b0a42553a",
     "g3_r2_snapshot.py": "9ebeed1ee3f58cc512592015ee4e976f8165490e4fc31727d8155f1cd9095d2f",
     "g3_r2_transport.py": "4c4222c4908dee6fd752e3a29541fd47c784c6880414df574db1ea2d85d354e1",
     "verify-g3-production-evidence.py": "1cf2aa48314e4daa543731e3e75bf032c5a15d83ca93cf339d1a3d16fb682e1f"
@@ -53,7 +55,11 @@
     "typedApprovedWriterInventory": true,
     "structuredStoppedWriterSemantics": true,
     "independentWriterProbeReplay": true,
-    "unsupportedHelperControlBlocked": true
+    "unsupportedHelperControlBlocked": true,
+    "rootUnixOneShotEndpoint": true,
+    "noRemoteShellSession": true,
+    "independentEndpointDeploymentRequired": true,
+    "separateTunnelAndWitnessTerminal": true
   },
   "limits": {
     "copyBytes": 8388608,

@@ -1,5 +1,6 @@
 """R2 synthetic unit acceptance. These fixtures carry no production authority."""
 import copy
+import base64
 import importlib.util
 import json
 import os
@@ -18,6 +19,7 @@ import g3_r2_acceptance as a
 import g3_r2_collector as col
 import g3_r2_snapshot as snapshot
 import g3_r2_custody as cust
+import g3_r2_endpoint as endpoint
 from g3_r2_transport import run_bounded
 from test_g3_forward_adoption_witness import fixture
 
@@ -255,7 +257,7 @@ class TransportAndLedger(unittest.TestCase):
             return DelayCommit(connection) if calls==2 else connection
         with patch.object(col,'TTL_NS',20_000_000),patch.object(col,'connect',side_effect=connect),\
              patch.object(col,'argv',return_value=['synthetic']),\
-             patch.object(col,'run_bounded',return_value={'exit':0,'stdout':b'{}','stderr':b'','limited':False}),\
+             patch.object(col,'forward_once',return_value={'exit':0,'stdout':b'{}','stderr':b'','limited':False,'wire':b'{}','sshStdout':b'','sshStderr':b'','tunnel':{'argv':['synthetic']}}),\
              patch.object(col,'validate_transport',return_value={}):
             with self.assertRaisesRegex(ValueError,'CAPTURE_REJECTED'):col.collect(n,{},'a'*64,self.root)
         seal=c.parse((self.root/n/'acceptance.json').read_bytes());self.assertEqual(seal['status'],'REJECTED')
@@ -270,6 +272,7 @@ class SshExecutableBinding(unittest.TestCase):
         self.approval={'purpose':'ISOLATED_VALIDATION_ONLY','referenceEvidenceSha256':'3'*64,
           'collectorRuntime':c.runtime(),'transport':{'host':'127.0.0.1','user':'tester','port':22,
           'keyPath':str(self.root/'unused-key'),'knownHostsPath':str(known),'knownHostsSha256':c.sha(known.read_bytes()),
+          'profile':endpoint.PROFILE,'endpoint':endpoint.ENDPOINT,'endpointDeploymentSha256':'d'*64,'endpointParents':[[1,2,0,0,16877]]*3,
           'sshExecutablePath':'/usr/bin/ssh','sshExecutableSha256':c.sha(c.bounded(Path('/usr/bin/ssh'),limit=16*1024*1024,trusted_uid=0))}}
     def test_absolute_approved_client_ignores_missing_caller_path(self):
         with patch.dict(os.environ,{'PATH':str(self.root/'no-programs')}):
@@ -278,6 +281,15 @@ class SshExecutableBinding(unittest.TestCase):
             # Version-only invocation of the real approved binary; no server connection.
             r=run_bounded([command[0],'-V'],env=col.SSH_ENV)
         self.assertEqual(r['exit'],0);self.assertIn(b'OpenSSH',r['stderr'])
+    def test_only_fixed_forward_and_no_remote_command(self):
+        command=col.argv(self.approval,'a'*64,'/tmp/jso-r2-tunnel-fixture')
+        self.assertIn('-N',command);self.assertIn('-T',command)
+        self.assertEqual(command[-1],'tester@127.0.0.1')
+        self.assertEqual(command[command.index('-L')+1],'/tmp/jso-r2-tunnel-fixture/data.sock:'+endpoint.ENDPOINT)
+        self.assertNotIn('sudo',' '.join(command));self.assertNotIn('a'*64,' '.join(command))
+        for field,value in [('profile','SHELL'),('endpoint','/home/tester/socket'),('endpointDeploymentSha256',None)]:
+            approved=copy.deepcopy(self.approval);approved['transport'][field]=value
+            with self.assertRaises(ValueError):col.argv(approved,'a'*64)
     def test_missing_wrong_path_or_byte_pin_refused(self):
         for edit in [lambda t:t.pop('sshExecutableSha256'),lambda t:t.pop('sshExecutablePath'),
                      lambda t:t.update(sshExecutablePath='ssh'),
@@ -304,10 +316,10 @@ class SshExecutableBinding(unittest.TestCase):
         for key,value in col.SSH_ENV.items():self.assertEqual(env[key],value)
     def test_collector_binds_actual_launch_environment(self):
         n=col.issue('a'*64,self.root)
-        with patch.object(col,'run_bounded',return_value={'exit':7,'stdout':b'','stderr':b'fixture failure','limited':False}) as run:
+        with patch.object(col,'forward_once',return_value={'exit':7,'stdout':b'','stderr':b'fixture failure','limited':False,'wire':b'{}','sshStdout':b'','sshStderr':b'','tunnel':{'argv':['synthetic']}}) as run:
             with self.assertRaisesRegex(ValueError,'CAPTURE_REJECTED'):col.collect(n,self.approval,'a'*64,self.root)
-        self.assertEqual(run.call_args.args[0][0],'/usr/bin/ssh')
-        self.assertEqual(run.call_args.kwargs,{'timeout':120,'env':col.SSH_ENV})
+        self.assertIs(run.call_args.args[0],col.argv)
+        self.assertEqual(run.call_args.args[1],self.approval)
         meta=c.parse((self.root/n/'transport.json').read_bytes())
         self.assertEqual(meta['environment'],col.SSH_ENV)
         changed=copy.deepcopy(meta);changed['environment']['PATH']='/tmp'
@@ -319,10 +331,64 @@ class SshExecutableBinding(unittest.TestCase):
     def test_changed_executable_refused_before_any_transport(self):
         a=copy.deepcopy(self.approval);a['transport']['sshExecutableSha256']='0'*64
         n=col.issue('a'*64,self.root)
-        with patch.object(col,'run_bounded') as run:
+        with patch.object(col,'forward_once') as run:
             with self.assertRaisesRegex(ValueError,'CAPTURE_UNKNOWN'):col.collect(n,a,'a'*64,self.root)
         run.assert_not_called()
         with self.assertRaisesRegex(ValueError,'REPLAY'):col.consume(n,'a'*64,self.root)
+
+
+class RemoteEndpointBoundary(unittest.TestCase):
+    def setUp(self):
+        self.parents = [[1, 2, 0, 0, 16877]] * 3
+        self.frame = {'version': 1, 'profile': endpoint.PROFILE, 'manifest': 'a'*64,
+                      'challenge': 'b'*64, 'exit': 0, 'limited': False, 'stdout': 'b2s=',
+                      'stderr': '', 'endpointRemoved': True, 'endpointParents': self.parents}
+    def decode(self, raw=None):
+        return endpoint.decode_response(c.canonical(self.frame) if raw is None else raw,
+                                        'a'*64, 'b'*64, self.parents)
+    def test_complete_wire_preserves_streams_and_witness_status(self):
+        self.assertEqual(self.decode(), {'stdout': b'ok', 'stderr': b'', 'exit': 0, 'limited': False})
+        self.frame['exit'] = 7
+        self.assertEqual(self.decode()['exit'], 7)  # not converted to SSH success
+    def test_unknown_missing_noncanonical_or_truncated_frame_rejected(self):
+        for edit in [lambda r:r.update(extra=True), lambda r:r.pop('exit'), lambda r:r.update(version=True),
+                     lambda r:r.update(endpointRemoved=False), lambda r:r.update(exit=None),
+                     lambda r:r.update(manifest='c'*64), lambda r:r.update(challenge='c'*64)]:
+            frame=copy.deepcopy(self.frame);edit(frame)
+            with self.assertRaises(ValueError):self.decode(c.canonical(frame))
+        for value in [b'',c.canonical(self.frame)[:-1],c.canonical(self.frame)+b' ',b'x'*(endpoint.MAX_FRAME+1)]:
+            with self.assertRaises(ValueError):self.decode(value)
+    def test_approved_parent_identity_drift_rejected(self):
+        frame=copy.deepcopy(self.frame);frame['endpointParents'][0][1]+=1
+        with self.assertRaisesRegex(ValueError,'FRAME_BINDING'):self.decode(c.canonical(frame))
+    def test_invalid_or_oversized_encoded_stream_rejected(self):
+        for value in ['???',base64.b64encode(b'x'*(c.MAX_OUTPUT+1)).decode()]:
+            self.frame['stdout']=value
+            with self.assertRaises(ValueError):self.decode()
+    def test_no_arbitrary_request_authority(self):
+        self.assertEqual(c.parse(endpoint.request('a'*64,'b'*64)),
+                         {'version':1,'manifest':'a'*64,'challenge':'b'*64})
+        for manifest,challenge in [('x','b'*64),('a'*64,'not-a-challenge')]:
+            with self.assertRaises(ValueError):endpoint.request(manifest,challenge)
+    def test_unprivileged_listener_rejected_before_creating_socket(self):
+        with patch.object(endpoint.os,'getuid',return_value=1000),patch.object(endpoint.socket,'socket') as opened:
+            with self.assertRaisesRegex(ValueError,'ENDPOINT_ROOT_REQUIRED'):endpoint.serve_once({},'a'*64)
+            opened.assert_not_called()
+    def test_cleanup_failure_keeps_partial_bytes_and_residual_identity(self):
+        import io
+        from unittest.mock import Mock
+        pipes=[]
+        for raw in [b'partial tunnel output',b'failure detail']:
+            rd,wr=os.pipe();os.write(wr,raw);os.close(wr)
+            pipes.append(os.fdopen(rd,'rb',buffering=0))
+        proc=Mock(stdout=pipes[0],stderr=pipes[1],pid=99999999)
+        proc.poll.return_value=None;proc.kill.side_effect=OSError('synthetic cleanup refusal')
+        with patch.object(endpoint.subprocess,'Popen',return_value=proc):
+            result=endpoint.forward_once(lambda *args:['unit-only'],{},'a'*64,'b'*64,timeout=.03)
+        self.assertTrue(result['limited']);self.assertFalse(result['tunnel']['localCleanupConfirmed'])
+        self.assertEqual(result['tunnel']['residualPid'],99999999)
+        self.assertEqual(result['sshStdout'],b'partial tunnel output')
+        self.assertEqual(result['sshStderr'],b'failure detail')
 
 
 class ExactApprovalBinding(unittest.TestCase):

@@ -2,7 +2,6 @@
 import os
 from pathlib import Path
 import re
-import shlex
 import sqlite3
 import time
 import secrets
@@ -11,6 +10,7 @@ from g3_r2_common import (bounded, canonical, DENY, exact, fsync_dir, load_appro
                           need, parse, reference, runtime, save_new, sha, SHA)
 from g3_r2_acceptance import validate_observation
 from g3_r2_transport import run_bounded
+from g3_r2_endpoint import ENDPOINT, PROFILE, decode_response, forward_once
 
 SSH_EXECUTABLE = '/usr/bin/ssh'
 SSH_ENV = {'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C'}
@@ -81,10 +81,14 @@ def consume(n, approval_sha, directory):
     return row[0], row[1], wall, mono
 
 
-def argv(approval, challenge):
+def argv(approval, challenge, tunnel_directory=None):
     t = approval['transport']
     exact(t, ('host', 'user', 'port', 'keyPath', 'knownHostsPath', 'knownHostsSha256',
-              'sshExecutablePath', 'sshExecutableSha256'))
+              'sshExecutablePath', 'sshExecutableSha256', 'profile', 'endpoint', 'endpointDeploymentSha256', 'endpointParents'))
+    need(t['profile'] == PROFILE and t['endpoint'] == ENDPOINT, 'ENDPOINT_PROFILE_REQUIRED')
+    need(type(t['endpointDeploymentSha256']) is str and SHA.fullmatch(t['endpointDeploymentSha256']), 'ENDPOINT_DEPLOYMENT_REQUIRED')
+    directory = Path(tunnel_directory or '/tmp/jso-r2-tunnel-placeholder')
+    need(str(directory.parent) == '/tmp' and re.fullmatch('jso-r2-tunnel-[a-z0-9_]+', directory.name), 'TUNNEL_PATH')
     need(t['sshExecutablePath'] == SSH_EXECUTABLE, 'FIXED_SSH_EXECUTABLE_REQUIRED')
     need(type(t['sshExecutableSha256']) is str and SHA.fullmatch(t['sshExecutableSha256']), 'SSH_EXECUTABLE_PIN_REQUIRED')
     # The fixed path and every parent must remain under root custody. The approved
@@ -99,16 +103,15 @@ def argv(approval, challenge):
         need(t['host'] == '127.0.0.1', 'LAB_LOOPBACK_ONLY')
     need(sha(bounded(Path(t['knownHostsPath']))) == t['knownHostsSha256'], 'HOSTKEY_PIN')
     need(Path(t['keyPath']).is_absolute(), 'KEY_PATH')
-    remote = ['sudo', '-n', '/usr/bin/python3', '-E', '-s',
-              '/opt/jso/g3-r2/g3-forward-adoption-readonly-witness-r2.py', 'capture',
-              '--reference-evidence', '/etc/jso/g3-r2/reference.json',
-              '--expected-reference-evidence-sha256', approval['referenceEvidenceSha256'], '--challenge', challenge]
     return [SSH_EXECUTABLE, '-F', '/dev/null', '-i', t['keyPath'], '-p', str(t['port']),
             '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes', '-o', 'IdentityAgent=none',
             '-o', 'StrictHostKeyChecking=yes', '-o', 'UpdateHostKeys=no', '-o', 'ForwardAgent=no',
-            '-o', 'ClearAllForwardings=yes', '-o', 'GlobalKnownHostsFile=/dev/null',
+            '-o', 'ClearAllForwardings=no', '-o', 'GlobalKnownHostsFile=/dev/null',
             '-o', 'UserKnownHostsFile="' + t['knownHostsPath'].replace('\\', '\\\\').replace('"', '\\"') + '"', '-o', 'ConnectTimeout=10',
-            t['user'] + '@' + t['host'], shlex.join(remote)]
+            '-o', 'ExitOnForwardFailure=yes', '-o', 'StreamLocalBindUnlink=no',
+            '-o', 'StreamLocalBindMask=0177', '-o', 'ControlPersist=no',
+            '-M', '-S', str(directory / 'control.sock'), '-N', '-T', '-n',
+            '-L', str(directory / 'data.sock') + ':' + ENDPOINT, t['user'] + '@' + t['host']]
 
 
 def fresh(issued_wall, issued_mono, wall, mono):
@@ -123,14 +126,16 @@ def collect(n, approval, approval_sha, directory=EVIDENCE):
     fsync_dir(directory)
     command = []
     status = 'REJECTED'
-    result = {'exit': None, 'stdout': b'', 'stderr': b'', 'limited': False}
+    result = {'exit': None, 'stdout': b'', 'stderr': b'', 'limited': False,
+              'wire': b'', 'sshStdout': b'', 'sshStderr': b'', 'tunnel': {}}
     sw, sm = clock()
     reason = 'PRETRANSPORT_REJECTED'
     try:
         fresh(iw, im, cw, cm)
         fresh(iw, im, sw, sm)
         command = argv(approval, n)
-        result = run_bounded(command, timeout=120, env=SSH_ENV)
+        result = forward_once(argv, approval, approval_sha, n)
+        command = result['tunnel']['argv']
         reason = 'TRANSPORT_COMPLETE'
     except (ValueError, OSError):
         pass
@@ -138,15 +143,22 @@ def collect(n, approval, approval_sha, directory=EVIDENCE):
     # Preserve exact outputs first, fsync them and their directory, then calculate/bind digests.
     save_new(target / 'stdout', result['stdout'])
     save_new(target / 'stderr', result['stderr'])
+    for key in ('wire', 'sshStdout', 'sshStderr'):
+        save_new(target / key, result[key])
     meta = {'version': 2, 'challenge': n, 'argv': command, 'environment': dict(SSH_ENV), 'manifest': approval_sha,
             'issuedWall': iw, 'issuedMono': im, 'consumedWall': cw, 'consumedMono': cm,
             'startedWall': sw, 'startedMono': sm, 'finishedWall': ew, 'finishedMono': em,
             'collectorBoot': boot(), 'collectorRuntime': runtime(), 'exit': result['exit'], 'limited': result['limited'], 'transportState': reason,
             'stdoutSha256': sha(result['stdout']), 'stderrSha256': sha(result['stderr']),
-            'stdoutBytes': len(result['stdout']), 'stderrBytes': len(result['stderr'])}
+            'stdoutBytes': len(result['stdout']), 'stderrBytes': len(result['stderr']),
+            'tunnel': result['tunnel'], 'endpointProfile': PROFILE,
+            'wireSha256': sha(result['wire']), 'wireBytes': len(result['wire']),
+            'sshStdoutSha256': sha(result['sshStdout']), 'sshStdoutBytes': len(result['sshStdout']),
+            'sshStderrSha256': sha(result['sshStderr']), 'sshStderrBytes': len(result['sshStderr'])}
     save_new(target / 'transport.json', canonical(meta))
     try:
-        validate_transport(meta, result['stdout'], result['stderr'], approval, approval_sha, n)
+        validate_transport(meta, result['stdout'], result['stderr'], approval, approval_sha, n,
+                           result['wire'], result['sshStdout'], result['sshStderr'])
         aw, am = clock()
         fresh(iw, im, aw, am)
         status = 'ACCEPTED'
@@ -175,15 +187,34 @@ def collect(n, approval, approval_sha, directory=EVIDENCE):
     return replay(n, approval, approval_sha, directory, require_fresh=True)
 
 
-def validate_transport(meta, out, err, approval, approval_sha, n):
+def validate_transport(meta, out, err, approval, approval_sha, n, wire=b'', ssh_out=b'', ssh_err=b''):
     exact(meta, ('version', 'challenge', 'argv', 'environment', 'manifest', 'issuedWall', 'issuedMono', 'consumedWall', 'consumedMono',
                  'startedWall', 'startedMono', 'finishedWall', 'finishedMono', 'collectorBoot', 'exit', 'limited',
-                 'transportState', 'collectorRuntime', 'stdoutSha256', 'stderrSha256', 'stdoutBytes', 'stderrBytes'))
+                 'transportState', 'collectorRuntime', 'stdoutSha256', 'stderrSha256', 'stdoutBytes', 'stderrBytes',
+                 'tunnel', 'endpointProfile', 'wireSha256', 'wireBytes', 'sshStdoutSha256', 'sshStdoutBytes',
+                 'sshStderrSha256', 'sshStderrBytes'))
     need(meta['environment'] == SSH_ENV, 'SSH_ENVIRONMENT_BINDING')
     need(meta['collectorRuntime'] == approval['collectorRuntime'], 'COLLECTOR_RUNTIME_BINDING')
     need(meta['version'] == 2 and meta['challenge'] == n and meta['manifest'] == approval_sha, 'TRANSPORT_BINDING')
     need(type(meta['exit']) is int and meta['exit'] == 0 and meta['limited'] is False and meta['transportState'] == 'TRANSPORT_COMPLETE', 'INCOMPLETE_TRANSPORT')
-    need(meta['argv'] == argv(approval, n), 'EXACT_SSH_COMMAND')
+    tunnel = meta['tunnel']
+    exact(tunnel, ('argv', 'shutdownArgv', 'sshExit', 'shutdownExit', 'shutdownStdout', 'shutdownStderr', 'localCleanupConfirmed', 'residualPid', 'cleanupError'))
+    need(type(tunnel['argv']) is list and '-S' in tunnel['argv'], 'TUNNEL_ARGV')
+    directory = str(Path(tunnel['argv'][tunnel['argv'].index('-S') + 1]).parent)
+    expected = argv(approval, n, directory)
+    need(meta['endpointProfile'] == PROFILE and meta['argv'] == tunnel['argv'] == expected, 'EXACT_SSH_COMMAND')
+    need(tunnel['shutdownArgv'] == [SSH_EXECUTABLE, '-F', '/dev/null', '-S', directory + '/control.sock', '-O', 'exit',
+         approval['transport']['user'] + '@' + approval['transport']['host']], 'EXACT_TUNNEL_SHUTDOWN')
+    need(type(tunnel['sshExit']) is int and tunnel['sshExit'] == 0 and
+         type(tunnel['shutdownExit']) is int and tunnel['shutdownExit'] == 0 and
+         tunnel['shutdownStdout'] == '' and tunnel['shutdownStderr'] == 'Exit request sent.\r\n' and
+         tunnel['localCleanupConfirmed'] is True and tunnel['residualPid'] is None and tunnel['cleanupError'] is None, 'TUNNEL_TERMINAL_OR_CLEANUP')
+    for prefix, raw in [('wire', wire), ('sshStdout', ssh_out), ('sshStderr', ssh_err)]:
+        need(type(meta[prefix + 'Bytes']) is int and meta[prefix + 'Bytes'] == len(raw) and
+             meta[prefix + 'Sha256'] == sha(raw), 'TUNNEL_RAW_BINDING')
+    need(not ssh_out and not ssh_err, 'SSH_TUNNEL_STREAMS')
+    decoded = decode_response(wire, approval_sha, n, approval['transport']['endpointParents'])
+    need(decoded == {'stdout': out, 'stderr': err, 'exit': meta['exit'], 'limited': meta['limited']}, 'WITNESS_FRAME_BINDING')
     need(len(out) == meta['stdoutBytes'] and len(err) == meta['stderrBytes'] and sha(out) == meta['stdoutSha256'] and sha(err) == meta['stderrSha256'], 'RAW_TRANSCRIPT_DIGEST')
     need(err == ('JSO_R2_COMPLETE:' + n + '\n').encode(), 'COMPLETE_STDERR_REQUIRED')
     for suffix in ('Wall', 'Mono'):
@@ -193,11 +224,11 @@ def validate_transport(meta, out, err, approval, approval_sha, n):
     return validate_observation(out, approval, approval_sha, n)
 
 
-def read_raw(path, size):
+def read_raw(path, size, limit=1024 * 1024):
     # Raw stderr may be empty on a rejected attempt; accepted R2 always has its exact marker.
-    need(type(size) is int and 0 <= size <= 1024 * 1024, 'RAW_SIZE')
+    need(type(size) is int and 0 <= size <= limit, 'RAW_SIZE')
     if size:
-        return bounded(path)
+        return bounded(path, limit=limit)
     need(path.is_file() and not path.is_symlink() and path.stat().st_size == 0, 'EMPTY_RAW_FILE')
     return b''
 
@@ -226,7 +257,10 @@ def replay(n, approval, approval_sha, directory=EVIDENCE, require_fresh=False):
     need(terminal[1] <= acceptance['durableTerminalObservedWall'] and terminal[2] <= acceptance['durableTerminalObservedMono'], 'DURABLE_TERMINAL_ORDER')
     fresh(issue_row[0], issue_row[1], acceptance['durableTerminalObservedWall'], acceptance['durableTerminalObservedMono'])
     validate_transport(meta, read_raw(target / 'stdout', meta['stdoutBytes']),
-                       read_raw(target / 'stderr', meta['stderrBytes']), approval, approval_sha, n)
+                       read_raw(target / 'stderr', meta['stderrBytes']), approval, approval_sha, n,
+                       read_raw(target / 'wire', meta['wireBytes'], 3 * 1024 * 1024),
+                       read_raw(target / 'sshStdout', meta['sshStdoutBytes']),
+                       read_raw(target / 'sshStderr', meta['sshStderrBytes']))
     if require_fresh:
         need(issue_row[2] == boot(), 'COLLECTOR_BOOT_CHANGED')
         wall, mono = clock()

@@ -202,6 +202,25 @@ def load_approval(*, local=False):
     if local:
         from g3_r2_acceptance import verify_sources
         verify_sources(approval, store, uid)
+        # This is a separately reviewed installation record anchored in Jenn's
+        # approved store, never an observation fetched through the capture session.
+        from g3_r2_endpoint import ENDPOINT, PROFILE
+        transport = approval['transport']
+        need(transport['profile'] == PROFILE and transport['endpoint'] == ENDPOINT, 'ENDPOINT_PROFILE')
+        deployment_raw = bounded(store / 'endpoint-deployment.json', trusted_uid=uid)
+        need(sha(deployment_raw) == transport['endpointDeploymentSha256'], 'ENDPOINT_DEPLOYMENT_PIN')
+        deployment = parse(deployment_raw)
+        exact(deployment, ('version', 'profile', 'endpoint', 'host', 'code', 'runtime', 'parents', 'sourceEvidenceSha256'))
+        need(type(deployment['version']) is int and deployment['version'] == 1 and
+             deployment['profile'] == PROFILE and deployment['endpoint'] == ENDPOINT and
+             all(deployment[k] == approval[k] for k in ('host', 'code', 'runtime')), 'ENDPOINT_DEPLOYMENT_BINDING')
+        parents = deployment['parents']
+        need(parents == transport['endpointParents'], 'ENDPOINT_DEPLOYMENT_PARENT_BINDING')
+        need(type(parents) is list and len(parents) == 3 and all(type(p) is list and len(p) == 5 and
+             all(type(v) is int for v in p) and p[2] == 0 and stat.S_ISDIR(p[4]) and not p[4] & 0o022
+             for p in parents), 'ENDPOINT_DEPLOYMENT_CUSTODY')
+        need(sha(bounded(store / 'endpoint-deployment-source', trusted_uid=uid)) == deployment['sourceEvidenceSha256'],
+             'ENDPOINT_INDEPENDENT_DEPLOYMENT_SOURCE')
     return approval, sha(raw)
 
 

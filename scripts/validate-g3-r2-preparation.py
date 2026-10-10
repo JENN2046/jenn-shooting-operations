@@ -30,7 +30,7 @@ def validate(root=ROOT):
                 'strictSchemaIndexesForeignKeysTypedMultisets', 'tenMigrationRecordsExactNoTimestampException',
                 'oneUseChallengeConsumedBeforeTransport', 'ttlFromIssueWallAndMonotonic', 'completeFsyncedRawStreams',
                 'strictIndependentLocalAcceptanceAndReadonlyReplay', 'expiredEvidenceAuditOnly', 'partialProtectionRetained',
-                'noAutomaticRetry', 'separateExactMergeApproval', 'postMergeExactProductionApproval', 'fullExecutionProjectionAndCanonicalBound', 'independentCollectorRuntimeBound', 'approvalBoundRootCustodiedSshExecutable', 'explicitSshEnvironmentBound', 'typedApprovedWriterInventory', 'structuredStoppedWriterSemantics', 'independentWriterProbeReplay', 'unsupportedHelperControlBlocked')
+                'noAutomaticRetry', 'separateExactMergeApproval', 'postMergeExactProductionApproval', 'fullExecutionProjectionAndCanonicalBound', 'independentCollectorRuntimeBound', 'approvalBoundRootCustodiedSshExecutable', 'explicitSshEnvironmentBound', 'typedApprovedWriterInventory', 'structuredStoppedWriterSemantics', 'independentWriterProbeReplay', 'unsupportedHelperControlBlocked', 'rootUnixOneShotEndpoint', 'noRemoteShellSession', 'independentEndpointDeploymentRequired', 'separateTunnelAndWitnessTerminal')
     exact(evidence['requirements'], (*required, 'historicalWalCompleteness', 'historicalWriterCoverage'))
     need(all(evidence['requirements'][k] is True for k in required) and
          evidence['requirements']['historicalWalCompleteness'] == evidence['requirements']['historicalWriterCoverage'] == 'NOT_PROVEN', 'REQUIREMENTS_WEAKENED')

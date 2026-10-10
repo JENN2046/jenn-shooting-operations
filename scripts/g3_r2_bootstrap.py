@@ -11,7 +11,8 @@ import sys
 CODE_FILES = frozenset(('g3_r2_bootstrap.py', 'g3_r2_common.py', 'g3_r2_custody.py', 'g3_r2_transport.py',
                         'g3_r2_snapshot.py', 'g3_r2_acceptance.py', 'g3_r2_collector.py',
                         'g3-forward-adoption-readonly-witness.py', 'g3-forward-adoption-readonly-witness-r2.py',
-                        'g3-collect-production-evidence.py', 'verify-g3-production-evidence.py'))
+                        'g3-collect-production-evidence.py', 'verify-g3-production-evidence.py',
+                        'g3_r2_endpoint.py', 'g3-r2-serve-once.py'))
 
 
 def bootstrap(root, *, local):
