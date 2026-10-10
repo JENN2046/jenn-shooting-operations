@@ -227,6 +227,69 @@ class TransportAndLedger(unittest.TestCase):
         with self.assertRaises(ValueError):col.replay(n,{},'a'*64,self.root)
 
 
+class SshExecutableBinding(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory(prefix='jso-r2-ssh-pin-');self.addCleanup(self.tmp.cleanup)
+        self.root=Path(self.tmp.name);self.root.chmod(0o700)
+        known=self.root/'known_hosts';known.write_bytes(b'non-network unit fixture\n')
+        self.approval={'purpose':'ISOLATED_VALIDATION_ONLY','referenceEvidenceSha256':'3'*64,
+          'collectorRuntime':c.runtime(),'transport':{'host':'127.0.0.1','user':'tester','port':22,
+          'keyPath':str(self.root/'unused-key'),'knownHostsPath':str(known),'knownHostsSha256':c.sha(known.read_bytes()),
+          'sshExecutablePath':'/usr/bin/ssh','sshExecutableSha256':c.sha(c.bounded(Path('/usr/bin/ssh'),limit=16*1024*1024,trusted_uid=0))}}
+    def test_absolute_approved_client_ignores_missing_caller_path(self):
+        with patch.dict(os.environ,{'PATH':str(self.root/'no-programs')}):
+            command=col.argv(self.approval,'a'*64)
+            self.assertEqual(command[0],'/usr/bin/ssh')
+            # Version-only invocation of the real approved binary; no server connection.
+            r=run_bounded([command[0],'-V'],env=col.SSH_ENV)
+        self.assertEqual(r['exit'],0);self.assertIn(b'OpenSSH',r['stderr'])
+    def test_missing_wrong_path_or_byte_pin_refused(self):
+        for edit in [lambda t:t.pop('sshExecutableSha256'),lambda t:t.pop('sshExecutablePath'),
+                     lambda t:t.update(sshExecutablePath='ssh'),
+                     lambda t:t.update(sshExecutablePath='/bin/ssh'),
+                     lambda t:t.update(sshExecutableSha256='0'*64)]:
+            a=copy.deepcopy(self.approval);edit(a['transport'])
+            with self.assertRaises(ValueError):col.argv(a,'a'*64)
+    def test_root_custody_failure_has_no_path_fallback(self):
+        with patch.object(col,'bounded',side_effect=ValueError('UNTRUSTED_PARENT')) as read:
+            with self.assertRaisesRegex(ValueError,'UNTRUSTED_PARENT'):col.argv(self.approval,'a'*64)
+        read.assert_called_once_with(Path('/usr/bin/ssh'),limit=16*1024*1024,trusted_uid=0)
+    def test_untrusted_filesystem_root_rejected_before_descending(self):
+        from types import SimpleNamespace
+        for uid,mode in [(65534,0o40755),(0,0o40777)]:
+            with patch.object(c.os,'fstat',return_value=SimpleNamespace(st_uid=uid,st_mode=mode)),\
+                 patch.object(c.os,'open',wraps=os.open) as opened:
+                with self.assertRaisesRegex(ValueError,'UNTRUSTED_PARENT'):col.argv(self.approval,'a'*64)
+            self.assertEqual(opened.call_count,1)
+            self.assertEqual(opened.call_args.args[0],'/')
+    def test_spawn_env_is_replaced_not_inherited(self):
+        with patch.dict(os.environ,{'JSO_AMBIENT_TEST_ONLY':'must_not_inherit'}):
+            r=run_bounded([sys.executable,'-c','import os,json;print(json.dumps(dict(os.environ)))'],env=col.SSH_ENV)
+        env=json.loads(r['stdout']);self.assertNotIn('JSO_AMBIENT_TEST_ONLY',env)
+        for key,value in col.SSH_ENV.items():self.assertEqual(env[key],value)
+    def test_collector_binds_actual_launch_environment(self):
+        n=col.issue('a'*64,self.root)
+        with patch.object(col,'run_bounded',return_value={'exit':7,'stdout':b'','stderr':b'fixture failure','limited':False}) as run:
+            with self.assertRaisesRegex(ValueError,'CAPTURE_REJECTED'):col.collect(n,self.approval,'a'*64,self.root)
+        self.assertEqual(run.call_args.args[0][0],'/usr/bin/ssh')
+        self.assertEqual(run.call_args.kwargs,{'timeout':120,'env':col.SSH_ENV})
+        meta=c.parse((self.root/n/'transport.json').read_bytes())
+        self.assertEqual(meta['environment'],col.SSH_ENV)
+        changed=copy.deepcopy(meta);changed['environment']['PATH']='/tmp'
+        with self.assertRaisesRegex(ValueError,'SSH_ENVIRONMENT_BINDING'):
+            col.validate_transport(changed,b'',b'fixture failure',self.approval,'a'*64,n)
+        del changed['environment']
+        with self.assertRaisesRegex(ValueError,'EXACT_FIELDS_REQUIRED'):
+            col.validate_transport(changed,b'',b'fixture failure',self.approval,'a'*64,n)
+    def test_changed_executable_refused_before_any_transport(self):
+        a=copy.deepcopy(self.approval);a['transport']['sshExecutableSha256']='0'*64
+        n=col.issue('a'*64,self.root)
+        with patch.object(col,'run_bounded') as run:
+            with self.assertRaisesRegex(ValueError,'CAPTURE_UNKNOWN'):col.collect(n,a,'a'*64,self.root)
+        run.assert_not_called()
+        with self.assertRaisesRegex(ValueError,'REPLAY'):col.consume(n,'a'*64,self.root)
+
+
 class ExactApprovalBinding(unittest.TestCase):
     """Fabricated approvals exercise validation only; no live store is installed."""
     def setUp(self):

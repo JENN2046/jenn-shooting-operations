@@ -65,6 +65,9 @@ def bounded(path, limit=MAX_OUTPUT, trusted_uid=None):
     need(path.is_absolute() and '..' not in path.parts, 'ABSOLUTE_PATH_REQUIRED')
     fd = os.open('/', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
+        root = os.fstat(fd)
+        if trusted_uid is not None:
+            need(root.st_uid in (0, trusted_uid) and not root.st_mode & 0o022, 'UNTRUSTED_PARENT')
         for part in path.parts[1:-1]:
             nxt = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
             os.close(fd)

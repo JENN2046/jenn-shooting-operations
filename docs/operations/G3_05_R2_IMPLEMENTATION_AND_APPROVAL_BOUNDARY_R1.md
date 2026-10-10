@@ -1,6 +1,6 @@
 # G3-05 R2 实现、证据边界与后续批准
 
-状态：`IMPLEMENTED_FOR_ISOLATED_REVIEW_ONLY`。Owner 已批准方法 R2；合并与生产执行均未批准。G3-05 仍 `BLOCKED`，PR #63 保持 Draft。
+状态：`IMPLEMENTED_FOR_ISOLATED_REVIEW_ONLY`。GitHub P1 SSH 程序绑定修复的增量及证据适用范围见 `G3_05_R2_SSH_EXECUTABLE_REVIEW_FIX_R1.md`。Owner 已批准方法 R2；合并与生产执行均未批准。G3-05 仍 `BLOCKED`，PR #63 保持 Draft。
 
 ## 1. 批准来源与不变边界
 
@@ -54,7 +54,7 @@ R2 仅处理 preserved `2/2`、active `1/1`。没有已安装且批准的完整 
 
 运行限制为 256 MiB 地址空间、60 秒 CPU、120 秒墙钟、stdout/stderr 各 1 MiB。清理仅包含本次两副本、私有挂载和目录；清理不确认则拒绝。SIGKILL、主机失联等不可处理退出可能留下空目录或未知状态，须记录 UNKNOWN/BLOCKED，不能自动重试或擅自扩大清理范围。
 
-Jenn 使用正常认证 SSH，固定主机密钥、身份、实例、boot、命令、代码、两端运行时。挑战从签发开始 300 秒，墙钟和单调时钟都必须有效；先耐久消费再启动传输。原 stdout/stderr、退出和时序先独立保存并 fsync；原记录不得回写。
+Jenn 使用正常认证 SSH，固定主机密钥、身份、实例、boot、命令、代码、两端运行时。客户端固定 `/usr/bin/ssh`；批准清单 transport 必须包含 `sshExecutablePath` 与 `sshExecutableSha256`。启动前和回放时验证 root 保管的完整父链及程序字节，无 PATH 回退。启动环境仅为已固定的 PATH、LANG、LC_ALL，且作为 transport 原文的 `environment` 字段严格核验；不继承调用者环境。挑战从签发开始 300 秒，墙钟和单调时钟都必须有效；先耐久消费再启动传输。原 stdout/stderr、退出和时序先独立保存并 fsync；原记录不得回写。
 
 ledger 的成功候选写为 `PENDING_FINAL_ACCEPTANCE`，提交并 fsync 后再记录时限内接受决定到只创建一次的 `acceptance.json`。独立回放必须同时验证完整 ledger、接受 seal、原文摘要、挑战、全部语义检查和引用链。单独 PENDING、缺失/未知 seal、迟到成功 JSON 均拒绝。历史回放只证明当时完成接受；不延长有效期，不授予跨 G3 阶段新鲜性。
 

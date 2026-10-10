@@ -12,11 +12,11 @@
     "g3-forward-adoption-readonly-witness.py": "95ca51db7174eaffc8ce9cee8f85f0440ec1253fb8a2e00dc89b42649775ccfc",
     "g3_r2_acceptance.py": "12378d7aae20335970a6202c0f5a8fd787ac9e76fcdf82e629a638fc0c74a567",
     "g3_r2_bootstrap.py": "a0ebeda481c296a281be95b43fcc68b8405c78a14086fc64958f0c6ad934fe17",
-    "g3_r2_collector.py": "171f57e4d5ef10e0250d550e93756a450e2040b3989ce61e5b27eb1f6a9e2007",
-    "g3_r2_common.py": "200541367b498449c4ab7ed199653c111c925962a1047bf7b55f889b3ac802c6",
+    "g3_r2_collector.py": "126749dc9a7498f4e658187e9bfd9e57856ca519573f104140db418c61fa4bc5",
+    "g3_r2_common.py": "5ec55ed719a63668e0563275fe59e927241a526b20fb1819ecd15cc7079970b6",
     "g3_r2_custody.py": "0899577ad6efab52f606dd2f6de962962b58ba093b7929d8ffac37b4ec29beb2",
     "g3_r2_snapshot.py": "9ebeed1ee3f58cc512592015ee4e976f8165490e4fc31727d8155f1cd9095d2f",
-    "g3_r2_transport.py": "475d3eced526cb78c8b1124e717a54c23ff964b93055f59dfb6cf56280f56af1",
+    "g3_r2_transport.py": "4c4222c4908dee6fd752e3a29541fd47c784c6880414df574db1ea2d85d354e1",
     "verify-g3-production-evidence.py": "1cf2aa48314e4daa543731e3e75bf032c5a15d83ca93cf339d1a3d16fb682e1f"
   },
   "referencePins": {
@@ -47,7 +47,9 @@
     "historicalWalCompleteness": "NOT_PROVEN",
     "historicalWriterCoverage": "NOT_PROVEN",
     "fullExecutionProjectionAndCanonicalBound": true,
-    "independentCollectorRuntimeBound": true
+    "independentCollectorRuntimeBound": true,
+    "approvalBoundRootCustodiedSshExecutable": true,
+    "explicitSshEnvironmentBound": true
   },
   "limits": {
     "copyBytes": 8388608,

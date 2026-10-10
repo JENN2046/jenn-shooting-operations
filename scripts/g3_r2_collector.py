@@ -8,10 +8,12 @@ import time
 import secrets
 
 from g3_r2_common import (bounded, canonical, DENY, exact, fsync_dir, load_approval, LOCAL_STORE,
-                          need, parse, reference, runtime, save_new, sha)
+                          need, parse, reference, runtime, save_new, sha, SHA)
 from g3_r2_acceptance import validate_observation
 from g3_r2_transport import run_bounded
 
+SSH_EXECUTABLE = '/usr/bin/ssh'
+SSH_ENV = {'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C'}
 TTL_NS = 300_000_000_000
 EVIDENCE = Path.home() / '.local/share/jso/g3-r2-evidence'
 
@@ -81,7 +83,14 @@ def consume(n, approval_sha, directory):
 
 def argv(approval, challenge):
     t = approval['transport']
-    exact(t, ('host', 'user', 'port', 'keyPath', 'knownHostsPath', 'knownHostsSha256'))
+    exact(t, ('host', 'user', 'port', 'keyPath', 'knownHostsPath', 'knownHostsSha256',
+              'sshExecutablePath', 'sshExecutableSha256'))
+    need(t['sshExecutablePath'] == SSH_EXECUTABLE, 'FIXED_SSH_EXECUTABLE_REQUIRED')
+    need(type(t['sshExecutableSha256']) is str and SHA.fullmatch(t['sshExecutableSha256']), 'SSH_EXECUTABLE_PIN_REQUIRED')
+    # The fixed path and every parent must remain under root custody. The approved
+    # bytes, not PATH lookup or a caller-provided version string, identify the client.
+    need(sha(bounded(Path(SSH_EXECUTABLE), limit=16 * 1024 * 1024, trusted_uid=0)) ==
+         t['sshExecutableSha256'], 'SSH_EXECUTABLE_DRIFT')
     need(re.fullmatch(r'[A-Za-z0-9_.-]+', t['host']) and re.fullmatch(r'[a-z_][a-z0-9_-]*', t['user']), 'SSH_TARGET')
     need(type(t['port']) is int and 1 <= t['port'] <= 65535, 'SSH_PORT')
     if approval['purpose'] == 'PRODUCTION_WINDOW':
@@ -94,7 +103,7 @@ def argv(approval, challenge):
               '/opt/jso/g3-r2/g3-forward-adoption-readonly-witness-r2.py', 'capture',
               '--reference-evidence', '/etc/jso/g3-r2/reference.json',
               '--expected-reference-evidence-sha256', approval['referenceEvidenceSha256'], '--challenge', challenge]
-    return ['ssh', '-F', '/dev/null', '-i', t['keyPath'], '-p', str(t['port']),
+    return [SSH_EXECUTABLE, '-F', '/dev/null', '-i', t['keyPath'], '-p', str(t['port']),
             '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes', '-o', 'IdentityAgent=none',
             '-o', 'StrictHostKeyChecking=yes', '-o', 'UpdateHostKeys=no', '-o', 'ForwardAgent=no',
             '-o', 'ClearAllForwardings=yes', '-o', 'GlobalKnownHostsFile=/dev/null',
@@ -121,7 +130,7 @@ def collect(n, approval, approval_sha, directory=EVIDENCE):
         fresh(iw, im, cw, cm)
         fresh(iw, im, sw, sm)
         command = argv(approval, n)
-        result = run_bounded(command, timeout=120)
+        result = run_bounded(command, timeout=120, env=SSH_ENV)
         reason = 'TRANSPORT_COMPLETE'
     except (ValueError, OSError):
         pass
@@ -129,7 +138,7 @@ def collect(n, approval, approval_sha, directory=EVIDENCE):
     # Preserve exact outputs first, fsync them and their directory, then calculate/bind digests.
     save_new(target / 'stdout', result['stdout'])
     save_new(target / 'stderr', result['stderr'])
-    meta = {'version': 2, 'challenge': n, 'argv': command, 'manifest': approval_sha,
+    meta = {'version': 2, 'challenge': n, 'argv': command, 'environment': dict(SSH_ENV), 'manifest': approval_sha,
             'issuedWall': iw, 'issuedMono': im, 'consumedWall': cw, 'consumedMono': cm,
             'startedWall': sw, 'startedMono': sm, 'finishedWall': ew, 'finishedMono': em,
             'collectorBoot': boot(), 'collectorRuntime': runtime(), 'exit': result['exit'], 'limited': result['limited'], 'transportState': reason,
@@ -167,9 +176,10 @@ def collect(n, approval, approval_sha, directory=EVIDENCE):
 
 
 def validate_transport(meta, out, err, approval, approval_sha, n):
-    exact(meta, ('version', 'challenge', 'argv', 'manifest', 'issuedWall', 'issuedMono', 'consumedWall', 'consumedMono',
+    exact(meta, ('version', 'challenge', 'argv', 'environment', 'manifest', 'issuedWall', 'issuedMono', 'consumedWall', 'consumedMono',
                  'startedWall', 'startedMono', 'finishedWall', 'finishedMono', 'collectorBoot', 'exit', 'limited',
                  'transportState', 'collectorRuntime', 'stdoutSha256', 'stderrSha256', 'stdoutBytes', 'stderrBytes'))
+    need(meta['environment'] == SSH_ENV, 'SSH_ENVIRONMENT_BINDING')
     need(meta['collectorRuntime'] == approval['collectorRuntime'], 'COLLECTOR_RUNTIME_BINDING')
     need(meta['version'] == 2 and meta['challenge'] == n and meta['manifest'] == approval_sha, 'TRANSPORT_BINDING')
     need(type(meta['exit']) is int and meta['exit'] == 0 and meta['limited'] is False and meta['transportState'] == 'TRANSPORT_COMPLETE', 'INCOMPLETE_TRANSPORT')

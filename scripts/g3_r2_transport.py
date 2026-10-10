@@ -7,9 +7,9 @@ import time
 from g3_r2_common import MAX_OUTPUT
 
 
-def run_bounded(argv, timeout=120):
+def run_bounded(argv, timeout=120, *, env=None):
     proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            start_new_session=True)
+                            start_new_session=True, env=env)
     streams = {'stdout': bytearray(), 'stderr': bytearray()}
     limited = False
     code = None
