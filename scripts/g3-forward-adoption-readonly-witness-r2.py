@@ -32,6 +32,7 @@ def capture(approval, approval_sha, evidence_path, expected_evidence_sha, challe
     need(runtime() == approval['runtime'], 'RUNTIME_BINDING')
     with PinnedPair(approval) as pair:
         before = pair.recheck()
+        writers_before = pair.writer_evidence
         # Check both originals' header and hash before any SQLite interpretation.
         for side, fmt in (('prestate', b'\x02\x02'), ('active', b'\x01\x01')):
             need(os.pread(pair.fds[side], 2, 18) == fmt, 'R2_FORMAT_COMBINATION')
@@ -49,6 +50,8 @@ def capture(approval, approval_sha, evidence_path, expected_evidence_sha, challe
         need(copy.cleanup_confirmed, 'CLEANUP_NOT_CONFIRMED')
         # Cleanup itself must not weaken any original or parent custody.
         need(pair.recheck() == before, 'POST_CLEANUP_CUSTODY_DRIFT')
+        writers_after = pair.writer_evidence
+        need(writers_before == writers_after, 'WRITER_EVIDENCE_DRIFT')
         record = {'version': 2, 'domain': 'G3_PRODUCTION_EVIDENCE_R2' if profile == 'g3' else 'G3_ISOLATED_EVIDENCE_R2',
                   'status': 'R2_OBSERVATION_REQUIRES_LOCAL_ACCEPTANCE', 'challenge': challenge,
                   'methodSha256': METHOD, 'approvalManifestSha256': approval_sha,
@@ -56,6 +59,7 @@ def capture(approval, approval_sha, evidence_path, expected_evidence_sha, challe
                   'referenceEvidenceSha256': expected_evidence_sha, 'reference': approval['reference'],
                   'code': approval['code'], 'runtime': runtime(), 'host': host_identity(),
                   'scope': approval['scope'], 'custodyBefore': before, 'custodyAfter': after,
+                  'writersBefore': writers_before, 'writersAfter': writers_after,
                   'prestate': views['prestate'], 'active': views['active'], 'comparedLegacyTables': len(legacy),
                   'historicalWalCompleteness': 'NOT_PROVEN', 'historicalWriterCoverage': 'NOT_PROVEN',
                   'sampling': 'PINNED_ORIGINAL_FDS_PRIVATE_TMPFS_RO_IMMUTABLE_COPIES',
@@ -90,7 +94,7 @@ def main():
             with PinnedPair(approval) as pair:
                 files = pair.protect() if args.mode == 'protect' else pair.recheck(require_protected=args.mode == 'verify')
                 record = {'version': 2, 'mode': args.mode, 'status': 'E1_' + args.mode.upper() + '_COMPLETE',
-                          'files': files, 'approvalManifestSha256': approval_sha, **DENY}
+                          'files': files, 'writers': pair.writer_evidence, 'approvalManifestSha256': approval_sha, **DENY}
         raw = canonical(record)
         need(len(raw) <= MAX_OUTPUT, 'OUTPUT_SIZE_LIMIT')
         sys.stdout.buffer.write(raw)

@@ -46,7 +46,7 @@ R2 仅处理 preserved `2/2`、active `1/1`。没有已安装且批准的完整 
 
 ## 4. 保护、解释与存证
 
-窗口责任同时绑定三类原件：可信管理员完整责任、disabled 配置事实、旧 helper 约束；还绑定实际只读 writer 探测命令及预期结果。disabled 文本不能替代进程排空、旧 helper 和父目录管理责任。探测只支持固定白名单的 docker inspect、systemctl is-active/show、pgrep 参数数组，不启动业务或停止共享 Docker，不改共享 Docker 父目录权限。
+窗口责任绑定可信管理员责任、disabled 配置事实、旧 helper 的实际程序和独立批准的 writer 身份清单。现行版本移除任意 readonlyChecks，按受支持 manager 类型生成固定探针，验证明确的停止状态，并由 Jenn 重解析完整原始观测。helper 必须与受支持的 systemd 配置、程序摘要和 runtime mask 绑定；未受管或无法可靠表达的入口保持 BLOCKED，不能用 disabled 文本或 pgrep 未匹配替代。精确支持范围、证据及历史适用性见 [writer 停止语义修复](G3_05_R2_WRITER_STOPPED_REVIEW_FIX_R1.md)。工具不安装或改造生产入口，不启动业务、不停止共享 Docker、不改共享 Docker 父目录权限。
 
 捕获检查全父链和固定 FD，复核挂载、路径、内容、时间元数据、flags 和已登记别名。在副本解释之后以及清理之后重复检查。R2 自带一次保护入口只使用固定 inode，部分失败绝不撤销已有保护。
 

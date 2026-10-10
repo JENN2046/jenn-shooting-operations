@@ -12,7 +12,7 @@ VIEW_KEYS = ('schemaDigest', 'columnsDigest', 'indexXinfo', 'foreignKeys', 'inde
              'tables', 'header', 'markers', 'integrity', 'foreignKeyViolations', 'schemaObjects', 'excludedHeaderFields')
 RECORD_KEYS = ('version', 'domain', 'status', 'challenge', 'methodSha256', 'approvalManifestSha256',
                'contractSha256', 'exceptionSha256', 'referenceEvidenceSha256', 'reference', 'code', 'runtime',
-               'host', 'scope', 'custodyBefore', 'custodyAfter', 'prestate', 'active', 'comparedLegacyTables',
+               'host', 'scope', 'writersBefore', 'writersAfter', 'custodyBefore', 'custodyAfter', 'prestate', 'active', 'comparedLegacyTables',
                'historicalWalCompleteness', 'historicalWriterCoverage', 'sampling', 'checks', 'problems',
                *DENY, 'captureDigest')
 CHECK_KEYS = ('integrity', 'foreignKeys', 'migrationPrefix', 'fullTypedRowsets', 'structureAndIndexes',
@@ -118,6 +118,10 @@ def validate_observation(raw, approval, approval_sha, challenge):
     exact(record['checks'], CHECK_KEYS)
     need(all(x is True for x in record['checks'].values()), 'INCOMPLETE_CHECKS')
     need(record['sampling'] == 'PINNED_ORIGINAL_FDS_PRIVATE_TMPFS_RO_IMMUTABLE_COPIES', 'SAMPLING')
+    from g3_r2_custody import validate_writer_evidence
+    validate_writer_evidence(record['writersBefore'], approval)
+    validate_writer_evidence(record['writersAfter'], approval)
+    need(record['writersBefore'] == record['writersAfter'], 'WRITER_EVIDENCE_DRIFT')
     need(record['custodyBefore'] == record['custodyAfter'], 'CUSTODY_DRIFT')
     exact(record['custodyBefore'], SIDES)
     inodes = []

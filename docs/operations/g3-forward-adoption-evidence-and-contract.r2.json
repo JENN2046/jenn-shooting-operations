@@ -8,13 +8,13 @@
   "r1ExceptionSha256": "337c386c6d4d9d11a11d47cfb09c0cd5a1f3f9a617104020bf53d493eb4dad25",
   "code": {
     "g3-collect-production-evidence.py": "ce1c7b499c56f3d1525978d9bef32a2cbcb877fe95cc725dd125e65c58810ab5",
-    "g3-forward-adoption-readonly-witness-r2.py": "51cbdbc04e9d2c637c43daf050a9fb6573a979309dba40ba91ddc25ec7c21d42",
+    "g3-forward-adoption-readonly-witness-r2.py": "957132a89b3b2e205624f8657cf28f6ebd9acd375245c05f0df831aac1024826",
     "g3-forward-adoption-readonly-witness.py": "95ca51db7174eaffc8ce9cee8f85f0440ec1253fb8a2e00dc89b42649775ccfc",
-    "g3_r2_acceptance.py": "12378d7aae20335970a6202c0f5a8fd787ac9e76fcdf82e629a638fc0c74a567",
+    "g3_r2_acceptance.py": "77f31037b4c7bdec2302ead36ffb304b2b33ee075c93aae0433c7ee31f0e595f",
     "g3_r2_bootstrap.py": "a0ebeda481c296a281be95b43fcc68b8405c78a14086fc64958f0c6ad934fe17",
     "g3_r2_collector.py": "126749dc9a7498f4e658187e9bfd9e57856ca519573f104140db418c61fa4bc5",
     "g3_r2_common.py": "5ec55ed719a63668e0563275fe59e927241a526b20fb1819ecd15cc7079970b6",
-    "g3_r2_custody.py": "0899577ad6efab52f606dd2f6de962962b58ba093b7929d8ffac37b4ec29beb2",
+    "g3_r2_custody.py": "e205b755488e9f1e3c7b71b358adc9335aa4f8dddb8f1a50c2dd19b315de512b",
     "g3_r2_snapshot.py": "9ebeed1ee3f58cc512592015ee4e976f8165490e4fc31727d8155f1cd9095d2f",
     "g3_r2_transport.py": "4c4222c4908dee6fd752e3a29541fd47c784c6880414df574db1ea2d85d354e1",
     "verify-g3-production-evidence.py": "1cf2aa48314e4daa543731e3e75bf032c5a15d83ca93cf339d1a3d16fb682e1f"
@@ -49,7 +49,11 @@
     "fullExecutionProjectionAndCanonicalBound": true,
     "independentCollectorRuntimeBound": true,
     "approvalBoundRootCustodiedSshExecutable": true,
-    "explicitSshEnvironmentBound": true
+    "explicitSshEnvironmentBound": true,
+    "typedApprovedWriterInventory": true,
+    "structuredStoppedWriterSemantics": true,
+    "independentWriterProbeReplay": true,
+    "unsupportedHelperControlBlocked": true
   },
   "limits": {
     "copyBytes": 8388608,

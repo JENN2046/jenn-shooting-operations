@@ -17,8 +17,41 @@ import g3_r2_common as c
 import g3_r2_acceptance as a
 import g3_r2_collector as col
 import g3_r2_snapshot as snapshot
+import g3_r2_custody as cust
 from g3_r2_transport import run_bounded
 from test_g3_forward_adoption_witness import fixture
+
+
+def writer_fixture(approved):
+    """Labelled synthetic manager records, never live or production observations."""
+    writers = []
+    for name, role in [('runtime', 'runtimeWriter'), ('helper', 'legacyHelper')]:
+        w = {'id': name, 'kind': 'systemd', 'role': role, 'target': 'jso-unit-' + name + '.service',
+             'sides': list(c.SIDES), 'probeSha256': '9' * 64, 'entrypointPath': '/opt/jso/lab-' + name,
+             'entrypointSha256': 'c' * 64}
+        w['unitSha256'] = c.sha(cust.unit_bytes(w)); writers.append(w)
+    controls = [{'role': role, 'path': '/opt/jso/lab-' + role, 'sha256': '8' * 64}
+                for role in ('windowResponsibility', 'runtimeDisabled')]
+    controls.append({'role': 'legacyHelper', 'path': writers[1]['entrypointPath'], 'sha256': writers[1]['entrypointSha256']})
+    window = {'notBefore': 0, 'notAfter': 9999999999, 'responsibilitySha256': '8' * 64, 'controls': controls,
+              'writers': writers, 'aliases': []}
+    approved['window'] = window
+    projection = {'version': 1, 'host': approved['host'], 'files': {
+        side: {'path': approved['files'][side]['path'], 'sha256': approved['files'][side]['identity']['sha256']}
+        for side in c.SIDES}, 'responsibilitySha256': window['responsibilitySha256'], 'writers': writers}
+    controls.append({'role': 'writerInventory', 'path': '/opt/jso/inventory.json', 'sha256': c.sha(c.canonical(projection))})
+    evidence = {}
+    for w in writers:
+        state = dict(zip(cust.SYSTEMD_PROPERTIES, (w['target'], 'masked', 'inactive', 'dead', '0', '0', '[not set]',
+                         'masked-runtime', '/run/systemd/system/' + w['target'], '', 'no', 'no', '')))
+        out = ''.join(k + '=' + v + '\n' for k, v in state.items())
+        guard = {'unitSha256': w['unitSha256'], 'entrypointSha256': w['entrypointSha256'],
+                 'maskIdentity': [1, 2, 0, 0, 41471, 3], 'maskParents': [[1, 2, 0, 0, 16877]] * 4,
+                 'cgroupAbsent': True, 'cgroupPath': '/sys/fs/cgroup/system.slice/' + w['target'], 'cgroupFilesystem': 'cgroup2'}
+        evidence[w['id']] = {'argv': cust.writer_argv(w), 'environment': dict(cust.PROBE_ENV),
+                             'probeSha256': w['probeSha256'], 'exit': 0, 'limited': False, 'stdout': out, 'stderr': '',
+                             'stdoutSha256': c.sha(out.encode()), 'stderrSha256': c.sha(b''), 'guard': guard, 'state': state}
+    return evidence
 
 
 def observation(root):
@@ -46,6 +79,8 @@ def observation(root):
             'historicalWalCompleteness':'NOT_PROVEN','historicalWriterCoverage':'NOT_PROVEN',
             'sampling':'PINNED_ORIGINAL_FDS_PRIVATE_TMPFS_RO_IMMUTABLE_COPIES',
             'checks':dict.fromkeys(a.CHECK_KEYS,True),'problems':[],**c.DENY}
+    record['writersBefore'] = writer_fixture(approved)
+    record['writersAfter'] = copy.deepcopy(record['writersBefore'])
     return approved,record
 
 
@@ -349,6 +384,85 @@ class SourceBootstrap(unittest.TestCase):
             self.assertIn(b'CODE_PIN_BEFORE_IMPORT',run(wrong).stderr)
             (home/'.local').chmod(0o770)
             self.assertIn(b'UNTRUSTED_APPROVAL_PARENT',run(pins).stderr)
+
+
+class WriterStoppedSemantics(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix='jso-writer-unit-'); self.addCleanup(self.tmp.cleanup)
+        self.approval, self.record = observation(Path(self.tmp.name))
+    def validate(self):
+        return a.validate_observation(raw(self.record), self.approval, 'b'*64, 'a'*64)
+    def repin_inventory(self):
+        x=self.approval;w=x['window']
+        value={'version':1,'host':x['host'],'files':{s:{'path':x['files'][s]['path'],'sha256':x['files'][s]['identity']['sha256']} for s in c.SIDES},'responsibilitySha256':w['responsibilitySha256'],'writers':w['writers']}
+        next(x for x in w['controls'] if x['role']=='writerInventory')['sha256']=c.sha(c.canonical(value))
+    def test_fixed_managed_stopped_state_accepted(self):
+        self.validate()
+    def test_old_arbitrary_checks_and_unmanaged_helpers_rejected(self):
+        self.approval['window']['readonlyChecks']=[{'argv':['/usr/bin/pgrep','-f','unrelated']}]
+        with self.assertRaises(ValueError): self.validate()
+        del self.approval['window']['readonlyChecks']
+        self.approval['window']['writers'][1]['kind']='pgrep';self.repin_inventory()
+        with self.assertRaisesRegex(ValueError,'UNSUPPORTED_WRITER'): self.validate()
+    def test_inventory_object_host_or_target_drift_rejected(self):
+        for edit in [lambda x:x['host'].update(boot='other'),lambda x:x['files']['active'].update(path='/other'),
+                     lambda x:x['window']['writers'][0].update(target='other.service')]:
+            saved=copy.deepcopy(self.approval);edit(self.approval)
+            with self.assertRaisesRegex(ValueError,'BINDING'): cust.writer_inventory(self.approval)
+            self.approval=saved
+    def test_missing_duplicate_or_unrelated_helper_rejected(self):
+        for edit in [lambda w:w.pop(),lambda w:w.append(copy.deepcopy(w[0])),lambda w:w[1].update(entrypointPath='/unrelated')]:
+            saved=copy.deepcopy(self.approval);edit(self.approval['window']['writers']);self.repin_inventory()
+            with self.assertRaises(ValueError): self.validate()
+            self.approval=saved
+    def test_missing_writer_evidence_or_extra_item_rejected(self):
+        for value in [{}, {**self.record['writersBefore'],'extra':{}}]:
+            with self.assertRaises(ValueError): cust.validate_writer_evidence(value,self.approval)
+    def test_active_unknown_stale_or_residual_tasks_rejected(self):
+        w=self.approval['window']['writers'][0];base=self.record['writersBefore']['runtime']
+        for key,value in [('Id','unrelated.service'),('ActiveState','active'),('LoadState','not-found'),('MainPID','42'),
+                          ('ControlPID','4'),('TasksCurrent','1'),('UnitFileState','enabled'),('Restart','always'),
+                          ('NeedDaemonReload','yes'),('ControlGroup','/system.slice/other.service'),('DropInPaths','/other.conf')]:
+            item=copy.deepcopy(base);state=dict(item['state']);state[key]=value
+            item['stdout']=''.join(k+'='+v+'\n' for k,v in state.items())
+            with self.subTest(key=key),self.assertRaises(ValueError):cust.stopped_state(w,item)
+    def test_nonzero_limited_stderr_and_duplicate_properties_rejected(self):
+        w=self.approval['window']['writers'][0];base=self.record['writersBefore']['runtime']
+        for change in [{'exit':1},{'exit':True},{'limited':True},{'stderr':'permission denied'},
+                       {'stdout':base['stdout']+'Id=other.service\n'},{'stdout':'Id='+w['target']+'\n'}]:
+            with self.assertRaises(ValueError):cust.stopped_state(w,{**base,**change})
+    def test_cgroup_absence_and_mask_root_custody_required(self):
+        w=self.approval['window']['writers'][0];base=self.record['writersBefore']['runtime']['guard']
+        for edit in [lambda g:g.update(cgroupAbsent=False),lambda g:g.update(cgroupFilesystem='unknown'),
+                     lambda g:g['maskParents'][0].__setitem__(2,1000),lambda g:g['maskParents'][3].__setitem__(4,16895),
+                     lambda g:g['maskIdentity'].__setitem__(2,1000)]:
+            guard=copy.deepcopy(base);edit(guard)
+            with self.assertRaises(ValueError):cust.validate_writer_guard(w,guard)
+    def test_replay_reparses_raw_and_rejects_command_environment_or_pin_change(self):
+        for edit in [lambda x:x.update(state={}),lambda x:x['argv'].__setitem__(-1,'unrelated.service'),
+                     lambda x:x['environment'].update(DOCKER_HOST='other'),lambda x:x.update(probeSha256='0'*64),
+                     lambda x:x.update(stdoutSha256='0'*64)]:
+            evidence=copy.deepcopy(self.record['writersBefore']);edit(evidence['runtime'])
+            with self.assertRaises(ValueError):cust.validate_writer_evidence(evidence,self.approval)
+    def test_container_stopped_identity_configuration_and_restart_semantics(self):
+        config={'image':'sha256:'+'1'*64,'path':'/app/writer','args':[],'mounts':[{'Source':'/data'}]}
+        w={'kind':'docker','target':'a'*64,'configurationSha256':c.sha(c.canonical(config))}
+        state={'id':w['target'],'status':'exited','running':False,'paused':False,'restarting':False,'dead':False,
+               'pid':0,'error':'','restartPolicy':{'Name':'no','MaximumRetryCount':0},'configuration':config}
+        def check(x):return cust.stopped_state(w,{'exit':0,'limited':False,'stderr':'','stdout':json.dumps(x)})
+        check(state)
+        for edit in [lambda x:x.update(id='b'*64),lambda x:x.update(running=True),lambda x:x.update(status='running'),
+                     lambda x:x.update(pid=True),lambda x:x['restartPolicy'].update(Name='always'),
+                     lambda x:x['configuration'].update(path='/unrelated')]:
+            value=copy.deepcopy(state);edit(value)
+            with self.assertRaises(ValueError):check(value)
+    def test_probe_failure_never_reaches_database_open(self):
+        with patch.object(cust,'controls',side_effect=ValueError('WRITER_NOT_STOPPED')):
+            with patch.object(cust,'load_r1') as loader:
+                opened=loader.return_value.open_pinned
+                with self.assertRaisesRegex(ValueError,'WRITER_NOT_STOPPED'):
+                    with cust.PinnedPair(self.approval):pass
+                opened.assert_not_called()
 
 
 if __name__=='__main__':unittest.main()

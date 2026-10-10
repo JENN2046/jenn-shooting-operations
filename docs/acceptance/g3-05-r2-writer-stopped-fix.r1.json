@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "task": "G3_05_R2_PR63_P1_WRITER_STOPPED_FIX_R1",
+  "scope": "SYNTHETIC_ISOLATED_ONLY_NOT_PRODUCTION",
+  "finding": "https://github.com/JENN2046/jenn-shooting-operations/pull/63#discussion_r4236110757",
+  "priorHead": "12585d09eadd02449e365f58ee87f14cba463784",
+  "methodSha256": "e1acba51102404d87e756b0e6a502c6a9cd92bbe4a2136c0f6d8c41b19b6ffd0",
+  "contractSha256": "b2cf0c097c3bbbd08cf384fded3b7fac49a2574dc65fe249586801a4cdfb07cc",
+  "exceptionSha256": "fab3b71a30fbb3c3d423e6726512667ee934a62425de145946942a6d81153f6c",
+  "code": {
+    "g3-collect-production-evidence.py": "ce1c7b499c56f3d1525978d9bef32a2cbcb877fe95cc725dd125e65c58810ab5",
+    "g3-forward-adoption-readonly-witness-r2.py": "957132a89b3b2e205624f8657cf28f6ebd9acd375245c05f0df831aac1024826",
+    "g3-forward-adoption-readonly-witness.py": "95ca51db7174eaffc8ce9cee8f85f0440ec1253fb8a2e00dc89b42649775ccfc",
+    "g3_r2_acceptance.py": "77f31037b4c7bdec2302ead36ffb304b2b33ee075c93aae0433c7ee31f0e595f",
+    "g3_r2_bootstrap.py": "a0ebeda481c296a281be95b43fcc68b8405c78a14086fc64958f0c6ad934fe17",
+    "g3_r2_collector.py": "126749dc9a7498f4e658187e9bfd9e57856ca519573f104140db418c61fa4bc5",
+    "g3_r2_common.py": "5ec55ed719a63668e0563275fe59e927241a526b20fb1819ecd15cc7079970b6",
+    "g3_r2_custody.py": "e205b755488e9f1e3c7b71b358adc9335aa4f8dddb8f1a50c2dd19b315de512b",
+    "g3_r2_snapshot.py": "9ebeed1ee3f58cc512592015ee4e976f8165490e4fc31727d8155f1cd9095d2f",
+    "g3_r2_transport.py": "4c4222c4908dee6fd752e3a29541fd47c784c6880414df574db1ea2d85d354e1",
+    "verify-g3-production-evidence.py": "1cf2aa48314e4daa543731e3e75bf032c5a15d83ca93cf339d1a3d16fb682e1f"
+  },
+  "validation": {
+    "pythonUnitTests": {
+      "passed": 46,
+      "failed": 0,
+      "addedDefensiveTests": 11
+    },
+    "realManagedWriterStates": {
+      "passed": 6,
+      "writers": [
+        "runtime",
+        "helper"
+      ],
+      "cases": [
+        {
+          "writer": "runtime",
+          "case": "REAL_ACTIVE_UNMASKED_REJECTED"
+        },
+        {
+          "writer": "runtime",
+          "case": "REAL_ACTIVE_MASKED_REJECTED"
+        },
+        {
+          "writer": "runtime",
+          "case": "REAL_STOPPED_MASKED_NO_CGROUP_ACCEPTED"
+        },
+        {
+          "writer": "helper",
+          "case": "REAL_ACTIVE_UNMASKED_REJECTED"
+        },
+        {
+          "writer": "helper",
+          "case": "REAL_ACTIVE_MASKED_REJECTED"
+        },
+        {
+          "writer": "helper",
+          "case": "REAL_STOPPED_MASKED_NO_CGROUP_ACCEPTED"
+        }
+      ]
+    },
+    "realIsolatedSshCapture": "PASS",
+    "independentFreshReplay": "PASS",
+    "guestRuntime": {
+      "executableSha256": "1643dacd9feaedc58f3cc581e4d22577dfe25c09b10282936186ccf0f2e61118",
+      "python": "3.12.3",
+      "sqlite": "3.45.1",
+      "sqliteExtensionSha256": "b30bc4b6a8fa3c80fa0ff79b752e811ffda985497155501691c1d169b289b238",
+      "sqliteLibrarySha256": "f2cd05de8b6f71ea9d0495a6f9ff9cae844b15d9c45b7ef49ee0af0f81658cc7"
+    },
+    "finalGuestTemporaryDirectories": [],
+    "fullRepository": {
+      "passed": 1120,
+      "failed": 0,
+      "skipped": 1,
+      "skipReason": "Existing identified VCPToolBox adapter package identity not supplied",
+      "node": "24.21.0",
+      "command": "npm run check (includes npm test)",
+      "pathWorkaround": "BYTE_IDENTICAL_ASCII_CHECKOUT_EXISTING_URL_PATHNAME_LIMITATION"
+    },
+    "dockerManager": "SYNTHETIC_STATE_VALIDATION_ONLY_NO_LIVE_DOCKER_ACCEPTANCE"
+  },
+  "captureResult": {
+    "adoptionAuthorityAllowed": false,
+    "challenge": "f3240c35b2a34b3887dd4566e75f5d03f9a0ae2d12439df30eea26eddbff7691",
+    "freshAtThisVerification": true,
+    "g4Allowed": false,
+    "historicalWalCompleteness": "NOT_PROVEN",
+    "manifest": "e18f94f3fcf1f2a318cce3e647d44e4725226f506d353a0d2dd975ebea1cd730",
+    "serviceStartAllowed": false,
+    "status": "ISOLATED_R2_ACCEPTED_NOT_PRODUCTION",
+    "transportDigest": "c1bb62cfc77919270f5b05e0f656874960a9e162903b4500eeef2e4fcad80372",
+    "version": 2,
+    "writerReadmissionAllowed": false
+  },
+  "cleanup": {
+    "status": "DISPOSABLE_RESOURCES_REMOVED",
+    "scope": "LAB_ONLY",
+    "vmUuid": "9eef3b3d-92f3-4a5f-b8bd-068d7b83d4a4",
+    "qemuPid": 2562730,
+    "qemuStopped": true,
+    "loopbackPortClosed": true,
+    "workDirectoryRemoved": true,
+    "labHomeRemoved": true,
+    "rawEvidenceArchivedAndByteVerified": true,
+    "retainedManifestSha256": "e3a9a058be4834ce000963e5323ff4d655bab82c37f33044770a8ef67d390f40",
+    "initialQmpQuit": "NOT_CONFIRMED_PROCESS_STILL_RUNNING",
+    "finalCleanup": "EXACT_PIDFD_SIGTERM_AFTER_FRESH_IDENTITY_CHECK",
+    "evidenceRetried": false,
+    "productionActions": 0
+  },
+  "evidenceLocation": "Jenn artifacts/g3-05-r1/pr63-final-review-closure-r1/p1-writer-semantics (independent local custody; raw records not published to GitHub)",
+  "evidenceSha256": {
+    "unit-tests-final.log": "7c64de64def60b573f2788e96f6c992869766e97cf97b21698e06f59a5dd60f6",
+    "full-check-final.log": "aa9c6a2d7dec3efc0ce14bafbcfc0553791374dbf829d7ff0ccd773205e6b45c",
+    "vm/positive-p1/e1-preflight.json": "15f03315fe5f3d625a73b4e33641d8cc825e1d6ca5511a7f8b4a8ebdbc6f599e",
+    "vm/positive-final/e1-preflight.json": "d065aa891c03d6b1ac105d5715ad6bd7c3d097a05346ccdaf679b3c48840c462",
+    "vm/positive-final/e1-protect.json": "7c2db49b76640b4f5444214d080653f6e091203bcb34b0cf531827be4c1fa3f9",
+    "vm/positive-final/e1-verify.json": "98ff3a3321c29ecdbcae22dd15b72eee2af57a4194c3223b3324c0536f8f022c",
+    "vm/positive-final/e2-collector.json": "1aa717f91c67b60a14962aade7c227f127bd438e93b8b38983005463d58b404b",
+    "vm/positive-final/e2-independent-fresh-replay.json": "1aa717f91c67b60a14962aade7c227f127bd438e93b8b38983005463d58b404b",
+    "vm/writer-lifecycle-raw.json": "9caff498694dc3722589995caf1014defe814fc09b165b5806a1630893e54a58",
+    "vm/writer-lifecycle-results.json": "408c87386eace8ac610724ae64b36b5763c9ceab42b128a0f3e153159942c80c",
+    "vm/final-guest-state.json": "403d03999f8848927cbb3c241c94adee6051e25c0d7302797e0afefe28aa9e4b",
+    "vm/cleanup-followup-observation.json": "8a33d37479e9a1268f16731fe1a5c54e0e6eed3b616afbe65298d5d8a0d847bc",
+    "vm/cleanup-scoped-termination.json": "d16073c29f326be72115e80f507e180e5e2875612eb83469432b913390150703",
+    "vm/cleanup-final.json": "67f0d399a93a4ff6c8e855d0238e0e9cf6b3bea043489dc274371c7eaacbfb83",
+    "vm/retained/manifest.json": "e3a9a058be4834ce000963e5323ff4d655bab82c37f33044770a8ef67d390f40"
+  },
+  "history": "Earlier receipts and reports remain unchanged. Old R2 writer checks are not accepted as new-source stopped-state proof. First lab preflight rejection and first unconfirmed QMP shutdown retained; no evidence retry.",
+  "limits": {
+    "historicalWalCompleteness": "NOT_PROVEN",
+    "historicalWriterCoverage": "NOT_PROVEN",
+    "g3_05": "BLOCKED",
+    "productionActions": 0,
+    "unsupportedHelperControl": "BLOCKED",
+    "inventoryCompleteness": "REQUIRES_INDEPENDENT_ACTUAL_DEPLOYMENT_REVIEW",
+    "mergeAllowed": false,
+    "g3_06Allowed": false,
+    "writerAllowed": false,
+    "serviceAllowed": false
+  }
+}
