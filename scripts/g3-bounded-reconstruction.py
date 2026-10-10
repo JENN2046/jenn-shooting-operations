@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import socket
@@ -29,6 +30,10 @@ SPECS = [
 MAX_ARCHIVE = 8 * 1024 * 1024
 MAX_TAR = 16 * 1024 * 1024
 ATTEMPT = {}
+DOCKER_EXECUTABLE = '/usr/bin/docker'
+DOCKER_APPROVAL = '/etc/jso/g3-reconstruction-runtime.json'
+DOCKER_CONFIG = '/etc/jso/g3-reconstruction-docker'
+DOCKER_ENV = {'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C', 'HOME': '/nonexistent'}
 
 
 def require(value, code):
@@ -40,19 +45,26 @@ def digest(b):
     return hashlib.sha256(b).hexdigest()
 
 
-def read_pinned(path, limit):
+def read_pinned(path, limit, *, trusted_uid=None):
     p = Path(path)
     require(p.is_absolute() and '..' not in p.parts, 'ABSOLUTE_PATH_REQUIRED')
     fd = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
     parents = []
+    def custody(fd):
+        st = os.fstat(fd)
+        if trusted_uid is not None:
+            require(st.st_uid == trusted_uid and not st.st_mode & 0o022, 'RUNTIME_CUSTODY')
     identity = lambda st: (st.st_dev, st.st_ino, st.st_mode, st.st_uid, st.st_gid)
     try:
+        custody(fd)
         for part in p.parts[1:-1]:
             child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
             parents.append((fd, part, identity(os.fstat(child))))
             fd = child
-        leaf = os.open(p.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NOATIME, dir_fd=fd)
+            custody(fd)
+        leaf = os.open(p.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NOATIME | os.O_NONBLOCK, dir_fd=fd)
         try:
+            custody(leaf)
             before = os.fstat(leaf)
             require(stat.S_ISREG(before.st_mode) and before.st_nlink == 1 and before.st_size <= limit, 'INPUT_TYPE_OR_SIZE')
             chunks = []
@@ -63,7 +75,7 @@ def read_pinned(path, limit):
                 chunks.append(chunk)
                 require(sum(map(len, chunks)) <= limit, 'INPUT_TOO_LARGE')
             after = os.fstat(leaf)
-            same = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns, s.st_atime_ns)
+            same = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns, s.st_atime_ns, s.st_uid, s.st_gid, s.st_mode)
             require(same(before) == same(after), 'INPUT_CHANGED')
             link = os.stat(p.name, dir_fd=fd, follow_symlinks=False)
             require((link.st_dev, link.st_ino) == (after.st_dev, after.st_ino), 'INPUT_REPLACED')
@@ -104,8 +116,37 @@ def verify_archive(spec):
     return files
 
 
+def docker_runtime():
+    # Administrator installs this separately approved pin; never learn it from
+    # the executable on the execution host during a reconstruction attempt.
+    raw = read_pinned(DOCKER_APPROVAL, 4096, trusted_uid=0)
+    approval = json.loads(raw)
+    require(type(approval) is dict and set(approval) == {'version', 'path', 'sha256'} and
+            type(approval['version']) is int and approval['version'] == 1 and
+            approval['path'] == DOCKER_EXECUTABLE and
+            type(approval['sha256']) is str and re.fullmatch('[a-f0-9]{64}', approval['sha256']),
+            'DOCKER_APPROVAL_REQUIRED')
+    executable = read_pinned(DOCKER_EXECUTABLE, 64 * 1024 * 1024, trusted_uid=0)
+    require(digest(executable) == approval['sha256'], 'DOCKER_EXECUTABLE_DRIFT')
+    # A direct local endpoint and an empty root-owned config directory eliminate
+    # caller context/config selection. The daemon stays inside the admin trust model.
+    for path in ('/', '/etc', '/etc/jso', DOCKER_CONFIG, '/run'):
+        st = os.lstat(path)
+        require(stat.S_ISDIR(st.st_mode) and st.st_uid == 0 and not st.st_mode & 0o022,
+                'DOCKER_CONFIGURATION_CUSTODY')
+    require(not list(Path(DOCKER_CONFIG).iterdir()), 'DOCKER_CONFIGURATION_NOT_EMPTY')
+    st = os.lstat('/run/docker.sock')
+    require(stat.S_ISSOCK(st.st_mode) and st.st_uid == 0, 'LOCAL_DOCKER_REQUIRED')
+    return approval
+
+
+def docker_args(*args):
+    docker_runtime()  # Recheck before every command, including terminal/cleanup.
+    return [DOCKER_EXECUTABLE, '--config', DOCKER_CONFIG, '--host', 'unix:///run/docker.sock', *args]
+
+
 def docker_command(root, runner, name):
-    return ['docker', '--context', 'default', 'create', '--name', name, '--label', 'jso.reconstruction='+name,
+    return docker_args('create', '--name', name, '--label', 'jso.reconstruction='+name,
             '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
             '--user', '1000:1000', '--pids-limit', '64', '--memory', '256m', '--memory-swap', '256m', '--cpus', '1',
             '--restart', 'no', '--no-healthcheck', '--log-driver', 'none', '--ulimit', 'core=0',
@@ -113,12 +154,12 @@ def docker_command(root, runner, name):
             '--tmpfs', '/work:rw,uid=1000,gid=1000,mode=0700,nosuid,nodev,noexec,size=32m',
             '--mount', 'type=bind,src='+str(root / 'work')+',dst=/inputs,readonly',
             '--mount', 'type=bind,src='+str(runner)+',dst=/tool/replay.mjs,readonly',
-            '--entrypoint', 'node', IMAGE, '--max-old-space-size=128', '/tool/replay.mjs']
+            '--entrypoint', 'node', IMAGE, '--max-old-space-size=128', '/tool/replay.mjs')
 
 
 def bounded_start(name, timeout, limit=1024 * 1024):
-    command = ['docker', '--context', 'default', 'start', '-a', name]
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    command = docker_args('start', '-a', name)
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=DOCKER_ENV)
     streams = selectors.DefaultSelector()
     buffers = {process.stdout: bytearray(), process.stderr: bytearray()}
     deadline = time.monotonic() + timeout
@@ -155,9 +196,8 @@ def run(specs, root, runner, timeout=120):
     require(not os.path.lexists(root), 'SCRATCH_EXISTS')
     space = os.statvfs(root.parent)
     require(space.f_bavail * space.f_frsize >= 1024**3, 'SPACE')
-    context = json.loads(subprocess.check_output(['docker', 'context', 'inspect', 'default'], timeout=15))[0]
-    require(context['Endpoints']['docker']['Host'] == 'unix:///var/run/docker.sock', 'LOCAL_DOCKER_REQUIRED')
-    image = subprocess.run(['docker', '--context', 'default', 'image', 'inspect', IMAGE], capture_output=True, text=True, timeout=15)
+    runtime = docker_runtime()
+    image = subprocess.run(docker_args('image', 'inspect', IMAGE), capture_output=True, text=True, timeout=15, env=DOCKER_ENV)
     require(image.returncode == 0 and json.loads(image.stdout)[0]['Id'] == IMAGE and json.loads(image.stdout)[0]['Architecture'] == 'amd64', 'IMAGE_UNAVAILABLE')
     runner_bytes = read_pinned(str(runner), 128 * 1024)
     root.mkdir(mode=0o700)
@@ -181,13 +221,13 @@ def run(specs, root, runner, timeout=120):
         tool = root / 'replay.mjs'; tool.write_bytes(runner_bytes); tool.chmod(0o444)
         command = docker_command(root, tool, name)
         started = True
-        created = subprocess.run(command, capture_output=True, timeout=20)
+        created = subprocess.run(command, capture_output=True, timeout=20, env=DOCKER_ENV)
         require(created.returncode == 0, 'CONTAINER_CREATE')
         result = bounded_start(name, timeout)
         require(result.returncode == 0 and len(result.stdout) <= 1024 * 1024, 'RUNTIME_REJECTED')
         record = json.loads(result.stdout)
         require(record.get('status') == 'LIMITED_RECONSTRUCTION_EVIDENCE' and record.get('productionAdmission') is False, 'RECEIPT_REJECTED')
-        state = json.loads(subprocess.check_output(['docker', '--context', 'default', 'inspect', name], timeout=15))[0]
+        state = json.loads(subprocess.check_output(docker_args('inspect', name), timeout=15, env=DOCKER_ENV))[0]
         require(state['State']['Status'] == 'exited' and state['State']['ExitCode'] == 0 and not state['State']['OOMKilled'], 'CONTAINER_TERMINAL')
         require(not any(state['HostConfig']['PortBindings'] or {}) and state['HostConfig']['NetworkMode'] == 'none', 'ISOLATION_DRIFT')
         for spec in specs:
@@ -197,14 +237,17 @@ def run(specs, root, runner, timeout=120):
         record['archiveSha256'] = [s['sha256'] for s in specs]
         record['runnerSha256'] = digest(runner_bytes)
         record['image'] = IMAGE
+        require(docker_runtime() == runtime, 'DOCKER_APPROVAL_DRIFT')
+        record['dockerRuntime'] = {**runtime, 'environment': dict(DOCKER_ENV),
+                                   'endpoint': 'unix:///run/docker.sock', 'config': DOCKER_CONFIG}
         return record
     finally:
         if started:
-            probe = subprocess.run(['docker', '--context', 'default', 'inspect', name], capture_output=True, timeout=15)
+            probe = subprocess.run(docker_args('inspect', name), capture_output=True, timeout=15, env=DOCKER_ENV)
             if probe.returncode == 0:
                 state = json.loads(probe.stdout)[0]
                 require(state['Config']['Labels'].get('jso.reconstruction') == name, 'CLEANUP_OWNER')
-                subprocess.run(['docker', '--context', 'default', 'rm', '-f', name], capture_output=True, check=True, timeout=20)
+                subprocess.run(docker_args('rm', '-f', name), capture_output=True, check=True, timeout=20, env=DOCKER_ENV)
             else:
                 require(b'No such' in probe.stderr, 'CLEANUP_UNCONFIRMED')
         require((root.stat().st_dev, root.stat().st_ino) == root_identity, 'SCRATCH_IDENTITY_CHANGED')

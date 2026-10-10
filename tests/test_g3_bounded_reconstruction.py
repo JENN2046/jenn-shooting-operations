@@ -55,7 +55,8 @@ class ArchiveTests(unittest.TestCase):
         with patch.object(m,'MAX_TAR',16):
             with self.assertRaises(ValueError):m.verify_archive(self.s)
     def test_mount_scope(self):
-        c=m.docker_command(self.root,self.root/'tool.mjs','synthetic-only')
+        with patch.object(m, 'docker_runtime'):
+            c=m.docker_command(self.root,self.root/'tool.mjs','synthetic-only')
         self.assertNotIn('/var/run/docker.sock',' '.join(c));self.assertIn('--no-healthcheck',c)
         self.assertIn('none',c);self.assertNotIn('run',c);self.assertEqual(c.count('--mount'),2)
 
@@ -132,4 +133,36 @@ class DockerTests(unittest.TestCase):
         changed=archive(d,self.root/'legacy.tgz',[m.DB])
         with self.assertRaises(ValueError):self.run_case(b=changed)
 
-if __name__=='__main__':unittest.main()
+
+
+class DockerIdentityTests(unittest.TestCase):
+    def test_fixed_command_and_environment(self):
+        with patch.object(m, 'docker_runtime') as check, patch.dict(os.environ, {'PATH': '/synthetic-only', 'DOCKER_HOST': 'synthetic-only'}):
+            args = m.docker_args('inspect', 'synthetic')
+            self.assertEqual(args, ['/usr/bin/docker', '--config', m.DOCKER_CONFIG, '--host', 'unix:///run/docker.sock', 'inspect', 'synthetic'])
+            check.assert_called_once()
+            self.assertNotIn('DOCKER_HOST', m.DOCKER_ENV)
+            self.assertEqual(m.DOCKER_ENV['PATH'], '/usr/bin:/bin')
+
+    def test_missing_runtime_approval_stops_before_process(self):
+        with patch.object(m, 'read_pinned', side_effect=FileNotFoundError), patch.object(m.subprocess, 'Popen') as start:
+            with self.assertRaises(FileNotFoundError):
+                m.bounded_start('synthetic', 1)
+            start.assert_not_called()
+
+    def test_digest_mismatch_stops_before_process(self):
+        approval = json.dumps({'version':1, 'path':m.DOCKER_EXECUTABLE, 'sha256':'0'*64}).encode()
+        with patch.object(m, 'read_pinned', side_effect=[approval, b'synthetic-runtime']) as read, patch.object(m.subprocess, 'Popen') as start:
+            with self.assertRaisesRegex(ValueError, 'DOCKER_EXECUTABLE_DRIFT'):
+                m.bounded_start('synthetic', 1)
+            self.assertTrue(all(call.kwargs.get('trusted_uid') == 0 for call in read.call_args_list))
+            start.assert_not_called()
+
+    def test_untrusted_runtime_parent_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'inert'; path.write_bytes(b'inert')
+            with self.assertRaisesRegex(ValueError, 'RUNTIME_CUSTODY'):
+                m.read_pinned(str(path), 4096, trusted_uid=0)
+
+if __name__ == "__main__":
+    unittest.main()

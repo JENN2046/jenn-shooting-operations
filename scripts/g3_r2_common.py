@@ -7,12 +7,12 @@ from pathlib import Path
 import re
 import stat
 import sys
+from g3_r2_bootstrap import local_custody_home
 
 ROOT = Path(__file__).resolve().parent
 METHOD = 'e1acba51102404d87e756b0e6a502c6a9cd92bbe4a2136c0f6d8c41b19b6ffd0'
 R1_SHA = '95ca51db7174eaffc8ce9cee8f85f0440ec1253fb8a2e00dc89b42649775ccfc'
 REMOTE_STORE = Path('/etc/jso/g3-r2')
-LOCAL_STORE = Path.home() / '.local/share/jso/g3-r2'
 MAX_OUTPUT = 1024 * 1024
 COPY_BUDGET = 8 * 1024 * 1024
 SHA = re.compile(r'^[a-f0-9]{64}$')
@@ -151,7 +151,7 @@ def production_approvals(approval, store, uid):
 
 def load_approval(*, local=False):
     """Only this fixed custody location is authoritative; no CLI/environment override."""
-    store = LOCAL_STORE if local else REMOTE_STORE
+    store = local_custody_home() / '.local/share/jso/g3-r2' if local else REMOTE_STORE
     uid = os.getuid() if local else 0
     st = store.lstat()
     need(stat.S_ISDIR(st.st_mode) and st.st_uid == uid and stat.S_IMODE(st.st_mode) == 0o700, 'TRUST_STORE_CUSTODY')

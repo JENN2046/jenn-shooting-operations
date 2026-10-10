@@ -4,6 +4,7 @@ import importlib.abc
 import importlib.util
 import json
 import os
+import pwd
 from pathlib import Path
 import stat
 import sys
@@ -15,8 +16,26 @@ CODE_FILES = frozenset(('g3_r2_bootstrap.py', 'g3_r2_common.py', 'g3_r2_custody.
                         'g3_r2_endpoint.py', 'g3-r2-serve-once.py'))
 
 
+def local_custody_home():
+    """Fixed Jenn identity from the host account database, never from caller HOME.
+
+    Account provisioning and this entrypoint remain TRUSTED_HOST_ADMIN inputs.
+    Remote witness imports do not require a local Jenn account.
+    """
+    account = pwd.getpwnam('jenn')
+    home = Path(account.pw_dir)
+    if (account.pw_uid == 0 or os.getuid() != account.pw_uid or
+            os.geteuid() != account.pw_uid):
+        raise ValueError('LOCAL_CUSTODY_IDENTITY')
+    if not home.is_absolute() or '..' in home.parts or home == Path('/'):
+        raise ValueError('LOCAL_CUSTODY_HOME')
+    if os.environ.get('HOME') != str(home):
+        raise ValueError('LOCAL_CUSTODY_ENVIRONMENT_DRIFT')
+    return home
+
+
 def bootstrap(root, *, local):
-    store = Path.home() / '.local/share/jso/g3-r2' if local else Path('/etc/jso/g3-r2')
+    store = local_custody_home() / '.local/share/jso/g3-r2' if local else Path('/etc/jso/g3-r2')
     uid = os.getuid() if local else 0
     # No existing module may bypass the verified source loader through sys.modules.
     if any(Path(name).stem in sys.modules for name in CODE_FILES if name.startswith('g3_r2_')):

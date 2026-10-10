@@ -6,7 +6,7 @@ import sqlite3
 import time
 import secrets
 
-from g3_r2_common import (bounded, canonical, DENY, exact, fsync_dir, load_approval, LOCAL_STORE,
+from g3_r2_common import (bounded, canonical, DENY, exact, fsync_dir, load_approval, local_custody_home,
                           need, parse, reference, runtime, save_new, sha, SHA)
 from g3_r2_acceptance import validate_observation
 from g3_r2_transport import run_bounded
@@ -15,7 +15,8 @@ from g3_r2_endpoint import ENDPOINT, PROFILE, decode_response, forward_once
 SSH_EXECUTABLE = '/usr/bin/ssh'
 SSH_ENV = {'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C'}
 TTL_NS = 300_000_000_000
-EVIDENCE = Path.home() / '.local/share/jso/g3-r2-evidence'
+def evidence_directory():
+    return local_custody_home() / '.local/share/jso/g3-r2-evidence'
 
 
 class ClosingConnection(sqlite3.Connection):
@@ -60,7 +61,8 @@ def connect(directory):
     return d
 
 
-def issue(approval_sha, directory=EVIDENCE):
+def issue(approval_sha, directory=None):
+    directory = evidence_directory() if directory is None else directory
     n = secrets.token_hex(32)
     wall, mono = clock()
     with connect(directory) as d:
@@ -118,7 +120,8 @@ def fresh(issued_wall, issued_mono, wall, mono):
     need(issued_wall <= wall < issued_wall + TTL_NS and issued_mono <= mono < issued_mono + TTL_NS, 'CHALLENGE_EXPIRED_OR_TIME_REVERSED')
 
 
-def collect(n, approval, approval_sha, directory=EVIDENCE):
+def collect(n, approval, approval_sha, directory=None):
+    directory = evidence_directory() if directory is None else directory
     need(re.fullmatch('[a-f0-9]{64}', n), 'CHALLENGE')
     iw, im, cw, cm = consume(n, approval_sha, directory)
     target = directory / n
@@ -233,7 +236,8 @@ def read_raw(path, size, limit=1024 * 1024):
     return b''
 
 
-def replay(n, approval, approval_sha, directory=EVIDENCE, require_fresh=False):
+def replay(n, approval, approval_sha, directory=None, require_fresh=False):
+    directory = evidence_directory() if directory is None else directory
     need(re.fullmatch('[a-f0-9]{64}', n), 'CHALLENGE')
     with db_readonly(directory) as d:
         need(d.execute('PRAGMA integrity_check').fetchall() == [('ok',)], 'LEDGER_INTEGRITY')

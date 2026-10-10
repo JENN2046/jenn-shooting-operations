@@ -11,9 +11,11 @@ import sys
 import tempfile
 import time
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import g3_r2_bootstrap as bootstrap
 import g3_r2_common as c
 import g3_r2_acceptance as a
 import g3_r2_collector as col
@@ -432,13 +434,15 @@ class SourceBootstrap(unittest.TestCase):
     def test_exact_source_loader_parent_custody_and_no_preloaded_modules(self):
         import g3_r2_bootstrap as b
         root=Path(c.__file__).parent
-        with tempfile.TemporaryDirectory(prefix='jso-r2-bootstrap-',dir=Path.home()) as name:
+        with tempfile.TemporaryDirectory(prefix='jso-r2-bootstrap-',dir=Path(__file__).resolve().parents[1]) as name:
             home=Path(name);store=home/'.local/share/jso/g3-r2';store.mkdir(parents=True,mode=0o700)
             for p in (home/'.local',home/'.local/share',home/'.local/share/jso'):p.chmod(0o700)
             pins={n:c.sha((root/n).read_bytes()) for n in b.CODE_FILES}
             def run(pins,preload=False):
                 (store/'approved.json').write_bytes(c.canonical({'code':pins}));(store/'approved.json').chmod(0o600)
-                code='import pathlib,sys,types;ns={};exec(compile(pathlib.Path(sys.argv[1]).read_bytes(),sys.argv[1],"exec"),ns);'
+                code='import pathlib,sys,types,os;ns={};exec(compile(pathlib.Path(sys.argv[1]).read_bytes(),sys.argv[1],"exec"),ns);'
+                # Synthetic account database for this loader unit only; no CLI HOME override.
+                code+='ns["pwd"].getpwnam=lambda name:types.SimpleNamespace(pw_uid=os.getuid(),pw_dir=os.environ["HOME"]);'
                 if preload:code+='sys.modules["g3_r2_common"]=types.ModuleType("g3_r2_common");'
                 code+='ns["bootstrap"](pathlib.Path(sys.argv[1]).parent,local=True)'
                 return subprocess.run([sys.executable,'-c',code,str(root/'g3_r2_bootstrap.py')],env={**os.environ,'HOME':str(home)},capture_output=True)
@@ -531,4 +535,33 @@ class WriterStoppedSemantics(unittest.TestCase):
                 opened.assert_not_called()
 
 
-if __name__=='__main__':unittest.main()
+
+
+class LocalCustodyIdentityTests(unittest.TestCase):
+    def identity(self):
+        return patch.object(bootstrap.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=1000, pw_dir='/home/jenn'))
+
+    def test_fixed_account_paths(self):
+        with self.identity() as lookup, patch.object(bootstrap.os, 'getuid', return_value=1000), patch.object(bootstrap.os, 'geteuid', return_value=1000), patch.dict(os.environ, {'HOME': '/home/jenn'}):
+            self.assertEqual(bootstrap.local_custody_home(), Path('/home/jenn'))
+            self.assertEqual(col.evidence_directory(), Path('/home/jenn/.local/share/jso/g3-r2-evidence'))
+            lookup.assert_called_with('jenn')
+
+    def test_home_drift_rejected_before_store_io(self):
+        with self.identity(), patch.object(bootstrap.os, 'getuid', return_value=1000), patch.object(bootstrap.os, 'geteuid', return_value=1000), patch.dict(os.environ, {'HOME': '/tmp/synthetic-home'}), patch.object(bootstrap.os, 'open') as opened:
+            with self.assertRaisesRegex(ValueError, 'ENVIRONMENT_DRIFT'):
+                bootstrap.bootstrap(Path('/synthetic-code'), local=True)
+            opened.assert_not_called()
+            with self.assertRaisesRegex(ValueError, 'ENVIRONMENT_DRIFT'):
+                c.load_approval(local=True)
+            with self.assertRaisesRegex(ValueError, 'ENVIRONMENT_DRIFT'):
+                col.issue('0' * 64)
+
+    def test_wrong_or_elevated_identity_rejected(self):
+        for uid, euid in ((1001,1001), (1000,0), (0,0)):
+            with self.subTest(uid=uid, euid=euid), self.identity(), patch.object(bootstrap.os, 'getuid', return_value=uid), patch.object(bootstrap.os, 'geteuid', return_value=euid):
+                with self.assertRaisesRegex(ValueError, 'LOCAL_CUSTODY_IDENTITY'):
+                    bootstrap.local_custody_home()
+
+if __name__ == "__main__":
+    unittest.main()
