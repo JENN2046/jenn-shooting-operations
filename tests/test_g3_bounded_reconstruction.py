@@ -1,4 +1,6 @@
 import hashlib
+from contextlib import ExitStack, redirect_stdout
+from types import SimpleNamespace
 import importlib.util
 import io
 import json
@@ -163,6 +165,139 @@ class DockerIdentityTests(unittest.TestCase):
             path = Path(folder) / 'inert'; path.write_bytes(b'inert')
             with self.assertRaisesRegex(ValueError, 'RUNTIME_CUSTODY'):
                 m.read_pinned(str(path), 4096, trusted_uid=0)
+
+
+class DockerControlFlowTests(unittest.TestCase):
+    """Exercise orchestration and real pipe draining; never launch a child process."""
+
+    def exercise(self, failure_at=None):
+        runtime_bytes = b'inert approved runtime identity'
+        approval = {'version': 1, 'path': '/usr/bin/docker',
+                    'sha256': hashlib.sha256(runtime_bytes).hexdigest()}
+        prefix = ['/usr/bin/docker', '--config', '/etc/jso/g3-reconstruction-docker',
+                  '--host', 'unix:///run/docker.sock']
+        environment = {'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C', 'HOME': '/nonexistent'}
+        name = 'jso-reconstruct-' + '1' * 32
+        calls, reads, stats = [], [], []
+        runtime_checks = 0
+        state = [{'State': {'Status': 'exited', 'ExitCode': 0, 'OOMKilled': False},
+                  'HostConfig': {'PortBindings': {}, 'NetworkMode': 'none'},
+                  'Config': {'Labels': {'jso.reconstruction': name}}}]
+        receipt = {'status': 'LIMITED_RECONSTRUCTION_EVIDENCE', 'productionAdmission': False}
+        original_lstat, original_iterdir = os.lstat, Path.iterdir
+        directories = ('/', '/etc', '/etc/jso', m.DOCKER_CONFIG, '/run')
+
+        def read(path, limit, *, trusted_uid=None):
+            nonlocal runtime_checks
+            reads.append((str(path), trusted_uid))
+            if str(path) == m.DOCKER_APPROVAL:
+                runtime_checks += 1
+                return json.dumps(approval).encode()
+            if str(path) == m.DOCKER_EXECUTABLE:
+                # A persistent ordinary identity-check error, not executable input.
+                if failure_at is not None and runtime_checks >= failure_at:
+                    raise ValueError('DOCKER_EXECUTABLE_DRIFT')
+                return runtime_bytes
+            self.assertEqual(str(path), str(runner))
+            return b'inert runner bytes'
+
+        def lstat(path, *args, **kwargs):
+            if str(path) in (*directories, '/run/docker.sock'):
+                stats.append(str(path))
+                return SimpleNamespace(st_uid=0, st_mode=(0o140660 if str(path) == '/run/docker.sock' else 0o40755))
+            return original_lstat(path, *args, **kwargs)
+
+        def iterdir(path):
+            return iter(()) if str(path) == m.DOCKER_CONFIG else original_iterdir(path)
+
+        def boundary(kind, argv, **kwargs):
+            self.assertEqual(argv[:5], prefix)
+            self.assertEqual(kwargs.get('env'), environment)
+            self.assertNotIn('shell', kwargs)
+            action = argv[5]
+            self.assertIn(action, ('image', 'create', 'start', 'inspect', 'rm'))
+            calls.append((kind, action))
+            if kind == 'Popen':
+                self.assertEqual(argv[5:], ['start', '-a', name])
+                streams = []
+                for payload in (json.dumps(receipt).encode(), b''):
+                    rd, wr = os.pipe()
+                    try:
+                        os.write(wr, payload)
+                    finally:
+                        os.close(wr)
+                    stream = os.fdopen(rd, 'rb')
+                    self.addCleanup(stream.close)
+                    streams.append(stream)
+                return SimpleNamespace(stdout=streams[0], stderr=streams[1],
+                                       poll=lambda: 0, wait=lambda **kw: 0,
+                                       kill=lambda: self.fail('unexpected kill on completed inert process'))
+            if action == 'image':
+                out = json.dumps([{'Id': m.IMAGE, 'Architecture': 'amd64'}])
+            elif action == 'inspect':
+                self.assertEqual(argv[6:], [name])
+                out = json.dumps(state)
+            else:
+                if action == 'rm':
+                    self.assertEqual(argv[6:], ['-f', name])
+                out = ''
+            if kind == 'check_output':
+                return out.encode()
+            return subprocess.CompletedProcess(argv, 0, out if kwargs.get('text') else out.encode(), b'')
+
+        with tempfile.TemporaryDirectory() as folder, ExitStack() as stack:
+            root = Path(folder) / 'scratch'
+            runner = Path(folder) / 'runner.mjs'
+            specs = [{'sha256': '1' * 64}, {'sha256': '2' * 64}]
+            stack.enter_context(patch.object(m, 'verify_archive', return_value={m.DB: b'inert synthetic data'}))
+            stack.enter_context(patch.object(m, 'read_pinned', side_effect=read))
+            stack.enter_context(patch.object(m.os, 'lstat', side_effect=lstat))
+            stack.enter_context(patch.object(Path, 'iterdir', iterdir))
+            stack.enter_context(patch.object(m.os, 'chown'))
+            stack.enter_context(patch.object(m.os, 'statvfs', return_value=SimpleNamespace(f_bavail=2**20, f_frsize=4096)))
+            stack.enter_context(patch.object(m.uuid, 'uuid4', return_value=SimpleNamespace(hex='1' * 32)))
+            stack.enter_context(patch.dict(m.ATTEMPT, {}, clear=True))
+            stack.enter_context(patch.dict(os.environ, {'PATH': '/inert', 'DOCKER_HOST': 'inert', 'DOCKER_CONFIG': '/inert'}))
+            for kind in ('run', 'check_output', 'Popen'):
+                stack.enter_context(patch.object(m.subprocess, kind,
+                    side_effect=lambda argv, _kind=kind, **kw: boundary(_kind, argv, **kw)))
+            output = io.StringIO()
+            with redirect_stdout(output):
+                if failure_at is None:
+                    result = m.run(specs, root, runner)
+                    self.assertEqual(result['dockerRuntime'], {**approval, 'environment': environment,
+                        'endpoint': 'unix:///run/docker.sock', 'config': m.DOCKER_CONFIG})
+                    self.assertTrue(result['archivePostcheck'])
+                    self.assertFalse(root.exists())
+                else:
+                    with self.assertRaisesRegex(ValueError, '^DOCKER_EXECUTABLE_DRIFT$'):
+                        m.run(specs, root, runner)
+                    # Refusal during finally must suppress any pending success return.
+                    self.assertTrue(root.is_dir())
+                    self.assertTrue((root / 'replay.mjs').exists())
+                    self.assertEqual(m.ATTEMPT, {'container': name, 'scratch': str(root)})
+            self.assertEqual(output.getvalue(), '')
+        self.assertTrue(all(uid == 0 for path, uid in reads if path in (m.DOCKER_APPROVAL, m.DOCKER_EXECUTABLE)))
+        return calls, runtime_checks, stats
+
+    def test_all_process_boundaries_and_positive_runtime_checks(self):
+        calls, checks, stats = self.exercise()
+        self.assertEqual(calls, [('run', 'image'), ('run', 'create'), ('Popen', 'start'),
+                                ('check_output', 'inspect'), ('run', 'inspect'), ('run', 'rm')])
+        self.assertEqual(checks, 8)
+        for path in ('/', '/etc', '/etc/jso', m.DOCKER_CONFIG, '/run', '/run/docker.sock'):
+            self.assertEqual(stats.count(path), checks)
+
+    def test_terminal_and_cleanup_identity_errors_stop_without_success(self):
+        normal = [('run', 'image'), ('run', 'create'), ('Popen', 'start'),
+                  ('check_output', 'inspect'), ('run', 'inspect')]
+        # Checks 5/7/8 precede terminal inspect, cleanup inspect, and cleanup rm.
+        for check, allowed in ((5, 3), (7, 4), (8, 5)):
+            with self.subTest(identity_check=check):
+                calls, checks, _ = self.exercise(failure_at=check)
+                self.assertEqual(calls, normal[:allowed])
+                self.assertGreaterEqual(checks, check)
+
 
 if __name__ == "__main__":
     unittest.main()
