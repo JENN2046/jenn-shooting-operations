@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
-import { validateV1Snapshot } from './contract-validator.mjs';
+import { validateV1Snapshot, validateV2Snapshot, validateV3Snapshot } from './contract-validator.mjs';
 import { sqliteFilenamePath, fileIdentity } from './sqlite-file-identity.mjs';
 import { assertKnownSchema, MIGRATIONS } from './sqlite-schema-v2.mjs';
 import { digestCanonicalJsonSchedulingV1 } from './scheduling-contract-v1.mjs';
@@ -204,6 +204,12 @@ export function validateCoreInitializationSnapshot({ initial, counter, audits, p
     const row = projections[index], version = schemaVersion===12?3:index + 1;
     let payload;
     try { payload = JSON.parse(row.payload_json); } catch { fail('INITIALIZATION_PROJECTIONS'); }
+    try {
+      const validation = version === 1
+        ? validateV1Snapshot(payload, { profile: 'legacy-read' })
+        : (version === 3 ? validateV3Snapshot : validateV2Snapshot)(payload);
+      need(validation.ok, 'INITIALIZATION_PROJECTIONS');
+    } catch { fail('INITIALIZATION_PROJECTIONS'); }
     need(row.projection_name === name && row.schema_version === version && row.source_schema_version === (schemaVersion===12?12:2)
       && row.revision === counter.projection_revision
       && row.schedule_revision === (version === 1 ? null : counter.schedule_revision)
@@ -241,6 +247,7 @@ export function loadCoreAcceptance(databasePath) {
       && initial.integrityOk === true && initial.foreignKeyViolations === 0
       && initial.backupRestoreVerified === true && initial.exclusiveMaintenance === true && initial.initialized === true
       && Date.parse(initial.checkedAt) >= Date.parse(record.window.start)
+      && Date.parse(initial.checkedAt) >= Date.parse(record.ownerApprovedAt)
       && Date.parse(initial.checkedAt) <= Date.parse(activation.acceptedAt), 'INITIAL_VERIFICATION');
   }
   const installed = jsonMaterial('installation.json');

@@ -351,3 +351,53 @@ test('acceptance scopes only its target; unrelated, memory and maintenance store
   assert.equal(f.m.loadCoreAcceptance(':memory:'),null);
  }finally{f.close();}
 });
+
+
+test('initial verification respects owner approval order, including equality, without rewriting data', async () => {
+ const f=await fixture();try {
+  f.activate();const initialPath=join(f.custody,'initial-verification.json');
+  const initial=JSON.parse(readFileSync(initialPath,'utf8')),before=readFileSync(f.filename);
+  for(const offset of [-1,0,1]) {
+   initial.checkedAt=new Date(Date.parse(f.record.ownerApprovedAt)+offset).toISOString();
+   const raw=f.m.canonical(initial)+'\n';writeFileSync(initialPath,raw);
+   f.record.activation.initialVerificationSha256=f.m.digest(raw);f.install();
+   if(offset<0)assert.throws(()=>f.m.loadCoreAcceptance(f.filename),/INITIAL_VERIFICATION$/);
+   else assert.equal(f.m.loadCoreAcceptance(f.filename).prepared,false);
+   assert.deepEqual(readFileSync(f.filename),before);
+  }
+ }finally{f.close();}
+});
+
+test('startup validates full V1 compatibility and V2 projection payloads without repair', async () => {
+ for(const [name,change] of [
+  ['schedule-v1-compat',p=>{delete p.tasks;}],
+  ['schedule-v1-compat',p=>{p.tasks={};}],
+  ['schedule-v2',p=>{delete p.requests;}],
+  ['schedule-v2',p=>{p.scheduleItems={};}],
+  ['schedule-v2',p=>{p.productionRuns=[{}];}],
+ ]) {
+  const f=await fixture();try {
+   const db=new DatabaseSync(f.filename),row=db.prepare('SELECT payload_json FROM snapshot_projections WHERE projection_name=?').get(name);
+   const payload=JSON.parse(row.payload_json);change(payload);
+   db.prepare('UPDATE snapshot_projections SET payload_json=? WHERE projection_name=?').run(JSON.stringify(payload),name);db.close();
+   f.record.baseline.sha256=f.m.digest(readFileSync(f.filename));f.install();const before=readFileSync(f.filename);
+   assert.throws(()=>f.server(),/INITIALIZATION_PROJECTIONS/);
+   f.activate();assert.throws(()=>f.server('enabled'),/INITIALIZATION_PROJECTIONS/);
+   assert.deepEqual(readFileSync(f.filename),before);
+  }finally{f.close();}
+ }
+});
+
+test('startup retains V1 grandfathered compatibility extensions and accepts valid V2', async () => {
+ const f=await fixture();try {
+  const db=new DatabaseSync(f.filename),row=db.prepare("SELECT payload_json FROM snapshot_projections WHERE projection_name='schedule-v1-compat'").get();
+  const payload=JSON.parse(row.payload_json);payload.legacyDisplayNote='synthetic preserved extension';
+  const {validateV1Snapshot}=await import('../src/contract-validator.mjs');
+  assert.equal(validateV1Snapshot(payload).ok,false);
+  assert.equal(validateV1Snapshot(payload,{profile:'legacy-read'}).classification,'L1_GRANDFATHERED_OPAQUE');
+  db.prepare("UPDATE snapshot_projections SET payload_json=? WHERE projection_name='schedule-v1-compat'").run(JSON.stringify(payload));db.close();
+  f.record.baseline.sha256=f.m.digest(readFileSync(f.filename));f.install();const before=readFileSync(f.filename);
+  assert.equal(f.m.loadCoreAcceptance(f.filename).prepared,true);f.activate();assert.equal(f.m.loadCoreAcceptance(f.filename).prepared,false);
+  assert.deepEqual(readFileSync(f.filename),before);
+ }finally{f.close();}
+});
