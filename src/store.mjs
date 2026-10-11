@@ -12,6 +12,11 @@ import {
 } from './write-admission-v1.mjs';
 import { assertG3AuthorityReconciliationStartupAllowed } from './g3-authority-reconciliation-startup-gate-v1.mjs';
 
+function coreRecoveryDisabled() {
+  return Object.freeze({ ok: true, skipped: true, code: 'G3_CORE_ACCEPTANCE_CLEANUP_DISABLED',
+    restored: 0, removed: 0, restoreErrors: 0, cleanupErrors: 0, errors: 0 });
+}
+
 function isoNow(clock) {
   return clock().toISOString();
 }
@@ -436,6 +441,7 @@ export class ScheduleStore {
   }
 
   recoverStagedUploadCleanup({ allowDelete = true } = {}) {
+    if (this.#coreAccepted) return coreRecoveryDisabled();
     if (this.writeAdmissionControl.isDisabled()) {
       return Object.freeze({
         ok: false,
@@ -466,6 +472,7 @@ export class ScheduleStore {
   }
 
   #recoverStagedUploadCleanupLocked({ allowDelete = false } = {}) {
+    if (this.#coreAccepted) return coreRecoveryDisabled();
     if (!this.uploadRoot || !this.cleanupRoot || !existsSync(this.cleanupRoot)) {
       return { ok: true, restored: 0, removed: 0, restoreErrors: 0, cleanupErrors: 0, errors: 0 };
     }

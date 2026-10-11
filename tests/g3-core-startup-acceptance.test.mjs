@@ -106,3 +106,23 @@ test('expired first window denies PREPARED but a completed ACTIVE permits later 
   f.activate();assert.equal(f.m.validateCoreRecord(f.record,{now:future}).state,'ACTIVE');
  } finally { f.close(); }
 });
+
+
+test('ACTIVE ordinary submission and explicit recovery never inspect the cleanup staging area', async () => {
+ const f=await fixture();
+ try {
+  f.activate();const s=f.server('enabled');
+  try {
+   Object.defineProperty(s.store,'cleanupRoot',{get(){throw new Error('cleanup staging must remain untouched');}});
+   for (const allowDelete of [false,true]) {
+    const result=s.store.recoverStagedUploadCleanup({allowDelete});
+    assert.equal(result.skipped,true);assert.equal(result.code,'G3_CORE_ACCEPTANCE_CLEANUP_DISABLED');
+    assert.equal(result.restored,0);assert.equal(result.removed,0);
+   }
+   const result=s.store.submitRequest({role:'submitter',submission:{schemaVersion:1,
+    operationId:'core-normal-request-001',productionType:'平面',sku:'SYNTHETIC-SKU',name:'Synthetic request',
+    kind:'细节',shootingSubtype:'细节',aspectRatio:'1:1',deliver:'Synthetic deliverable',requestedBy:'Synthetic user'}});
+   assert.equal(result.status,201,JSON.stringify(result));
+  } finally { s.store.close(); }
+ } finally { f.close(); }
+});
