@@ -26,16 +26,31 @@ export function canonical(value) {
 }
 export function sourceDigest() {
   const files = [];
-  function walk(path, prefix = '') {
+  let entries = 0, bytes = 0;
+  function walk(path, prefix, depth = 0) {
+    const directory = lstatSync(path);
+    need(!directory.isSymbolicLink(), 'SOURCE_LINK');
+    need(directory.isDirectory(), 'SOURCE_TYPE');
+    need(depth <= 16, 'SOURCE_LIMIT');
     for (const name of readdirSync(path).sort()) {
+      need(++entries <= 4096, 'SOURCE_LIMIT');
       const full = join(path, name), label = prefix + name, st = lstatSync(full);
       need(!st.isSymbolicLink(), 'SOURCE_LINK');
-      if (st.isDirectory()) walk(full, label + '/');
-      else { need(st.isFile(), 'SOURCE_TYPE'); files.push([label, digest(readFileSync(full))]); }
+      if (st.isDirectory()) walk(full, label + '/', depth + 1);
+      else {
+        need(st.isFile(), 'SOURCE_TYPE');
+        need(st.size <= 8 * 1024 * 1024 && bytes + st.size <= 64 * 1024 * 1024, 'SOURCE_LIMIT');
+        const content = readFileSync(full), after = lstatSync(full);
+        need(content.length === st.size && after.dev === st.dev && after.ino === st.ino
+          && after.size === st.size && after.mtimeMs === st.mtimeMs && after.ctimeMs === st.ctimeMs,
+        'SOURCE_CHANGED');
+        bytes += content.length;
+        files.push([label, digest(content)]);
+      }
     }
   }
-  walk(SOURCE);
-  files.push(['../contracts/g3-forward-reconciliation-exception.r3.schema.json', digest(readFileSync(SCHEMA))]);
+  // Fixed release roots, including schemas loaded at runtime and served browser assets.
+  for (const name of ['src', 'contracts', 'public']) walk(join(SOURCE, '..', name), name + '/');
   return digest(canonical(files));
 }
 function protectedDirectory(path) {

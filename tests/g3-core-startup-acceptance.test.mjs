@@ -21,6 +21,7 @@ async function fixture({ initialized = true } = {}) {
   mkdirSync(app); mkdirSync(custody,{mode:0o700});
   cpSync(new URL('../src',import.meta.url),join(app,'src'),{recursive:true});
   cpSync(new URL('../contracts',import.meta.url),join(app,'contracts'),{recursive:true});
+  cpSync(new URL('../public',import.meta.url),join(app,'public'),{recursive:true});
   cpSync(new URL('../docs',import.meta.url),join(app,'docs'),{recursive:true});
   symlinkSync(new URL('../node_modules',import.meta.url).pathname,join(app,'node_modules'));
   const modulePath=join(app,'src/g3-core-startup-acceptance.mjs');
@@ -219,5 +220,38 @@ test('read-only initialization snapshot validates immutable receipt semantics an
    x=>x.projections[0].updated_at='2000-01-01T00:00:00.000Z',
   ]) {const damaged=structuredClone(state);change(damaged);assert.throws(()=>f.m.validateCoreInitializationSnapshot(damaged),/INITIALIZATION_/);}
   assert.deepEqual(readFileSync(f.filename),before);
+ }finally{f.close();}
+});
+
+
+test('release digest deterministically binds runtime contracts and served public assets', async () => {
+ const f=await fixture();try {
+  const original=f.m.sourceDigest();assert.equal(original,f.m.sourceDigest());
+  for(const file of ['contracts/g3-forward-reconciliation-exception.r3.schema.json','contracts/request-submission.schema.json','public/manage.js','public/manage.css','public/manage.html']) {
+   const path=join(f.app,file);const before=readFileSync(path);
+   try {writeFileSync(path,Buffer.concat([before,Buffer.from('\n')]));
+    assert.notEqual(f.m.sourceDigest(),original);
+    assert.throws(()=>f.m.loadCoreAcceptance(f.filename),/CODE_CHANGED/);
+    f.activate();assert.throws(()=>f.m.loadCoreAcceptance(f.filename),/CODE_CHANGED/);
+   }finally{writeFileSync(path,before);}
+   assert.equal(f.m.sourceDigest(),original);
+  }
+  const added=join(f.app,'public','new-release-file.txt');writeFileSync(added,'ordinary release change');
+  assert.notEqual(f.m.sourceDigest(),original);rmSync(added);assert.equal(f.m.sourceDigest(),original);
+  const removed=join(f.app,'public','manage.css'), saved=readFileSync(removed);rmSync(removed);
+  assert.notEqual(f.m.sourceDigest(),original);writeFileSync(removed,saved);assert.equal(f.m.sourceDigest(),original);
+  assert.equal(f.m.loadCoreAcceptance(f.filename).prepared,false);
+ }finally{f.close();}
+});
+
+test('release digest rejects links and over-limit local release files', async () => {
+ const f=await fixture();try {
+  const link=join(f.app,'public','linked-file');symlinkSync(join(f.app,'public','manage.js'),link);
+  assert.throws(()=>f.m.sourceDigest(),/SOURCE_LINK/);rmSync(link);
+  const large=join(f.app,'contracts','oversized-local-fixture');writeFileSync(large,Buffer.alloc(8*1024*1024+1));
+  assert.throws(()=>f.m.sourceDigest(),/SOURCE_LIMIT/);rmSync(large);
+  let nested=join(f.app,'public');for(let i=0;i<17;i++){nested=join(nested,'nested');mkdirSync(nested);}
+  assert.throws(()=>f.m.sourceDigest(),/SOURCE_LIMIT/);rmSync(join(f.app,'public','nested'),{recursive:true});
+  assert.equal(f.m.sourceDigest(),f.record.release.sourceSha256);
  }finally{f.close();}
 });
