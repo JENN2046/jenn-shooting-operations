@@ -401,3 +401,47 @@ test('startup retains V1 grandfathered compatibility extensions and accepts vali
   assert.deepEqual(readFileSync(f.filename),before);
  }finally{f.close();}
 });
+
+
+test('V1 L2 projections are not startup-ready despite legacy-read ok, with no PREPARED or ACTIVE writes', async () => {
+ const {validateV1Snapshot}=await import('../src/contract-validator.mjs');
+ for(const change of [p=>{p.projectionRevision=0;},p=>{p.products=[['incomplete synthetic product']];}]) {
+  const f=await fixture();try {
+   const db=new DatabaseSync(f.filename);
+   const payload=JSON.parse(db.prepare("SELECT payload_json FROM snapshot_projections WHERE projection_name='schedule-v1-compat'").get().payload_json);
+   change(payload);const validation=validateV1Snapshot(payload,{profile:'legacy-read'});
+   assert.equal(validation.ok,true);assert.equal(validation.switchReady,false);
+   assert.equal(validation.classification,'L2_REPAIR_REQUIRED');
+   db.prepare("UPDATE snapshot_projections SET payload_json=? WHERE projection_name='schedule-v1-compat'").run(JSON.stringify(payload));db.close();
+   f.record.baseline.sha256=f.m.digest(readFileSync(f.filename));f.install();const before=readFileSync(f.filename);
+   assert.throws(()=>f.server(),/INITIALIZATION_PROJECTIONS/);
+   assert.deepEqual(readFileSync(f.filename),before);
+   f.activate();assert.throws(()=>f.server('enabled'),/INITIALIZATION_PROJECTIONS/);
+   assert.deepEqual(readFileSync(f.filename),before);
+  }finally{f.close();}
+ }
+});
+
+test('V1 L0 and L1 startup-ready projections retain compatibility and normal restart', async () => {
+ const {validateV1Snapshot}=await import('../src/contract-validator.mjs');
+ for(const classification of ['L0_STRICT','L1_GRANDFATHERED_OPAQUE']) {
+  const f=await fixture();try {
+   const db=new DatabaseSync(f.filename);
+   const payload=JSON.parse(db.prepare("SELECT payload_json FROM snapshot_projections WHERE projection_name='schedule-v1-compat'").get().payload_json);
+   if(classification==='L1_GRANDFATHERED_OPAQUE')payload.legacyDisplayNote='synthetic preserved extension';
+   const validation=validateV1Snapshot(payload,{profile:'legacy-read'});
+   assert.equal(validation.ok,true);assert.equal(validation.switchReady,true);assert.equal(validation.classification,classification);
+   db.prepare("UPDATE snapshot_projections SET payload_json=? WHERE projection_name='schedule-v1-compat'").run(JSON.stringify(payload));db.close();
+   f.record.baseline.sha256=f.m.digest(readFileSync(f.filename));f.install();const before=readFileSync(f.filename);
+   const prepared=f.server();assert.equal(prepared.store.readOnly,true);prepared.store.close();
+   assert.deepEqual(readFileSync(f.filename),before);
+   f.activate();assert.equal(f.m.loadCoreAcceptance(f.filename).prepared,false);
+   assert.deepEqual(readFileSync(f.filename),before);
+   for(let i=0;i<2;i++) {const active=f.server('enabled');
+    assert.equal(active.store.readOnly,false);
+    assert.deepEqual(JSON.parse(active.store.db.prepare("SELECT payload_json FROM snapshot_projections WHERE projection_name='schedule-v1-compat'").get().payload_json),payload);
+    active.store.close();
+   }
+  }finally{f.close();}
+ }
+});
