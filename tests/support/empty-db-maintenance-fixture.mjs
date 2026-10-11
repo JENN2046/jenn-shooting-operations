@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { resolveOrphanCleanupControlRoot } from '../../src/store.mjs';
 import { createOrphanCleanupControl } from '../../src/orphan-cleanup-control.mjs';
 import { initializeWritableSchema, MIGRATIONS } from '../../src/sqlite-schema-v2.mjs';
-import { bindLocalEmptyDbMaintenanceTargetV1, EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1,
+import { bindLocalEmptyDbMaintenanceTargetV1, EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1, EMPTY_DB_MAINTENANCE_SCHEMA11_DIGEST_V1,
   digestEmptyDbMaintenancePacketV1, executeLocalEmptyDbMaintenanceV1 } from '../../src/empty-db-maintenance-v1.mjs';
 import { digestResourceCapabilitiesV1 } from '../../src/scheduling-contract-v1.mjs';
 import { normalizeSchedulingConfigV1, SCHEDULING_CALENDAR_COMPILER_VERSION_V1 } from '../../src/scheduling-admin-contract-v1.mjs';
@@ -17,10 +17,11 @@ export function authorizationFor(packet) {
     packetDigest: digestEmptyDbMaintenancePacketV1(packet), writeAdmission: 'disabled',
     cleanup: 'disabled', kiosk: 'disabled', writersStopped: true };
 }
-export function maintenanceFixture(runtime = syntheticRuntime) {
+export function maintenanceFixture(runtime = syntheticRuntime, { schemaVersion = 10 } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'jso-empty-maintenance-'));
   mkdirSync(join(root, 'uploads'));
-  // Legacy maintenance is deliberately pinned to schema10; normal runtime now migrates to11.
+  // Explicit fixture version; production data is never inferred from these empty seeds.
+  if (![10, 11].includes(schemaVersion)) throw new Error('FIXTURE_SCHEMA_VERSION');
   const filename = join(root, 'synthetic.sqlite');
   mkdirSync(join(root, 'uploads', '.cleanup'));
   const control = createOrphanCleanupControl({ controlRoot: resolveOrphanCleanupControlRoot({filename}) });
@@ -28,7 +29,7 @@ export function maintenanceFixture(runtime = syntheticRuntime) {
   const bootstrap = new DatabaseSync(filename);
   try {
     bootstrap.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON');
-    initializeWritableSchema(bootstrap, {migrations:MIGRATIONS.slice(0,10)});
+    initializeWritableSchema(bootstrap, {migrations:MIGRATIONS.slice(0,schemaVersion)});
     const at = new Date().toISOString();
     bootstrap.prepare('INSERT INTO schedule_state VALUES (1,0,?,?)').run(at,JSON.stringify({schemaVersion:1,revision:0,updatedAt:at,products:[],tasks:[],sessions:[]}));
   } finally {bootstrap.close();}
@@ -36,7 +37,7 @@ export function maintenanceFixture(runtime = syntheticRuntime) {
   const packet = (kind = 'initialize', command = null, expected = { scheduleRevision: 0, projectionRevision: 0 }) =>
     ({ schemaVersion: 1, operationId: command?.operationId ?? 'LOCAL-INIT-01', kind,
       actor: 'local:maintenance-owner', approvalRef: 'local:synthetic-review-r1',
-      target, runtime, schemaDigest: EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1,
+      target, runtime, schemaDigest: schemaVersion === 11 ? EMPTY_DB_MAINTENANCE_SCHEMA11_DIGEST_V1 : EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1,
       businessTimeZone: 'Asia/Shanghai', expected, command });
   function execute(value = packet(), overrides = {}) {
     return executeLocalEmptyDbMaintenanceV1({ packet: value, authorization: authorizationFor(value),

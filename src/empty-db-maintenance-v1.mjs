@@ -19,6 +19,14 @@ const digest = value => digestCanonicalJsonSchedulingV1(value);
 const json = value => canonicalJsonSchedulingV1(value);
 export const EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1 = digest(MIGRATIONS.slice(0, 10).map(({ version, name, checksum }) =>
   ({ version, name, checksum })));
+// Separate exact schema binding: old Schema10 packets never admit a Schema11 database.
+export const EMPTY_DB_MAINTENANCE_SCHEMA11_DIGEST_V1 = digest(MIGRATIONS.slice(0, 11).map(({ version, name, checksum }) =>
+  ({ version, name, checksum })));
+function maintenanceSchemaVersion(packet) {
+  if (packet.schemaDigest === EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1) return 10;
+  if (packet.schemaDigest === EMPTY_DB_MAINTENANCE_SCHEMA11_DIGEST_V1) return 11;
+  fail('MAINTENANCE_PACKET_INVALID');
+}
 export function digestEmptyDbMaintenancePacketV1(packet) { return digest(packet); }
 function fail(code) { const error = new Error(code); error.code = code; throw error; }
 function requireValue(condition, code) { if (!condition) fail(code); }
@@ -98,9 +106,11 @@ function validate(packet, authorization, runtime, offline = false) {
     && (packet.kind === 'initialize' || Object.hasOwn(normalizers, packet.kind))
     && Object.values(packet.expected).every(value => Number.isSafeInteger(value) && value >= 0)
     && packet.businessTimeZone === 'Asia/Shanghai'
-    && packet.schemaDigest === EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1
+    && [EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1, EMPTY_DB_MAINTENANCE_SCHEMA11_DIGEST_V1].includes(packet.schemaDigest)
     && /^[a-f0-9]{40}$/u.test(packet.runtime.sourceRevision)
     && /^sha256:[a-f0-9]{64}$/u.test(packet.runtime.imageId), 'MAINTENANCE_PACKET_INVALID');
+  requireValue(maintenanceSchemaVersion(packet) !== 11 || packet.kind === 'initialize',
+    'MAINTENANCE_SCHEMA11_INITIALIZE_ONLY');
   requireValue(json(packet.runtime) === json(runtime), 'MAINTENANCE_RUNTIME_MISMATCH');
   requireValue(authorization.scope === (offline ? 'OFFLINE_ADAPTER_TRUST_PORT' : 'LOCAL_SYNTHETIC')
     && authorization.actor === packet.actor && authorization.approvalRef === packet.approvalRef
@@ -132,7 +142,7 @@ function binding(packet) {
     businessTimeZone: packet.businessTimeZone, actor: packet.actor,
     ...(packet.adapterBinding ? { adapterBinding: packet.adapterBinding } : {}) };
 }
-function assertTarget(packet, offline = false) {
+function assertTarget(packet, offline = false, { allowRollbackJournal = false } = {}) {
   requireValue(json(offline ? bindOfflineEmptyDbMaintenanceTargetV1() : bindLocalEmptyDbMaintenanceTargetV1(packet.target.root)) === json(packet.target),
     'MAINTENANCE_TARGET_MISMATCH');
   const uploads = join(packet.target.root, 'uploads');
@@ -140,18 +150,19 @@ function assertTarget(packet, offline = false) {
   metadata(join(uploads, '.cleanup'), true);
   requireValue(readdirSync(join(uploads, '.cleanup')).length === 0, 'MAINTENANCE_UPLOADS_NOT_EMPTY');
   const name = offline ? 'shooting-operations.sqlite' : 'synthetic.sqlite';
-  const allowed = new Set([name, `${name}-wal`, `${name}-shm`, 'uploads', '.orphan-cleanup-control']);
+  const allowed = new Set([name, `${name}-wal`, `${name}-shm`, 'uploads', '.orphan-cleanup-control',
+    ...(allowRollbackJournal ? [`${name}-journal`] : [])]);
   requireValue(readdirSync(packet.target.root).every(name => allowed.has(name)), 'MAINTENANCE_STORAGE_NOT_EMPTY');
-  for (const suffix of ['-wal', '-shm']) {
+  for (const suffix of ['-wal', '-shm', ...(allowRollbackJournal ? ['-journal'] : [])]) {
     const path = join(packet.target.root, `${name}${suffix}`);
     // SQLite may remove disposable sidecars when a concurrent last connection closes.
     // An absent sidecar is permitted; existing links or ambiguous files still fail.
     try { metadata(path, false); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
 }
-function assertSchema(db) {
-  const known = assertKnownSchema(db, { migrations: MIGRATIONS.slice(0, 10) });
-  requireValue(known.version === 10,
+function assertSchema(db, expectedVersion) {
+  const known = assertKnownSchema(db, { migrations: MIGRATIONS.slice(0, expectedVersion) });
+  requireValue(known.version === expectedVersion,
     'MAINTENANCE_SCHEMA_UNSUPPORTED');
   requireValue(db.prepare('PRAGMA integrity_check').get().integrity_check === 'ok'
     && db.prepare('PRAGMA foreign_key_check').all().length === 0, 'MAINTENANCE_DATABASE_INVALID');
@@ -282,18 +293,19 @@ function executeMaintenance({ packet, authorization, runtime,
   // Seal caller objects before entering filesystem/SQLite code; never rewrite or infer fields.
   validate(packet, authorization, runtime, offline);
   packet = JSON.parse(json(packet));
+  const expectedSchemaVersion = maintenanceSchemaVersion(packet);
   const packetDigest = digest(packet);
   assertTarget(packet, offline);
   const databasePath = join(packet.target.root, offline ? 'shooting-operations.sqlite' : 'synthetic.sqlite');
   const readonly = new DatabaseSync(databasePath, { readOnly: true });
-  try { readonly.exec('PRAGMA busy_timeout = 5000'); assertSchema(readonly); } finally { readonly.close(); }
+  try { readonly.exec('PRAGMA busy_timeout = 5000'); assertSchema(readonly, expectedSchemaVersion); } finally { readonly.close(); }
   assertTarget(packet, offline);
   const db = new DatabaseSync(databasePath);
   try {
     db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; BEGIN IMMEDIATE;');
     let commitAttempted = false;
     try {
-      assertTarget(packet, offline); assertSchema(db);
+      assertTarget(packet, offline); assertSchema(db, expectedSchemaVersion);
       assertSchedulingQuiescenceV1({ db, now });
       const initial = db.prepare('SELECT * FROM empty_db_initialization WHERE id = 1').get();
       const at = now().toISOString();
@@ -357,7 +369,10 @@ function executeMaintenance({ packet, authorization, runtime,
         }
       }
       beforeCommit({ db, response });
-      assertTarget(packet, offline);
+      // Only the current Schema11 transaction may create a rollback journal.
+      // A pre-existing journal still fails the pre-open target check.
+      assertTarget(packet, offline, { allowRollbackJournal: expectedSchemaVersion === 11
+        && db.isTransaction && db.prepare('PRAGMA journal_mode').get().journal_mode === 'delete' });
       // The offline helper performs a final local deadline check after all slow observations.
       beforeCommitDecision();
       commitAttempted = true;

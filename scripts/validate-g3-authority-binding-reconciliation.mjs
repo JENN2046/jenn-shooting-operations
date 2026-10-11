@@ -132,7 +132,7 @@ try {
     || !startupGate.includes('G3_AUTHORITY_RECONCILIATION_STARTUP_BLOCKED')
     || !startupGate.includes("record.status === 'RECONCILIATION_REQUIRED'")
     || server.split('assertG3AuthorityReconciliationStartupAllowed({ databasePath });').length - 1 < 2
-    || !store.includes('assertG3AuthorityReconciliationStartupAllowed({ databasePath: filename });')
+    || !store.includes('assertG3AuthorityReconciliationStartupAllowed({ databasePath: filename, readOnly });')
     || !compose.includes('WRITE_ADMISSION_MODE: ${WRITE_ADMISSION_MODE:-disabled}')
     || !compose.includes('ORPHAN_CLEANUP_MODE: ${ORPHAN_CLEANUP_MODE:-disabled}')
     || !dockerfile.includes('g3-authority-binding-reconciliation.r1.json')) {

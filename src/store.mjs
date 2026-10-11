@@ -12,6 +12,11 @@ import {
 } from './write-admission-v1.mjs';
 import { assertG3AuthorityReconciliationStartupAllowed } from './g3-authority-reconciliation-startup-gate-v1.mjs';
 
+function coreRecoveryDisabled() {
+  return Object.freeze({ ok: true, skipped: true, code: 'G3_CORE_ACCEPTANCE_CLEANUP_DISABLED',
+    restored: 0, removed: 0, restoreErrors: 0, cleanupErrors: 0, errors: 0 });
+}
+
 function isoNow(clock) {
   return clock().toISOString();
 }
@@ -286,6 +291,7 @@ function matchesSignature(contentType, buffer) {
 
 export class ScheduleStore {
   #orphanCleanupControl;
+  #coreAccepted = false;
   #database;
   #renameFile;
 
@@ -303,8 +309,17 @@ export class ScheduleStore {
     writeAdmissionMode = 'enabled',
     writeAdmissionControl,
   }) {
-    if (!readOnly) {
-      assertG3AuthorityReconciliationStartupAllowed({ databasePath: filename });
+    const startup = assertG3AuthorityReconciliationStartupAllowed({ databasePath: filename, readOnly });
+    const coreAccepted = startup.reason === 'PROSPECTIVE_CORE_ACCEPTANCE';
+    this.#coreAccepted = coreAccepted;
+    if (coreAccepted) {
+      if (orphanCleanupMode !== 'disabled' || resolve(uploadRoot || join(dirname(filename), 'uploads')) !== startup.target.uploadRoot) {
+        throw new Error('G3_CORE_ACCEPTANCE_STORE_CONFIG');
+      }
+      if (startup.prepared && (!readOnly || writeAdmissionMode !== 'disabled'
+          || (writeAdmissionControl && !writeAdmissionControl.isDisabled()))) {
+        throw new Error('G3_CORE_ACCEPTANCE_PREPARED_READ_ONLY_REQUIRED');
+      }
     }
     const cleanupMode = readOnly ? 'inherit' : normalizeOrphanCleanupMode(orphanCleanupMode);
     const admissionControl = writeAdmissionControl
@@ -317,8 +332,9 @@ export class ScheduleStore {
       throw new TypeError('disabled write admission requires disabled orphan cleanup');
     }
 
-    if (!readOnly && filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
-    this.uploadRoot = uploadRoot || (filename === ':memory:' ? null : join(dirname(filename), 'uploads'));
+    if (!coreAccepted && !readOnly && filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
+    this.uploadRoot = coreAccepted ? startup.target.uploadRoot
+      : uploadRoot || (filename === ':memory:' ? null : join(dirname(filename), 'uploads'));
     this.cleanupRoot = this.uploadRoot ? join(this.uploadRoot, '.cleanup') : null;
     this.cleanupControlRoot = resolveOrphanCleanupControlRoot({
       filename,
@@ -350,8 +366,8 @@ export class ScheduleStore {
       }
     }
 
-    if (!readOnly && this.uploadRoot) mkdirSync(this.uploadRoot, { recursive: true });
-    if (!readOnly && this.cleanupRoot) mkdirSync(this.cleanupRoot, { recursive: true });
+    if (!coreAccepted && !readOnly && this.uploadRoot) mkdirSync(this.uploadRoot, { recursive: true });
+    if (!coreAccepted && !readOnly && this.cleanupRoot) mkdirSync(this.cleanupRoot, { recursive: true });
 
     const database = new DatabaseSync(filename, { readOnly });
     const bootstrapDb = createAdmissionCheckedDatabaseFacade(
@@ -364,18 +380,20 @@ export class ScheduleStore {
     } else {
       enableWalWithBusyRetry(bootstrapDb);
       bootstrapDb.exec('PRAGMA foreign_keys = ON;');
-      initializeRuntimeWritableSchema(bootstrapDb, { now: this.clock });
-      transaction(bootstrapDb, () => {
-        const current = bootstrapDb.prepare('SELECT id FROM schedule_state WHERE id = 1').get();
-        if (current) return;
-        const now = isoNow(this.clock);
-        const snapshot = { schemaVersion: 1, revision: 0, updatedAt: now, products: [], tasks: [], sessions: [] };
-        bootstrapDb.prepare(`
-          INSERT INTO schedule_state (id, revision, updated_at, snapshot_json)
-          VALUES (1, 0, ?, ?)
-          ON CONFLICT(id) DO NOTHING
-        `).run(now, JSON.stringify(snapshot));
-      });
+      if (!coreAccepted) {
+        initializeRuntimeWritableSchema(bootstrapDb, { now: this.clock });
+        transaction(bootstrapDb, () => {
+          const current = bootstrapDb.prepare('SELECT id FROM schedule_state WHERE id = 1').get();
+          if (current) return;
+          const now = isoNow(this.clock);
+          const snapshot = { schemaVersion: 1, revision: 0, updatedAt: now, products: [], tasks: [], sessions: [] };
+          bootstrapDb.prepare(`
+            INSERT INTO schedule_state (id, revision, updated_at, snapshot_json)
+            VALUES (1, 0, ?, ?)
+            ON CONFLICT(id) DO NOTHING
+          `).run(now, JSON.stringify(snapshot));
+        });
+      }
     }
 
     this.#database = database;
@@ -386,7 +404,7 @@ export class ScheduleStore {
       configurable: false,
     });
 
-    if (readOnly) return;
+    if (readOnly || coreAccepted) return;
     if (cleanupMode === 'enabled') {
       const enabled = this.#orphanCleanupControl.enable({ expectedEpoch: orphanCleanupEnableEpoch });
       if (!enabled.ok) {
@@ -408,6 +426,7 @@ export class ScheduleStore {
   }
 
   enableOrphanCleanup(options) {
+    if (this.#coreAccepted) throw new Error('G3_CORE_ACCEPTANCE_CLEANUP_DISABLED');
     if (this.writeAdmissionControl.isDisabled()) {
       return Object.freeze({
         ok: false,
@@ -423,6 +442,7 @@ export class ScheduleStore {
   }
 
   recoverStagedUploadCleanup({ allowDelete = true } = {}) {
+    if (this.#coreAccepted) return coreRecoveryDisabled();
     if (this.writeAdmissionControl.isDisabled()) {
       return Object.freeze({
         ok: false,
@@ -453,6 +473,7 @@ export class ScheduleStore {
   }
 
   #recoverStagedUploadCleanupLocked({ allowDelete = false } = {}) {
+    if (this.#coreAccepted) return coreRecoveryDisabled();
     if (!this.uploadRoot || !this.cleanupRoot || !existsSync(this.cleanupRoot)) {
       return { ok: true, restored: 0, removed: 0, restoreErrors: 0, cleanupErrors: 0, errors: 0 };
     }
