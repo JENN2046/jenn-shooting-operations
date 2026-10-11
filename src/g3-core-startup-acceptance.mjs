@@ -100,6 +100,18 @@ export function validateCoreRecord(record, { now = Date.now() } = {}) {
   }
   return record;
 }
+function validateCoreUploadRoot(target) {
+  const path = target.uploadRoot;
+  let st, canonicalPath;
+  try {
+    st = lstatSync(path);
+    canonicalPath = realpathSync(path);
+  } catch { fail('UPLOAD_IDENTITY'); }
+  need(resolve(path) === path && canonicalPath === path
+    && st.isDirectory() && !st.isSymbolicLink()
+    && st.dev === target.uploadIdentity.device && st.ino === target.uploadIdentity.inode,
+  'UPLOAD_IDENTITY');
+}
 export function validateCoreDatabase(record, filename) {
   need(resolve(filename) === record.target.databasePath && realpathSync(filename) === record.target.databasePath, 'DATABASE_PATH');
   const st = lstatSync(filename), identity = record.target.databaseIdentity;
@@ -208,6 +220,8 @@ export function loadCoreAcceptance(databasePath) {
   need(process.env.KIOSK_SERVICE_CONTEXT === 'PROD11_PRODUCTION'
     && process.env.JSO_BUSINESS_RUNTIME === 'enabled'
     && process.env.ORPHAN_CLEANUP_MODE === 'disabled', 'CORE_SCOPE');
+  // Check the approved attachment root before opening the store or creating anything.
+  validateCoreUploadRoot(record.target);
   validateCoreDatabase(record, databasePath);
   return Object.freeze({ allowed: true, reason: 'PROSPECTIVE_CORE_ACCEPTANCE',
     prepared: state === 'PREPARED', target: Object.freeze(record.target), acceptanceId: record.acceptanceId });

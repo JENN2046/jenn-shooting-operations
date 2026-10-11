@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync, readdirSync, symlinkSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync, readdirSync, symlinkSync, renameSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
@@ -34,7 +34,7 @@ async function fixture({ initialized = true } = {}) {
   const env={KIOSK_SERVICE_CONTEXT:'PROD11_PRODUCTION',JSO_BUSINESS_RUNTIME:'enabled',ORPHAN_CLEANUP_MODE:'disabled',JSO_BUSINESS_IDENTITIES_JSON:JSON.stringify([{token:'a'.repeat(40),subjectId:'test-admin',role:'administrator',resourceIds:['JSO-BIZ-RESOURCE-001']}]),UPLOAD_ROOT:uploads};
   const saved=Object.fromEntries(Object.keys(env).map(k=>[k,process.env[k]]));Object.assign(process.env,env);
   const m=await import(pathToFileURL(modulePath)); const st=statSync(filename), now=Date.now(), h='a'.repeat(64);
-  const record={version:3,purpose:'CORE_SCHEMA11_PROSPECTIVE_ACCEPTANCE',acceptanceId:'SYNTHETIC-ONLY',state:'PREPARED',ownerSource:'SYNTHETIC TEST FIXTURE - NOT OWNER APPROVAL',ownerApprovedAt:new Date(now-1000).toISOString(),ownerTextSha256:m.digest('SYNTHETIC ONLY\n'),planSha256:h,release:{head:'a'.repeat(40),tree:'b'.repeat(40),imageDigest:'sha256:'+h,sourceSha256:m.sourceDigest()},target:{hostId:'synthetic-host',service:'synthetic-core',volumeName:'synthetic-volume',volumeSource:root,mountPoint:root,databasePath:filename,databaseIdentity:{device:st.dev,inode:st.ino},uploadRoot:uploads},baseline:{schemaVersion:11,sha256:m.digest(readFileSync(filename)),sideFiles:'ABSENT_UNDER_EXCLUSIVE_MAINTENANCE',historicalEvidenceSha256:h,backupManifestSha256:h,restoreVerificationSha256:h},policy:{adminTrustAccepted:true,historicalCoverageRiskAccepted:true,sameTargetRestartAllowed:true,cleanup:'disabled',integrations:'disabled',runtimeConfigSha256:m.runtimeConfigDigest()},window:{start:new Date(now-10000).toISOString(),end:new Date(now+600000).toISOString()},activation:null};
+  const record={version:3,purpose:'CORE_SCHEMA11_PROSPECTIVE_ACCEPTANCE',acceptanceId:'SYNTHETIC-ONLY',state:'PREPARED',ownerSource:'SYNTHETIC TEST FIXTURE - NOT OWNER APPROVAL',ownerApprovedAt:new Date(now-1000).toISOString(),ownerTextSha256:m.digest('SYNTHETIC ONLY\n'),planSha256:h,release:{head:'a'.repeat(40),tree:'b'.repeat(40),imageDigest:'sha256:'+h,sourceSha256:m.sourceDigest()},target:{hostId:'synthetic-host',service:'synthetic-core',volumeName:'synthetic-volume',volumeSource:root,mountPoint:root,databasePath:filename,databaseIdentity:{device:st.dev,inode:st.ino},uploadRoot:uploads,uploadIdentity:{device:statSync(uploads).dev,inode:statSync(uploads).ino}},baseline:{schemaVersion:11,sha256:m.digest(readFileSync(filename)),sideFiles:'ABSENT_UNDER_EXCLUSIVE_MAINTENANCE',historicalEvidenceSha256:h,backupManifestSha256:h,restoreVerificationSha256:h},policy:{adminTrustAccepted:true,historicalCoverageRiskAccepted:true,sameTargetRestartAllowed:true,cleanup:'disabled',integrations:'disabled',runtimeConfigSha256:m.runtimeConfigDigest()},window:{start:new Date(now-10000).toISOString(),end:new Date(now+600000).toISOString()},activation:null};
   function install(){const {state,activation,...scope}=record; const json=(n,v)=>writeFileSync(join(custody,n),m.canonical(v)+'\n',{mode:0o644});json('acceptance.json',record);json('owner-approval.json',{acceptanceScopeSha256:m.digest(m.canonical(scope)),ownerSource:record.ownerSource,ownerApprovedAt:record.ownerApprovedAt,ownerTextSha256:record.ownerTextSha256});writeFileSync(join(custody,'owner-approval.txt'),'SYNTHETIC ONLY\n',{mode:0o644});json('installation.json',{acceptanceSha256:m.digest(m.canonical(record)+'\n'),release:record.release,target:record.target,runtimeConfigSha256:record.policy.runtimeConfigSha256,installedBy:'synthetic-fixture'});}
   function activate(){record.state='ACTIVE';const {state,activation,...scope}=record;const checkedAt=new Date().toISOString();const initial={acceptanceScopeSha256:m.digest(m.canonical(scope)),baselineSha256:record.baseline.sha256,checkedAt,schemaVersion:11,integrityOk:true,foreignKeyViolations:0,backupRestoreVerified:true,exclusiveMaintenance:true,initialized:true};const raw=m.canonical(initial)+'\n';writeFileSync(join(custody,'initial-verification.json'),raw,{mode:0o644});record.activation={acceptedAt:checkedAt,installedBy:'synthetic-fixture',initialVerificationSha256:m.digest(raw)};install();}
   const evidence='SYNTHETIC EVIDENCE ONLY\n';
@@ -65,7 +65,7 @@ test('ACTIVE persists business calendar through changed digest and independent-p
 test('missing approval, wrong object/version, incomplete activation, damaged records and drift fail closed',async()=>{
  const f=await fixture();try{
  assert.equal(f.m.loadCoreAcceptance(f.filename).prepared,true);
- for(const mutate of [r=>r.version=4,r=>r.state='COMMITTING',r=>r.state='ACTIVE',r=>r.target.databaseIdentity.inode++,r=>r.target.databasePath+='.wrong',r=>r.release.sourceSha256='b'.repeat(64),r=>r.policy.runtimeConfigSha256='b'.repeat(64),r=>r.window.end=r.window.start]){const original=structuredClone(f.record);mutate(f.record);f.install();assert.throws(()=>f.m.loadCoreAcceptance(f.filename));Object.keys(f.record).forEach(k=>delete f.record[k]);Object.assign(f.record,original);}
+ for(const mutate of [r=>r.version=4,r=>r.state='COMMITTING',r=>r.state='ACTIVE',r=>r.target.databaseIdentity.inode++,r=>r.target.uploadIdentity.inode++,r=>r.target.uploadIdentity.device++,r=>r.target.uploadRoot+='/.' ,r=>delete r.target.uploadIdentity,r=>r.target.databasePath+='.wrong',r=>r.release.sourceSha256='b'.repeat(64),r=>r.policy.runtimeConfigSha256='b'.repeat(64),r=>r.window.end=r.window.start]){const original=structuredClone(f.record);mutate(f.record);f.install();assert.throws(()=>f.m.loadCoreAcceptance(f.filename));Object.keys(f.record).forEach(k=>delete f.record[k]);Object.assign(f.record,original);}
  f.install();rmSync(join(f.custody,'owner-approval.json'));assert.throws(()=>f.m.loadCoreAcceptance(f.filename));f.install();writeFileSync(join(f.custody,'acceptance.json'),'{');assert.throws(()=>f.m.loadCoreAcceptance(f.filename));
  }finally{f.close();}
 });
@@ -253,5 +253,37 @@ test('release digest rejects links and over-limit local release files', async ()
   let nested=join(f.app,'public');for(let i=0;i<17;i++){nested=join(nested,'nested');mkdirSync(nested);}
   assert.throws(()=>f.m.sourceDigest(),/SOURCE_LIMIT/);rmSync(join(f.app,'public','nested'),{recursive:true});
   assert.equal(f.m.sourceDigest(),f.record.release.sourceSha256);
+ }finally{f.close();}
+});
+
+
+test('accepted attachment roots must exist with the approved canonical directory identity before startup writes', async () => {
+ for(const state of ['PREPARED','ACTIVE']) for(const replacement of ['missing','directory','symlink','file']) {
+  const f=await fixture();try {
+   if(state==='ACTIVE')f.activate();
+   const before=readFileSync(f.filename), moved=join(f.root,'original-uploads');
+   renameSync(f.uploads,moved);
+   if(replacement==='directory'){mkdirSync(f.uploads);writeFileSync(join(f.uploads,'sentinel'),'unchanged');}
+   if(replacement==='symlink')symlinkSync(moved,f.uploads);
+   if(replacement==='file')writeFileSync(f.uploads,'ordinary non-directory fixture');
+   assert.throws(()=>f.server(state==='ACTIVE'?'enabled':'disabled'),/UPLOAD_IDENTITY/);
+   assert.deepEqual(readFileSync(f.filename),before);
+   assert.deepEqual(readdirSync(moved),['.cleanup']);
+   if(replacement==='missing')assert.equal(existsSync(f.uploads),false);
+   if(replacement==='directory')assert.deepEqual(readdirSync(f.uploads),['sentinel']);
+   if(replacement==='file')assert.equal(readFileSync(f.uploads,'utf8'),'ordinary non-directory fixture');
+  }finally{f.close();}
+ }
+});
+
+test('normal attachment creation preserves root identity and survives an independent accepted restart', async () => {
+ const f=await fixture();try {
+  f.activate();const before=statSync(f.uploads);const s=f.server('enabled');let saved;
+  try {saved=s.store.saveUpload({operationId:'core-attachment-001',originalName:'synthetic.txt',contentType:'text/plain',kind:'attachment',buffer:Buffer.from('Synthetic attachment only')});assert.equal(saved.status,201,JSON.stringify(saved));}
+  finally{s.store.close();}
+  const after=statSync(f.uploads);assert.equal(after.dev,before.dev);assert.equal(after.ino,before.ino);
+  const code=`import {ScheduleStore} from ${JSON.stringify(pathToFileURL(join(f.app,'src/store.mjs')).href)};import {readFileSync} from 'node:fs';import {join} from 'node:path';const s=new ScheduleStore({filename:${JSON.stringify(f.filename)},uploadRoot:${JSON.stringify(f.uploads)},orphanCleanupMode:'disabled'});try{const row=s.db.prepare('SELECT stored_name FROM uploads WHERE id=?').get(${JSON.stringify(saved.upload.id)});if(!row||readFileSync(join(s.uploadRoot,row.stored_name),'utf8')!=='Synthetic attachment only')process.exitCode=1;}finally{s.close();}`;
+  const child=spawnSync(process.execPath,['--input-type=module','-e',code],{encoding:'utf8'});assert.equal(child.status,0,child.stderr);
+  assert.equal(statSync(f.uploads).ino,before.ino);
  }finally{f.close();}
 });

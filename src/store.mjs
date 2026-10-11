@@ -332,8 +332,9 @@ export class ScheduleStore {
       throw new TypeError('disabled write admission requires disabled orphan cleanup');
     }
 
-    if (!readOnly && filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
-    this.uploadRoot = uploadRoot || (filename === ':memory:' ? null : join(dirname(filename), 'uploads'));
+    if (!coreAccepted && !readOnly && filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
+    this.uploadRoot = coreAccepted ? startup.target.uploadRoot
+      : uploadRoot || (filename === ':memory:' ? null : join(dirname(filename), 'uploads'));
     this.cleanupRoot = this.uploadRoot ? join(this.uploadRoot, '.cleanup') : null;
     this.cleanupControlRoot = resolveOrphanCleanupControlRoot({
       filename,
@@ -365,8 +366,8 @@ export class ScheduleStore {
       }
     }
 
-    if (!readOnly && this.uploadRoot) mkdirSync(this.uploadRoot, { recursive: true });
-    if (!readOnly && this.cleanupRoot) mkdirSync(this.cleanupRoot, { recursive: true });
+    if (!coreAccepted && !readOnly && this.uploadRoot) mkdirSync(this.uploadRoot, { recursive: true });
+    if (!coreAccepted && !readOnly && this.cleanupRoot) mkdirSync(this.cleanupRoot, { recursive: true });
 
     const database = new DatabaseSync(filename, { readOnly });
     const bootstrapDb = createAdmissionCheckedDatabaseFacade(

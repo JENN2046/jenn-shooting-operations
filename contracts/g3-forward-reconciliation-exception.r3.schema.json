@@ -91,7 +91,8 @@
         "mountPoint",
         "databasePath",
         "databaseIdentity",
-        "uploadRoot"
+        "uploadRoot",
+        "uploadIdentity"
       ],
       "properties": {
         "hostId": {
@@ -146,6 +147,24 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 1024
+        },
+        "uploadIdentity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "device",
+            "inode"
+          ],
+          "properties": {
+            "device": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "inode": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
         }
       }
     },
