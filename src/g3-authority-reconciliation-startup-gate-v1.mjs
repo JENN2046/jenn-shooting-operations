@@ -1,3 +1,4 @@
+import { loadCoreAcceptance } from './g3-core-startup-acceptance.mjs';
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -91,7 +92,11 @@ export function isFrozenProductionDatabasePath(databasePath) {
 export function assertG3AuthorityReconciliationStartupAllowed({
   databasePath,
   reconciliationRecord,
+  readOnly = false,
 } = {}) {
+  const core = loadCoreAcceptance(databasePath);
+  if (core) return core;
+  if (readOnly) return Object.freeze({ allowed: true, reason: 'READ_ONLY' });
   if (!isFrozenProductionDatabasePath(databasePath)) {
     return Object.freeze({ allowed: true, reason: 'NON_PRODUCTION_DATABASE_PATH' });
   }

@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { createSqliteOutboxRepositoryV1 } from '../src/sqlite-outbox-repository-v1.mjs';
 import { buildScheduleConfirmedCardV1 } from '../src/dingtalk-card-builders-v1.mjs';
@@ -18,7 +21,7 @@ import { createSqliteSchedulingQuiescenceV1 } from '../src/sqlite-scheduling-qui
 const at = '2026-10-01T00:00:00.000Z';
 const principal = createTrustedPrincipal({ subjectId: 'Jenn', role: 'scheduler', resourceIds: ['PHOTO'] }).principal;
 function fixture(options = {}) {
-  const db = new DatabaseSync(':memory:'); db.exec('PRAGMA foreign_keys = ON'); initializeWritableSchema(db);
+  const db = new DatabaseSync(options.filename ?? ':memory:'); db.exec('PRAGMA foreign_keys = ON'); initializeWritableSchema(db);
   if (!db.prepare("SELECT 1 FROM sqlite_schema WHERE name = 'schedule_reschedule_operations'").get()) db.exec(SCHEDULE_RESCHEDULE_SCHEMA_SQL);
   const capabilityJson = { schemaVersion: 1, capabilityIds: ['FLAT'] }, capabilityDigest = digestResourceCapabilitiesV1(capabilityJson);
   const configInput = { schemaVersion: 1, businessTimeZone: 'Asia/Shanghai',
@@ -192,4 +195,28 @@ test('reschedule blocks every still-dispatchable old confirmation without rewrit
       assert.deepEqual(f.db.prepare('SELECT * FROM notification_outbox').all(), before);
     } finally { f.db.close(); }
   }
+});
+
+
+test('reschedule receipt and saved times survive closing and reopening a file database', () => {
+  const root = mkdtempSync(join(tmpdir(), 'jso-reschedule-reopen-'));
+  const filename = join(root, 'synthetic.sqlite');
+  try {
+    const f = fixture({ filename });
+    let receipt;
+    try {
+      const result = f.store.reschedule(f.command, principal);
+      assert.equal(result.ok, true, JSON.stringify(result));
+      receipt = result.receipt;
+    } finally { f.db.close(); }
+    const db = new DatabaseSync(filename);
+    try {
+      const store = createSqliteScheduleRescheduleStoreV1({ db, now: () => at,
+        refreshProjections: () => refreshSqliteSnapshotProjectionsV2(db) });
+      assert.deepEqual(store.readOperation('MOVE-1', principal).receipt, receipt);
+      assert.equal(db.prepare("SELECT planned_start FROM schedule_items WHERE id='ITEM'").get().planned_start,
+        '2026-10-02T05:30:00.000Z');
+      assert.equal(db.prepare('SELECT count(*) n FROM notification_outbox').get().n, 0);
+    } finally { db.close(); }
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
