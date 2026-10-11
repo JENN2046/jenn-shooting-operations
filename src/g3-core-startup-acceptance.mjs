@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
+import { validateV1Snapshot } from './contract-validator.mjs';
+import { sqliteFilenamePath, fileIdentity } from './sqlite-file-identity.mjs';
 import { assertKnownSchema, MIGRATIONS } from './sqlite-schema-v2.mjs';
 import { digestCanonicalJsonSchedulingV1 } from './scheduling-contract-v1.mjs';
 
@@ -127,14 +129,47 @@ export function validateCoreDatabase(record, filename) {
     db.exec('PRAGMA query_only=ON; BEGIN');
     need(assertKnownSchema(db).version === 11, 'SCHEMA11');
     const counter = db.prepare('SELECT * FROM revision_counters WHERE id=1').get();
-    need(counter
-      && !!db.prepare('SELECT id FROM schedule_state WHERE id=1').get(), 'INITIALIZATION_REQUIRED');
+    const legacy = db.prepare('SELECT * FROM schedule_state WHERE id=1').get();
+    need(counter && legacy, 'INITIALIZATION_REQUIRED');
+    validateCoreLegacySnapshot(legacy);
     const initial = db.prepare('SELECT * FROM empty_db_initialization WHERE id=1').get();
     validateCoreInitializationSnapshot({ initial, counter,
       audits: initial ? db.prepare(`SELECT * FROM audit_log
         WHERE action='emptyDbMaintenanceV1' AND entity_id=?`).all(initial.operation_id) : [],
       projections: db.prepare('SELECT * FROM snapshot_projections ORDER BY projection_name').all() });
   } finally { db.close(); }
+}
+
+// Validate the independent V1 row, not the V2 revision counter. Never normalize or repair it.
+export function validateCoreLegacySnapshot(row) {
+  let snapshot;
+  try { snapshot = JSON.parse(row.snapshot_json); } catch { fail('LEGACY_SNAPSHOT_JSON'); }
+  need(validateV1Snapshot(snapshot).ok, 'LEGACY_SNAPSHOT_CONTRACT');
+  need(snapshot.revision === row.revision && snapshot.updatedAt === row.updated_at,
+    'LEGACY_SNAPSHOT_BINDING');
+}
+
+// Locate scope using administrator-owned material before checking runtime eligibility.
+// A remaining complete locator can scope an incomplete installation. If none survives,
+// file-backed stores fail closed because we cannot prove they are outside the target.
+function concernsCoreDatabase(databasePath) {
+  if (databasePath === ':memory:' || databasePath === '') return false;
+  const filename = resolve(sqliteFilenamePath(databasePath));
+  const current = fileIdentity(filename);
+  const targets = [];
+  for (const name of ['acceptance.json', 'installation.json']) {
+    try {
+      const target = jsonMaterial(name)?.target;
+      if (typeof target?.databasePath === 'string' && target.databasePath === resolve(target.databasePath)
+        && Number.isSafeInteger(target.databaseIdentity?.device)
+        && Number.isSafeInteger(target.databaseIdentity?.inode)) targets.push(target);
+    } catch { /* Full validation below still rejects missing or damaged target material. */ }
+  }
+  need(targets.length > 0, 'TARGET_SCOPE_UNAVAILABLE');
+  return targets.some(target => filename === target.databasePath
+    || current?.realpath === target.databasePath
+    || (current && current.device === target.databaseIdentity.device
+      && current.inode === target.databaseIdentity.inode));
 }
 
 // The receipt describes the original transaction; projections describe current state.
@@ -180,6 +215,7 @@ export function validateCoreInitializationSnapshot({ initial, counter, audits, p
 }
 export function loadCoreAcceptance(databasePath) {
   if (!existsSync(CUSTODY)) return null;
+  if (!concernsCoreDatabase(databasePath)) return null;
   need(process.getuid() !== 0, 'NON_ROOT_APP_REQUIRED');
   const record = validateCoreRecord(jsonMaterial('acceptance.json'));
   const approval = jsonMaterial('owner-approval.json');

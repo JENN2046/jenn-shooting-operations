@@ -287,3 +287,67 @@ test('normal attachment creation preserves root identity and survives an indepen
   assert.equal(statSync(f.uploads).ino,before.ino);
  }finally{f.close();}
 });
+
+test('legacy V1 snapshot contract and row binding are checked read-only in PREPARED and ACTIVE', async () => {
+ for (const change of [
+  () => '{',
+  () => JSON.stringify({schemaVersion:1,revision:0,updatedAt:'2026-10-12T00:00:00Z'}),
+  snapshot => JSON.stringify({...snapshot,revision:snapshot.revision+1}),
+  snapshot => JSON.stringify({...snapshot,updatedAt:'2026-10-12T00:00:00Z'}),
+ ]) {
+  const f=await fixture();try {
+   const db=new DatabaseSync(f.filename);
+   const row=db.prepare('SELECT * FROM schedule_state WHERE id=1').get();
+   db.prepare('UPDATE schedule_state SET snapshot_json=? WHERE id=1').run(change(JSON.parse(row.snapshot_json)));
+   db.close();f.record.baseline.sha256=f.m.digest(readFileSync(f.filename));f.install();
+   const before=readFileSync(f.filename);
+   assert.throws(()=>f.server(),/LEGACY_SNAPSHOT_(JSON|CONTRACT|BINDING)/);
+   f.activate();assert.throws(()=>f.server('enabled'),/LEGACY_SNAPSHOT_(JSON|CONTRACT|BINDING)/);
+   assert.deepEqual(readFileSync(f.filename),before);
+  }finally{f.close();}
+ }
+});
+
+test('a legal nonzero V1 revision restarts independently of the V2 counter without rewriting', async () => {
+ const f=await fixture();try {
+  const db=new DatabaseSync(f.filename),row=db.prepare('SELECT * FROM schedule_state WHERE id=1').get();
+  const snapshot=JSON.parse(row.snapshot_json);snapshot.revision=7;
+  db.prepare('UPDATE schedule_state SET revision=?,snapshot_json=? WHERE id=1').run(7,JSON.stringify(snapshot));
+  assert.equal(db.prepare('SELECT schedule_revision FROM revision_counters WHERE id=1').get().schedule_revision,0);
+  db.close();f.record.baseline.sha256=f.m.digest(readFileSync(f.filename));f.install();
+  const before=readFileSync(f.filename);
+  const prepared=f.server();assert.equal(prepared.store.getSnapshot().revision,7);prepared.store.close();
+  assert.deepEqual(readFileSync(f.filename),before);
+  f.activate();assert.equal(f.m.loadCoreAcceptance(f.filename).prepared,false);
+  assert.deepEqual(readFileSync(f.filename),before);
+  const active=f.server('enabled');assert.deepEqual(active.store.getSnapshot(),snapshot);active.store.close();
+ }finally{f.close();}
+});
+
+test('acceptance scopes only its target; unrelated, memory and maintenance stores retain their own gates', async () => {
+ const f=await fixture();try {
+  const {ScheduleStore:LocalStore}=await import(pathToFileURL(join(f.app,'src/store.mjs')));
+  const {assertG3AuthorityReconciliationStartupAllowed:gate}=await import(pathToFileURL(join(f.app,'src/g3-authority-reconciliation-startup-gate-v1.mjs')));
+  rmSync(join(f.custody,'owner-approval.json'));
+  const unrelated=join(f.root,'unrelated.sqlite');
+  assert.equal(f.m.loadCoreAcceptance(unrelated),null);
+  assert.equal(f.m.loadCoreAcceptance(':memory:'),null);
+  assert.equal(f.m.loadCoreAcceptance(''),null);
+  const other=new LocalStore({filename:unrelated,orphanCleanupMode:'disabled'});other.close();
+  assert.equal(gate({databasePath:unrelated,readOnly:true}).reason,'READ_ONLY');
+  const memory=new LocalStore({filename:':memory:',orphanCleanupMode:'disabled'});memory.close();
+  assert.throws(()=>gate({databasePath:f.filename,readOnly:true}));
+  const alias=join(f.root,'database-alias.sqlite');symlinkSync(f.filename,alias);
+  for(const filename of [alias,pathToFileURL(f.filename).href,f.filename+'/../synthetic.sqlite']) {
+   assert.throws(()=>gate({databasePath:filename,readOnly:true}));
+  }
+  // Installation locator keeps target enforcement when acceptance is missing.
+  rmSync(join(f.custody,'acceptance.json'));
+  assert.equal(f.m.loadCoreAcceptance(unrelated),null);
+  assert.throws(()=>gate({databasePath:f.filename,readOnly:true}));
+  assert.throws(()=>gate({databasePath:alias,readOnly:true}));
+  rmSync(join(f.custody,'installation.json'));
+  assert.throws(()=>gate({databasePath:f.filename,readOnly:true}),/TARGET_SCOPE_UNAVAILABLE/);
+  assert.equal(f.m.loadCoreAcceptance(':memory:'),null);
+ }finally{f.close();}
+});
