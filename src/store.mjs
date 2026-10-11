@@ -286,6 +286,7 @@ function matchesSignature(contentType, buffer) {
 
 export class ScheduleStore {
   #orphanCleanupControl;
+  #coreAccepted = false;
   #database;
   #renameFile;
 
@@ -303,8 +304,17 @@ export class ScheduleStore {
     writeAdmissionMode = 'enabled',
     writeAdmissionControl,
   }) {
-    if (!readOnly) {
-      assertG3AuthorityReconciliationStartupAllowed({ databasePath: filename });
+    const startup = assertG3AuthorityReconciliationStartupAllowed({ databasePath: filename, readOnly });
+    const coreAccepted = startup.reason === 'PROSPECTIVE_CORE_ACCEPTANCE';
+    this.#coreAccepted = coreAccepted;
+    if (coreAccepted) {
+      if (orphanCleanupMode !== 'disabled' || resolve(uploadRoot || join(dirname(filename), 'uploads')) !== startup.target.uploadRoot) {
+        throw new Error('G3_CORE_ACCEPTANCE_STORE_CONFIG');
+      }
+      if (startup.prepared && (!readOnly || writeAdmissionMode !== 'disabled'
+          || (writeAdmissionControl && !writeAdmissionControl.isDisabled()))) {
+        throw new Error('G3_CORE_ACCEPTANCE_PREPARED_READ_ONLY_REQUIRED');
+      }
     }
     const cleanupMode = readOnly ? 'inherit' : normalizeOrphanCleanupMode(orphanCleanupMode);
     const admissionControl = writeAdmissionControl
@@ -364,18 +374,20 @@ export class ScheduleStore {
     } else {
       enableWalWithBusyRetry(bootstrapDb);
       bootstrapDb.exec('PRAGMA foreign_keys = ON;');
-      initializeRuntimeWritableSchema(bootstrapDb, { now: this.clock });
-      transaction(bootstrapDb, () => {
-        const current = bootstrapDb.prepare('SELECT id FROM schedule_state WHERE id = 1').get();
-        if (current) return;
-        const now = isoNow(this.clock);
-        const snapshot = { schemaVersion: 1, revision: 0, updatedAt: now, products: [], tasks: [], sessions: [] };
-        bootstrapDb.prepare(`
-          INSERT INTO schedule_state (id, revision, updated_at, snapshot_json)
-          VALUES (1, 0, ?, ?)
-          ON CONFLICT(id) DO NOTHING
-        `).run(now, JSON.stringify(snapshot));
-      });
+      if (!coreAccepted) {
+        initializeRuntimeWritableSchema(bootstrapDb, { now: this.clock });
+        transaction(bootstrapDb, () => {
+          const current = bootstrapDb.prepare('SELECT id FROM schedule_state WHERE id = 1').get();
+          if (current) return;
+          const now = isoNow(this.clock);
+          const snapshot = { schemaVersion: 1, revision: 0, updatedAt: now, products: [], tasks: [], sessions: [] };
+          bootstrapDb.prepare(`
+            INSERT INTO schedule_state (id, revision, updated_at, snapshot_json)
+            VALUES (1, 0, ?, ?)
+            ON CONFLICT(id) DO NOTHING
+          `).run(now, JSON.stringify(snapshot));
+        });
+      }
     }
 
     this.#database = database;
@@ -386,7 +398,7 @@ export class ScheduleStore {
       configurable: false,
     });
 
-    if (readOnly) return;
+    if (readOnly || coreAccepted) return;
     if (cleanupMode === 'enabled') {
       const enabled = this.#orphanCleanupControl.enable({ expectedEpoch: orphanCleanupEnableEpoch });
       if (!enabled.ok) {
@@ -408,6 +420,7 @@ export class ScheduleStore {
   }
 
   enableOrphanCleanup(options) {
+    if (this.#coreAccepted) throw new Error('G3_CORE_ACCEPTANCE_CLEANUP_DISABLED');
     if (this.writeAdmissionControl.isDisabled()) {
       return Object.freeze({
         ok: false,

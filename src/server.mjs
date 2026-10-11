@@ -189,7 +189,13 @@ export function createOperationsServer({
   schedulingAllowedBriefHosts = [],
   writeAdmissionMode = 'enabled',
 }) {
-  assertG3AuthorityReconciliationStartupAllowed({ databasePath });
+  const startup = assertG3AuthorityReconciliationStartupAllowed({ databasePath });
+  const coreAccepted = startup.reason === 'PROSPECTIVE_CORE_ACCEPTANCE';
+  if (coreAccepted && (orphanCleanupMode !== 'disabled'
+      || kioskAuthenticate !== undefined || kioskServiceBinding?.mode !== 'DISABLED'
+      || !schedulingAuthenticate || (startup.prepared && writeAdmissionMode !== 'disabled'))) {
+    throw new Error('G3_CORE_ACCEPTANCE_SERVER_CONFIG');
+  }
   requireKioskServiceBindingV1(kioskServiceBinding);
   if (kioskAuthenticate === undefined && kioskServiceBinding.mode === 'PROD11_SMOKE_ONLY') {
     throw new Error('KIOSK_SMOKE_CONFIG_REQUIRED');
@@ -199,12 +205,19 @@ export function createOperationsServer({
       && String(orphanCleanupMode || 'inherit').trim().toLowerCase() !== 'disabled') {
     throw new TypeError('disabled write admission requires disabled orphan cleanup');
   }
-  const writeAdmissionControl = createWriteAdmissionControl({
+  let writeAdmissionControl = createWriteAdmissionControl({
     initialMode: initialWriteAdmissionMode,
   });
+  if (startup.prepared) {
+    writeAdmissionControl = Object.freeze({ ...writeAdmissionControl,
+      enable: () => { throw new Error('G3_CORE_ACCEPTANCE_PREPARED_READ_ONLY_REQUIRED'); },
+    });
+  }
   const effectiveClock = clock ?? (() => new Date());
   const store = new ScheduleStore({
     filename: databasePath,
+    readOnly: startup.prepared === true,
+    writeAdmissionMode,
     uploadRoot,
     clock: effectiveClock,
     idFactory,
@@ -214,7 +227,7 @@ export function createOperationsServer({
     orphanCleanupDomain,
     writeAdmissionControl,
   });
-  store.cleanupOrphanUploads();
+  if (!coreAccepted) store.cleanupOrphanUploads();
   const kiosk = kioskAuthenticate === undefined
     ? null
     : createKioskV2Application({
@@ -243,7 +256,7 @@ export function createOperationsServer({
     scheduling,
     writeAdmissionControl,
   }));
-  const cleanupTimer = cleanupIntervalMs > 0
+  const cleanupTimer = !coreAccepted && cleanupIntervalMs > 0
     ? setInterval(() => {
         try {
           store.cleanupOrphanUploads();
