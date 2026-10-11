@@ -206,7 +206,9 @@ export function validateCoreInitializationSnapshot({ initial, counter, audits, p
     try {
       const validation = version === 1
         ? validateV1Snapshot(payload, { profile: 'legacy-read' }) : validateV2Snapshot(payload);
-      need(validation.ok, 'INITIALIZATION_PROJECTIONS');
+      need(validation.ok && (version !== 1 || (validation.switchReady === true
+        && ['L0_STRICT', 'L1_GRANDFATHERED_OPAQUE'].includes(validation.classification))),
+      'INITIALIZATION_PROJECTIONS');
     } catch { fail('INITIALIZATION_PROJECTIONS'); }
     need(row.projection_name === name && row.schema_version === version && row.source_schema_version === 2
       && row.revision === counter.projection_revision
