@@ -22,7 +22,9 @@ export const EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1 = digest(MIGRATIONS.slice(0, 
 // Separate exact schema binding: old Schema10 packets never admit a Schema11 database.
 export const EMPTY_DB_MAINTENANCE_SCHEMA11_DIGEST_V1 = digest(MIGRATIONS.slice(0, 11).map(({ version, name, checksum }) =>
   ({ version, name, checksum })));
+export const EMPTY_DB_MAINTENANCE_SCHEMA12_DIGEST_V1 = digest(MIGRATIONS.slice(0,12).map(({version,name,checksum})=>({version,name,checksum})));
 function maintenanceSchemaVersion(packet) {
+  if(packet.schemaDigest===EMPTY_DB_MAINTENANCE_SCHEMA12_DIGEST_V1)return 12;
   if (packet.schemaDigest === EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1) return 10;
   if (packet.schemaDigest === EMPTY_DB_MAINTENANCE_SCHEMA11_DIGEST_V1) return 11;
   fail('MAINTENANCE_PACKET_INVALID');
@@ -106,10 +108,10 @@ function validate(packet, authorization, runtime, offline = false) {
     && (packet.kind === 'initialize' || Object.hasOwn(normalizers, packet.kind))
     && Object.values(packet.expected).every(value => Number.isSafeInteger(value) && value >= 0)
     && packet.businessTimeZone === 'Asia/Shanghai'
-    && [EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1, EMPTY_DB_MAINTENANCE_SCHEMA11_DIGEST_V1].includes(packet.schemaDigest)
+    && [EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1, EMPTY_DB_MAINTENANCE_SCHEMA11_DIGEST_V1, EMPTY_DB_MAINTENANCE_SCHEMA12_DIGEST_V1].includes(packet.schemaDigest)
     && /^[a-f0-9]{40}$/u.test(packet.runtime.sourceRevision)
     && /^sha256:[a-f0-9]{64}$/u.test(packet.runtime.imageId), 'MAINTENANCE_PACKET_INVALID');
-  requireValue(maintenanceSchemaVersion(packet) !== 11 || packet.kind === 'initialize',
+  requireValue(maintenanceSchemaVersion(packet) < 11 || packet.kind === 'initialize',
     'MAINTENANCE_SCHEMA11_INITIALIZE_ONLY');
   requireValue(json(packet.runtime) === json(runtime), 'MAINTENANCE_RUNTIME_MISMATCH');
   requireValue(authorization.scope === (offline ? 'OFFLINE_ADAPTER_TRUST_PORT' : 'LOCAL_SYNTHETIC')
@@ -201,7 +203,7 @@ function assertConfigOnly(db) {
     && count(db, 'audit_log') === packets + 1
     && db.prepare("SELECT 1 FROM audit_log WHERE action <> 'emptyDbMaintenanceV1' LIMIT 1").get() === undefined,
   'MAINTENANCE_UNBOUND_CONTROL_FACTS');
-  requireValue(count(db, 'revision_counters') === 1 && count(db, 'snapshot_projections') === 2,
+  requireValue(count(db, 'revision_counters') === 1 && count(db, 'snapshot_projections') === (assertKnownSchema(db).version === 12 ? 1 : 2),
     'MAINTENANCE_BASELINE_INVALID');
   const rows = db.prepare('SELECT * FROM empty_db_maintenance_operations').all();
   const initial = db.prepare('SELECT * FROM empty_db_initialization WHERE id = 1').get();
@@ -371,7 +373,7 @@ function executeMaintenance({ packet, authorization, runtime,
       beforeCommit({ db, response });
       // Only the current Schema11 transaction may create a rollback journal.
       // A pre-existing journal still fails the pre-open target check.
-      assertTarget(packet, offline, { allowRollbackJournal: expectedSchemaVersion === 11
+      assertTarget(packet, offline, { allowRollbackJournal: expectedSchemaVersion >= 11
         && db.isTransaction && db.prepare('PRAGMA journal_mode').get().journal_mode === 'delete' });
       // The offline helper performs a final local deadline check after all slow observations.
       beforeCommitDecision();

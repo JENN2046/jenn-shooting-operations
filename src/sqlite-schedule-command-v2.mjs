@@ -1,3 +1,6 @@
+import {schedulingOperationIdOwnersV1} from './sqlite-scheduling-operation-id-v1.mjs';
+import {normalizeSchedulingConfig} from './scheduling-admin-contract-v2.mjs';
+import {canonicalJsonSchedulingV1 as json,digestCanonicalJsonSchedulingV1 as digest} from './scheduling-contract-v1.mjs';
 import { isolateGf15OutboxInTransactionV1 } from './sqlite-gf15-outbox-isolation-v1.mjs';
 import { assertSchedulingQuiescenceV1 } from './sqlite-scheduling-quiescence-v1.mjs';
 import { buildScheduleConfirmedCardV1 } from './dingtalk-card-builders-v1.mjs';
@@ -30,6 +33,9 @@ export function applyCanonicalScheduleAcceptanceInTransactionV2({ db, proposal, 
   }
   const nextScheduleRevision = currentScheduleRevision + 1;
   const nextProjectionRevision = currentProjectionRevision + 1;
+  const configRow=db.prepare('SELECT * FROM scheduling_config_versions WHERE config_version=?').get(proposal.configVersion);
+  const localOnly=configRow?.schema_version===3;
+  if(localOnly){const c=normalizeSchedulingConfig(JSON.parse(configRow.config_json));if(!c.ok||c.configDigest!==configRow.config_digest||c.config.externalNotifications!=='disabled')fail('NOTIFICATION_POLICY_INVALID');}
   const outbox = createSqliteOutboxRepositoryV1({ db });
   const inserted = [];
   for (let index = 0; index < selectedItems.length; index += 1) {
@@ -89,7 +95,7 @@ export function applyCanonicalScheduleAcceptanceInTransactionV2({ db, proposal, 
   if (changed !== 1) fail('SCHEDULE_REVISION_CONFLICT');
   refreshProjections({ db, projectionRevision: nextProjectionRevision,
     scheduleRevision: nextScheduleRevision, updatedAt: at });
-  for (let index = 0; index < selectedItems.length; index += 1) {
+  if (!localOnly) for (let index = 0; index < selectedItems.length; index += 1) {
     const item = selectedItems[index];
     const scheduleItemId = inserted[index].scheduleItemId;
     const card = buildScheduleConfirmedCardV1({ scheduleItemId,
@@ -105,6 +111,12 @@ export function applyCanonicalScheduleAcceptanceInTransactionV2({ db, proposal, 
     isolateGf15OutboxInTransactionV1({ db, proposal, selectedItems, decisionId, intent: intent.intent, schedulingLease, at });
     const queued = outbox.enqueue(intent.intent);
     if (!queued.ok || queued.code !== 'OUTBOX_ENQUEUED') fail(queued.code);
+  }
+  if(localOnly){
+    if(schedulingOperationIdOwnersV1(db,`notification:${decisionId}`).length)fail('IDEMPOTENCY_KEY_REUSE');
+    const receipt={decisionId,configVersion:proposal.configVersion,configDigest:configRow.config_digest,resourceIds:[...new Set(selectedItems.map(i=>i.resourceId))],notificationStatus:'NOT_ENQUEUED_EXTERNAL_DELIVERY_DISABLED',createdAt:at};
+    db.prepare('INSERT INTO operations(operation_id,kind,response_json,created_at,request_digest) VALUES(?,?,?,?,?)').run(`notification:${decisionId}`,'business.notificationPolicy.v3',json(receipt),at,digest(receipt));
+    db.prepare('INSERT INTO audit_log(action,role,entity_id,revision,result,created_at) VALUES(?,?,?,?,?,?)').run('business.notificationPolicy.v3','system',decisionId,nextScheduleRevision,receipt.notificationStatus,at);
   }
   return { adoptedItems: inserted, scheduleRevision: nextScheduleRevision,
     projectionRevision: nextProjectionRevision };

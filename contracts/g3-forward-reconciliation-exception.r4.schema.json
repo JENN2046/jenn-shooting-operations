@@ -1,0 +1,293 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "purpose",
+    "acceptanceId",
+    "state",
+    "ownerSource",
+    "ownerApprovedAt",
+    "ownerTextSha256",
+    "planSha256",
+    "release",
+    "target",
+    "baseline",
+    "policy",
+    "window",
+    "activation"
+  ],
+  "properties": {
+    "version": {
+      "const": 4
+    },
+    "purpose": {
+      "const": "CORE_SCHEMA12_PROSPECTIVE_ACCEPTANCE"
+    },
+    "acceptanceId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "state": {
+      "enum": [
+        "PREPARED",
+        "ACTIVE"
+      ]
+    },
+    "ownerSource": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "ownerApprovedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ownerTextSha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "planSha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "head",
+        "tree",
+        "imageDigest",
+        "sourceSha256"
+      ],
+      "properties": {
+        "head": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "tree": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "imageDigest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "sourceSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hostId",
+        "service",
+        "volumeName",
+        "volumeSource",
+        "mountPoint",
+        "databasePath",
+        "databaseIdentity",
+        "uploadRoot",
+        "uploadIdentity"
+      ],
+      "properties": {
+        "hostId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "service": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "volumeName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "volumeSource": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "mountPoint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "databasePath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "databaseIdentity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "device",
+            "inode"
+          ],
+          "properties": {
+            "device": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "inode": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "uploadRoot": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "uploadIdentity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "device",
+            "inode"
+          ],
+          "properties": {
+            "device": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "inode": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "sha256",
+        "sideFiles",
+        "historicalEvidenceSha256",
+        "backupManifestSha256",
+        "restoreVerificationSha256"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 12
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "sideFiles": {
+          "const": "ABSENT_UNDER_EXCLUSIVE_MAINTENANCE"
+        },
+        "historicalEvidenceSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "backupManifestSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "restoreVerificationSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "adminTrustAccepted",
+        "historicalCoverageRiskAccepted",
+        "sameTargetRestartAllowed",
+        "cleanup",
+        "integrations",
+        "runtimeConfigSha256"
+      ],
+      "properties": {
+        "adminTrustAccepted": {
+          "const": true
+        },
+        "historicalCoverageRiskAccepted": {
+          "const": true
+        },
+        "sameTargetRestartAllowed": {
+          "const": true
+        },
+        "cleanup": {
+          "const": "disabled"
+        },
+        "integrations": {
+          "const": "disabled"
+        },
+        "runtimeConfigSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end"
+      ],
+      "properties": {
+        "start": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "end": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "activation": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "acceptedAt",
+            "installedBy",
+            "initialVerificationSha256"
+          ],
+          "properties": {
+            "acceptedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "installedBy": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "initialVerificationSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "G3 forward reconciliation exception R3 core acceptance candidate",
+  "$id": ""
+}

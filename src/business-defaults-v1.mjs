@@ -13,3 +13,9 @@ export function businessInitialConfig(resource, effectiveFrom) {
     bufferRules:['细节','模特','场景'].map((shootingSubtype,i)=>({ruleId:`JSO-BUFFER-${i+1}`,productionType:'平面',shootingSubtype,bufferAfterMinutes:20})),
     softScoringWeights:{LIGHTING_SWITCH:1,REFLECTIVITY_SEQUENCE:1,IDLE_GAP:1,EXPECTED_OVERRUN:1,DESIRED_DATE_MISS:1},compatibleAlgorithmVersions:['deterministic-scheduler-v1']};
 }
+
+export function businessInitialConfigV3(resource, effectiveFrom) {
+ const config=businessInitialConfig(resource,effectiveFrom);
+ return {...config,schemaVersion:3,externalNotifications:'disabled',compatibleAlgorithmVersions:['deterministic-scheduler-v2'],
+ bufferRules:['产品3D主图','细节图','功能图','模特','场景','细节'].map((shootingSubtype,i)=>({ruleId:`JSO-V3-BUFFER-${i+1}`,productionType:'平面',shootingSubtype,bufferAfterMinutes:20}))};
+}

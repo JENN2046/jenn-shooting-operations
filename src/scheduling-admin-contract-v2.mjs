@@ -1,3 +1,4 @@
+import {normalizeSchedulingConfigV3, normalizePublishSchedulingConfigV3, compileSchedulingCalendarDateV3} from './scheduling-admin-contract-v3.mjs';
 // Proposed successor: v1 callers retain their exact normalizers and digest domains.
 import { normalizeSchedulingConfigV1, normalizePublishSchedulingConfigV1, compileSchedulingCalendarDateV1 } from './scheduling-admin-contract-v1.mjs';
 import { canonicalJsonSchedulingV1, digestCanonicalJsonSchedulingV1 } from './scheduling-contract-v1.mjs';
@@ -70,7 +71,7 @@ export function normalizeSchedulingConfigV2(input) {
   });
 }
 export function digestSchedulingConfigV2(input) { return need(normalizeSchedulingConfigV2(input)).configDigest; }
-export function normalizeSchedulingConfig(input) { return Object.getOwnPropertyDescriptor(input ?? {}, 'schemaVersion')?.value === 2 ? normalizeSchedulingConfigV2(input) : normalizeSchedulingConfigV1(input); }
+export function normalizeSchedulingConfig(input) { if(input?.schemaVersion===3)return normalizeSchedulingConfigV3(input); return Object.getOwnPropertyDescriptor(input ?? {}, 'schemaVersion')?.value === 2 ? normalizeSchedulingConfigV2(input) : normalizeSchedulingConfigV1(input); }
 
 export function normalizePublishSchedulingConfigV2(input) {
   return attempt('PUBLISH_SCHEDULING_CONFIG_INVALID', () => {
@@ -85,7 +86,7 @@ export function normalizePublishSchedulingConfigV2(input) {
     return { ok: true, commandType: 'PublishSchedulingConfigV2', command, commandJson: canonicalJsonSchedulingV1(command), commandDigest: digestCanonicalJsonSchedulingV1({ domain: 'scheduling-config-publish-command-v2', command: content }) };
   });
 }
-export function normalizePublishSchedulingConfig(input) { return Object.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(input ?? {}, 'configJson')?.value ?? {}, 'schemaVersion')?.value === 2 ? normalizePublishSchedulingConfigV2(input) : normalizePublishSchedulingConfigV1(input); }
+export function normalizePublishSchedulingConfig(input) { if(input?.configJson?.schemaVersion===3)return normalizePublishSchedulingConfigV3(input); return Object.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(input ?? {}, 'configJson')?.value ?? {}, 'schemaVersion')?.value === 2 ? normalizePublishSchedulingConfigV2(input) : normalizePublishSchedulingConfigV1(input); }
 
 export function compileSchedulingCalendarDateV2(input) {
   return attempt('SCHEDULING_CALENDAR_COMPILE_INVALID', () => {
@@ -109,4 +110,4 @@ export function compileSchedulingCalendarDateV2(input) {
     return { ok: true, ...result, resultDigest: digestCanonicalJsonSchedulingV1({ domain: 'scheduling-calendar-compile-result-v2', result }) };
   });
 }
-export function compileSchedulingCalendarDate(input) { return Object.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(input ?? {}, 'configJson')?.value ?? {}, 'schemaVersion')?.value === 2 ? compileSchedulingCalendarDateV2(input) : compileSchedulingCalendarDateV1(input); }
+export function compileSchedulingCalendarDate(input) { if(input?.configJson?.schemaVersion===3)return compileSchedulingCalendarDateV3(input); return Object.getOwnPropertyDescriptor(Object.getOwnPropertyDescriptor(input ?? {}, 'configJson')?.value ?? {}, 'schemaVersion')?.value === 2 ? compileSchedulingCalendarDateV2(input) : compileSchedulingCalendarDateV1(input); }

@@ -2,6 +2,7 @@ import { assertSchedulingQuiescenceV1 } from './sqlite-scheduling-quiescence-v1.
 import {
   projectV1CompatibilitySnapshot,
   projectV2Snapshot,
+  projectV3Snapshot,
 } from './projections-v2.mjs';
 import {
   validateV1Snapshot,
@@ -59,6 +60,16 @@ export function refreshSqliteSnapshotProjectionsV2({ db, businessTimeZone,
     error.code = 'PROJECTION_COUNTER_MISMATCH';
     throw error;
   }
+  const classification = db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get();
+  if (classification) {
+    const v3 = projectV3Snapshot(records, {allowedBriefHosts, updatedAt});
+    db.prepare(`INSERT INTO snapshot_projections (projection_name,schema_version,revision,schedule_revision,updated_at,payload_json,source_schema_version)
+      VALUES ('schedule-v3',3,?,?,?,?,12) ON CONFLICT(projection_name) DO UPDATE SET revision=excluded.revision,
+      schedule_revision=excluded.schedule_revision,updated_at=excluded.updated_at,payload_json=excluded.payload_json`).run(projectionRevision,scheduleRevision,updatedAt,JSON.stringify(v3));
+    db.prepare("DELETE FROM snapshot_projections WHERE projection_name IN ('schedule-v1-compat','schedule-v2')").run();
+    return {v3};
+  }
+
   const v1 = projectV1(records, { businessTimeZone, updatedAt });
   const v2 = projectV2(records, { allowedBriefHosts, updatedAt });
   const v1Validation = validateV1Snapshot(v1, { profile: 'legacy-read' });
@@ -98,6 +109,7 @@ export function createSqliteRunEventStore({
   db,
   businessTimeZone,
   allowedBriefHosts = [],
+  ownsTransaction = true,
   projectV1 = projectV1CompatibilitySnapshot,
   projectV2 = projectV2Snapshot,
 } = {}) {
@@ -157,7 +169,7 @@ export function createSqliteRunEventStore({
         FROM scheduling_resources WHERE resource_id = ?
       `).get(scheduleItem.resource_id) ?? null;
       const activeConfig = db.prepare(`
-        SELECT version.config_version, version.config_json, version.config_digest,
+        SELECT version.schema_version, version.config_version, version.config_json, version.config_digest,
           version.algorithm_version, version.calendar_compiler_version,
           version.estimate_policy_version
         FROM scheduling_active_config AS active
@@ -310,14 +322,14 @@ export function createSqliteRunEventStore({
 
   return {
     withImmediateTransaction(action) {
-      db.exec('BEGIN IMMEDIATE');
+      if (ownsTransaction) db.exec('BEGIN IMMEDIATE');
       try {
         assertSchedulingQuiescenceV1({ db });
         const result = action(transaction);
-        db.exec('COMMIT');
+        if (ownsTransaction) db.exec('COMMIT');
         return result;
       } catch (error) {
-        try { db.exec('ROLLBACK'); } catch {}
+        if (ownsTransaction) { try { db.exec('ROLLBACK'); } catch {} }
         throw error;
       }
     },

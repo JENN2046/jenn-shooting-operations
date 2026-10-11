@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { ScheduleStore } from '../src/store.mjs';
-import { initializeWritableSchema } from '../src/sqlite-schema-v2.mjs';
+import { initializeWritableSchema, MIGRATIONS } from '../src/sqlite-schema-v2.mjs';
 import { createSchedulingV2Application } from '../src/server.mjs';
 import { createHttpApp } from '../src/http-app.mjs';
 import { createBusinessRuntimeAuthV1,createBusinessRuntimeOptionsFromEnv } from '../src/business-runtime-auth-v1.mjs';
@@ -17,7 +17,7 @@ const resourceId='JSO-BIZ-RESOURCE-001';
 function fixture({disabled=false}={}){
  const root=mkdtempSync(join(tmpdir(),'jso-business-management-')),filename=join(root,'db.sqlite'),uploadRoot=join(root,'uploads');
  mkdirSync(uploadRoot);
- const bootstrap=new DatabaseSync(filename);bootstrap.exec('PRAGMA foreign_keys=ON');initializeWritableSchema(bootstrap);bootstrap.close();
+ const bootstrap=new DatabaseSync(filename);bootstrap.exec('PRAGMA foreign_keys=ON');initializeWritableSchema(bootstrap,{migrations:MIGRATIONS.slice(0,11)});bootstrap.close();
  const store=new ScheduleStore({filename,uploadRoot,writeAdmissionMode:disabled?'disabled':'enabled',orphanCleanupMode:'disabled'});
  if(!disabled)store.db.prepare('INSERT INTO revision_counters VALUES(1,0,0,?)').run('2026-10-01T00:00:00.000Z');
  const authenticate=createBusinessRuntimeAuthV1({identities:[{token:tokens.admin,subjectId:'Jenn',role:'administrator',resourceIds:[resourceId]},{token:tokens.scheduler,subjectId:'scheduler',role:'scheduler',resourceIds:[resourceId]},{token:tokens.other,subjectId:'other',role:'administrator',resourceIds:['OTHER']}]});

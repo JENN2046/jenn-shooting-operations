@@ -1,6 +1,7 @@
 import { normalizeSchedulingConfig } from './scheduling-admin-contract-v2.mjs';
 import {
   buildSchedulingRunContextSnapshotV1,
+  buildSchedulingRunContextSnapshotV2,
   RUN_CONTEXT_SNAPSHOT_SCHEMA_V1,
 } from './scheduling-evaluation-contract-v1.mjs';
 
@@ -72,17 +73,19 @@ export function buildFirstStartRunContextSnapshotV1({
   activeConfig,
   capturedAt,
 } = {}) {
+  const classified = requests?.some(r=>['产品3D主图','细节图','功能图'].includes(r.shooting_subtype)) || activeConfig?.schema_version===3;
+  const build = value => classified ? buildSchedulingRunContextSnapshotV2({...value,schemaVersion:2}) : buildSchedulingRunContextSnapshotV1(value);
   if (!scheduleItem || !Array.isArray(requests) || typeof capturedAt !== 'string') {
     return Object.freeze({ ok: false, code: 'RUN_CONTEXT_CAPTURE_INPUT_INVALID' });
   }
   if (scope === 'block') {
-    return buildSchedulingRunContextSnapshotV1(ineligibleBase({
+    return build(ineligibleBase({
       runId, scope, scheduleItem, request: null, capturedAt, reason: 'GROUPED_UNALLOCATED',
     }));
   }
   const request = requests.length === 1 ? requests[0] : null;
   if (!activeConfig) {
-    return buildSchedulingRunContextSnapshotV1(ineligibleBase({
+    return build(ineligibleBase({
       runId, scope, scheduleItem, request, capturedAt, reason: 'CONFIG_MISSING',
     }));
   }
@@ -96,7 +99,7 @@ export function buildFirstStartRunContextSnapshotV1({
     }
     config = admitted.config;
   } catch {
-    return buildSchedulingRunContextSnapshotV1(ineligibleBase({
+    return build(ineligibleBase({
       runId, scope, scheduleItem, request, capturedAt, reason: 'CONFIG_MISSING',
     }));
   }
@@ -119,7 +122,7 @@ export function buildFirstStartRunContextSnapshotV1({
     activeConfig.config_digest,
   ];
   if (completeFacts.some(value => value === null || value === undefined)) {
-    return buildSchedulingRunContextSnapshotV1({
+    return build({
       ...ineligibleBase({
         runId, scope, scheduleItem, request, capturedAt, reason: 'RULE_FACT_MISSING',
       }),
@@ -130,7 +133,7 @@ export function buildFirstStartRunContextSnapshotV1({
     });
   }
 
-  return buildSchedulingRunContextSnapshotV1({
+  return build({
     schemaVersion: RUN_CONTEXT_SNAPSHOT_SCHEMA_V1,
     runId,
     scope,

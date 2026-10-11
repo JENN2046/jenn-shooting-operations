@@ -23,3 +23,15 @@ test('Schema11 upgrades without reclassifying historical DETAIL, keeps FK and pu
  db.prepare("UPDATE requests_v2 SET kind='静物',shooting_subtype='功能图' WHERE id='old'").run();
  assert.throws(()=>db.exec("UPDATE requests_v2 SET shooting_subtype='细节' WHERE id='old'"));db.close();
 });
+test('successor rebuild failure rolls back and restores FK; static category rejects null production type',async()=>{
+ const {createHash}=await import('node:crypto');
+ const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON');initializeWritableSchema(db,{migrations:MIGRATIONS.slice(0,11)});
+ const before=db.prepare("SELECT name,sql FROM sqlite_schema WHERE sql IS NOT NULL ORDER BY name").all();
+ const sql=MIGRATIONS[11].sql+'\nCREATE TABLE unexpected_schema_object(x TEXT);';
+ const failed=[...MIGRATIONS.slice(0,11),{...MIGRATIONS[11],sql,checksum:'sha256:'+createHash('sha256').update(sql).digest('hex')}];
+ assert.throws(()=>applySchemaMigrations(db,{migrations:failed}));
+ assert.equal(assertKnownSchema(db).version,11);assert.equal(db.prepare('PRAGMA foreign_keys').get().foreign_keys,1);
+ assert.deepEqual(db.prepare("SELECT name,sql FROM sqlite_schema WHERE sql IS NOT NULL ORDER BY name").all(),before);
+ applySchemaMigrations(db);
+ assert.throws(()=>db.exec(`INSERT INTO requests_v2(id,source_ordinal,sku,name,client,legacy_deliver_text,kind,v1_status_mode,request_lifecycle,lifecycle_provenance,source,imported_at,v1_assets_present,v1_request_present,production_type,shooting_subtype,lighting_preset,reflectivity) VALUES('invalid',0,'s','n','c','d','静物','canonical','open','domain_command','submission','2026-10-01T00:00:00Z',0,0,NULL,'产品3D主图','SOFT','unknown')`));db.close();
+});

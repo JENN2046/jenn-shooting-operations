@@ -1,5 +1,8 @@
 // Explicit business route adapter; caller authenticates and applies global write admission.
 const POST = new Map([
+  ['/api/v2/business/run-events', ['recordActualEvent']],
+  ['/api/v2/business/requests', ['createOrder']],
+  ['/api/v2/business/requests/edit', ['editOrder']],
   ['/api/v2/business/day-adjustment/preview', ['previewDayAdjustment']],
   ['/api/v2/business/day-adjustment/apply', ['applyDayAdjustment']],
   ['/api/v2/business/resources', ['manage', 'registerResource']],
@@ -9,6 +12,7 @@ const POST = new Map([
   ['/api/v2/business/proposals', ['generateProposal']],
 ]);
 export function businessRoute(method, pathname) {
+  pathname=pathname.replace(/^\/api\/v3\/business(?=\/)/u,'/api/v2/business');
   if (method === 'GET' && pathname === '/api/v2/business/state') return { method: 'readManagement' };
   if (method === 'POST' && POST.has(pathname)) { const [method,kind]=POST.get(pathname);return {method,kind}; }
   const read = method === 'GET' && /^\/api\/v2\/business\/(operations|proposals)\/([^/]+)$/u.exec(pathname);

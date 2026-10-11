@@ -275,21 +275,21 @@ function normalizeDurationEstimate(value, path) {
   };
 }
 
-function normalizeSnapshotContent(value, path) {
+function normalizeSnapshotContent(value, path, version = 1) {
   exact(value, SNAPSHOT_CONTENT_KEYS, path);
-  if (value.schemaVersion !== 1) fail('SCHEMA_VERSION_INVALID', `${path}.schemaVersion`);
+  if (value.schemaVersion !== version) fail('SCHEMA_VERSION_INVALID', `${path}.schemaVersion`);
   const scope = enumValue(value.scope, new Set(['task', 'block']), `${path}.scope`);
   const productionType = value.productionType === null ? null
     : enumValue(value.productionType, new Set(['平面', '视频']), `${path}.productionType`);
   const shootingSubtype = value.shootingSubtype === null ? null
     : identifier(value.shootingSubtype, `${path}.shootingSubtype`, 120);
   if ((productionType === null && shootingSubtype !== null)
-    || (productionType === '平面' && !FLAT_SUBTYPES.has(shootingSubtype))
+    || (productionType === '平面' && !(version === 2 ? new Set([...FLAT_SUBTYPES, '产品3D主图', '细节图', '功能图']) : FLAT_SUBTYPES).has(shootingSubtype))
     || (productionType === '视频' && !VIDEO_SUBTYPES.has(shootingSubtype))) {
     fail('PRODUCTION_FACTS_INCONSISTENT', path);
   }
   const content = {
-    schemaVersion: 1,
+    schemaVersion: version,
     runId: identifier(value.runId, `${path}.runId`),
     scope,
     scheduleItemId: identifier(value.scheduleItemId, `${path}.scheduleItemId`),
@@ -340,15 +340,15 @@ function normalizeSnapshotEnvelope(value, path) {
   return { ...content, capturedAt, snapshotDigest };
 }
 
-export function buildSchedulingRunContextSnapshotV1(value) {
+function buildSchedulingRunContextSnapshot(value, version) {
   return admissionResult('RUN_CONTEXT_SNAPSHOT_INVALID', () => {
     exact(value, SNAPSHOT_INPUT_KEYS, '$');
     const capturedAt = timestamp(value.capturedAt, '$.capturedAt');
     const content = normalizeSnapshotContent(
-      Object.fromEntries(SNAPSHOT_CONTENT_KEYS.map(key => [key, value[key]])), '$',
+      Object.fromEntries(SNAPSHOT_CONTENT_KEYS.map(key => [key, value[key]])), '$', version,
     );
     const snapshotDigest = digestCanonicalJsonSchedulingV1({
-      domain: 'scheduling-run-context-snapshot-v1', content,
+      domain: `scheduling-run-context-snapshot-v${version}`, content,
     });
     return freeze({ ok: true, snapshot: { ...content, capturedAt, snapshotDigest },
       snapshotJson: canonicalJsonSchedulingV1(content), snapshotDigest });
@@ -935,3 +935,6 @@ export function evaluateShadowMetricsV1(value, context = {
       resultJson: canonicalJsonSchedulingV1(body), resultDigest });
   });
 }
+
+export function buildSchedulingRunContextSnapshotV1(value){return buildSchedulingRunContextSnapshot(value,1);}
+export function buildSchedulingRunContextSnapshotV2(value){return buildSchedulingRunContextSnapshot(value,2);}

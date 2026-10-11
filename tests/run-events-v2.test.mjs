@@ -21,7 +21,7 @@ import {
   digestRunEventResponse,
 } from '../src/run-event-use-case-v2.mjs';
 import { createSqliteRunEventStore } from '../src/sqlite-run-event-store-v2.mjs';
-import { initializeWritableSchema } from '../src/sqlite-schema-v2.mjs';
+import { initializeWritableSchema, MIGRATIONS } from '../src/sqlite-schema-v2.mjs';
 import { projectV2Snapshot } from '../src/projections-v2.mjs';
 import { normalizeSchedulingConfigV1 } from '../src/scheduling-admin-contract-v1.mjs';
 import { canonicalJsonSchedulingV1, digestResourceCapabilitiesV1 } from '../src/scheduling-contract-v1.mjs';
@@ -37,7 +37,7 @@ function openDatabase(filename) {
 }
 
 function seedBase(db, { projectionRevision = 10, scheduleRevision = 3 } = {}) {
-  initializeWritableSchema(db, { now: () => new Date(T0) });
+  initializeWritableSchema(db, { now: () => new Date(T0), migrations:MIGRATIONS.slice(0,11) });
   db.prepare(`
     INSERT INTO migration_batches (
       id, identity_digest, migration_version, mapping_version, source_schema_version,
