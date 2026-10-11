@@ -1,7 +1,7 @@
 import {mergeFiles,fileSelectionError} from './common.js';
 import {referenceGallery,clearReferenceImages} from './references.js';
 const $=s=>document.querySelector(s);
-let dayPreview=null;
+let dayPreview=null,editingOrder=null;
 let token='',state=null,preview=null,published=null,publishedBinding=null,editing=null,proposal=null,busy=false;
 let pending=null;try{pending=JSON.parse(sessionStorage.getItem('jso.pending.operation')||'null');}catch{}
 const messages={DYNAMIC_FORECAST_NOT_CURRENT:'需要已有的正在拍摄或受阻执行记录；未确认的实际状态不能当作已知。',DYNAMIC_OCCUPANCY_UNKNOWN:'已有占用信息不完整，请先核对。',DYNAMIC_PREVIEW_CHANGED:'现场、安排或配置已变化，请重新预览。',DYNAMIC_TODAY_ONLY:'仅支持北京时间当天，结束时间必须晚于现在。',DYNAMIC_UNRESOLVED:'存在未解决项，整批未保存。',FORBIDDEN:'没有这个资源的操作权限。',WRITE_ADMISSION_DISABLED:'当前处于禁写状态，不能保存。',CALENDAR_HAS_CONFLICTS:'新规则与已排场次冲突，请先改期。',SCHEDULING_REVISION_CONFLICT:'安排已被其他操作更新，请刷新并重新核对。',RESCHEDULE_REVISION_CONFLICT:'安排已变化，请刷新后重新核对。',SCHEDULING_RESOURCE_OVERLAP_OR_UNKNOWN:'与已有拍摄或缓冲冲突，或存在尚未确定的占用。',PAST_CALENDAR_CHANGE_FORBIDDEN:'历史工作规则需要保留，请选择今天或以后的生效日。',SCHEDULING_QUIESCENCE_HELD:'维护操作正在持锁，暂不能修改。',OPERATION_NOT_FOUND:'暂未找到回执，不能据此认定未提交。请保持待核对状态。',CONFIG_SCHEMA_TRANSITION_REQUIRES_REVIEW:'已有旧版日历需要单独迁移，页面暂不直接转换。'};
@@ -144,7 +144,7 @@ const dynamicReason=code=>({PREDECESSOR_ORDER_CONFLICT:'不能越过原先前序
 $('#dynamic-confirm').addEventListener('click',()=>work(async()=>{if(!dayPreview?.preview.canApply)throw new Error('请先完成可行的预览。');await mutation('/api/v3/business/day-adjustment/apply',{operationId:newId('DAY'),input:dayPreview.preview.input,previewDigest:dayPreview.previewDigest});await refresh();say('整批调整已保存；实际事实未改写，未发送外部通知。');}));
 
 function durationFields(config){return [['duration-detail','细节'],['duration-model','模特'],['duration-scene','场景'],...(config.schemaVersion===3?[['duration-main3d','产品3D主图'],['duration-still-detail','细节图'],['duration-function','功能图']]:[])];}
-let editingOrder=null,draftOperationId=newId('ORDER'),referenceFiles=[],referenceUploads=new Map();
+let draftOperationId=newId('ORDER'),referenceFiles=[],referenceUploads=new Map();
 function resetOrderDraft(){draftOperationId=newId('ORDER');referenceFiles=[];referenceUploads.clear();$('#reference-files').value='';$('#reference-selection').replaceChildren();}
 function renderReferenceSelection(){const list=$('#reference-selection');list.replaceChildren();for(const file of referenceFiles)list.append(row('li',file.name+' · '+(referenceUploads.has(file)?'已上传，待订单关联':'待上传')));}
 $('#reference-files').addEventListener('change',()=>{if(busy||pending||editingOrder)return;const files=mergeFiles(referenceFiles,Array.from($('#reference-files').files));const error=fileSelectionError(files.map(file=>({file,kind:'image'})));if(error){say(error);$('#reference-files').value='';return;}referenceFiles=files;renderReferenceSelection();});
