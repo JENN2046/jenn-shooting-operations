@@ -46,14 +46,21 @@ export function createDynamicDayAdjustment({db,now,refreshProjections,writeAdmis
       &&r.planned_start>at&&!rowRuns(r).length&&bindings.filter(b=>b.schedule_item_id===r.id).length===1
       &&bindings.filter(b=>b.schedule_item_id===r.id).every(b=>b.request_lifecycle==='open')&&!notifications.some(n=>n.aggregate_id===r.id);
     if(input.mode==='plan'&&!movable(anchor))return fail('DYNAMIC_ANCHOR_IMMUTABLE');
-    if(input.mode==='forecast'&&(anchor.planned_start>at||rowRuns(anchor).length!==1||rowRuns(anchor).some(r=>!['shooting','blocked'].includes(r.status))))return fail('DYNAMIC_FORECAST_NOT_CURRENT');
+    const anchorRuns=rowRuns(anchor),actual=anchorRuns.length===1?anchorRuns[0]:null;
+    // Current execution is established by actual facts, including an early start.
+    // Keep the same-day/time boundary and reject incomplete or inconsistent facts.
+    if(input.mode==='forecast'&&(!actual||!['shooting','blocked'].includes(actual.status)
+      ||!iso(actual.started_at)||actual.started_at>at||date(actual.started_at)!==today||actual.completed_at!==null
+      ||(actual.status==='shooting'?actual.active_block_started_at!==null
+        :!iso(actual.active_block_started_at)||actual.active_block_started_at<actual.started_at||actual.active_block_started_at>at)))return fail('DYNAMIC_FORECAST_NOT_CURRENT');
     const unresolved=[],warnings=[],changes=[],fixed=[];
     if(rows.some(r=>r.resource_resolution_status!=='resolved'||!iso(r.planned_start)||!iso(r.planned_end)||r.planned_end<=r.planned_start||!Number.isSafeInteger(r.buffer_after_minutes)))unresolved.push({code:'UNKNOWN_OCCUPANCY'});
     const windows=compiled.windows.map(w=>({start:Date.parse(w.start),end:Date.parse(w.end)}));
     const fits=(s,e)=>windows.some(w=>s>=w.start&&e<=w.end);
     const index=rows.indexOf(anchor),suffix=rows.slice(index+1).filter(r=>iso(r.planned_start)&&date(r.planned_start)===today);
     const end=Date.parse(input.endAt)+input.bufferAfterMinutes*60000;
-    const start=Date.parse(input.mode==='plan'?input.plannedStart:anchor.planned_start);
+    // Forecast occupancy starts at the actual start; the anchor plan stays immutable.
+    const start=Date.parse(input.mode==='plan'?input.plannedStart:actual.started_at);
     if(!fits(start,end)){if(input.mode==='forecast')warnings.push({code:'FORECAST_OUTSIDE_DEFAULT_WINDOW',scheduleItemId:anchor.id});else unresolved.push({code:'ANCHOR_OUTSIDE_WORK_WINDOW',scheduleItemId:anchor.id});}
     // Preserve both planned occupancy and known actual completion. A past plan
     // without completed execution evidence does not prove the resource is free.
