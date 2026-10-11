@@ -1,3 +1,4 @@
+import { createDynamicDayAdjustment } from './dynamic-day-adjustment-v1.mjs';
 import { businessInitialResource, businessInitialConfig } from './business-defaults-v1.mjs';
 import { createSqliteSchedulingAdminStoreV1 } from './sqlite-scheduling-admin-store-v1.mjs';
 import { createSqliteScheduleRescheduleStoreV1 } from './sqlite-schedule-reschedule-store-v1.mjs';
@@ -73,9 +74,20 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
     const past = preservePastRules(db, JSON.parse(configRow.config_json), at);
     return past.ok ? checkBusinessCalendarImpact({ db, configRow, at }) : past;
   };
+  // Unassigned requests are global. Only an administrator covering the entire
+  // registered catalogue may inspect or edit their estimates.
+  const ownsRequestCatalogue = principal => {
+    const ids = db.prepare('SELECT resource_id FROM scheduling_resources').all().map(r => r.resource_id);
+    return scoped(principal, ids, true);
+  };
+  const ownsRequest = (principal, requestId) => ownsRequestCatalogue(principal)
+    && db.prepare(`SELECT s.resource_id,s.resource_resolution_status FROM schedule_item_tasks b
+      JOIN schedule_items s ON s.id=b.schedule_item_id WHERE b.task_id=?`).all(requestId)
+      .every(r => r.resource_resolution_status === 'resolved' && principal.resourceIds.includes(r.resource_id));
   const adminStore = createSqliteSchedulingAdminStoreV1({ db, now: clock, refreshProjections, validateActivation: guard });
   const reschedules = createSqliteScheduleRescheduleStoreV1({ db, now: clock, refreshProjections,
     writeAdmission: () => !writeAdmissionControl.isDisabled() });
+  const dynamic = createDynamicDayAdjustment({db,now:clock,refreshProjections,writeAdmission:()=>!writeAdmissionControl.isDisabled()});
   const permitWrite = () => !writeAdmissionControl.isDisabled();
   return {
     readManagement({ principal }) {
@@ -96,8 +108,33 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
         sessions: db.prepare(`SELECT id, resource_id AS resourceId, planned_start AS plannedStart, planned_end AS plannedEnd,
           buffer_after_minutes AS bufferAfterMinutes, schedule_status AS status, lock_status AS lockStatus,
           EXISTS(SELECT 1 FROM production_runs r WHERE r.schedule_item_id=s.id) AS hasRunHistory
-          FROM schedule_items s ORDER BY planned_start,id`).all().filter(s => principal.resourceIds.includes(s.resourceId)).map(s=>({...s,requestNames:db.prepare('SELECT r.name FROM schedule_item_tasks b JOIN requests_v2 r ON r.id=b.task_id WHERE b.schedule_item_id=? ORDER BY b.display_order').all(s.id).map(r=>r.name)})),
+          FROM schedule_items s ORDER BY planned_start,id`).all().filter(s => principal.resourceIds.includes(s.resourceId)).map(s=>({...s,runs:db.prepare('SELECT id,status,run_revision AS runRevision,started_at AS startedAt,completed_at AS completedAt FROM production_runs WHERE schedule_item_id=? ORDER BY created_at,id').all(s.id),requestNames:db.prepare('SELECT r.name FROM schedule_item_tasks b JOIN requests_v2 r ON r.id=b.task_id WHERE b.schedule_item_id=? ORDER BY b.display_order').all(s.id).map(r=>r.name)})),
+        requests: ownsRequestCatalogue(principal) ? db.prepare(`SELECT r.id,r.name,r.production_type AS productionType,
+          r.shooting_subtype AS shootingSubtype,q.duration_estimate_json AS durationEstimateJson
+          FROM requests_v2 r LEFT JOIN scheduling_request_requirements q ON q.request_id=r.id
+          WHERE r.request_lifecycle='open' ORDER BY r.id`).all().filter(r => ownsRequest(principal,r.id)) : [],
         writeAdmission: writeAdmissionControl.status().mode };
+    },
+    previewDayAdjustment({command,principal}) { const schema=requireBusinessSchema();return schema??dynamic.preview(command,principal); },
+    applyDayAdjustment({command,principal}) { const schema=requireBusinessSchema();return schema??dynamic.apply(command,principal); },
+    setRequestDuration({ command, principal }) {
+      const schema = requireBusinessSchema(); if (schema) return schema;
+      if (!permitWrite()) return denied('WRITE_ADMISSION_DISABLED');
+      if (!ownsRequestCatalogue(principal)) return denied('FORBIDDEN');
+      const keys=['operationId','requestId','expectedScheduleRevision','expectedProjectionRevision','durationMinutes'];
+      if (!command || Object.keys(command).length!==keys.length || !keys.every(k=>Object.hasOwn(command,k))
+        || !Number.isSafeInteger(command.durationMinutes) || command.durationMinutes<1 || command.durationMinutes>1440)
+        return denied('INVALID_REQUEST');
+      if (typeof command.requestId!=='string' || !ownsRequest(principal,command.requestId)) return denied('FORBIDDEN');
+      const request=db.prepare('SELECT production_type,shooting_subtype,request_lifecycle FROM requests_v2 WHERE id=?').get(command.requestId);
+      if (!request) return denied('REQUEST_NOT_FOUND');
+      if (request.request_lifecycle!=='open') return denied('REQUEST_NOT_OPEN');
+      if (request.production_type!=='平面' || !['细节','模特','场景'].includes(request.shooting_subtype)) return denied('REQUEST_TYPE_UNSUPPORTED');
+      const existing=db.prepare('SELECT required_capability_ids_json FROM scheduling_request_requirements WHERE request_id=?').get(command.requestId);
+      const {durationMinutes,...binding}=command;
+      return adminStore.setRequestRequirements({...binding,
+        requiredCapabilityIds: existing ? JSON.parse(existing.required_capability_ids_json) : ['FLAT'],
+        durationEstimate:{durationMs:durationMinutes*60000,source:'explicit',sourceVersion:'business-duration-v1'}},principal.subjectId);
     },
     previewConfig({ command, principal }) {
       const schema = requireBusinessSchema(); if (schema) return schema;
@@ -139,10 +176,14 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
       const schema = requireBusinessSchema(); if (schema) return schema;
       if (!scoped(principal, principal?.resourceIds)) return denied('FORBIDDEN');
       const reschedule = reschedules.readOperation(operationId, principal);
-      if (reschedule.ok) return reschedule;
+      if (reschedule.ok || reschedule.code!=='RESCHEDULE_OPERATION_NOT_FOUND') return reschedule;
       const row = db.prepare('SELECT kind,response_json FROM scheduling_admin_operations WHERE operation_id=?').get(operationId);
       if (row) {
         const receipt = JSON.parse(row.response_json);
+        if (row.kind === 'setRequestRequirements') {
+          if (!ownsRequest(principal,receipt.requestId)) return denied('FORBIDDEN');
+          return {ok:true,kind:row.kind,receipt};
+        }
         const ids = receipt.resourceId ? [receipt.resourceId] : (() => {
           const v=db.prepare('SELECT config_json FROM scheduling_config_versions WHERE config_version=?').get(receipt.configVersion ?? '');
           return v ? JSON.parse(v.config_json).resourceCalendars.map(c=>c.resourceId) : [];

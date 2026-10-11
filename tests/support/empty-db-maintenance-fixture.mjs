@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { createGreenfieldDomain } from '../../scripts/create-greenfield-domain.mjs';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,8 +19,10 @@ export function authorizationFor(packet) {
     packetDigest: digestEmptyDbMaintenancePacketV1(packet), writeAdmission: 'disabled',
     cleanup: 'disabled', kiosk: 'disabled', writersStopped: true };
 }
-export function maintenanceFixture(runtime = syntheticRuntime, { schemaVersion = 10 } = {}) {
-  const root = mkdtempSync(join(tmpdir(), 'jso-empty-maintenance-'));
+export function maintenanceFixture(runtime = syntheticRuntime, { schemaVersion = 10, greenfield = false } = {}) {
+  const root = greenfield ? join(tmpdir(),'jso-empty-maintenance-'+randomUUID()) : mkdtempSync(join(tmpdir(), 'jso-empty-maintenance-'));
+  if(greenfield){if(schemaVersion!==11)throw new Error('GREENFIELD_SCHEMA11_ONLY');createGreenfieldDomain({root,synthetic:true});}
+  else {
   mkdirSync(join(root, 'uploads'));
   // Explicit fixture version; production data is never inferred from these empty seeds.
   if (![10, 11].includes(schemaVersion)) throw new Error('FIXTURE_SCHEMA_VERSION');
@@ -33,6 +37,7 @@ export function maintenanceFixture(runtime = syntheticRuntime, { schemaVersion =
     const at = new Date().toISOString();
     bootstrap.prepare('INSERT INTO schedule_state VALUES (1,0,?,?)').run(at,JSON.stringify({schemaVersion:1,revision:0,updatedAt:at,products:[],tasks:[],sessions:[]}));
   } finally {bootstrap.close();}
+  }
   const target = bindLocalEmptyDbMaintenanceTargetV1(root);
   const packet = (kind = 'initialize', command = null, expected = { scheduleRevision: 0, projectionRevision: 0 }) =>
     ({ schemaVersion: 1, operationId: command?.operationId ?? 'LOCAL-INIT-01', kind,

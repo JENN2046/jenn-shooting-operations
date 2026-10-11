@@ -1,3 +1,4 @@
+import { validateDynamicReceiptRow } from './dynamic-day-adjustment-v1.mjs';
 import { canonicalJsonSchedulingV1, digestCanonicalJsonSchedulingV1, isSchedulingIdentifierV1 } from './scheduling-contract-v1.mjs';
 import { compileSchedulingCalendarDate, normalizeSchedulingConfig } from './scheduling-admin-contract-v2.mjs';
 import { validateTrustedPrincipal, authorizeCapability } from './authorization-v2.mjs';
@@ -43,6 +44,8 @@ export function createSqliteScheduleRescheduleStoreV1({ db, now, refreshProjecti
     if (!row) return denied('RESCHEDULE_OPERATION_NOT_FOUND');
     if (!allowed(principal, row.resource_id)) return denied('RESOURCE_FORBIDDEN');
     const receipt = JSON.parse(row.receipt_json);
+    if(receipt.schemaVersion===2){if(principal.role!=='administrator')return denied('RESOURCE_FORBIDDEN');return {ok:true,receipt:validateDynamicReceiptRow(row)};}
+    if(receipt.schemaVersion!==1)throw new Error('RESCHEDULE_RECEIPT_VERSION');
     if (canonicalJsonSchedulingV1(receipt) !== row.receipt_json || digestCanonicalJsonSchedulingV1(receipt) !== row.receipt_digest) throw new Error('RESCHEDULE_RECEIPT_CORRUPT');
     return { ok: true, receipt };
   }

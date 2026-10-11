@@ -1,3 +1,4 @@
+import { seedEmptyLegacyState } from './empty-legacy-state-v1.mjs';
 import { assertSchedulingQuiescenceV1 } from './sqlite-scheduling-quiescence-v1.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, realpathSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
@@ -383,15 +384,7 @@ export class ScheduleStore {
       if (!coreAccepted) {
         initializeRuntimeWritableSchema(bootstrapDb, { now: this.clock });
         transaction(bootstrapDb, () => {
-          const current = bootstrapDb.prepare('SELECT id FROM schedule_state WHERE id = 1').get();
-          if (current) return;
-          const now = isoNow(this.clock);
-          const snapshot = { schemaVersion: 1, revision: 0, updatedAt: now, products: [], tasks: [], sessions: [] };
-          bootstrapDb.prepare(`
-            INSERT INTO schedule_state (id, revision, updated_at, snapshot_json)
-            VALUES (1, 0, ?, ?)
-            ON CONFLICT(id) DO NOTHING
-          `).run(now, JSON.stringify(snapshot));
+          seedEmptyLegacyState(bootstrapDb, this.clock());
         });
       }
     }
