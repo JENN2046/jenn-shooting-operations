@@ -655,7 +655,7 @@ export class ScheduleStore {
     }
   }
 
-  saveUpload({ operationId, originalName, contentType, kind, buffer, role = 'submitter' }) {
+  saveUpload({ operationId, originalName, contentType, kind, buffer, role = 'submitter', deduplicate = false }) {
     if (this.writeAdmissionControl.isDisabled()) return writeAdmissionFailure();
     if (typeof operationId !== 'string' || !OPERATION_ID.test(operationId)) {
       return { ok: false, status: 422, code: 'INVALID_OPERATION_ID' };
@@ -671,6 +671,11 @@ export class ScheduleStore {
       return { ok: false, status: 415, code: 'UPLOAD_SIGNATURE_MISMATCH' };
     }
     return transaction(this.db, () => {
+      if(deduplicate){
+        const sha=createHash('sha256').update(buffer).digest('hex');
+        const prior=this.db.prepare('SELECT id,original_name AS name,content_type AS contentType,kind,size,sha256 FROM uploads WHERE operation_id=? AND original_name=? AND content_type=? AND kind=? AND sha256=? AND claimed_task_id IS NULL').get(operationId,safeName(originalName),contentType,kind,sha);
+        if(prior)return {ok:true,status:200,upload:{...prior},replayed:true};
+      }
       const count = this.db.prepare('SELECT COUNT(*) AS count, COALESCE(SUM(size), 0) AS bytes FROM uploads WHERE operation_id = ?')
         .get(operationId);
       if (count.count >= 10 || count.bytes + buffer.length > 40 * 1024 * 1024) {

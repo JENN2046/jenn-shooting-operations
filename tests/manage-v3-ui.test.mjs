@@ -5,12 +5,12 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {launch} from './support/first-launch-v3-fixture.mjs';
-import {dom} from './support/manage-synthetic-dom.mjs';
+import {dom,managementScript} from './support/manage-synthetic-dom.mjs';
 test('management UI creates distinct still-life order, filters it, sets duration, adopts proposal, records actual start and complete',async()=>{
  const f=await launch();try{
  const {ids,document}=dom();
  const context=vm.createContext({document,structuredClone,Intl,Date,Number,JSON,Map,Set,Error,crypto:{randomUUID},sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}},fetch:async(path,opt)=>{const r=await f.call(path,opt.body?JSON.parse(opt.body):undefined,opt.headers.Authorization.slice(7));return {ok:r.status<400,status:r.status,json:async()=>r.body};}});
- vm.runInContext(readFileSync(new URL('../public/manage.js',import.meta.url),'utf8'),context);
+ vm.runInContext(managementScript(),context);
  async function fire(id,event){const e=typeof id==='string'?ids.get(id):id;await e.fire(event);for(let i=0;i<150;i++){await new Promise(r=>setImmediate(r));if(ids.get('message').textContent!=='正在处理…')return;}throw Error('UI did not settle');}
  ids.get('token').value='a'.repeat(40);await fire('login','submit');assert.equal(ids.get('order-panel').hidden,false);
  const values={sku:'SYNTHETIC-UI',name:'功能图订单',category:'静物',subtype:'功能图',requested:'Synthetic requester',date:'2026-10-12',count:'1',ratio:'待定',sample:'arrivedVerified',priority:'p1',light:'SOFT',reflectivity:'unknown',brief:'功能图',note:''};
@@ -38,7 +38,7 @@ test('confirmed forecast survives fresh page/reselection, and nonfirst selection
  const storage=new Map();
  async function page(){
   const {ids,document}=dom();const context=vm.createContext({document,structuredClone,Intl,Date,Number,JSON,Map,Set,Error,crypto:{randomUUID},sessionStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},fetch:async(path,opt)=>{const r=await f.call(path,opt.body?JSON.parse(opt.body):undefined,opt.headers.Authorization.slice(7));return {ok:r.status<400,status:r.status,json:async()=>r.body};}});
-  vm.runInContext(readFileSync(new URL('../public/manage.js',import.meta.url),'utf8'),context);
+  vm.runInContext(managementScript(),context);
   async function fire(id,event){await ids.get(id).fire(event);for(let i=0;i<150;i++){await new Promise(r=>setImmediate(r));if(ids.get('message').textContent!=='正在处理…')return;}throw Error('UI did not settle');}
   ids.get('token').value='a'.repeat(40);await fire('login','submit');return {ids,fire};
  }

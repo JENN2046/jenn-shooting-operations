@@ -1,12 +1,17 @@
 import { showMessage, dateKey, mondayOf, minutes, sessionState, layoutSessions } from './common.js?v=ui-20260922';
 
+import {boardView,beijingParts} from './board-model.js';
+import {referenceGallery,clearReferenceImages} from './references.js';
+let protocolVersion=1,token='',authEpoch=0;
+const displayState=(session,tasks)=>protocolVersion===3?session.actualState:sessionState(session,tasks);
+const today=()=>protocolVersion===3?new Date(beijingParts(new Date()).date+'T12:00:00'):new Date();
 const $ = selector => document.querySelector(selector);
 const calendar = $('#calendar');
 const message = $('#message');
 const board = $('#board');
 const agenda = $('#day-agenda');
 const mobile = matchMedia('(max-width: 760px)');
-const labels = { live: '拍摄中', scheduled: '已排期', completed: '已完成', cancelled: '已取消' };
+const labels = { live: '拍摄中', scheduled: '已排期', blocked:'受阻', completed: '已完成', cancelled: '已取消' };
 let currentSnapshot;
 let viewMode = 'week';
 let anchorDate = new Date();
@@ -34,6 +39,7 @@ function maps(snapshot) {
 }
 
 function taskType(task) {
+  if(protocolVersion===3)return task.kind==='静物'?'静物 / '+task.shootingSubtype:task.shootingSubtype==='细节'?'历史细节（未细分）':task.shootingSubtype;
   return [task.request?.productionType || '未分类', task.request?.shootingSubtype || task.kind].filter(Boolean).join(' · ');
 }
 
@@ -60,23 +66,28 @@ function expandCard(item) {
 }
 
 function showDetails(session, tasks) {
+  $('#session-dialog').dataset.sessionId=session.id;
   closeCard();
   const content = $('#session-dialog-content');
   const head = element('div', 'session-detail-meta');
-  head.append(element('span', 'status-badge ' + sessionState(session, tasks), labels[sessionState(session, tasks)]),
-    element('p', '', session.date + ' · ' + session.start + '–' + session.end),
+  head.append(element('span', 'status-badge ' + displayState(session, tasks), labels[displayState(session, tasks)]),
+    element('p', '', '计划 '+session.date + ' · ' + session.start + '–' + session.end),
     element('p', '', session.place || '地点待确认'));
+  if(protocolVersion===3){
+    head.append(element('p','','已确认预计结束：'+(session.confirmedForecast?beijingParts(session.confirmedForecast.estimatedEnd).time:'尚未确认')));
+    for(const run of session.runs||[])head.append(element('p','','实际开拍：'+(run.startedAt?beijingParts(run.startedAt).time:'未发生')+'；实际完成：'+(run.completedAt?beijingParts(run.completedAt).time:'未发生')));
+  }
   const sections = tasks.map(task => {
     const section = element('section', 'detail-task');
     section.append(element('h3', '', task.name), element('p', 'muted', taskType(task) + ' · ' + task.sku));
     const description = element('dl', 'detail-list');
     const request = task.request;
-    const pairs = [['拍摄要求', task.deliver], ['客户', task.client], ['任务状态', { pending: '待排期', scheduled: '已排期', completed: '已完成', cancelled: '已取消' }[task.status] || '未标记']];
+    const pairs = [['拍摄要求', task.deliver], ['客户', task.client], ['任务状态', { live:'拍摄中', blocked:'受阻', pending: '待排期', scheduled: '已排期', blocked:'受阻', completed: '已完成', cancelled: '已取消' }[task.status] || '未标记']];
     if (request) pairs.push(['提报人', request.requestedBy], ['期望日期', request.desiredDate], ['交付', [request.deliverableCount ? request.deliverableCount + ' 份' : '', request.aspectRatio, request.durationSeconds ? request.durationSeconds + ' 秒' : '', request.audioRequirement].filter(Boolean).join(' · ')], ['补充说明', request.note]);
     for (const [label, value] of pairs) {
       if (value) description.append(element('dt', '', label), element('dd', '', value));
     }
-    section.append(description);
+    section.append(description,referenceGallery(task.references,()=>token));
     return section;
   });
   content.replaceChildren(head, ...sections);
@@ -87,7 +98,7 @@ function showDetails(session, tasks) {
 function sessionElement(session, taskById, mode = 'week') {
   const tasks = session.ids.map(id => taskById.get(id)).filter(Boolean);
   const names = session.ids.map(id => taskById.get(id)?.name || id).join(' / ');
-  const state = sessionState(session, tasks);
+  const state = displayState(session, tasks);
   const types = new Set(tasks.map(task => task.request?.productionType));
   const item = element('article', 'session-card ' + mode + '-session ' + (types.has('视频') ? 'video' : 'print') + ' state-' + state);
   item.dataset.sessionId = session.id;
@@ -98,8 +109,9 @@ function sessionElement(session, taskById, mode = 'week') {
   const top = element('span', 'session-top');
   top.append(element('time', '', session.start + '–' + session.end));
   const badge = element('span', 'status-badge ' + state, labels[state]);
-  if (state === 'live') badge.title = '按排班时间显示，不代表实际开拍确认';
+  if (protocolVersion!==3&&state === 'live') badge.title = '按排班时间显示，不代表实际开拍确认';
   summary.append(top, element('strong', 'session-name', names), badge);
+  if(protocolVersion===3&&session.confirmedForecast)summary.append(element('small','','预计 '+beijingParts(session.confirmedForecast.estimatedEnd).time));
   const peek = element('div', 'session-peek');
   peek.hidden = true;
   const detail = element('div', 'peek-meta');
@@ -139,7 +151,7 @@ function dayButton(date, className, text) {
   const key = dateKey(date);
   button.setAttribute('aria-label', key + '，查看当日场次');
   button.setAttribute('aria-pressed', String(key === dateKey(anchorDate)));
-  if (key === dateKey(new Date())) {
+  if (key === dateKey(today())) {
     button.classList.add('today');
     button.setAttribute('aria-current', 'date');
   }
@@ -258,41 +270,46 @@ function renderPending(snapshot) {
       detail.hidden = !detail.hidden;
       button.setAttribute('aria-expanded', String(!detail.hidden));
     });
+    detail.append(referenceGallery(task.references,()=>token));
     item.append(button, detail);
     return item;
   });
   $('#pending').replaceChildren(...cards);
   if (!tasks.length) $('#pending').append(element('p', 'empty-state', '暂无待排任务'), element('a', 'text-link', '提交拍摄需求 →'));
   const link = $('#pending .text-link');
-  if (link) link.href = '/submit';
+  if (link) link.href = protocolVersion===3?'/manage':'/submit';
 }
 
 async function loadBoard() {
-  $('#retry').hidden = true;
-  showMessage(message, '正在读取排班…');
-  try {
-    const response = await fetch('/api/v1/snapshot');
-    if (!response.ok) throw new Error('READ_FAILED');
-    const { snapshot } = await response.json();
-    currentSnapshot = snapshot;
-    renderCalendar();
-    renderPending(snapshot);
-    $('#revision').textContent = '数据版本 ' + snapshot.revision + ' · 看板只读';
-    board.hidden = false;
-    showMessage(message, '');
-    clearInterval(clockTimer);
-    clockTimer = setInterval(updateLiveStates, 30000);
-  } catch {
-    showMessage(message, '暂时无法读取排班，请检查网络后重试。', 'error');
-    $('#retry').hidden = false;
-  }
+  const epoch=authEpoch;
+  $('#retry').hidden=true;showMessage(message,'正在读取排班…');
+  try{
+    const profile=await fetch('/api/client-profile');if(!profile.ok)throw Error('服务暂时不可用，请稍后重试。');
+    const profileResult=await profile.json();if(epoch!==authEpoch)return;protocolVersion=profileResult.protocolVersion;
+    if(protocolVersion===3){
+      $('#create-order-link').href='/manage';$('#create-order-link').textContent='＋ 新建订单';
+      document.querySelector('.legend').textContent='北京时间 · 实际进度以开拍和完成记录为准';
+      if(!token){board.hidden=true;$('#board-login').hidden=false;showMessage(message,'请使用 Jenn 业务身份登录。');return;}
+    }
+    const response=await fetch(protocolVersion===3?'/api/v3/business/board':'/api/v1/snapshot',{headers:token?{Authorization:'Bearer '+token}:{}});
+    if(!response.ok)throw Error(response.status===401?'登录失效或令牌无效，请重新登录。':response.status===403?'没有此看板的访问权限。':'排班读取失败，请刷新重试。');
+    const result=await response.json();if(epoch!==authEpoch)return;const detailId=$('#session-dialog').open?$('#session-dialog').dataset.sessionId:null;clearReferenceImages();
+    currentSnapshot=protocolVersion===3?boardView(result):result.snapshot;
+    if(protocolVersion===3&&!board.dataset.loaded)anchorDate=today();
+    board.dataset.loaded='yes';renderCalendar();renderPending(currentSnapshot);if(detailId){const selected=currentSnapshot.sessions.find(s=>s.id===detailId);if(selected)showDetails(selected,currentSnapshot.tasks.filter(t=>selected.ids.includes(t.id)));else $('#session-dialog').close();}
+    $('#revision').textContent='数据版本 '+currentSnapshot.revision+' · 看板只读';board.hidden=false;
+    $('#board-login').hidden=true;$('#board-logout').hidden=protocolVersion!==3;showMessage(message,'');
+    clearInterval(clockTimer);clockTimer=setInterval(protocolVersion===3?loadBoard:updateLiveStates,30000);
+  }catch(e){if(epoch!==authEpoch)return;board.hidden=true;currentSnapshot=null;clearReferenceImages();clearInterval(clockTimer);$('#session-dialog').close();$('#session-dialog-content').replaceChildren();$('#pending').replaceChildren();calendar.replaceChildren();if(protocolVersion===3)$('#board-login').hidden=false;showMessage(message,e.message,'error');$('#retry').hidden=false;}
 }
+$('#board-login').addEventListener('submit',e=>{e.preventDefault();authEpoch++;token=$('#board-token').value;$('#board-token').value='';loadBoard();});
+$('#board-logout').addEventListener('click',()=>{authEpoch++;token='';currentSnapshot=null;clearInterval(clockTimer);clearReferenceImages();board.hidden=true;$('#board-login').hidden=false;$('#board-logout').hidden=true;$('#session-dialog').close();$('#session-dialog-content').replaceChildren();$('#pending').replaceChildren();calendar.replaceChildren();agenda.replaceChildren();showMessage(message,'已退出。');});
 
 function updateLiveStates() {
   if (!currentSnapshot) return;
   const { taskById } = maps(currentSnapshot);
   currentSnapshot.sessions.forEach(session => {
-    const state = sessionState(session, session.ids.map(id => taskById.get(id)).filter(Boolean));
+    const state = displayState(session, session.ids.map(id => taskById.get(id)).filter(Boolean));
     document.querySelectorAll('.session-card').forEach(item => {
       if (item.dataset.sessionId !== session.id) return;
       Object.keys(labels).forEach(key => item.classList.toggle('state-' + key, key === state));
@@ -316,7 +333,7 @@ function movePeriod(direction) {
 }
 $('#previous-period').addEventListener('click', () => movePeriod(-1));
 $('#next-period').addEventListener('click', () => movePeriod(1));
-$('#current-period').addEventListener('click', () => { anchorDate = new Date(); renderCalendar(); });
+$('#current-period').addEventListener('click', () => { anchorDate = today(); renderCalendar(); });
 $('#retry').addEventListener('click', loadBoard);
 $('#close-session').addEventListener('click', () => $('#session-dialog').close());
 $('#session-dialog').addEventListener('click', event => {

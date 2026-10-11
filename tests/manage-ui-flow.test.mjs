@@ -1,4 +1,4 @@
-import {dom} from './support/manage-synthetic-dom.mjs';
+import {dom,managementScript} from './support/manage-synthetic-dom.mjs';
 // Executes shipped event handlers against an in-process HTTP app and a minimal
 // synthetic DOM. This is not a browser/rendering or network-listener test.
 import test from 'node:test';
@@ -12,7 +12,7 @@ test('shipped UI handlers → authenticated HTTP → duration, weekly config pre
  const f=await setup();try{
  const {ids,document}=dom();const calls=[];
  const context=vm.createContext({document,structuredClone,Intl,Date,Number,JSON,Map,Set,Error,crypto:{randomUUID},sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}},fetch:async(path,options)=>{const body=options.body?JSON.parse(options.body):undefined;calls.push({path,body});const r=await f.call(path,body,options.headers.Authorization.slice(7));return {ok:r.status<400,status:r.status,json:async()=>r.body};}});
- vm.runInContext(readFileSync(new URL('../public/manage.js',import.meta.url),'utf8'),context);
+ vm.runInContext(managementScript(),context);
  async function fire(element,event){await element.fire(event);for(let i=0;i<100;i++){await new Promise(resolve=>setImmediate(resolve));if(ids.get('message').textContent!=='正在处理…')return;}throw new Error('UI did not settle');}
  ids.get('token').value=tokens.admin;await fire(ids.get('login'),'submit');assert.equal(ids.get('workspace').hidden,false,ids.get('message').textContent);
  const form=ids.get('requests').children[0];form.children[1].children[0].value='75';await fire(form,'submit');assert.match(ids.get('message').textContent,/时长已保存/);assert.equal(JSON.parse(f.store.db.prepare("SELECT duration_estimate_json FROM scheduling_request_requirements WHERE request_id='REQ-A'").get().duration_estimate_json).durationMs,4500000);

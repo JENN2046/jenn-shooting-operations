@@ -7,10 +7,15 @@ export function dom(){
  replaceChildren(...elements){this.children=[];this.value=this.tagName==='select'?'':this.value;this.append(...elements);}
  addEventListener(event,fn){(this.handlers[event]??=[]).push(fn);}
  querySelectorAll(){return this.children;}
+ reset(){for(const e of ids.values())if(e.id?.startsWith('order-')&&['input','textarea'].includes(e.tagName))e.value='';}
  focus(){}
  async fire(event){for(const fn of this.handlers[event]||[])await fn({preventDefault(){}});}
  }
  const html=readFileSync(new URL('../../public/manage.html',import.meta.url),'utf8');
  for(const m of html.matchAll(/<([a-z]+)[^>]*\bid="([^"]+)"[^>]*>/g)){const e=new Element(m[1]);e.id=m[2];e.value=/\bvalue="([^"]*)"/.exec(m[0])?.[1]||'';ids.set(e.id,e);}
  return {ids,document:{querySelector:s=>ids.get(s.slice(1)),querySelectorAll:s=>all.filter(e=>e.tagName==='button'&&(!s.includes('data-locked')||e.dataset.locked==='yes')),createElement:tag=>new Element(tag)}};
+}
+
+export function managementScript(){
+ return ['common.js','references.js','manage.js'].map(name=>readFileSync(new URL('../../public/'+name,import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace(/export /g,'')).join('\n');
 }
