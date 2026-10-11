@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { join, dirname } from 'node:path';
-import { initializeWritableSchema, V1_SCHEMA_SQL } from '../../src/sqlite-schema-v2.mjs';
+import { initializeWritableSchema, MIGRATIONS, V1_SCHEMA_SQL } from '../../src/sqlite-schema-v2.mjs';
 import { buildMigrationPlan } from '../../src/migration-v2.mjs';
 import { materializeMigrationPlan } from '../../src/migration-materialize-sqlite-v2.mjs';
 import { readV1Source, resolveExistingPath } from '../../src/migration-sqlite-v2.mjs';
@@ -12,10 +12,10 @@ import { createSqliteSchedulingAdminStoreV1 } from '../../src/sqlite-scheduling-
 import { normalizeSchedulingConfigV1 } from '../../src/scheduling-admin-contract-v1.mjs';
 import { refreshSqliteSnapshotProjectionsV2 } from '../../src/sqlite-run-event-store-v2.mjs';
 
-export function gf15Fixture({ path = ':memory:', prior = false, checkpoint, refresh, legacySnapshot } = {}) {
+export function gf15Fixture({ path = ':memory:', prior = false, checkpoint, refresh, legacySnapshot, schemaVersion = MIGRATIONS.length } = {}) {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 3000;');
-  initializeWritableSchema(db);
+  initializeWritableSchema(db, { migrations: MIGRATIONS.slice(0, schemaVersion) });
   let instant = '2026-09-30T15:30:00.000Z'; // Asia/Shanghai 23:30.
   const now = () => new Date(instant);
   // Isolated empty-domain bootstrap; no GF15 request/resource/config/proposal/decision facts.
