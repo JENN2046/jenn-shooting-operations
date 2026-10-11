@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
-import { assertKnownSchema } from './sqlite-schema-v2.mjs';
+import { assertKnownSchema, MIGRATIONS } from './sqlite-schema-v2.mjs';
+import { digestCanonicalJsonSchedulingV1 } from './scheduling-contract-v1.mjs';
 
 // Fixed administrator custody. No environment/CLI override or application-writable approval.
 const CUSTODY = '/etc/jso/core-acceptance';
@@ -96,11 +97,59 @@ export function validateCoreDatabase(record, filename) {
   }
   const db = new DatabaseSync(filename, { readOnly: true });
   try {
-    db.exec('PRAGMA query_only=ON');
+    db.exec('PRAGMA query_only=ON; BEGIN');
     need(assertKnownSchema(db).version === 11, 'SCHEMA11');
-    need(!!db.prepare('SELECT id FROM revision_counters WHERE id=1').get()
+    const counter = db.prepare('SELECT * FROM revision_counters WHERE id=1').get();
+    need(counter
       && !!db.prepare('SELECT id FROM schedule_state WHERE id=1').get(), 'INITIALIZATION_REQUIRED');
+    const initial = db.prepare('SELECT * FROM empty_db_initialization WHERE id=1').get();
+    validateCoreInitializationSnapshot({ initial, counter,
+      audits: initial ? db.prepare(`SELECT * FROM audit_log
+        WHERE action='emptyDbMaintenanceV1' AND entity_id=?`).all(initial.operation_id) : [],
+      projections: db.prepare('SELECT * FROM snapshot_projections ORDER BY projection_name').all() });
   } finally { db.close(); }
+}
+
+// The receipt describes the original transaction; projections describe current state.
+// Neither current revisions nor the legacy snapshot must remain at their initial zero.
+export function validateCoreInitializationSnapshot({ initial, counter, audits, projections }) {
+  need(initial, 'INITIALIZATION_REQUIRED');
+  let response, binding;
+  try { response = JSON.parse(initial.response_json); binding = JSON.parse(initial.binding_json); }
+  catch { fail('INITIALIZATION_RECEIPT'); }
+  const expected = { ok: true, kind: 'initialize', operationId: initial.operation_id,
+    packetDigest: initial.packet_digest, scheduleRevision: 0, projectionRevision: 0,
+    initializedAt: initial.created_at };
+  need(canonical(response) === canonical(expected)
+    && digestCanonicalJsonSchedulingV1(response) === initial.response_digest
+    && /^sha256:[a-f0-9]{64}$/u.test(initial.packet_digest)
+    && typeof initial.operation_id === 'string' && initial.operation_id.length > 0
+    && Number.isFinite(Date.parse(initial.created_at))
+    && typeof binding?.actor === 'string' && binding.actor.length > 0
+    && binding.businessTimeZone === 'Asia/Shanghai'
+    && [10, 11].some(version => binding.schemaDigest === digestCanonicalJsonSchedulingV1(
+      MIGRATIONS.slice(0, version).map(({ version, name, checksum }) => ({ version, name, checksum })))),
+  'INITIALIZATION_RECEIPT');
+  need(audits.length === 1 && audits[0].action === 'emptyDbMaintenanceV1'
+    && audits[0].entity_id === initial.operation_id && audits[0].role === binding.actor
+    && audits[0].revision === 0 && audits[0].result === initial.packet_digest
+    && audits[0].created_at === initial.created_at, 'INITIALIZATION_AUDIT');
+  need(projections.length === 2 && Number.isSafeInteger(counter.schedule_revision)
+    && counter.schedule_revision >= 0 && Number.isSafeInteger(counter.projection_revision)
+    && counter.projection_revision >= 0, 'INITIALIZATION_PROJECTIONS');
+  for (const [index, name] of ['schedule-v1-compat', 'schedule-v2'].entries()) {
+    const row = projections[index], version = index + 1;
+    let payload;
+    try { payload = JSON.parse(row.payload_json); } catch { fail('INITIALIZATION_PROJECTIONS'); }
+    need(row.projection_name === name && row.schema_version === version && row.source_schema_version === 2
+      && row.revision === counter.projection_revision
+      && row.schedule_revision === (version === 1 ? null : counter.schedule_revision)
+      && row.updated_at === counter.updated_at && payload?.schemaVersion === version
+      && payload.updatedAt === row.updated_at
+      && (version === 1 ? payload.revision === row.revision
+        : payload.projectionRevision === row.revision && payload.scheduleRevision === row.schedule_revision),
+    'INITIALIZATION_PROJECTIONS');
+  }
 }
 export function loadCoreAcceptance(databasePath) {
   if (!existsSync(CUSTODY)) return null;

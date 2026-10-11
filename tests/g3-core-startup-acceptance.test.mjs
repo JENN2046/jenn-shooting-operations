@@ -4,7 +4,9 @@ import { cpSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, st
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
+import { createServer } from 'node:net';
+import { once } from 'node:events';
 import { DatabaseSync } from 'node:sqlite';
 import { initializeWritableSchema } from '../src/sqlite-schema-v2.mjs';
 import { ScheduleStore } from '../src/store.mjs';
@@ -44,7 +46,7 @@ async function fixture({ initialized = true } = {}) {
   return {root,app,custody,filename,uploads,m,record,install,activate,server,initialize:()=>maintenance.execute(),dataRoot:maintenance.root,close(){for(const [k,v]of Object.entries(saved)){if(v===undefined)delete process.env[k];else process.env[k]=v;}maintenance.close();rmSync(root,{recursive:true,force:true});}};
 }
 test('PREPARED uses a truly read-only store, cannot enable writes, and leaves bytes/schema/directories unchanged',async()=>{
- const f=await fixture();try{const before=readFileSync(f.filename),names=readdirSync(f.root),dataNames=readdirSync(f.dataRoot);const s=f.server();try{assert.equal(s.store.readOnly,true);assert.throws(()=>s.orphanCleanupControl.enable({}),/CLEANUP_DISABLED/);assert.throws(()=>s.writeAdmissionControl.enable(),/PREPARED/);assert.throws(()=>s.store.db.exec('CREATE TABLE forbidden(x)'));}finally{s.store.close();}assert.deepEqual(readFileSync(f.filename),before);assert.deepEqual(readdirSync(f.root),names);assert.deepEqual(readdirSync(f.dataRoot),dataNames);assert.throws(()=>f.server('enabled'),/SERVER_CONFIG/);}finally{f.close();}
+ const f=await fixture();try{const before=readFileSync(f.filename),names=readdirSync(f.root),dataNames=readdirSync(f.dataRoot);const s=f.server();try{assert.equal(s.store.readOnly,true);assert.throws(()=>s.orphanCleanupControl.enable({}),/CLEANUP_DISABLED/);assert.deepEqual(s.writeAdmissionControl.enable(),{ok:false,code:'G3_CORE_ACCEPTANCE_PREPARED_READ_ONLY_REQUIRED',mode:'disabled',enabled:false,transitionCount:0});assert.equal(s.writeAdmissionControl.isDisabled(),true);assert.throws(()=>s.store.db.exec('CREATE TABLE forbidden(x)'));}finally{s.store.close();}assert.deepEqual(readFileSync(f.filename),before);assert.deepEqual(readdirSync(f.root),names);assert.deepEqual(readdirSync(f.dataRoot),dataNames);assert.throws(()=>f.server('enabled'),/SERVER_CONFIG/);}finally{f.close();}
 });
 test('ACTIVE persists business calendar through changed digest and independent-process reopen plus save',async()=>{
  const f=await fixture();try{f.activate();const s=f.server('enabled');assert.throws(()=>s.orphanCleanupControl.enable({}),/CLEANUP_DISABLED/);
@@ -55,7 +57,8 @@ test('ACTIVE persists business calendar through changed digest and independent-p
  assert.notEqual(f.m.digest(readFileSync(f.filename)),f.record.baseline.sha256);
  const code=`import {ScheduleStore} from ${JSON.stringify(pathToFileURL(join(f.app,'src/store.mjs')).href)};const s=new ScheduleStore({filename:${JSON.stringify(f.filename)},uploadRoot:${JSON.stringify(f.uploads)},orphanCleanupMode:'disabled'});if(s.db.prepare('SELECT config_version FROM scheduling_active_config').get().config_version!=='C1')process.exitCode=1;const saved=s.submitRequest({role:'submitter',submission:{schemaVersion:1,operationId:'core-restart-request-001',productionType:'平面',sku:'RESTART-SYNTHETIC',name:'Restart synthetic request',kind:'细节',shootingSubtype:'细节',aspectRatio:'1:1',deliver:'Synthetic deliverable',requestedBy:'Synthetic user'}});if(saved.status!==201||s.getSnapshot().tasks.length!==1)process.exitCode=1;s.close();`;
  const child=spawnSync(process.execPath,['--input-type=module','-e',code],{encoding:'utf8'});assert.equal(child.status,0,child.stderr);
- const reopened=new DatabaseSync(f.filename,{readOnly:true});try{assert.equal(JSON.parse(reopened.prepare('SELECT snapshot_json FROM schedule_state WHERE id=1').get().snapshot_json).tasks.filter(t=>t.sku==='RESTART-SYNTHETIC').length,1);assert.equal(reopened.prepare("SELECT count(*) n FROM operations WHERE operation_id='core-restart-request-001'").get().n,1);}finally{reopened.close();}
+ const reopened=new DatabaseSync(f.filename,{readOnly:true});try{assert.equal(JSON.parse(reopened.prepare('SELECT snapshot_json FROM schedule_state WHERE id=1').get().snapshot_json).tasks.filter(t=>t.sku==='RESTART-SYNTHETIC').length,1);assert.equal(reopened.prepare("SELECT count(*) n FROM operations WHERE operation_id='core-restart-request-001'").get().n,1);assert.ok(reopened.prepare('SELECT projection_revision FROM revision_counters WHERE id=1').get().projection_revision>0);}finally{reopened.close();}
+ const again=f.server('enabled');again.store.close();
  }finally{f.close();}
 });
 test('missing approval, wrong object/version, incomplete activation, damaged records and drift fail closed',async()=>{
@@ -142,5 +145,79 @@ test('supported Schema11 initialization breaks the bootstrap cycle only after a 
   const prepared=f.server();assert.equal(prepared.store.readOnly,true);prepared.store.close();
   f.activate();const active=f.server('enabled');
   try {assert.equal(active.store.readOnly,false);assert.equal(active.store.db.prepare('SELECT count(*) n FROM empty_db_initialization').get().n,1);}finally{active.store.close();}
+ }finally{f.close();}
+});
+
+
+test('incomplete initialization evidence refuses startup without changing database bytes', async () => {
+ for (const sql of [
+  "DELETE FROM audit_log WHERE action='emptyDbMaintenanceV1'",
+  "UPDATE audit_log SET result='incomplete synthetic receipt' WHERE action='emptyDbMaintenanceV1'",
+  "DELETE FROM snapshot_projections WHERE projection_name='schedule-v2'",
+  "UPDATE snapshot_projections SET revision=revision+1 WHERE projection_name='schedule-v2'",
+  "UPDATE snapshot_projections SET payload_json=json_set(payload_json,'$.projectionRevision',9) WHERE projection_name='schedule-v2'",
+ ]) {
+  const f=await fixture();try {
+   const db=new DatabaseSync(f.filename);db.exec(sql);db.close();
+   f.record.baseline.sha256=f.m.digest(readFileSync(f.filename));f.install();
+   const before=readFileSync(f.filename);
+   assert.throws(()=>f.server(),/INITIALIZATION_(AUDIT|PROJECTIONS)/);
+   f.activate();assert.throws(()=>f.server('enabled'),/INITIALIZATION_(AUDIT|PROJECTIONS)/);
+   assert.deepEqual(readFileSync(f.filename),before);
+  }finally{f.close();}
+ }
+});
+
+test('PREPARED direct entrypoint refuses an operational enable signal and remains responsive and read-only', {timeout:15000}, async () => {
+ const f=await fixture();let child;
+ try {
+  const reservation=createServer();reservation.listen(0,'127.0.0.1');await once(reservation,'listening');
+  const port=reservation.address().port;await new Promise(resolve=>reservation.close(resolve));
+  const env={...process.env,HOST:'127.0.0.1',PORT:String(port),DATABASE_PATH:f.filename,WRITE_ADMISSION_MODE:'disabled'};
+  f.record.policy.runtimeConfigSha256=f.m.runtimeConfigDigest(env);f.install();
+  const before=readFileSync(f.filename), names=readdirSync(f.dataRoot);
+  child=spawn(process.execPath,[join(f.app,'src/server.mjs')],{env,stdio:['ignore','pipe','pipe']});
+  let stdout='',stderr='';child.stdout.on('data',b=>stdout+=b);child.stderr.on('data',b=>stderr+=b);
+  async function until(text){
+   const end=Date.now()+5000;
+   while(!stdout.includes(text)){
+    assert.equal(child.exitCode,null,stderr);assert.equal(child.signalCode,null,stderr);
+    assert.ok(Date.now()<end,stdout+'\n'+stderr);await new Promise(r=>setTimeout(r,20));
+   }
+  }
+  await until('listening on');
+  const response=await fetch(`http://127.0.0.1:${port}/api/v2/business/state`,{headers:{authorization:'Bearer '+'a'.repeat(40)}});
+  assert.equal(response.status,200);await response.text();
+  child.kill('SIGUSR2');await until('G3_CORE_ACCEPTANCE_PREPARED_READ_ONLY_REQUIRED');
+  const event=stdout.split('\n').filter(x=>x.startsWith('{')).map(x=>JSON.parse(x)).find(x=>x.event==='G3_CORE_ACCEPTANCE_PREPARED_READ_ONLY_REQUIRED');
+  assert.equal(event.writeAdmission,'disabled');assert.equal(event.transitionCount,0);
+  const after=await fetch(`http://127.0.0.1:${port}/api/v2/business/state`,{headers:{authorization:'Bearer '+'a'.repeat(40)}});
+  assert.equal(after.status,200);await after.text();assert.equal(child.exitCode,null);
+  assert.deepEqual(readFileSync(f.filename),before);assert.deepEqual(readdirSync(f.dataRoot),names);
+ }finally{if(child&&child.exitCode===null&&child.signalCode===null){const ended=once(child,'exit');child.kill('SIGTERM');await ended;}f.close();}
+});
+
+test('read-only initialization snapshot validates immutable receipt semantics and its audit binding', async () => {
+ const f=await fixture();try {
+  const db=new DatabaseSync(f.filename,{readOnly:true});let state;
+  try {state={initial:db.prepare('SELECT * FROM empty_db_initialization WHERE id=1').get(),
+   counter:db.prepare('SELECT * FROM revision_counters WHERE id=1').get(),
+   audits:db.prepare("SELECT * FROM audit_log WHERE action='emptyDbMaintenanceV1'").all(),
+   projections:db.prepare('SELECT * FROM snapshot_projections ORDER BY projection_name').all()};}finally{db.close();}
+  assert.doesNotThrow(()=>f.m.validateCoreInitializationSnapshot(state));
+  const before=readFileSync(f.filename);
+  // Data-only damaged/incomplete read results; never alter immutable database records.
+  for (const change of [
+   x=>x.initial=undefined,
+   x=>x.initial.response_json='{',
+   x=>x.initial.response_digest='sha256:'+'0'.repeat(64),
+   x=>x.initial.operation_id='different-receipt',
+   x=>x.initial.binding_json=JSON.stringify({...JSON.parse(x.initial.binding_json),schemaDigest:'unknown'}),
+   x=>x.initial.created_at='2000-01-01T00:00:00.000Z',
+   x=>x.audits[0].role='different-actor',
+   x=>x.audits.push({...x.audits[0]}),
+   x=>x.projections[0].updated_at='2000-01-01T00:00:00.000Z',
+  ]) {const damaged=structuredClone(state);change(damaged);assert.throws(()=>f.m.validateCoreInitializationSnapshot(damaged),/INITIALIZATION_/);}
+  assert.deepEqual(readFileSync(f.filename),before);
  }finally{f.close();}
 });

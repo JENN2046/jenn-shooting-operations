@@ -210,7 +210,9 @@ export function createOperationsServer({
   });
   if (startup.prepared) {
     writeAdmissionControl = Object.freeze({ ...writeAdmissionControl,
-      enable: () => { throw new Error('G3_CORE_ACCEPTANCE_PREPARED_READ_ONLY_REQUIRED'); },
+      enable: () => Object.freeze({ ok: false,
+        code: 'G3_CORE_ACCEPTANCE_PREPARED_READ_ONLY_REQUIRED',
+        ...writeAdmissionControl.status() }),
     });
   }
   const effectiveClock = clock ?? (() => new Date());
