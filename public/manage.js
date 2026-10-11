@@ -44,7 +44,7 @@ function render(){
  $('#requests').replaceChildren();for(const request of state.requests||[]){const form=document.createElement('form');form.append(row('strong',request.name));const label=row('label','预计拍摄分钟数'),input=document.createElement('input');input.type='number';input.min='1';input.max='1440';input.required=true;input.value=request.durationEstimateJson?JSON.parse(request.durationEstimateJson).durationMs/60000:'';label.append(input);form.append(label);const save=row('button','保存该单时长');save.type='submit';form.append(save);form.addEventListener('submit',e=>{e.preventDefault();work(async()=>{await mutation(`/api/v3/business/requests/${encodeURIComponent(request.id)}/duration`,{operationId:newId('DURATION'),requestId:request.id,expectedScheduleRevision:state.revisions.scheduleRevision,expectedProjectionRevision:state.revisions.projectionRevision,durationMinutes:Number(input.value)});await refresh();say('逐单时长已保存，已有场次未移动。');});});$('#requests').append(form);}
  $('#sessions').replaceChildren();for(const s of state.sessions){const e=row('div','');e.className='session';e.append(row('strong',s.requestNames?.join('、')||'未命名拍摄'),row('p',`${local(s.plannedStart)} — ${local(s.plannedEnd)} · 缓冲 ${s.bufferAfterMinutes??'未确定'} 分钟`));const b=row('button','调整时间');b.type='button';b.disabled=s.hasRunHistory||s.lockStatus!=='unlocked'||s.status==='cancelled';b.dataset.locked=b.disabled?'yes':'';b.addEventListener('click',()=>{editing=s;$('#reschedule-form').hidden=false;$('#edit-title').textContent=`调整 ${s.requestNames?.join('、')||'拍摄场次'}`;const start=local(s.plannedStart).split(' '),end=local(s.plannedEnd).split(' ');$('#shoot-date').value=start[0];$('#shoot-start').value=start[1];$('#shoot-end').value=end[1];$('#buffer-note').textContent=`拍后保留 ${s.bufferAfterMinutes} 分钟。改期不会发送外部通知。`;$('#shoot-date').focus();});e.append(b);$('#sessions').append(e);}
  if(!state.sessions.length)$('#sessions').append(row('p','暂无已排场次。'));
- dayPreview=null;$('#dynamic-preview').hidden=true;$('#dynamic-item').replaceChildren(...state.sessions.filter(s=>local(s.plannedStart).slice(0,10)===state.businessToday).map(s=>{const o=row('option',s.requestNames?.join('、')||s.id);o.value=s.id;return o;}));loadDynamic();
+ dayPreview=null;$('#dynamic-preview').hidden=true;renderSessionChoice('dynamic-item',state.sessions.filter(s=>s.status==='confirmed'&&local(s.plannedStart).slice(0,10)===state.businessToday),s=>s.requestNames?.join('、')||s.id);selectDynamic();
  $('#plan-from').value=state.businessToday;$('#plan-through').value=state.businessToday;
  const inactive=state.configs.filter(c=>!c.active&&!c.everActive);published=null;$('#saved-preview').hidden=true;
  $('#saved-version').replaceChildren(...inactive.map(c=>{const o=row('option',`保存于 ${local(c.publishedAt)} · ${c.configVersion.slice(-8)}`);o.value=c.configVersion;return o;}));$('#published').hidden=!inactive.length||state.principal.role!=='administrator';
@@ -98,8 +98,34 @@ function renderProposal(){const p=proposal.proposal;const out=$('#proposal');out
 // Preserve semantic disabled state in addition to in-flight guards.
 const baseSync=syncBusy;syncBusy=function(){baseSync();document.querySelectorAll('button[data-locked="yes"]').forEach(b=>b.disabled=true);};syncBusy();
 
-function loadDynamic(){const s=state?.sessions.find(s=>s.id===$('#dynamic-item').value);if(!s)return;$('#dynamic-facts').textContent=(s.runs||[]).length?'已记录执行事实：'+s.runs.map(r=>`${({scheduled:'未开始',shooting:'拍摄中',blocked:'受阻',completed:'已完成',cancelled:'已取消'})[r.status]||r.status}；实际开始 ${r.startedAt?local(r.startedAt):'未记录'}；实际完成 ${r.completedAt?local(r.completedAt):'未记录'}`).join('。'):'尚无执行事实，不能把过期计划推定为已经结束。';$('#dynamic-start').value=local(s.plannedStart).slice(11,16);$('#dynamic-end').value=local(s.plannedEnd).slice(11,16);$('#dynamic-buffer').value=s.bufferAfterMinutes??'';dayPreview=null;$('#dynamic-preview').hidden=true;}
-$('#dynamic-item').addEventListener('change',loadDynamic);
+function choiceKey(id){return `jso.choice.${JSON.stringify([state.principal.subjectId,[...state.principal.resourceIds].sort()])}.${id}`;}
+function rememberChoice(id){try{sessionStorage.setItem(choiceKey(id),$('#'+id).value);}catch{}}
+function renderSessionChoice(id,sessions,label){
+ const select=$('#'+id),key=choiceKey(id);let selected='';
+ if(select.dataset.owner===key)selected=select.value;
+ else try{selected=sessionStorage.getItem(key)||'';}catch{}
+ const valid=sessions.some(s=>s.id===selected),placeholder=row('option',selected&&!valid?'原场次已不适用，请重新选择':'请选择场次');placeholder.value='';
+ select.replaceChildren(placeholder,...sessions.map(s=>{const o=row('option',label(s));o.value=s.id;return o;}));
+ select.value=valid?selected:'';select.dataset.owner=key;
+ $('#'+id+'-notice').textContent=selected&&!valid?'原先选择的场次已不在当前可操作范围，请重新选择后再操作。':'';
+ rememberChoice(id);
+}
+for(const id of ['actual-item','dynamic-item'])$('#'+id).addEventListener('change',()=>{rememberChoice(id);$('#'+id+'-notice').textContent='';});
+function loadDynamic(){
+ dayPreview=null;$('#dynamic-preview').hidden=true;
+ const s=state?.sessions.find(s=>s.id===$('#dynamic-item').value);
+ if(!s){$('#dynamic-facts').textContent='请先选择当天场次。';for(const id of ['dynamic-start','dynamic-end','dynamic-buffer'])$('#'+id).value='';return;}
+ const forecast=s.confirmedForecast;
+ const facts=(s.runs||[]).length?'已记录执行事实：'+s.runs.map(r=>`${({scheduled:'未开始',shooting:'拍摄中',blocked:'受阻',completed:'已完成',cancelled:'已取消'})[r.status]||r.status}；实际开始 ${r.startedAt?local(r.startedAt):'未记录'}；实际完成 ${r.completedAt?local(r.completedAt):'未记录'}`).join('。'):'尚无执行事实，不能把过期计划推定为已经结束。';
+ $('#dynamic-facts').textContent=`原计划：${local(s.plannedStart)} — ${local(s.plannedEnd)}。`+(forecast?`已确认预计结束：${local(forecast.estimatedEnd)}（确认于 ${local(forecast.confirmedAt)}，不是实际完成）。`:'尚无已确认预计结束。')+facts;
+ const useForecast=$('#dynamic-mode').value==='forecast';
+ $('#dynamic-start').value=local(s.plannedStart).slice(11,16);
+ $('#dynamic-end').value=useForecast?(forecast?local(forecast.estimatedEnd).slice(11,16):''):local(s.plannedEnd).slice(11,16);
+ $('#dynamic-buffer').value=(useForecast?forecast?.bufferAfterMinutes:null)??s.bufferAfterMinutes??'';
+}
+$('#dynamic-mode').addEventListener('change',loadDynamic);
+function selectDynamic(){const s=state?.sessions.find(s=>s.id===$('#dynamic-item').value);$('#dynamic-mode').value=s?.runs?.length?'forecast':'plan';loadDynamic();}
+$('#dynamic-item').addEventListener('change',selectDynamic);
 $('#dynamic-form').addEventListener('input',()=>{dayPreview=null;$('#dynamic-preview').hidden=true;});
 $('#dynamic-form').addEventListener('submit',e=>{e.preventDefault();work(async()=>{
  const s=state.sessions.find(s=>s.id===$('#dynamic-item').value);if(!s)throw new Error('当天没有可选择的场次。');
@@ -125,7 +151,7 @@ function renderOrderPanel(){
  $('#order-counts').textContent=`全部 ${facts.length}；静物 ${facts.filter(r=>r.kind==='静物').length}；`+names.map(n=>`${n==='细节'?'历史细节（未细分）':n} ${facts.filter(r=>r.shootingSubtype===n).length}`).join('；');
  $('#order-list').replaceChildren();
  for(const r of facts.filter(r=>filter==='all'||(filter==='静物'?r.kind==='静物':r.shootingSubtype===filter))){const line=row('p',`${r.name} · ${r.kind==='静物'?'静物 / ':''}${r.shootingSubtype==='细节'?'历史细节（未细分）':r.shootingSubtype} · ${r.lifecycle}`);if(r.editable&&r.shootingSubtype!=='细节'){const b=row('button','维护未排订单');b.type='button';b.addEventListener('click',()=>{editingOrder=r.id;const v=r.submission;for(const [key,id]of Object.entries(orderFields))$('#order-'+id).value=v[key]??'';$('#order-category').value=v.kind;$('#order-subtype').value=v.shootingSubtype;$('#order-count').value=v.deliverables.count;$('#order-edit-state').textContent='维护：'+r.name;syncOrderCategory();});line.append(b);}$('#order-list').append(line);}
- $('#actual-item').replaceChildren(...state.sessions.filter(s=>s.status==='confirmed').map(s=>{const o=row('option',`${s.requestNames?.join('、')||s.id} · ${local(s.plannedStart)} · ${s.runs?.[0]?.status||'未开始'}`);o.value=s.id;return o;}));
+ renderSessionChoice('actual-item',state.sessions.filter(s=>s.status==='confirmed'),s=>`${s.requestNames?.join('、')||s.id} · ${local(s.plannedStart)} · ${s.runs?.[0]?.status||'未开始'}`);
 }
 function syncOrderCategory(){$('#order-subtype-label').hidden=$('#order-category').value!=='静物';}
 $('#order-category').addEventListener('change',syncOrderCategory);
