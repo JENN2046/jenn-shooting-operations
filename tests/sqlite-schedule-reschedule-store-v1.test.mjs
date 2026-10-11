@@ -1,3 +1,5 @@
+// Explicit Schema11 coverage: V2 projection ports/cache and legacy notification semantics.
+// Schema12/V3 entry points and atomic rollback are covered by business-v3-boundaries.
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,7 +9,7 @@ import { buildScheduleConfirmedCardV1 } from '../src/dingtalk-card-builders-v1.m
 import { buildNotificationIntentV1 } from '../src/outbox-contract-v1.mjs';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
-import { initializeWritableSchema } from '../src/sqlite-schema-v2.mjs';
+import { initializeWritableSchema, MIGRATIONS } from '../src/sqlite-schema-v2.mjs';
 import { SCHEDULE_RESCHEDULE_SCHEMA_SQL } from '../src/sqlite-schedule-reschedule-schema-v1.mjs';
 import { createSqliteScheduleRescheduleStoreV1 } from '../src/sqlite-schedule-reschedule-store-v1.mjs';
 import { normalizeSchedulingConfig } from '../src/scheduling-admin-contract-v2.mjs';
@@ -21,7 +23,7 @@ import { createSqliteSchedulingQuiescenceV1 } from '../src/sqlite-scheduling-qui
 const at = '2026-10-01T00:00:00.000Z';
 const principal = createTrustedPrincipal({ subjectId: 'Jenn', role: 'scheduler', resourceIds: ['PHOTO'] }).principal;
 function fixture(options = {}) {
-  const db = new DatabaseSync(options.filename ?? ':memory:'); db.exec('PRAGMA foreign_keys = ON'); initializeWritableSchema(db);
+  const db = new DatabaseSync(options.filename ?? ':memory:'); db.exec('PRAGMA foreign_keys = ON'); initializeWritableSchema(db, { migrations: MIGRATIONS.slice(0, 11) });
   if (!db.prepare("SELECT 1 FROM sqlite_schema WHERE name = 'schedule_reschedule_operations'").get()) db.exec(SCHEDULE_RESCHEDULE_SCHEMA_SQL);
   const capabilityJson = { schemaVersion: 1, capabilityIds: ['FLAT'] }, capabilityDigest = digestResourceCapabilitiesV1(capabilityJson);
   const configInput = { schemaVersion: 1, businessTimeZone: 'Asia/Shanghai',
