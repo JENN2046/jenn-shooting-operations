@@ -1,4 +1,7 @@
-import { businessInitialResource, businessInitialConfig } from './business-defaults-v1.mjs';
+import {createBusinessRunV3} from './business-run-v3.mjs';
+import {createBusinessOrderV3} from './business-order-v3.mjs';
+import { createDynamicDayAdjustment, validateDynamicReceiptRow } from './dynamic-day-adjustment-v1.mjs';
+import { businessInitialResource, businessInitialConfig, businessInitialConfigV3 } from './business-defaults-v1.mjs';
 import { createSqliteSchedulingAdminStoreV1 } from './sqlite-scheduling-admin-store-v1.mjs';
 import { createSqliteScheduleRescheduleStoreV1 } from './sqlite-schedule-reschedule-store-v1.mjs';
 import { normalizeSchedulingConfig, compileSchedulingCalendarDate } from './scheduling-admin-contract-v2.mjs';
@@ -52,7 +55,7 @@ function preservePastRules(db, config, at) {
     if (!next) return denied('RESOURCE_CALENDAR_REMOVAL_UNSUPPORTED');
     const pastOverrides = c => c.dateOverrides.filter(d => d.date < today);
     if (canonicalJsonSchedulingV1(pastOverrides(previous)) !== canonicalJsonSchedulingV1(pastOverrides(next))) return denied('PAST_CALENDAR_CHANGE_FORBIDDEN');
-    if (old.schemaVersion === 2) {
+    if (old.schemaVersion >= 2) {
       const pastRules = c => c.rules.filter(r => r.effectiveFrom < today);
       if (canonicalJsonSchedulingV1(pastRules(previous)) !== canonicalJsonSchedulingV1(pastRules(next))) return denied('PAST_CALENDAR_CHANGE_FORBIDDEN');
     } else if (canonicalJsonSchedulingV1(previous.weeklyWindows) !== canonicalJsonSchedulingV1(next.weeklyWindows)) {
@@ -73,11 +76,27 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
     const past = preservePastRules(db, JSON.parse(configRow.config_json), at);
     return past.ok ? checkBusinessCalendarImpact({ db, configRow, at }) : past;
   };
+  // Unassigned requests are global. Only an administrator covering the entire
+  // registered catalogue may inspect or edit their estimates.
+  const ownsRequestCatalogue = principal => {
+    const ids = db.prepare('SELECT resource_id FROM scheduling_resources').all().map(r => r.resource_id);
+    return scoped(principal, ids, true);
+  };
+  const ownsRequest = (principal, requestId) => ownsRequestCatalogue(principal)
+    && db.prepare(`SELECT s.resource_id,s.resource_resolution_status FROM schedule_item_tasks b
+      JOIN schedule_items s ON s.id=b.schedule_item_id WHERE b.task_id=?`).all(requestId)
+      .every(r => r.resource_resolution_status === 'resolved' && principal.resourceIds.includes(r.resource_id));
   const adminStore = createSqliteSchedulingAdminStoreV1({ db, now: clock, refreshProjections, validateActivation: guard });
   const reschedules = createSqliteScheduleRescheduleStoreV1({ db, now: clock, refreshProjections,
     writeAdmission: () => !writeAdmissionControl.isDisabled() });
+  const runEvent = createBusinessRunV3({db,now:clock,writeAdmission:()=>!writeAdmissionControl.isDisabled()});
+  const orders = createBusinessOrderV3({db,now:clock,refreshProjections,writeAdmission:()=>!writeAdmissionControl.isDisabled()});
+  const dynamic = createDynamicDayAdjustment({db,now:clock,refreshProjections,writeAdmission:()=>!writeAdmissionControl.isDisabled()});
   const permitWrite = () => !writeAdmissionControl.isDisabled();
   return {
+    recordActualEvent(input) {return db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get()?runEvent(input):denied('BUSINESS_SCHEMA12_REQUIRED');},
+    createOrder(input) {return db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get()?orders.create(input):denied('BUSINESS_SCHEMA12_REQUIRED');},
+    editOrder(input) {return db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get()?orders.edit(input):denied('BUSINESS_SCHEMA12_REQUIRED');},
     readManagement({ principal }) {
       const schema = requireBusinessSchema(); if (schema) return schema;
       if (!scoped(principal, principal?.resourceIds)) return denied('FORBIDDEN');
@@ -88,7 +107,25 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
       const current = active();
       const today=dateAt(clock().toISOString(),'Asia/Shanghai');
       const initialResource=businessInitialResource(principal.resourceIds[0]);
-      return { ok: true, businessToday:today, initialResource, initialConfig:businessInitialConfig(initialResource,today), principal: { subjectId: principal.subjectId, role: principal.role, resourceIds: principal.resourceIds },
+      const orderRows=ownsRequestCatalogue(principal)?db.prepare('SELECT * FROM requests_v2 ORDER BY source_ordinal').all().filter(r=>ownsRequest(principal,r.id)):[];
+      // Confirmed estimates live in immutable adjustment receipts, independently of the plan.
+      // Revision ordering remains deterministic even when multiple confirmations share a clock tick.
+      const forecasts=new Map();
+      for(const row of db.prepare(`SELECT r.* FROM schedule_reschedule_operations r
+        JOIN operations o ON o.operation_id=r.operation_id WHERE o.kind='dynamicDayAdjustment'`).all()) {
+        if(!principal.resourceIds.includes(row.resource_id))continue;
+        const receipt=validateDynamicReceiptRow(row),input=receipt.preview.input;
+        if(input.mode!=='forecast')continue;
+        const prior=forecasts.get(input.scheduleItemId);
+        if(!prior||receipt.scheduleRevision>prior.scheduleRevision)forecasts.set(input.scheduleItemId,{
+          estimatedEnd:input.endAt,bufferAfterMinutes:input.bufferAfterMinutes,
+          confirmedAt:receipt.createdAt,operationId:receipt.operationId,scheduleRevision:receipt.scheduleRevision});
+      }
+      const orderFacts=orderRows.map(r=>({id:r.id,name:r.name,kind:r.kind,shootingSubtype:r.shooting_subtype,lifecycle:r.request_lifecycle,
+        editable:r.request_lifecycle==='open'&&!db.prepare('SELECT 1 FROM schedule_item_tasks WHERE task_id=?').get(r.id)&&!db.prepare('SELECT 1 FROM production_runs WHERE task_id=?').get(r.id),
+        submission:{schemaVersion:3,productionType:r.production_type,sku:r.sku,name:r.name,kind:r.kind,shootingSubtype:r.shooting_subtype,aspectRatio:r.aspect_ratio,
+          deliverables:{type:'flat',count:r.deliverable_count},requestedBy:r.requested_by,desiredDate:r.desired_date,note:r.note??'',coreBriefSummary:r.core_brief_summary??'',sampleStatus:r.sample_status,lightingPreset:r.lighting_preset,reflectivity:r.reflectivity,priority:r.priority,uploadIds:[]}}));
+      return { ok: true, protocolVersion:db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get()?3:2,orderFacts, businessToday:today, initialResource, initialConfig:(db.prepare("SELECT 1 FROM schema_migrations WHERE version=12").get()?businessInitialConfigV3:businessInitialConfig)(initialResource,today), principal: { subjectId: principal.subjectId, role: principal.role, resourceIds: principal.resourceIds },
         revisions: db.prepare('SELECT schedule_revision AS scheduleRevision, projection_revision AS projectionRevision FROM revision_counters WHERE id=1').get() ?? null,
         resources, configs: versions.map(v => ({ configVersion: v.config_version, publishedAt: v.published_at, configJson: JSON.parse(v.config_json), configDigest: v.config_digest,
           calendarCompilerVersion: v.calendar_compiler_version, active: v.config_version === current?.config_version,
@@ -96,8 +133,33 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
         sessions: db.prepare(`SELECT id, resource_id AS resourceId, planned_start AS plannedStart, planned_end AS plannedEnd,
           buffer_after_minutes AS bufferAfterMinutes, schedule_status AS status, lock_status AS lockStatus,
           EXISTS(SELECT 1 FROM production_runs r WHERE r.schedule_item_id=s.id) AS hasRunHistory
-          FROM schedule_items s ORDER BY planned_start,id`).all().filter(s => principal.resourceIds.includes(s.resourceId)).map(s=>({...s,requestNames:db.prepare('SELECT r.name FROM schedule_item_tasks b JOIN requests_v2 r ON r.id=b.task_id WHERE b.schedule_item_id=? ORDER BY b.display_order').all(s.id).map(r=>r.name)})),
+          FROM schedule_items s ORDER BY planned_start,id`).all().filter(s => principal.resourceIds.includes(s.resourceId)).map(s=>({...s,confirmedForecast:forecasts.get(s.id)??null,runs:db.prepare('SELECT id,status,run_revision AS runRevision,started_at AS startedAt,completed_at AS completedAt FROM production_runs WHERE schedule_item_id=? ORDER BY created_at,id').all(s.id),requestNames:db.prepare('SELECT r.name FROM schedule_item_tasks b JOIN requests_v2 r ON r.id=b.task_id WHERE b.schedule_item_id=? ORDER BY b.display_order').all(s.id).map(r=>r.name)})),
+        requests: ownsRequestCatalogue(principal) ? db.prepare(`SELECT r.id,r.name,r.kind,r.sample_status AS sampleStatus,r.priority,r.production_type AS productionType,
+          r.shooting_subtype AS shootingSubtype,q.duration_estimate_json AS durationEstimateJson
+          FROM requests_v2 r LEFT JOIN scheduling_request_requirements q ON q.request_id=r.id
+          WHERE r.request_lifecycle='open' ORDER BY r.id`).all().filter(r => ownsRequest(principal,r.id)) : [],
         writeAdmission: writeAdmissionControl.status().mode };
+    },
+    previewDayAdjustment({command,principal}) { const schema=requireBusinessSchema();return schema??dynamic.preview(command,principal); },
+    applyDayAdjustment({command,principal}) { const schema=requireBusinessSchema();return schema??dynamic.apply(command,principal); },
+    setRequestDuration({ command, principal }) {
+      const schema = requireBusinessSchema(); if (schema) return schema;
+      if (!permitWrite()) return denied('WRITE_ADMISSION_DISABLED');
+      if (!ownsRequestCatalogue(principal)) return denied('FORBIDDEN');
+      const keys=['operationId','requestId','expectedScheduleRevision','expectedProjectionRevision','durationMinutes'];
+      if (!command || Object.keys(command).length!==keys.length || !keys.every(k=>Object.hasOwn(command,k))
+        || !Number.isSafeInteger(command.durationMinutes) || command.durationMinutes<1 || command.durationMinutes>1440)
+        return denied('INVALID_REQUEST');
+      if (typeof command.requestId!=='string' || !ownsRequest(principal,command.requestId)) return denied('FORBIDDEN');
+      const request=db.prepare('SELECT production_type,shooting_subtype,request_lifecycle FROM requests_v2 WHERE id=?').get(command.requestId);
+      if (!request) return denied('REQUEST_NOT_FOUND');
+      if (request.request_lifecycle!=='open') return denied('REQUEST_NOT_OPEN');
+      if (request.production_type!=='平面' || !['细节','模特','场景','产品3D主图','细节图','功能图'].includes(request.shooting_subtype)) return denied('REQUEST_TYPE_UNSUPPORTED');
+      const existing=db.prepare('SELECT required_capability_ids_json FROM scheduling_request_requirements WHERE request_id=?').get(command.requestId);
+      const {durationMinutes,...binding}=command;
+      return adminStore.setRequestRequirements({...binding,
+        requiredCapabilityIds: existing ? JSON.parse(existing.required_capability_ids_json) : ['FLAT'],
+        durationEstimate:{durationMs:durationMinutes*60000,source:'explicit',sourceVersion:'business-duration-v1'}},principal.subjectId);
     },
     previewConfig({ command, principal }) {
       const schema = requireBusinessSchema(); if (schema) return schema;
@@ -110,7 +172,7 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
       const n = normalizeSchedulingConfig(command.configJson);
       if (!n.ok) return n;
       const row = { config_json: n.configJson, config_digest: n.configDigest,
-        calendar_compiler_version: n.config.schemaVersion === 2 ? 'calendar-compiler-v2' : 'calendar-compiler-v1' };
+        calendar_compiler_version: `calendar-compiler-v${n.config.schemaVersion}` };
       const impact = guard({ configRow: row, at: clock().toISOString() });
       return { ok: true, configJson: n.config, configDigest: n.configDigest, impact,
         expectedProjectionRevision: command.expectedProjectionRevision, baseConfigDigest: command.baseConfigDigest };
@@ -138,11 +200,24 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
     readBusinessOperation({ operationId, principal }) {
       const schema = requireBusinessSchema(); if (schema) return schema;
       if (!scoped(principal, principal?.resourceIds)) return denied('FORBIDDEN');
+      const own=db.prepare('SELECT kind,response_json FROM operations WHERE operation_id=?').get(operationId);
+      if(own && ['business.order.create.v3','business.order.edit.v3','business.run.v3','business.notificationPolicy.v3'].includes(own.kind)){
+        const receipt=JSON.parse(own.response_json);
+        if(principal.role!=='administrator'||(receipt.actor&&receipt.actor!==principal.subjectId))return denied('FORBIDDEN');
+        if(receipt.requestId&&!ownsRequest(principal,receipt.requestId))return denied('FORBIDDEN');
+        if(receipt.runId){const row=db.prepare('SELECT s.resource_id FROM production_runs r JOIN schedule_items s ON s.id=r.schedule_item_id WHERE r.id=?').get(receipt.runId);if(!row||!principal.resourceIds.includes(row.resource_id))return denied('FORBIDDEN');}
+        if(receipt.resourceIds&&!scoped(principal,receipt.resourceIds,true))return denied('FORBIDDEN');
+        return {ok:true,kind:own.kind,receipt};
+      }
       const reschedule = reschedules.readOperation(operationId, principal);
-      if (reschedule.ok) return reschedule;
+      if (reschedule.ok || reschedule.code!=='RESCHEDULE_OPERATION_NOT_FOUND') return reschedule;
       const row = db.prepare('SELECT kind,response_json FROM scheduling_admin_operations WHERE operation_id=?').get(operationId);
       if (row) {
         const receipt = JSON.parse(row.response_json);
+        if (row.kind === 'setRequestRequirements') {
+          if (!ownsRequest(principal,receipt.requestId)) return denied('FORBIDDEN');
+          return {ok:true,kind:row.kind,receipt};
+        }
         const ids = receipt.resourceId ? [receipt.resourceId] : (() => {
           const v=db.prepare('SELECT config_json FROM scheduling_config_versions WHERE config_version=?').get(receipt.configVersion ?? '');
           return v ? JSON.parse(v.config_json).resourceCalendars.map(c=>c.resourceId) : [];

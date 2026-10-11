@@ -44,7 +44,7 @@ test('schema11 preserves nonempty v1 config/activation bytes and historical mark
  const db=dbFixture(MIGRATIONS.slice(0,10));try {
  db.exec(`INSERT INTO scheduling_config_versions VALUES ('old',1,'a','c','e','{}','digest','admin','at','pub'); INSERT INTO scheduling_active_config VALUES (1,'old','at','act',0); INSERT INTO scheduling_config_activations VALUES ('act','d',NULL,'old',0,'at','admin');`);
  const rows=db.prepare('SELECT * FROM scheduling_config_versions').all(), markers=db.prepare('SELECT * FROM schema_migrations').all();
- applySchemaMigrations(db);assert.deepEqual(db.prepare('SELECT * FROM scheduling_config_versions').all(),rows);assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=10').all(),markers);assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[]);assert.equal(db.prepare('PRAGMA foreign_keys').get().foreign_keys,1);assert.equal(assertKnownSchema(db).version,11);
+ applySchemaMigrations(db,{migrations:MIGRATIONS.slice(0,11)});assert.deepEqual(db.prepare('SELECT * FROM scheduling_config_versions').all(),rows);assert.deepEqual(db.prepare('SELECT * FROM schema_migrations WHERE version<=10').all(),markers);assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[]);assert.equal(db.prepare('PRAGMA foreign_keys').get().foreign_keys,1);assert.equal(assertKnownSchema(db).version,11);
  assert.throws(()=>db.exec("UPDATE scheduling_config_versions SET config_json='changed'"),/immutable/);assert.throws(()=>db.exec('DELETE FROM scheduling_config_versions'),/cannot be deleted/);
  }finally{db.close();}
 });

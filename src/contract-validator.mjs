@@ -43,6 +43,8 @@ const validateV1SnapshotStructure = ajv.compile(loadSchema('schedule-snapshot.sc
 const validateV1SubmissionStructure = ajv.compile(loadSchema('request-submission.schema.json'));
 const validateV2SnapshotStructure = ajv.compile(loadSchema('schedule-snapshot.v2.schema.json'));
 const validateV2SubmissionStructure = ajv.compile(loadSchema('request-submission.v2.schema.json'));
+const validateV3SnapshotStructure = ajv.compile(loadSchema('schedule-snapshot.v3.schema.json'));
+const validateV3SubmissionStructure = ajv.compile(loadSchema('request-submission.v3.schema.json'));
 const validateLegacyFragmentStructure = ajv.compile(loadSchema('legacy-compat-fragment.v2.schema.json'));
 const validateDateTimeFormat = ajv.compile({ type: 'string', format: 'date-time' });
 
@@ -432,4 +434,21 @@ export function validateSnapshot(snapshot) {
 
 export function validateSubmission(submission) {
   return legacyMessages(validateV1Submission(submission));
+}
+
+const STILL_LIFE_SUBTYPES = new Set(['产品3D主图', '细节图', '功能图']);
+function classificationIssues(value, path = '') {
+  if (!isRecord(value)) return [];
+  const isNew = STILL_LIFE_SUBTYPES.has(value.shootingSubtype);
+  return (value.kind === '静物' ? value.productionType === '平面' && isNew : !isNew)
+    ? [] : [issue('CLASSIFICATION_MISMATCH', path, 'category/subtype mismatch')];
+}
+export function validateV3Submission(value, {allowedBriefHosts} = {}) {
+  return strictResult(PROFILE_STRICT, [...schemaIssues(validateV3SubmissionStructure, value),
+    ...v1SubmissionSemanticIssues(value), ...briefHostIssues(value?.briefUrl, '/briefUrl', allowedBriefHosts),
+    ...classificationIssues(value)]);
+}
+export function validateV3Snapshot(value, options = {}) {
+  return strictResult(PROFILE_STRICT, [...schemaIssues(validateV3SnapshotStructure, value),
+    ...v2SnapshotSemanticIssues(value, options), ...(value?.requests ?? []).flatMap((r,i) => classificationIssues(r, `/requests/${i}`))]);
 }

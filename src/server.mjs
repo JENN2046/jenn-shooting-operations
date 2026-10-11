@@ -146,7 +146,7 @@ export function createSchedulingV2Application({
         return Object.freeze({ ok: false, code: 'WRITE_ADMISSION_DISABLED' });
       }
       if (command?.decisionType !== 'reject') {
-        return proposalStore.accept(command, principal);
+        try {return proposalStore.accept(command, principal);} catch(error) {if(error.code==='IDEMPOTENCY_KEY_REUSE')return {ok:false,code:error.code};throw error;}
       }
       if (!validateTrustedPrincipal(principal).ok
         || !['scheduler', 'administrator'].includes(principal.role)) {

@@ -446,7 +446,7 @@ function normalizeResourceCalendar(value, path, timeZone) {
   };
 }
 
-function normalizeSelector(value, path) {
+function normalizeSelector(value, path, classified = false) {
   const productionType = value.productionType;
   const shootingSubtype = value.shootingSubtype;
   if (productionType !== null && productionType !== '平面' && productionType !== '视频') {
@@ -455,7 +455,7 @@ function normalizeSelector(value, path) {
   if (productionType === null) {
     if (shootingSubtype !== null) fail('SELECTOR_INVALID', path);
   } else if (shootingSubtype !== null) {
-    const allowed = productionType === '平面' ? FLAT_SUBTYPES : VIDEO_SUBTYPES;
+    const allowed = productionType === '平面' ? (classified ? new Set([...FLAT_SUBTYPES, '产品3D主图', '细节图', '功能图']) : FLAT_SUBTYPES) : VIDEO_SUBTYPES;
     if (!allowed.has(shootingSubtype)) fail('SELECTOR_INVALID', path);
   }
   return { productionType, shootingSubtype };
@@ -478,20 +478,20 @@ function ruleCompare(left, right) {
     || codePointCompare(left.ruleId, right.ruleId);
 }
 
-function normalizeDurationRule(value, path) {
+function normalizeDurationRule(value, path, classified = false) {
   exactRecord(value, DURATION_RULE_KEYS, path);
   return {
     ruleId: identifier(value.ruleId, `${path}.ruleId`),
-    ...normalizeSelector(value, path),
+    ...normalizeSelector(value, path, classified),
     durationMs: safeInteger(value.durationMs, `${path}.durationMs`, { minimum: 1 }),
   };
 }
 
-function normalizeBufferRule(value, path) {
+function normalizeBufferRule(value, path, classified = false) {
   exactRecord(value, BUFFER_RULE_KEYS, path);
   return {
     ruleId: identifier(value.ruleId, `${path}.ruleId`),
-    ...normalizeSelector(value, path),
+    ...normalizeSelector(value, path, classified),
     bufferAfterMinutes: safeInteger(value.bufferAfterMinutes, `${path}.bufferAfterMinutes`),
   };
 }
@@ -699,4 +699,11 @@ export function compileSchedulingCalendarDateV1(value) {
       }),
     });
   });
+}
+
+// Explicit successor rules; legacy public normalizers retain their closed enums.
+export function normalizeClassificationRulesV3(config) {
+  return admissionResult('SCHEDULING_CONFIG_INVALID', () => ({ok:true,
+    durationFallbackRules: normalizeRules(config.durationFallbackRules, '$.durationFallbackRules', (v,p)=>normalizeDurationRule(v,p,true)),
+    bufferRules: normalizeRules(config.bufferRules, '$.bufferRules', (v,p)=>normalizeBufferRule(v,p,true))}));
 }

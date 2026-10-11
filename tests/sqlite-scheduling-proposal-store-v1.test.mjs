@@ -1,8 +1,10 @@
+// Explicit Schema11 coverage: V2 projection ports/cache and legacy notification semantics.
+// Schema12/V3 entry points and atomic rollback are covered by business-v3-boundaries.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 
-import { initializeWritableSchema } from '../src/sqlite-schema-v2.mjs';
+import { initializeWritableSchema, MIGRATIONS } from '../src/sqlite-schema-v2.mjs';
 import { createSqliteSchedulingProposalStoreV1 } from '../src/sqlite-scheduling-proposal-store-v1.mjs';
 import { assembleSchedulingInputFromSqliteV1 } from '../src/sqlite-scheduling-input-assembler-v1.mjs';
 import { createSqliteSchedulingAdminStoreV1 } from '../src/sqlite-scheduling-admin-store-v1.mjs';
@@ -50,7 +52,7 @@ function config() {
 function fixture({ mutateAfterFirst = false, requestIds = ['REQ-1'] } = {}) {
   const db = new DatabaseSync(':memory:');
   db.exec('PRAGMA foreign_keys = ON;');
-  initializeWritableSchema(db);
+  initializeWritableSchema(db, { migrations: MIGRATIONS.slice(0, 11) });
   const admitted = normalizeSchedulingConfigV1(config());
   assert.equal(admitted.ok, true, JSON.stringify(admitted));
   db.prepare(`INSERT INTO revision_counters
@@ -433,7 +435,7 @@ test('compute-time input change saves no draft', () => {
 test('missing active config and expected assembler failures return stable denials', () => {
   const empty = new DatabaseSync(':memory:');
   empty.exec('PRAGMA foreign_keys = ON;');
-  initializeWritableSchema(empty);
+  initializeWritableSchema(empty, { migrations: MIGRATIONS.slice(0, 11) });
   empty.prepare(`INSERT INTO revision_counters
     (id, projection_revision, schedule_revision, updated_at) VALUES (1, 0, 0, ?)`)
     .run('2026-09-22T08:00:00.000Z');

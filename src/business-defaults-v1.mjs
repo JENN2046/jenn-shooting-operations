@@ -7,9 +7,15 @@ export function businessInitialConfig(resource, effectiveFrom) {
   const windows=[{start:'09:00',end:'12:00'},{start:'13:30',end:'18:00'}];
   return {schemaVersion:2,businessTimeZone:'Asia/Shanghai',resourceCalendars:[{
     resourceId:resource.resourceId,capabilityDigest:resource.capabilityDigest,
-    rules:[{effectiveFrom,weeklyWindows:[1,2,3,4,5].flatMap(weekday=>windows.map(w=>({weekday,...w}))),
-      alternatingSaturday:{workingAnchorDate:'2026-10-10',windows}}],dateOverrides:[]}],
-    durationFallbackRules:[['细节',60],['模特',120],['场景',90]].map(([shootingSubtype,minutes],i)=>({ruleId:`JSO-DURATION-${i+1}`,productionType:'平面',shootingSubtype,durationMs:minutes*60000})),
-    bufferRules:['细节','模特','场景'].map((shootingSubtype,i)=>({ruleId:`JSO-BUFFER-${i+1}`,productionType:'平面',shootingSubtype,bufferAfterMinutes:10})),
+    rules:[{effectiveFrom,weeklyWindows:[1,2,3,4,5,6].flatMap(weekday=>windows.map(w=>({weekday,...w}))),
+      alternatingSaturday:null}],dateOverrides:[]}],
+    durationFallbackRules:[],
+    bufferRules:['细节','模特','场景'].map((shootingSubtype,i)=>({ruleId:`JSO-BUFFER-${i+1}`,productionType:'平面',shootingSubtype,bufferAfterMinutes:20})),
     softScoringWeights:{LIGHTING_SWITCH:1,REFLECTIVITY_SEQUENCE:1,IDLE_GAP:1,EXPECTED_OVERRUN:1,DESIRED_DATE_MISS:1},compatibleAlgorithmVersions:['deterministic-scheduler-v1']};
+}
+
+export function businessInitialConfigV3(resource, effectiveFrom) {
+ const config=businessInitialConfig(resource,effectiveFrom);
+ return {...config,schemaVersion:3,externalNotifications:'disabled',compatibleAlgorithmVersions:['deterministic-scheduler-v2'],
+ bufferRules:['产品3D主图','细节图','功能图','模特','场景','细节'].map((shootingSubtype,i)=>({ruleId:`JSO-V3-BUFFER-${i+1}`,productionType:'平面',shootingSubtype,bufferAfterMinutes:20}))};
 }

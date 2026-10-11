@@ -15,7 +15,14 @@ const principal=(role='viewer',resourceIds=['PHOTO'])=>createTrustedPrincipal({s
 const viewer=principal(),executor=principal('scheduler'),elsewhere=principal('scheduler',['OTHER']);
 function fixture(options={}) {
  const db=new DatabaseSync(':memory:');db.exec('PRAGMA foreign_keys=ON');initializeWritableSchema(db);
- const at='2026-10-01T00:00:00.000Z',now=()=>new Date(at),r=businessInitialResource('PHOTO'),c=normalizeSchedulingConfig(businessInitialConfig(r,'2026-01-01'));
+ const at='2026-10-01T00:00:00.000Z',now=()=>new Date(at),r=businessInitialResource('PHOTO');
+ // This agent fixture intentionally exercises the existing alternating-calendar
+ // profile. It must not infer Owner duration defaults from the initial template.
+ const syntheticConfig=businessInitialConfig(r,'2026-01-01');
+ syntheticConfig.durationFallbackRules=[{ruleId:'SYNTHETIC-HOUR',productionType:'平面',shootingSubtype:'细节',durationMs:3600000}];
+ const rule=syntheticConfig.resourceCalendars[0].rules[0];rule.weeklyWindows=rule.weeklyWindows.filter(w=>w.weekday!==6);
+ rule.alternatingSaturday={workingAnchorDate:'2026-10-10',windows:[{start:'09:00',end:'12:00'},{start:'13:30',end:'18:00'}]};
+ const c=normalizeSchedulingConfig(syntheticConfig);
  db.prepare('INSERT INTO revision_counters VALUES (1,0,0,?)').run(at);
  db.prepare('INSERT INTO scheduling_resources VALUES (?,?,?,?,?,?,?,?)').run(r.resourceId,r.v1DisplayPlace,r.status,JSON.stringify(r.capabilityJson),r.capabilityDigest,at,at,'RESOURCE');
  db.prepare('INSERT INTO scheduling_config_versions VALUES (?,?,?,?,?,?,?,?,?,?)').run('config-1',2,'deterministic-scheduler-v1','calendar-compiler-v2','estimate-policy-v1',c.configJson,c.configDigest,'Jenn',at,'PUB');

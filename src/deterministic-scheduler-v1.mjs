@@ -52,7 +52,7 @@ function resolveDuration(candidate, resource, config, stats) {
   const matches = stats.filter(stat => (
     (stat.resourceId === null || stat.resourceId === resource.resourceId)
     && (stat.productionType === null || stat.productionType === candidate.productionType)
-    && (stat.shootingSubtype === null || stat.shootingSubtype === candidate.shootingSubtype)
+    && ((['产品3D主图','细节图','功能图'].includes(candidate.shootingSubtype)) ? stat.shootingSubtype === candidate.shootingSubtype : (stat.shootingSubtype === null || stat.shootingSubtype === candidate.shootingSubtype))
     && (stat.lightingPreset === null || stat.lightingPreset === candidate.lightingPreset)
     && (stat.reflectivity === null || stat.reflectivity === candidate.reflectivity)
   )).toSorted((left, right) => {
@@ -81,7 +81,7 @@ function expectedOverrun(candidate, resource, stats, durationMs) {
   return stats.some(stat => stat.estimateDurationMs > durationMs
     && (stat.resourceId === null || stat.resourceId === resource.resourceId)
     && (stat.productionType === null || stat.productionType === candidate.productionType)
-    && (stat.shootingSubtype === null || stat.shootingSubtype === candidate.shootingSubtype)
+    && ((['产品3D主图','细节图','功能图'].includes(candidate.shootingSubtype)) ? stat.shootingSubtype === candidate.shootingSubtype : (stat.shootingSubtype === null || stat.shootingSubtype === candidate.shootingSubtype))
     && (stat.lightingPreset === null || stat.lightingPreset === candidate.lightingPreset)
     && (stat.reflectivity === null || stat.reflectivity === candidate.reflectivity));
 }
@@ -171,7 +171,7 @@ export function generateDeterministicScheduleV1(inputValue, configValue) {
   if (!admittedConfig.ok) return failure(admittedConfig.reason);
   const { input, inputDigest } = admittedInput;
   const { config, configDigest } = admittedConfig;
-  if (input.algorithmVersion !== DETERMINISTIC_SCHEDULER_VERSION_V1
+  if (input.algorithmVersion !== (config.schemaVersion === 3 ? "deterministic-scheduler-v2" : DETERMINISTIC_SCHEDULER_VERSION_V1)
     || !config.compatibleAlgorithmVersions.includes(input.algorithmVersion)) {
     return failure('ALGORITHM_VERSION_MISMATCH');
   }

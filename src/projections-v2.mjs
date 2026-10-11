@@ -1,6 +1,7 @@
 import {
   validateLegacyCompatFragment,
   validateV2Snapshot,
+  validateV3Snapshot,
 } from './contract-validator.mjs';
 
 export class ProjectionError extends Error {
@@ -605,7 +606,7 @@ export function projectV1CompatibilitySnapshot(records, {
   }, rows(records, 'legacy_compat_fragments'), records);
 }
 
-export function projectV2Snapshot(records, { updatedAt, allowedBriefHosts } = {}) {
+function projectCanonicalSnapshot(records, { updatedAt, allowedBriefHosts } = {}, version) {
   if (!records || typeof records !== 'object' || Array.isArray(records)) fail('INVALID_PROJECTION_INPUT');
   const model = validateBindings(records);
   const projectionRevision = scopedRevision(records, 'projection_revision', 'INVALID_PROJECTION_REVISION');
@@ -646,7 +647,7 @@ export function projectV2Snapshot(records, { updatedAt, allowedBriefHosts } = {}
   const productionRuns = projectProductionRuns(records, model);
 
   const snapshot = {
-    schemaVersion: 2,
+    schemaVersion: version,
     projectionRevision,
     scheduleRevision,
     updatedAt: projectionTimestamp(updatedAt),
@@ -654,7 +655,10 @@ export function projectV2Snapshot(records, { updatedAt, allowedBriefHosts } = {}
     scheduleItems,
     productionRuns,
   };
-  const validation = validateV2Snapshot(snapshot, { allowedBriefHosts });
+  const validation = (version === 3 ? validateV3Snapshot : validateV2Snapshot)(snapshot, { allowedBriefHosts });
   if (!validation.ok) fail(validation.errors[0]?.code ?? 'INVALID_V2_PROJECTION');
   return snapshot;
 }
+
+export function projectV2Snapshot(records, options) { return projectCanonicalSnapshot(records, options, 2); }
+export function projectV3Snapshot(records, options) { return projectCanonicalSnapshot(records, options, 3); }

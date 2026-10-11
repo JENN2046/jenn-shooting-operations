@@ -835,6 +835,32 @@ function checksum(sql) {
   return `sha256:${createHash('sha256').update(sql).digest('hex')}`;
 }
 
+// Successor classification schema. Published migration SQL above stays byte-for-byte intact.
+const REQUEST_TABLE_V3_SQL = V2_CORE_SQL.match(/CREATE TABLE requests_v2[\s\S]*?\) STRICT;/)[0]
+  .replace("kind IN ('模特', '细节', '场景', '待定')", "kind IN ('模特', '细节', '场景', '待定', '静物')")
+  .replace("shooting_subtype IN ('模特', '细节', '场景', '待定')", "shooting_subtype IN ('模特', '细节', '场景', '待定', '产品3D主图', '细节图', '功能图')")
+  .replace(') STRICT;', `, CHECK (
+    (kind = '静物' AND production_type IS '平面' AND shooting_subtype IS NOT NULL
+      AND shooting_subtype IN ('产品3D主图', '细节图', '功能图')) OR
+    (kind <> '静物' AND (shooting_subtype IS NULL OR shooting_subtype NOT IN ('产品3D主图', '细节图', '功能图')))
+  )) STRICT;`);
+const PROJECTION_TABLE_V3_SQL = V2_CORE_SQL.match(/CREATE TABLE snapshot_projections[\s\S]*?\) STRICT;/)[0]
+  .replace("'schedule-v1-compat', 'schedule-v2'", "'schedule-v1-compat', 'schedule-v2', 'schedule-v3'")
+  .replace('schema_version IN (1, 2)', 'schema_version IN (1, 2, 3)')
+  .replace("(projection_name = 'schedule-v2' AND schema_version = 2 AND schedule_revision IS NOT NULL)", "(projection_name = 'schedule-v2' AND schema_version = 2 AND schedule_revision IS NOT NULL) OR (projection_name = 'schedule-v3' AND schema_version = 3 AND schedule_revision IS NOT NULL)");
+const CONFIG_TABLE_V3_SQL = SCHEDULING_CONFIG_TABLE_V2_SQL.replace('schema_version IN (1, 2)', 'schema_version IN (1, 2, 3)');
+const RUN_CONTEXT_TABLE_V2_SQL = RUN_CONTEXT_CAPTURE_SCHEMA_SQL.match(/CREATE TABLE scheduling_run_context_snapshots[\s\S]*?\) STRICT;/)[0].replace('schema_version = 1', 'schema_version IN (1, 2)');
+const CLASSIFICATION_SQL = [
+  ['requests_v2', REQUEST_TABLE_V3_SQL], ['snapshot_projections', PROJECTION_TABLE_V3_SQL],
+  ['scheduling_config_versions', CONFIG_TABLE_V3_SQL], ['scheduling_run_context_snapshots', RUN_CONTEXT_TABLE_V2_SQL],
+].map(([name, sql]) => `CREATE TABLE ${name}_migration12 AS SELECT * FROM ${name};
+  DROP TABLE ${name}; ${sql}
+  INSERT INTO ${name} SELECT * FROM ${name}_migration12;
+  DROP TABLE ${name}_migration12;`).join('\n') + '\n' +
+  [...V2_CORE_SQL.matchAll(/CREATE INDEX requests_v2_\w+[\s\S]*?;/g)].map(m => m[0]).join('\n') + '\n' +
+  [...SCHEDULING_SCHEMA_SQL.matchAll(/CREATE TRIGGER scheduling_config_versions_\w+[\s\S]*?END;/g)].map(m => m[0]).join('\n') + '\n' +
+  [...RUN_CONTEXT_CAPTURE_SCHEMA_SQL.matchAll(/CREATE TRIGGER scheduling_run_context_snapshots_\w+[\s\S]*?END;/g)].map(m => m[0]).join('\n');
+
 export const MIGRATIONS = Object.freeze([
   Object.freeze({ version: 1, name: 'v2_normalized_core', sql: V2_CORE_SQL, checksum: checksum(V2_CORE_SQL) }),
   Object.freeze({ version: 2, name: 'v1_compatibility_columns', sql: V1_COMPATIBILITY_SQL, checksum: checksum(V1_COMPATIBILITY_SQL) }),
@@ -847,6 +873,7 @@ export const MIGRATIONS = Object.freeze([
   Object.freeze({ version: 9, name: 'kiosk_smoke_runtime_ownership', sql: KIOSK_SMOKE_SESSION_SCHEMA_SQL, checksum: checksum(KIOSK_SMOKE_SESSION_SCHEMA_SQL) }),
   Object.freeze({ version: 10, name: 'empty_db_maintenance_receipts', sql: EMPTY_DB_MAINTENANCE_SCHEMA_SQL, checksum: checksum(EMPTY_DB_MAINTENANCE_SCHEMA_SQL) }),
   Object.freeze({ version: 11, name: 'business_calendar_and_reschedule', sql: BUSINESS_SCHEDULING_SQL, checksum: checksum(BUSINESS_SCHEDULING_SQL) }),
+  Object.freeze({ version: 12, name: 'structured_still_life', sql: CLASSIFICATION_SQL, checksum: checksum(CLASSIFICATION_SQL) }),
 ]);
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1).version;
@@ -1160,10 +1187,12 @@ function assertAppliedPrefix(applied, migrations) {
   });
 }
 
-function assertCoreStructure(db) {
+function assertCoreStructure(db, version) {
   for (const table of V2_CORE_TABLES) {
     assertExactColumns(db, table, V2_COLUMNS[table]);
-    assertObjectDefinition(db, 'table', table, V2_TABLE_DEFINITIONS[table]);
+    assertObjectDefinition(db, 'table', table, version >= 12 && table === 'requests_v2'
+      ? normalizeSchemaSql(REQUEST_TABLE_V3_SQL) : version >= 12 && table === 'snapshot_projections'
+      ? normalizeSchemaSql(PROJECTION_TABLE_V3_SQL) : V2_TABLE_DEFINITIONS[table]);
   }
   for (const index of V2_INDEXES) {
     assertObjectDefinition(db, 'index', index, V2_INDEX_DEFINITIONS[index]);
@@ -1202,7 +1231,7 @@ function assertNotificationOutboxStructure(db) {
 function assertSchedulingStructure(db, version) {
   for (const table of SCHEDULING_TABLES) {
     assertObjectDefinition(db, 'table', table, version >= 11 && table === 'scheduling_config_versions'
-      ? normalizeSchemaSql(SCHEDULING_CONFIG_TABLE_V2_SQL) : SCHEDULING_TABLE_DEFINITIONS[table]);
+      ? normalizeSchemaSql(version >= 12 ? CONFIG_TABLE_V3_SQL : SCHEDULING_CONFIG_TABLE_V2_SQL) : SCHEDULING_TABLE_DEFINITIONS[table]);
   }
   for (const index of SCHEDULING_INDEXES) {
     assertObjectDefinition(db, 'index', index, SCHEDULING_INDEX_DEFINITIONS[index]);
@@ -1212,10 +1241,10 @@ function assertSchedulingStructure(db, version) {
   }
 }
 
-function assertRunContextCaptureStructure(db) {
+function assertRunContextCaptureStructure(db, version) {
   for (const table of RUN_CONTEXT_CAPTURE_TABLES) {
     assertExactColumns(db, table, RUN_CONTEXT_CAPTURE_COLUMNS[table]);
-    assertObjectDefinition(db, 'table', table, RUN_CONTEXT_CAPTURE_TABLE_DEFINITIONS[table]);
+    assertObjectDefinition(db, 'table', table, version >= 12 ? normalizeSchemaSql(RUN_CONTEXT_TABLE_V2_SQL) : RUN_CONTEXT_CAPTURE_TABLE_DEFINITIONS[table]);
   }
   for (const trigger of RUN_CONTEXT_CAPTURE_TRIGGERS) {
     assertObjectDefinition(db, 'trigger', trigger, RUN_CONTEXT_CAPTURE_TRIGGER_DEFINITIONS[trigger]);
@@ -1311,12 +1340,12 @@ function assertCompatibilityStructure(db) {
 
 function assertStructureForVersion(db, version) {
   assertV1Schema(db);
-  if (version >= 1) assertCoreStructure(db);
+  if (version >= 1) assertCoreStructure(db, version);
   if (version >= 2) assertCompatibilityStructure(db);
   if (version >= 3) assertKioskReviewStructure(db);
   if (version >= 4) assertNotificationOutboxStructure(db);
   if (version >= 5) assertSchedulingStructure(db, version);
-  if (version >= 6) assertRunContextCaptureStructure(db);
+  if (version >= 6) assertRunContextCaptureStructure(db, version);
   if (version >= 7) {
     for (const [type, definitions] of Object.entries(GF15_DEFINITIONS)) {
       for (const [name, sql] of Object.entries(definitions)) assertObjectDefinition(db, type, name, sql);
@@ -1429,7 +1458,7 @@ export function applySchemaMigrations(db, { now = () => new Date(), migrations =
   for (const migration of migrations) {
     // SQLite parent-table rebuild requires FK OFF outside the transaction. Validate all
     // references before COMMIT and restore the original connection setting on every path.
-    const rebuild = migration.version === 11;
+    const rebuild = [11, 12].includes(migration.version);
     const foreignKeys = rebuild ? db.prepare('PRAGMA foreign_keys').get().foreign_keys : null;
     if (rebuild) db.exec('PRAGMA foreign_keys = OFF');
     try {

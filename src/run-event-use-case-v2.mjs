@@ -235,7 +235,7 @@ function validateRunContext(context, command) {
   return { ok: true };
 }
 
-export function createApplyRunEvent({ store, clock, eventTimePolicy } = {}) {
+export function createApplyRunEvent({ store, clock, eventTimePolicy, auditRole = 'system', notifications = 'enabled' } = {}) {
   if (!store || typeof store.withImmediateTransaction !== 'function') {
     throw new TypeError('store with withImmediateTransaction is required');
   }
@@ -313,6 +313,7 @@ export function createApplyRunEvent({ store, clock, eventTimePolicy } = {}) {
         const response = {
           ok: true,
           code: 'RUN_EVENT_APPLIED',
+          ...(notifications === 'disabled' ? {notificationStatus:'NOT_ENQUEUED_EXTERNAL_DELIVERY_DISABLED'} : {}),
           eventId: command.eventId,
           runId: run.id,
           previousState: folded.previousState,
@@ -383,7 +384,7 @@ export function createApplyRunEvent({ store, clock, eventTimePolicy } = {}) {
           updatedAt: receivedAt,
         });
 
-        if (command.eventType === 'complete') {
+        if (command.eventType === 'complete' && notifications !== 'disabled') {
           const notification = buildProductionRunCompletedNotificationV1({
             eventId: command.eventId,
             runId: run.id,
@@ -410,7 +411,7 @@ export function createApplyRunEvent({ store, clock, eventTimePolicy } = {}) {
         });
         transaction.recordAudit({
           action: 'production.run-event',
-          role: 'system',
+          role: auditRole,
           entityId: run.id,
           revision: nextProjectionRevision,
           result: 'success',

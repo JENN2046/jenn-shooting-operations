@@ -1,3 +1,5 @@
+// Explicit Schema11 coverage: V2 projection ports/cache and legacy notification semantics.
+// Schema12/V3 entry points and atomic rollback are covered by business-v3-boundaries.
 import { createKioskServiceBindingV1 } from '../src/kiosk-service-context-v1.mjs';
 const isolatedBinding = createKioskServiceBindingV1({ context: 'WO03_ISOLATED_ACCEPTANCE' });
 import assert from 'node:assert/strict';
@@ -22,7 +24,7 @@ import { digestRunEventResponse } from '../src/run-event-use-case-v2.mjs';
 import { createSqliteKioskRunEventStore } from '../src/sqlite-kiosk-run-event-store-v2.mjs';
 import { createKioskV2Application } from '../src/server.mjs';
 import { ScheduleStore } from '../src/store.mjs';
-import { initializeWritableSchema } from '../src/sqlite-schema-v2.mjs';
+import { initializeWritableSchema, MIGRATIONS } from '../src/sqlite-schema-v2.mjs';
 import { normalizeSchedulingConfigV1 } from '../src/scheduling-admin-contract-v1.mjs';
 import { canonicalJsonSchedulingV1, digestResourceCapabilitiesV1 } from '../src/scheduling-contract-v1.mjs';
 
@@ -37,7 +39,7 @@ function openDatabase(filename = ':memory:') {
 }
 
 function seedBase(db, { projectionRevision = 10, scheduleRevision = 3 } = {}) {
-  initializeWritableSchema(db, { now: () => new Date(T0) });
+  initializeWritableSchema(db, { migrations: MIGRATIONS.slice(0, 11), now: () => new Date(T0) });
   db.prepare(`
     INSERT INTO migration_batches (
       id, identity_digest, migration_version, mapping_version, source_schema_version,

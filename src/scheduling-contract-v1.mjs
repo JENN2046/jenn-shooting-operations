@@ -107,6 +107,7 @@ const DIAGNOSTIC_PATHS = new Set(SCHEDULING_DIAGNOSTIC_FIELD_PATHS_V1);
 const PRODUCTION_TYPES = new Set(['平面', '视频']);
 const FLAT_SUBTYPES = new Set(['模特', '细节', '场景', '待定']);
 const VIDEO_SUBTYPES = new Set(['产品展示', '人物展示', '产品加人物展示', '口播', '剧情短片', '场景视频']);
+const FLAT_SUBTYPES_V3 = new Set([...FLAT_SUBTYPES, '产品3D主图', '细节图', '功能图']);
 const ALL_SUBTYPES = new Set([...FLAT_SUBTYPES, ...VIDEO_SUBTYPES]);
 
 class AdmissionError extends Error {
@@ -397,17 +398,18 @@ function normalizeFactProvenance(value, path) {
   ]));
 }
 
-function normalizeCandidate(value, path) {
+function normalizeCandidate(value, path, classified = false) {
+  const flat = classified ? FLAT_SUBTYPES_V3 : FLAT_SUBTYPES;
   exactRecord(value, CANDIDATE_KEYS, path);
   const productionType = value.productionType === null
     ? null
     : enumValue(value.productionType, PRODUCTION_TYPES, `${path}.productionType`);
   const shootingSubtype = value.shootingSubtype === null
     ? null
-    : enumValue(value.shootingSubtype, ALL_SUBTYPES, `${path}.shootingSubtype`);
+    : enumValue(value.shootingSubtype, new Set([...flat, ...VIDEO_SUBTYPES]), `${path}.shootingSubtype`);
   if (
     (productionType === null && shootingSubtype !== null)
-    || (productionType === '平面' && !FLAT_SUBTYPES.has(shootingSubtype))
+    || (productionType === '平面' && !flat.has(shootingSubtype))
     || (productionType === '视频' && !VIDEO_SUBTYPES.has(shootingSubtype))
   ) fail('PRODUCTION_FACTS_INCONSISTENT', path);
 
@@ -538,17 +540,18 @@ function normalizeActiveRun(value, path) {
   };
 }
 
-function normalizeDurationStat(value, path) {
+function normalizeDurationStat(value, path, classified = false) {
+  const flat = classified ? FLAT_SUBTYPES_V3 : FLAT_SUBTYPES;
   exactRecord(value, DURATION_STAT_KEYS, path);
   const productionType = value.productionType === null
     ? null
     : enumValue(value.productionType, PRODUCTION_TYPES, `${path}.productionType`);
   const shootingSubtype = value.shootingSubtype === null
     ? null
-    : enumValue(value.shootingSubtype, ALL_SUBTYPES, `${path}.shootingSubtype`);
+    : enumValue(value.shootingSubtype, new Set([...flat, ...VIDEO_SUBTYPES]), `${path}.shootingSubtype`);
   if (
     (productionType === null && shootingSubtype !== null)
-    || (productionType === '平面' && !FLAT_SUBTYPES.has(shootingSubtype))
+    || (productionType === '平面' && !flat.has(shootingSubtype))
     || (productionType === '视频' && !VIDEO_SUBTYPES.has(shootingSubtype))
   ) fail('PRODUCTION_FACTS_INCONSISTENT', path);
   return {
@@ -585,10 +588,10 @@ function admissionResult(code, work) {
   }
 }
 
-function normalizeSchedulingInputWithCompiler(input, compilerVersion) {
+function normalizeSchedulingInputWithCompiler(input, compilerVersion, classified = false) {
   return admissionResult('SCHEDULING_INPUT_INVALID', () => {
     exactRecord(input, INPUT_KEYS, '$');
-    if (input.schemaVersion !== SCHEDULING_INPUT_SCHEMA_V1) fail('SCHEMA_VERSION_INVALID', '$.schemaVersion');
+    if (input.schemaVersion !== (classified ? 2 : SCHEDULING_INPUT_SCHEMA_V1)) fail('SCHEMA_VERSION_INVALID', '$.schemaVersion');
     const planningWindowStart = utcTimestamp(input.planningWindowStart, '$.planningWindowStart');
     const planningWindowEnd = utcTimestamp(input.planningWindowEnd, '$.planningWindowEnd');
     const planningStartMs = Date.parse(planningWindowStart);
@@ -599,7 +602,7 @@ function normalizeSchedulingInputWithCompiler(input, compilerVersion) {
       .map((resource, index) => normalizeResource(resource, `$.resources[${index}]`, planningStartMs, planningEndMs))
       .toSorted((left, right) => codePointCompare(left.resourceId, right.resourceId));
     const candidates = arrayValues(input.candidates, '$.candidates')
-      .map((candidate, index) => normalizeCandidate(candidate, `$.candidates[${index}]`))
+      .map((candidate, index) => normalizeCandidate(candidate, `$.candidates[${index}]`, classified))
       .toSorted((left, right) => codePointCompare(left.requestId, right.requestId));
     const occupied = arrayValues(input.occupied, '$.occupied')
       .map((item, index) => normalizeOccupied(item, `$.occupied[${index}]`))
@@ -610,7 +613,7 @@ function normalizeSchedulingInputWithCompiler(input, compilerVersion) {
       .map((run, index) => normalizeActiveRun(run, `$.activeRuns[${index}]`))
       .toSorted((left, right) => codePointCompare(left.runId, right.runId));
     const durationStats = arrayValues(input.durationStats, '$.durationStats')
-      .map((stat, index) => normalizeDurationStat(stat, `$.durationStats[${index}]`))
+      .map((stat, index) => normalizeDurationStat(stat, `$.durationStats[${index}]`, classified))
       .toSorted((left, right) => codePointCompare(left.statId, right.statId));
 
     ensureUnique(resources, 'resourceId', '$.resources');
@@ -646,7 +649,7 @@ function normalizeSchedulingInputWithCompiler(input, compilerVersion) {
     }
 
     const normalized = deepFreeze({
-      schemaVersion: SCHEDULING_INPUT_SCHEMA_V1,
+      schemaVersion: classified ? 2 : SCHEDULING_INPUT_SCHEMA_V1,
       planningWindowStart,
       planningWindowEnd,
       businessTimeZone: businessTimeZone(input.businessTimeZone, '$.businessTimeZone'),
@@ -820,3 +823,6 @@ export function normalizeSchedulingInputV1(input) { return normalizeSchedulingIn
 export function normalizeSchedulingInputCalendarV2(input) { return normalizeSchedulingInputWithCompiler(input, 'calendar-compiler-v2'); }
 export function canonicalizeSchedulingResultV1(value) { return canonicalizeSchedulingResultWithCompiler(value, SCHEDULING_CALENDAR_COMPILER_VERSION_V1); }
 export function canonicalizeSchedulingResultCalendarV2(value) { return canonicalizeSchedulingResultWithCompiler(value, 'calendar-compiler-v2'); }
+
+export function normalizeSchedulingInputClassificationV3(input) { return normalizeSchedulingInputWithCompiler(input, "calendar-compiler-v3", true); }
+export function canonicalizeSchedulingResultClassificationV3(input) { return canonicalizeSchedulingResultWithCompiler(input, "calendar-compiler-v3"); }

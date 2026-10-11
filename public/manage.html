@@ -1,23 +1,40 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>工作安排 · Jenn</title><link rel="stylesheet" href="/manage.css"></head>
-<body><header><a href="/board">Jenn 拍摄工作台</a><span>工作安排</span></header>
+<body><header><a href="/manage">Jenn 拍摄工作台</a><span>工作安排</span></header>
 <main><h1>安排工作，也留出调整的余地</h1><p class="muted">工作日历决定可拍时间。改期前，会检查摄影师占用、午休和拍后缓冲。</p>
 <form id="login"><label>管理访问令牌<input id="token" type="password" autocomplete="off" required></label><button id="login-button">连接工作台</button><small>令牌只在当前页面内存中使用。</small></form>
 <p id="message" role="status" aria-live="polite"></p><section id="unknown" hidden><strong>上一次操作结果待核对</strong><p>暂不提交新操作，先读取原操作的结果。</p><button id="reconcile" type="button">核对结果</button></section>
 <section id="workspace" hidden><div class="toolbar"><p id="identity"></p><button id="refresh" type="button">刷新状态</button><button id="logout" type="button">退出</button></div>
-<section id="setup" hidden><h2>一个摄影师，一份产能</h2><p>登记 Jenn 摄影师，模特、细节和场景共用同一资源，最多同时拍一场。</p><button id="register" type="button">登记摄影师</button></section>
+<section id="setup" hidden><h2>一个摄影师，一份产能</h2><p>登记 Jenn 摄影师，模特、静物和场景共用同一资源，最多同时拍一场。</p><button id="register" type="button">登记摄影师</button></section>
 <section id="calendar-panel"><h2>工作日历</h2><p id="config-state"></p><form id="calendar-form">
 <fieldset id="calendar-fields"><legend>日常工作时段（北京时间）</legend><div class="grid">
-<label>这次规则从哪天开始<input id="effective" type="date" required></label><label>确定上班的周六<input id="anchor" type="date" value="2026-10-10" required></label>
+<label>这次规则从哪天开始<input id="effective" type="date" required></label><label>周六安排<select id="saturday"><option value="weekly">每周上班</option><option value="alternating">隔周上班</option><option value="off">休息</option></select></label><label id="anchor-label">确定上班的周六<input id="anchor" type="date" value="2026-10-10"></label>
 <label>上午开始<input id="am-start" type="time" value="09:00" required></label><label>上午结束<input id="am-end" type="time" value="12:00" required></label>
 <label>下午开始<input id="pm-start" type="time" value="13:30" required></label><label>下午结束<input id="pm-end" type="time" value="18:00" required></label></div>
-<p class="muted">周一至周五上班，周日休息，周六隔周。锚点只确定大小周，不限制未来可排日期。</p>
+<p class="muted">周一至周五上班，周日休息；周六按所选方式安排。隔周模式下才使用锚点。</p>
 <h3>临时休息或加班</h3><div id="exceptions"></div><button id="add-exception" type="button" class="secondary">添加日期例外</button>
 <p class="muted">删除某天的例外后恢复周期规则。历史例外保留；自定义时段可以只填一段。</p>
-<h3>初始耗时</h3><div class="grid"><label>细节（分钟）<input id="duration-detail" type="number" min="1" max="1440" value="60" required></label><label>模特（分钟）<input id="duration-model" type="number" min="1" max="1440" value="120" required></label><label>场景（分钟）<input id="duration-scene" type="number" min="1" max="1440" value="90" required></label></div><p class="muted">这是可校准的起始估计。每场拍后缓冲10分钟，连同拍摄一起占用工作时段。</p>
-<button id="preview-button" type="submit">预览影响</button></fieldset></form>
+<h3>类型默认耗时（可留空，改为逐单填写）</h3><div class="grid"><label>历史细节（未细分，分钟）<input id="duration-detail" type="number" min="1" max="1440" ></label><label>产品3D主图（分钟）<input id="duration-main3d" type="number" min="1" max="1440"></label><label>静物细节图（分钟）<input id="duration-still-detail" type="number" min="1" max="1440"></label><label>静物功能图（分钟）<input id="duration-function" type="number" min="1" max="1440"></label><label>模特（分钟）<input id="duration-model" type="number" min="1" max="1440" ></label><label>场景（分钟）<input id="duration-scene" type="number" min="1" max="1440" ></label></div><p class="muted">未填写默认耗时的订单需要明确的逐单时长。缓冲连同拍摄一起占用工作时段，包含最后一场。</p>
+<label>统一拍后缓冲（分钟）<input id="buffer-minutes" type="number" min="0" max="1440" value="20" required></label><button id="preview-button" type="submit">预览影响</button></fieldset></form>
 <div id="preview" hidden><h3>保存前核对</h3><p id="preview-summary"></p><ul id="conflicts"></ul><button id="publish" type="button">保存并生效</button></div>
 <div id="published" hidden><p>有已经保存、尚未生效的规则。当前安排仍使用原规则。</p><label>选择待生效记录<select id="saved-version"></select></label><button id="inspect-saved" type="button">查看这份规则及影响</button><div id="saved-preview" hidden><p id="saved-details"></p><details><summary>查看保存的完整规则记录</summary><pre id="saved-record"></pre></details><ul id="saved-conflicts"></ul><button id="activate" type="button">确认以上规则并生效</button></div></div></section>
+<section id="order-panel" hidden><h2>普通新建订单</h2><p>选择静物、模特或场景图。没有附件也可提交；比例和反光可以待定。样品未核实到货的订单不能排期。</p>
+<form id="order-form"><p id="order-edit-state">新建订单</p><div class="grid">
+<label>SKU<input id="order-sku" required maxlength="120"></label><label>名称<input id="order-name" required maxlength="240"></label>
+<label>业务类别<select id="order-category"><option value="静物">静物</option><option value="模特">模特</option><option value="场景">场景图</option></select></label>
+<label id="order-subtype-label">静物子类<select id="order-subtype"><option value="产品3D主图">产品3D主图</option><option value="细节图">细节图</option><option value="功能图">功能图</option></select></label>
+<label>需求人<input id="order-requested" required maxlength="160"></label><label>期望日期<input id="order-date" type="date" required></label>
+<label>交付张数<input id="order-count" type="number" min="1" max="999" required></label>
+<label>比例<select id="order-ratio"><option value="待定">待定</option><option>1:1</option><option>3:4</option><option>4:5</option><option>9:16</option><option>16:9</option></select></label>
+<label>样品<select id="order-sample" required><option value="">请选择</option><option value="arrivedVerified">已到货并核实</option><option value="inTransit">运输中</option><option value="unavailable">不可用</option></select></label>
+<label>优先级<select id="order-priority" required><option value="">请选择</option><option value="p0">P0</option><option value="p1">P1</option><option value="p2">P2</option></select></label>
+<label>光照配置<input id="order-light" required maxlength="120"></label><label>反光<select id="order-reflectivity"><option value="unknown">未知</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option></select></label>
+<label>拍摄简述<input id="order-brief" required maxlength="100"></label><label>备注<textarea id="order-note" maxlength="2000"></textarea></label></div>
+<button type="submit">保存订单</button><button id="order-new" type="button">切换为新建</button></form>
+<h3>订单分类与统计</h3><label>筛选<select id="order-filter"><option value="all">全部</option><option value="静物">静物全部</option><option value="产品3D主图">产品3D主图</option><option value="细节图">细节图</option><option value="功能图">功能图</option><option value="模特">模特</option><option value="场景">场景图</option><option value="细节">历史细节（未细分）</option></select></label><p id="order-counts"></p><div id="order-list"></div>
+<h3>登记实际执行</h3><p>仅在真实发生时点击；记录服务器当前时间，不支持补录或更正。预计结束请使用下方现场预览。</p><label>场次<select id="actual-item"></select></label><p id="actual-item-notice" role="status"></p><button id="actual-start" type="button">现在开拍</button><button id="actual-complete" type="button">现在完成</button></section>
+<section><h2>逐单拍摄时长</h2><p>管理员填写该单预计拍摄分钟数，不改变已排场次。静物包括独立记录的产品3D主图、细节图、功能图；模特与场景图分别记录。</p><div id="requests"></div></section><section><h2>现场变化与当天后续安排</h2><p>仅预览同摄影师当天后续，保持顺序。预计结束不是实际完成；已发生、锁定的安排不改写。不自动跨天、加班或取消。</p>
+<p id="dynamic-item-notice" role="status"></p><p id="dynamic-facts"></p><form id="dynamic-form"><label>场次<select id="dynamic-item" required></select></label><label>此次变更<select id="dynamic-mode"><option value="plan">尚未开始：修改本场计划</option><option value="forecast">现场预计结束（不改实际事实）</option></select></label><label>本场开始（计划模式）<input id="dynamic-start" type="time"></label><label>本场结束／现场预计结束<input id="dynamic-end" type="time" required></label><label>仅本场拍后缓冲（分钟）<input id="dynamic-buffer" type="number" min="0" max="1440" required></label><button>预览后续影响</button></form><div id="dynamic-preview" hidden><p id="dynamic-summary"></p><ul id="dynamic-changes"></ul><button id="dynamic-confirm" type="button">确认以上整批调整</button></div></section>
 <section><h2>拍摄改期</h2><p>只调整未锁定、尚无执行记录的场次。已确认拍摄不会随工作日历自动移动。</p><div id="sessions"></div>
 <form id="reschedule-form" hidden><h3 id="edit-title"></h3><div class="grid"><label>拍摄日期<input id="shoot-date" type="date" required></label><label>开始时间<input id="shoot-start" type="time" required></label><label>结束时间<input id="shoot-end" type="time" required></label></div><p id="buffer-note"></p><button type="submit">检查并保存改期</button><button id="cancel-edit" type="button" class="secondary">取消</button></form></section>
 <section><h2>排程提案</h2><form id="proposal-form"><div class="grid"><label>开始日期<input id="plan-from" type="date" required></label><label>结束日期（含当天）<input id="plan-through" type="date" required></label></div><button type="submit">生成提案</button></form><div id="proposal"></div></section>

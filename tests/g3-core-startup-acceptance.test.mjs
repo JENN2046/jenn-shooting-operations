@@ -99,7 +99,7 @@ test('schema10 and missing initialization reject without automatic schema repair
   const st=statSync(old);f.record.target.databasePath=old;f.record.target.databaseIdentity={device:st.dev,inode:st.ino};
   f.record.baseline.sha256=f.m.digest(readFileSync(old));f.install();
   const oldBytes=readFileSync(old);
-  assert.throws(()=>f.m.loadCoreAcceptance(old),/SCHEMA11/);
+  assert.throws(()=>f.m.loadCoreAcceptance(old), { message: 'G3_CORE_ACCEPTANCE_SCHEMA_BINDING' });
   assert.deepEqual(readFileSync(old),oldBytes);
  } finally { f.close(); }
 });

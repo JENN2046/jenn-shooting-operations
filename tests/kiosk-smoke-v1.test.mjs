@@ -23,7 +23,8 @@ const END = '2026-10-01T02:10:00.000Z';
 const principal = createTrustedPrincipal({ subjectId: 'KIOSK-PROD-01', role: 'operator', resourceIds: ['STUDIO-PROD-01'] }).principal;
 function fixture(options = {}) {
   // Canonical Scheduling preparation, solely in disposable test storage.
-  const f = gf15Fixture(options);
+  // This suite exercises the legacy V2 protocol against its Schema11 domain.
+  const f = gf15Fixture({ ...options, schemaVersion: 11 });
   f.service.begin(f.binding, f.lease, f.principal);
   assert.equal(f.service.forward(f.lease, f.principal).ok, true);
   f.quiescence.release(f.lease);

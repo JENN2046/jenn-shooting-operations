@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
-import { validateV1Snapshot, validateV2Snapshot } from './contract-validator.mjs';
+import { validateV1Snapshot, validateV2Snapshot, validateV3Snapshot } from './contract-validator.mjs';
 import { sqliteFilenamePath, fileIdentity } from './sqlite-file-identity.mjs';
 import { assertKnownSchema, MIGRATIONS } from './sqlite-schema-v2.mjs';
 import { digestCanonicalJsonSchedulingV1 } from './scheduling-contract-v1.mjs';
@@ -18,6 +18,7 @@ const SCHEMA = new URL('../contracts/g3-forward-reconciliation-exception.r3.sche
 const ajv = new Ajv({ strict: true, allErrors: false });
 addFormats(ajv);
 const valid = ajv.compile(JSON.parse(readFileSync(SCHEMA, 'utf8')));
+const validV4 = ajv.compile(JSON.parse(readFileSync(new URL('../contracts/g3-forward-reconciliation-exception.r4.schema.json',import.meta.url),'utf8')));
 const fail = code => { throw new Error(`G3_CORE_ACCEPTANCE_${code}`); };
 const need = (value, code) => { if (!value) fail(code); };
 export const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -91,7 +92,7 @@ export function runtimeConfigDigest(env = process.env) {
   return digest(canonical(Object.fromEntries(keys.map(k => [k, env[k] ?? null]))));
 }
 export function validateCoreRecord(record, { now = Date.now() } = {}) {
-  need(valid(record), 'RECORD_INVALID');
+  need((record?.version===4?validV4:valid)(record), 'RECORD_INVALID');
   const start = Date.parse(record.window.start), end = Date.parse(record.window.end);
   need(start < end && Date.parse(record.ownerApprovedAt) <= now, 'WINDOW');
   if (record.state === 'PREPARED') {
@@ -127,13 +128,13 @@ export function validateCoreDatabase(record, filename) {
   const db = new DatabaseSync(filename, { readOnly: true });
   try {
     db.exec('PRAGMA query_only=ON; BEGIN');
-    need(assertKnownSchema(db).version === 11, 'SCHEMA11');
+    need(assertKnownSchema(db).version === record.baseline.schemaVersion, 'SCHEMA_BINDING');
     const counter = db.prepare('SELECT * FROM revision_counters WHERE id=1').get();
     const legacy = db.prepare('SELECT * FROM schedule_state WHERE id=1').get();
     need(counter && legacy, 'INITIALIZATION_REQUIRED');
     validateCoreLegacySnapshot(legacy);
     const initial = db.prepare('SELECT * FROM empty_db_initialization WHERE id=1').get();
-    validateCoreInitializationSnapshot({ initial, counter,
+    validateCoreInitializationSnapshot({ initial, counter, schemaVersion:record.baseline.schemaVersion,
       audits: initial ? db.prepare(`SELECT * FROM audit_log
         WHERE action='emptyDbMaintenanceV1' AND entity_id=?`).all(initial.operation_id) : [],
       projections: db.prepare('SELECT * FROM snapshot_projections ORDER BY projection_name').all() });
@@ -174,7 +175,7 @@ function concernsCoreDatabase(databasePath) {
 
 // The receipt describes the original transaction; projections describe current state.
 // Neither current revisions nor the legacy snapshot must remain at their initial zero.
-export function validateCoreInitializationSnapshot({ initial, counter, audits, projections }) {
+export function validateCoreInitializationSnapshot({ initial, counter, audits, projections, schemaVersion=11 }) {
   need(initial, 'INITIALIZATION_REQUIRED');
   let response, binding;
   try { response = JSON.parse(initial.response_json); binding = JSON.parse(initial.binding_json); }
@@ -189,28 +190,29 @@ export function validateCoreInitializationSnapshot({ initial, counter, audits, p
     && Number.isFinite(Date.parse(initial.created_at))
     && typeof binding?.actor === 'string' && binding.actor.length > 0
     && binding.businessTimeZone === 'Asia/Shanghai'
-    && [10, 11].some(version => binding.schemaDigest === digestCanonicalJsonSchedulingV1(
+    && (schemaVersion===12?[12]:[10,11]).some(version => binding.schemaDigest === digestCanonicalJsonSchedulingV1(
       MIGRATIONS.slice(0, version).map(({ version, name, checksum }) => ({ version, name, checksum })))),
   'INITIALIZATION_RECEIPT');
   need(audits.length === 1 && audits[0].action === 'emptyDbMaintenanceV1'
     && audits[0].entity_id === initial.operation_id && audits[0].role === binding.actor
     && audits[0].revision === 0 && audits[0].result === initial.packet_digest
     && audits[0].created_at === initial.created_at, 'INITIALIZATION_AUDIT');
-  need(projections.length === 2 && Number.isSafeInteger(counter.schedule_revision)
+  need(projections.length === (schemaVersion===12?1:2) && Number.isSafeInteger(counter.schedule_revision)
     && counter.schedule_revision >= 0 && Number.isSafeInteger(counter.projection_revision)
     && counter.projection_revision >= 0, 'INITIALIZATION_PROJECTIONS');
-  for (const [index, name] of ['schedule-v1-compat', 'schedule-v2'].entries()) {
-    const row = projections[index], version = index + 1;
+  for (const [index, name] of (schemaVersion===12?['schedule-v3']:['schedule-v1-compat', 'schedule-v2']).entries()) {
+    const row = projections[index], version = schemaVersion===12?3:index + 1;
     let payload;
     try { payload = JSON.parse(row.payload_json); } catch { fail('INITIALIZATION_PROJECTIONS'); }
     try {
       const validation = version === 1
-        ? validateV1Snapshot(payload, { profile: 'legacy-read' }) : validateV2Snapshot(payload);
+        ? validateV1Snapshot(payload, { profile: 'legacy-read' })
+        : (version === 3 ? validateV3Snapshot : validateV2Snapshot)(payload);
       need(validation.ok && (version !== 1 || (validation.switchReady === true
         && ['L0_STRICT', 'L1_GRANDFATHERED_OPAQUE'].includes(validation.classification))),
       'INITIALIZATION_PROJECTIONS');
     } catch { fail('INITIALIZATION_PROJECTIONS'); }
-    need(row.projection_name === name && row.schema_version === version && row.source_schema_version === 2
+    need(row.projection_name === name && row.schema_version === version && row.source_schema_version === (schemaVersion===12?12:2)
       && row.revision === counter.projection_revision
       && row.schedule_revision === (version === 1 ? null : counter.schedule_revision)
       && row.updated_at === counter.updated_at && payload?.schemaVersion === version
@@ -243,7 +245,7 @@ export function loadCoreAcceptance(databasePath) {
     exact(initial, ['acceptanceScopeSha256','baselineSha256','checkedAt','schemaVersion','integrityOk',
       'foreignKeyViolations','backupRestoreVerified','exclusiveMaintenance','initialized']);
     need(initial.acceptanceScopeSha256 === approval.acceptanceScopeSha256
-      && initial.baselineSha256 === record.baseline.sha256 && initial.schemaVersion === 11
+      && initial.baselineSha256 === record.baseline.sha256 && initial.schemaVersion === record.baseline.schemaVersion
       && initial.integrityOk === true && initial.foreignKeyViolations === 0
       && initial.backupRestoreVerified === true && initial.exclusiveMaintenance === true && initial.initialized === true
       && Date.parse(initial.checkedAt) >= Date.parse(record.window.start)

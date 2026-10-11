@@ -304,6 +304,10 @@ export function createHttpApp({
         return serveStatic(response, STATIC.get(url.pathname));
       }
 
+      if ((url.pathname.startsWith('/api/v2/') || ['/api/v1/snapshot','/api/v1/requests','/api/v1/uploads'].includes(url.pathname))
+        && store.db?.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get()) {
+        return sendJson(response, 409, {ok:false,code:'CLIENT_PROTOCOL_UPGRADE_REQUIRED',requiredVersion:3});
+      }
       if (request.method === 'GET' && url.pathname === '/api/v1/snapshot') {
         return sendJson(response, 200, { ok: true, snapshot: store.getSnapshot() });
       }
@@ -465,7 +469,7 @@ export function createHttpApp({
       }
 
       const proposalDecisionRoute = request.method === 'POST'
-        ? /^\/api\/v2\/proposals\/([^/]+)\/decisions$/u.exec(url.pathname)
+        ? /^\/api\/v[23]\/proposals\/([^/]+)\/decisions$/u.exec(url.pathname)
         : null;
       if (proposalDecisionRoute) {
         if ([...url.searchParams].length !== 0) {

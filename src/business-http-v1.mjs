@@ -1,5 +1,10 @@
 // Explicit business route adapter; caller authenticates and applies global write admission.
 const POST = new Map([
+  ['/api/v2/business/run-events', ['recordActualEvent']],
+  ['/api/v2/business/requests', ['createOrder']],
+  ['/api/v2/business/requests/edit', ['editOrder']],
+  ['/api/v2/business/day-adjustment/preview', ['previewDayAdjustment']],
+  ['/api/v2/business/day-adjustment/apply', ['applyDayAdjustment']],
   ['/api/v2/business/resources', ['manage', 'registerResource']],
   ['/api/v2/business/config/preview', ['previewConfig']],
   ['/api/v2/business/config/publish', ['manage', 'publishConfig']],
@@ -7,10 +12,13 @@ const POST = new Map([
   ['/api/v2/business/proposals', ['generateProposal']],
 ]);
 export function businessRoute(method, pathname) {
+  pathname=pathname.replace(/^\/api\/v3\/business(?=\/)/u,'/api/v2/business');
   if (method === 'GET' && pathname === '/api/v2/business/state') return { method: 'readManagement' };
   if (method === 'POST' && POST.has(pathname)) { const [method,kind]=POST.get(pathname);return {method,kind}; }
   const read = method === 'GET' && /^\/api\/v2\/business\/(operations|proposals)\/([^/]+)$/u.exec(pathname);
   if (read) return {method:read[1]==='operations'?'readBusinessOperation':'readBusinessProposal',key:read[1]==='operations'?'operationId':'proposalId',encoded:read[2]};
+  const duration = method === 'POST' && /^\/api\/v2\/business\/requests\/([^/]+)\/duration$/u.exec(pathname);
+  if (duration) return {method:'setRequestDuration',key:'requestId',encoded:duration[1]};
   const edit = method === 'POST' && /^\/api\/v2\/business\/schedule-items\/([^/]+)\/reschedule$/u.exec(pathname);
   if (edit) return {method:'reschedule',key:'scheduleItemId',encoded:edit[1]};
   return null;

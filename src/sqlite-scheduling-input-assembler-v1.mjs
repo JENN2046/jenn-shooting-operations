@@ -129,7 +129,7 @@ export function assembleSchedulingInputFromSqliteV1({ db, command, activeConfig 
     WHERE id = 1`).get()?.schedule_revision;
   if (scheduleRevision === undefined) throw new Error('SCHEDULING_REVISION_NOT_READY');
   return {
-    schemaVersion: 1, planningWindowStart: command.planningWindowStart,
+    schemaVersion: config.schemaVersion === 3 ? 2 : 1, planningWindowStart: command.planningWindowStart,
     planningWindowEnd: command.planningWindowEnd,
     businessTimeZone: config.businessTimeZone,
     baseScheduleRevision: scheduleRevision,

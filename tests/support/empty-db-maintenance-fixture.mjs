@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { createGreenfieldDomain } from '../../scripts/create-greenfield-domain.mjs';
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -5,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { resolveOrphanCleanupControlRoot } from '../../src/store.mjs';
 import { createOrphanCleanupControl } from '../../src/orphan-cleanup-control.mjs';
 import { initializeWritableSchema, MIGRATIONS } from '../../src/sqlite-schema-v2.mjs';
-import { bindLocalEmptyDbMaintenanceTargetV1, EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1, EMPTY_DB_MAINTENANCE_SCHEMA11_DIGEST_V1,
+import { bindLocalEmptyDbMaintenanceTargetV1, EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1, EMPTY_DB_MAINTENANCE_SCHEMA11_DIGEST_V1, EMPTY_DB_MAINTENANCE_SCHEMA12_DIGEST_V1,
   digestEmptyDbMaintenancePacketV1, executeLocalEmptyDbMaintenanceV1 } from '../../src/empty-db-maintenance-v1.mjs';
 import { digestResourceCapabilitiesV1 } from '../../src/scheduling-contract-v1.mjs';
 import { normalizeSchedulingConfigV1, SCHEDULING_CALENDAR_COMPILER_VERSION_V1 } from '../../src/scheduling-admin-contract-v1.mjs';
@@ -17,11 +19,13 @@ export function authorizationFor(packet) {
     packetDigest: digestEmptyDbMaintenancePacketV1(packet), writeAdmission: 'disabled',
     cleanup: 'disabled', kiosk: 'disabled', writersStopped: true };
 }
-export function maintenanceFixture(runtime = syntheticRuntime, { schemaVersion = 10 } = {}) {
-  const root = mkdtempSync(join(tmpdir(), 'jso-empty-maintenance-'));
+export function maintenanceFixture(runtime = syntheticRuntime, { schemaVersion = 10, greenfield = false } = {}) {
+  const root = greenfield ? join(tmpdir(),'jso-empty-maintenance-'+randomUUID()) : mkdtempSync(join(tmpdir(), 'jso-empty-maintenance-'));
+  if(greenfield){createGreenfieldDomain({root,synthetic:true,schemaVersion});}
+  else {
   mkdirSync(join(root, 'uploads'));
   // Explicit fixture version; production data is never inferred from these empty seeds.
-  if (![10, 11].includes(schemaVersion)) throw new Error('FIXTURE_SCHEMA_VERSION');
+  if (![10, 11, 12].includes(schemaVersion)) throw new Error('FIXTURE_SCHEMA_VERSION');
   const filename = join(root, 'synthetic.sqlite');
   mkdirSync(join(root, 'uploads', '.cleanup'));
   const control = createOrphanCleanupControl({ controlRoot: resolveOrphanCleanupControlRoot({filename}) });
@@ -33,11 +37,12 @@ export function maintenanceFixture(runtime = syntheticRuntime, { schemaVersion =
     const at = new Date().toISOString();
     bootstrap.prepare('INSERT INTO schedule_state VALUES (1,0,?,?)').run(at,JSON.stringify({schemaVersion:1,revision:0,updatedAt:at,products:[],tasks:[],sessions:[]}));
   } finally {bootstrap.close();}
+  }
   const target = bindLocalEmptyDbMaintenanceTargetV1(root);
   const packet = (kind = 'initialize', command = null, expected = { scheduleRevision: 0, projectionRevision: 0 }) =>
     ({ schemaVersion: 1, operationId: command?.operationId ?? 'LOCAL-INIT-01', kind,
       actor: 'local:maintenance-owner', approvalRef: 'local:synthetic-review-r1',
-      target, runtime, schemaDigest: schemaVersion === 11 ? EMPTY_DB_MAINTENANCE_SCHEMA11_DIGEST_V1 : EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1,
+      target, runtime, schemaDigest: schemaVersion === 12 ? EMPTY_DB_MAINTENANCE_SCHEMA12_DIGEST_V1 : schemaVersion === 11 ? EMPTY_DB_MAINTENANCE_SCHEMA11_DIGEST_V1 : EMPTY_DB_MAINTENANCE_SCHEMA_DIGEST_V1,
       businessTimeZone: 'Asia/Shanghai', expected, command });
   function execute(value = packet(), overrides = {}) {
     return executeLocalEmptyDbMaintenanceV1({ packet: value, authorization: authorizationFor(value),
