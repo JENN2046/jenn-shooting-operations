@@ -26,6 +26,7 @@ function slot(prefix,s){
  $(prefix+'-tasks').replaceChildren(...(s?.tasks??[]).map(t=>{const li=document.createElement('li');li.textContent=`${t.sku} · ${t.name} · ${t.kind==='静物'?'静物 / ':''}${t.shootingSubtype}`;return li;}));
 }
 function render(){
+ $('online-current-label').textContent=selected&&model?.currentId===selected?'NOW / 当前场次':'所选场次';
  slot('current',current());$('confirmed-state').textContent='服务端：'+(labels[current()?.state]??'—');
  slot('next',model?.sessions.find(s=>s.state==='scheduled'&&s.id!==selected));
  $('online-day').replaceChildren(...(model?.sessions??[]).map(s=>{const li=document.createElement('li'),b=document.createElement('button');b.type='button';b.textContent=`${time(s.plannedStart)} · ${s.tasks.map(t=>t.shootingSubtype+' '+t.name).join(' / ')} · ${labels[s.state]??s.state}`;b.disabled=busy;b.addEventListener('click',()=>{selected=s.id;render();});li.append(b);return li;}));controls();
@@ -45,7 +46,7 @@ async function api(path,body){
 }
 async function refresh(){
  const e=epoch;fresh=false;controls();
- try{const next=await api('day');if(e!==epoch)return;model=next;fresh=true;if(!model.sessions.some(s=>s.id===selected))selected=model.currentId??model.sessions[0]?.id??null;render();}
+ try{const next=await api('day');if(e!==epoch)return;model=next;fresh=true;if(!model.sessions.some(s=>s.id===selected))selected=model.currentId??model.sessions.find(s=>s.state==='scheduled')?.id??model.sessions[0]?.id??null;render();}
  catch(err){if(e!==epoch)return;fresh=false;model=null;selected=null;render();say(navigator.onLine?err.message:'已离线，禁止操作；恢复连接后先刷新。');}
 }
 async function sendPending(){

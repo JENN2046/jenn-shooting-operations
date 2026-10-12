@@ -31,7 +31,7 @@
     <p id="live-message" class="live-message" aria-live="polite" aria-atomic="true"></p>
     <section class="current-panel" aria-labelledby="current-title">
       <div class="section-heading">
-        <div><p class="eyebrow">NOW / 当前场次</p><h2 id="current-title">等待服务端任务</h2></div>
+        <div><p id="online-current-label" class="eyebrow">所选场次</p><h2 id="current-title">等待服务端任务</h2></div>
         <div class="state-stack">
           <span id="confirmed-state" class="state-badge">服务端：—</span>
           <span id="pending-state" class="state-badge pending" hidden>本地预计：—（未确认）</span>
@@ -65,7 +65,7 @@
 
     <section class="next-panel"><h2>当天场次（北京时间）</h2><ul id="online-day" class="task-list"></ul></section>
     <aside class="next-panel" aria-labelledby="next-title">
-      <p class="eyebrow">NEXT / 下一场</p>
+      <p class="eyebrow">NEXT / 待开始场次</p>
       <h2 id="next-title">暂无后续任务</h2>
       <p id="next-time" class="time-range">—</p>
       <ul id="next-tasks" class="task-list compact" aria-label="下一场全部任务"></ul>
