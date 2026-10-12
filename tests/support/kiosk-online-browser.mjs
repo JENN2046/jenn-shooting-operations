@@ -12,6 +12,7 @@ const token='KIOSK-BROWSER-SYNTHETIC-ONLY-NOT-PRODUCTION',admin='a'.repeat(40);
 const identities=[{token,subjectId:'OPERATOR-BROWSER-001',deviceId:'DEVICE-BROWSER-001',resourceId:'JSO-BIZ-RESOURCE-001'},{token:'OTHER-KIOSK-BROWSER-SYNTHETIC-ONLY-001',subjectId:'OTHER-OPERATOR-001',deviceId:'OTHER-DEVICE-001',resourceId:'OTHER-RESOURCE-001'}];
 const f=await launch({kioskIdentities:identities});let running,browser,at='2026-10-12T01:00:00.000Z';
 const checks=[],errors=[];let posts=0;
+checks.push=(...items)=>{console.log(...items);return Array.prototype.push.apply(checks,items);};
 try{
  await scheduleOrders(f,5);f.server.store.close();
  const api=await import(pathToFileURL(join(f.app,'src/server.mjs')));
@@ -23,19 +24,51 @@ try{
  const count=()=>running.store.db.prepare('SELECT count(*) n FROM production_events').get().n;
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH||'/usr/bin/google-chrome',chromiumSandbox:true});
  const context=await browser.newContext({locale:'zh-CN',timezoneId:'Asia/Shanghai',viewport:{width:1365,height:1100}}),page=await context.newPage();
+ context.setDefaultTimeout(20000);
  page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST'&&r.url()===base+'/api/v3/kiosk/events')posts++;});
- const login=async()=>{await page.locator('#online-token').fill(token);await page.locator('#online-login button').click();await page.locator('#online-identity').filter({hasText:'DEVICE-BROWSER-001'}).waitFor();await page.locator('#server-status').filter({hasText:'已同步'}).waitFor();};
+ const login=async(target=page)=>{await target.locator('#online-token').fill(token);await target.locator('#online-login button').click();await target.locator('#online-identity').filter({hasText:'DEVICE-BROWSER-001'}).waitFor();await target.locator('#server-status').filter({hasText:'已同步'}).waitFor();};
  const message=text=>page.locator('#live-message').filter({hasText:text}).waitFor();
+ const idle=await context.newPage();idle.on('pageerror',e=>errors.push(e.message));await idle.goto(base+'/kiosk');
+ assert.equal((await idle.evaluate(()=>navigator.locks.query())).held.length,0);
  await page.goto(base+'/kiosk');const legacy=JSON.stringify({schemaVersion:2,pending:[{synthetic:'preserved'}]});await page.evaluate(v=>localStorage.setItem('jenn.kiosk.offline-queue.v2',v),legacy);await page.reload();await login();
+ await page.waitForFunction(()=>!document.getElementById('action-start').disabled);
+ await login(idle);assert.equal(await idle.locator('#action-start').isDisabled(),true);assert.match(await idle.locator('#lock-status').textContent(),/另一页面/);
+ assert.equal((await page.evaluate(()=>navigator.locks.query())).held.filter(l=>l.name==='jenn.kiosk.control.v2').length,1);
+ await page.locator('#online-logout').click();await idle.locator('#online-refresh').click();await idle.waitForFunction(()=>!document.getElementById('action-start').disabled);
+ await login();assert.equal(await page.locator('#action-start').isDisabled(),true);
+ await idle.locator('#online-logout').click();await page.locator('#online-refresh').click();await page.waitForFunction(()=>!document.getElementById('action-start').disabled);
+ checks.push('two real Chrome tabs: unauthenticated page has no Web Lock; two authenticated pages remain single-controller; logout releases and denied authenticated page explicitly refreshes to acquire; repeated handoff');
+ await page.screenshot({path:join(out,'06-lock-handoff.png'),fullPage:true});
+ // Browser history navigation is real; separately exercise persisted lifecycle handlers if Chrome chooses a reload instead of BFCache.
+ await page.evaluate(()=>{window.addEventListener('pageshow',e=>window.__lastPersisted=e.persisted);});
+ await page.goto(base+'/board');await page.goBack();
+ const persisted=await page.evaluate(()=>window.__lastPersisted===true);
+ if(await page.locator('#online-login').isVisible())await login();
+ await page.waitForFunction(()=>!document.getElementById('action-start').disabled);
+ await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true})));
+ assert.equal(await page.locator('#action-start').isDisabled(),true);
+ await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true})));
+ await page.waitForFunction(()=>!document.getElementById('action-start').disabled);
+ checks.push('real history back restores usability (BFCache persisted='+persisted+'); dispatched persisted pagehide/pageshow releases, validates day identity and reacquires; unauthenticated tab remains open');
  assert.equal(await page.locator('#online-day li').count(),5);assert.equal(await page.locator('#legacy-warning').isVisible(),true);
  for(const name of ['产品3D主图','细节图','功能图','模特','场景'])assert.ok((await page.locator('#online-day').textContent()).includes(name));
  await page.waitForFunction(()=>!document.getElementById('action-start').disabled);checks.push('five categories and current/day list; scoped device login; old queue preserved and warned');
  await page.screenshot({path:join(out,'01-five-categories.png'),fullPage:true});
  // Exercise client encodeURIComponent with an accepted colon-containing event ID.
  await page.evaluate(()=>{const original=crypto.randomUUID.bind(crypto);crypto.randomUUID=()=>original().replace('-',':');});
+ // Real SQLite failure in the isolated server connection, after inner facts but before outer receipt commit.
+ running.store.db.exec("CREATE TEMP TRIGGER kiosk_browser_receipt_failure BEFORE INSERT ON operations WHEN NEW.kind='kiosk.online.run.v3' BEGIN SELECT RAISE(ABORT,'synthetic receipt write failure'); END");
+ const failedResponse=page.waitForResponse(r=>r.url()===base+'/api/v3/kiosk/events'&&r.status()===500);
+ await page.locator('#action-start').evaluate(b=>{b.click();b.click();});await failedResponse;await message('结果尚未确认');assert.equal(count(),0);assert.equal(posts,1);assert.equal(await page.locator('#pending-count').textContent(),'1');
+ const originalId=await page.evaluate(()=>JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('jenn.kiosk.online-v3.pending:')))).command.eventId);
+ assert.ok(originalId.includes(':'));assert.equal(running.store.db.isTransaction,false);
+ await page.screenshot({path:join(out,'07-storage-failure-pending.png'),fullPage:true});
+ await page.locator('#online-logout').click();await login();assert.equal(await page.locator('#pending-count').textContent(),'1');
+ await page.locator('#online-reconcile').click();await message('暂未找到回执');running.store.db.exec('DROP TRIGGER kiosk_browser_receipt_failure');
+ checks.push('real SQLite receipt failure returns500; complete rollback zero events; original colon eventId retained through logout/relogin and receipt404 enables explicit same-ID retry');
  // Deliver once, deliberately lose response. This is transport recovery, not an exploit.
  await page.route('**/api/v3/kiosk/events',async route=>{await route.fetch();await route.abort('failed');await page.unroute('**/api/v3/kiosk/events');},{times:1});
- await page.locator('#action-start').evaluate(b=>{b.click();b.click();});await message('结果尚未确认');assert.equal(count(),1);assert.equal(posts,1);
+ await page.locator('#online-retry').evaluate(b=>{b.click();b.click();});await message('结果尚未确认');assert.equal(count(),1);assert.equal(posts,2);assert.equal(running.store.db.prepare('SELECT event_id FROM production_events').get().event_id,originalId);
  await page.screenshot({path:join(out,'02-response-lost.png'),fullPage:true});
  assert.ok(await page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('jenn.kiosk.online-v3.pending:')).some(k=>JSON.parse(localStorage.getItem(k)).command.eventId.includes(':'))));
  await page.reload();await login();assert.equal(await page.locator('#pending-count').textContent(),'1');assert.equal(count(),1);await page.locator('#online-reconcile').click();await message('上次操作已保存');assert.equal(await page.locator('#pending-count').textContent(),'0');checks.push('double-click single event; delivered/lost response; reload and re-login; colon-ID receipt reconciliation without replay');
@@ -54,7 +87,7 @@ try{
   await adminCall('/api/v3/business/schedule-items/'+item.id+'/reschedule',{operationId:'BROWSER-CONCURRENT-MOVE',scheduleItemId:item.id,resourceId:item.resourceId,plannedStart:item.plannedStart,plannedEnd:new Date(Date.parse(item.plannedEnd)-60000).toISOString(),expectedScheduleRevision:state.revisions.scheduleRevision,expectedProjectionRevision:state.revisions.projectionRevision,configDigest:config.configDigest});
   await route.continue();
  },{times:1});
- await page.locator('#action-start').click();await message('排期已变化');assert.equal(count(),4);checks.push('stale schedule version refused after real management mutation');
+ await page.locator('#action-start').click();await message('排期已变化');assert.equal(count(),4);assert.equal(await page.locator('#pending-count').textContent(),'0');checks.push('stale schedule version refused after real management mutation');
  // HTTP authority probes from actual browser, with synthetic identities only.
  const denied=await page.evaluate(async token=>{
   const h={Authorization:'Bearer '+token};return Promise.all(['/api/v3/business/state','/api/v3/kiosk/day?resourceId=OTHER','/api/v2/updates'].map(async p=>(await fetch(p,{headers:h})).status));

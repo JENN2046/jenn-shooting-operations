@@ -7,11 +7,11 @@ import {createKioskOnlineV3} from '../src/kiosk-online-v3.mjs';
 import {launch,scheduleOrders} from './support/first-launch-v3-fixture.mjs';
 const TOKEN='KIOSK-SYNTHETIC-OPERATOR-NOT-PRODUCTION-001';
 const identity={token:TOKEN,subjectId:'OPERATOR-TEST-001',deviceId:'DEVICE-TEST-001',resourceId:'JSO-BIZ-RESOURCE-001'};
-async function setup(){
+async function setup({recordOverride}={}){
  const f=await launch();let at='2026-10-12T01:00:00.000Z';
  const runtime=createKioskOnlineRuntimeV3({identities:[identity,{...identity,token:'OTHER-DEVICE-SYNTHETIC-ONLY-0000001',deviceId:'DEVICE-TEST-002',resourceId:'OTHER-RESOURCE'}]});
  const online=createKioskOnlineV3({store:f.server.store,runtime,clock:()=>new Date(at)});
- const app=createHttpApp({store:f.server.store,kioskOnline:online});
+ const app=createHttpApp({store:f.server.store,kioskOnline:recordOverride?{...online,record:recordOverride}:online});
  const call=async(path,body,token=TOKEN)=>{
   const req=Readable.from(body===undefined?[]:[Buffer.from(JSON.stringify(body))]);req.url=path;req.method=body===undefined?'GET':'POST';req.headers={authorization:'Bearer '+token};let status,raw;
   raw='';const res=new Writable({write(chunk,encoding,done){raw+=chunk.toString();done();}});res.setHeader=()=>{};res.writeHead=s=>{status=s;};const finished=new Promise(resolve=>res.on('finish',resolve));
@@ -155,5 +155,29 @@ test('receipt path decodes accepted event IDs once, rejects malformed encodings 
   for(const id of ['KIOSK%3AEVENT%ZZ','KIOSK%3AEVENT%E0%A4%A','KIOSK%253AEVENT%253A001','KIOSK%2FEVENT%3A001'])assert.equal((await f.callKiosk('/api/v3/kiosk/events/'+id)).status,400,id);
   assert.equal((await f.callKiosk('/api/v3/kiosk/events',cmd)).body.replayed,true);
   assert.equal(f.server.store.db.prepare('SELECT count(*) n FROM production_events').get().n,1);
+ }finally{f.close();}
+});
+
+
+test('Kiosk internal/storage failures are 5xx while explicit domain refusals keep their statuses',async()=>{
+ let code='RUN_EVENT_WRITE_FAILED';const f=await setup({recordOverride:()=>({ok:false,code})});try{
+  for(code of ['RUN_EVENT_WRITE_FAILED','INTERNAL_ERROR','ERR_SQLITE_ERROR','ERR_INVALID_STATE','SQLITE_BUSY','SQLITE_CONSTRAINT'])assert.equal((await f.callKiosk('/api/v3/kiosk/events',{})).status,500,code);
+  for(const [value,status] of [['SCHEDULING_REVISION_CONFLICT',409],['RUN_REVISION_CONFLICT',409],['IDEMPOTENCY_KEY_REUSE',409],['FORBIDDEN',403],['INVALID_RUN_EVENT_COMMAND',422],['WRITE_ADMISSION_DISABLED',503]]){code=value;assert.equal((await f.callKiosk('/api/v3/kiosk/events',{})).status,status,code);}
+ }finally{f.close();}
+});
+
+test('real SQLite receipt write failure rolls back all facts and same-ID retry records exactly once',async()=>{
+ const f=await setup();try{
+  await scheduleOrders(f,1);const day=(await f.callKiosk('/api/v3/kiosk/day')).body,cmd={...command(day.sessions[0],day.revisions.scheduleRevision),eventId:'STORAGE:RETRY:001'};
+  const db=f.server.store.db,before=db.prepare('SELECT * FROM revision_counters').get();
+  db.exec("CREATE TEMP TRIGGER kiosk_receipt_failure BEFORE INSERT ON operations WHEN NEW.kind='kiosk.online.run.v3' BEGIN SELECT RAISE(ABORT,'synthetic receipt write failure'); END");
+  const failed=await f.callKiosk('/api/v3/kiosk/events',cmd);assert.equal(failed.status,500,JSON.stringify(failed));assert.equal(failed.body.code,'ERR_SQLITE_ERROR');
+  assert.equal(db.isTransaction,false);assert.deepEqual(db.prepare('SELECT * FROM revision_counters').get(),before);
+  for(const table of ['production_runs','production_events'])assert.equal(db.prepare('SELECT count(*) n FROM '+table).get().n,0);
+  assert.equal((await f.callKiosk('/api/v3/kiosk/events/'+encodeURIComponent(cmd.eventId))).status,404);
+  db.exec('DROP TRIGGER kiosk_receipt_failure');
+  assert.equal((await f.callKiosk('/api/v3/kiosk/events',cmd)).status,200);assert.equal((await f.callKiosk('/api/v3/kiosk/events',cmd)).body.replayed,true);
+  const receipt=await f.callKiosk('/api/v3/kiosk/events/'+encodeURIComponent(cmd.eventId));assert.equal(receipt.status,200);assert.equal(receipt.body.eventId,cmd.eventId);
+  assert.equal(db.prepare('SELECT count(*) n FROM production_events').get().n,1);
  }finally{f.close();}
 });

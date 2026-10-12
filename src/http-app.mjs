@@ -339,7 +339,9 @@ export function createHttpApp({
           }
           else return sendJson(response,404,{ok:false,code:'NOT_FOUND'});
         }
-        return sendJson(response,businessHttpStatus(result),result);
+        // Storage/internal failures are not definitive business refusals: keep the client's original command for reconciliation.
+        const internalFailure=result?.ok!==true&&(['RUN_EVENT_WRITE_FAILED','INTERNAL_ERROR'].includes(result?.code)||/^(?:ERR|SQLITE)(?:_|$)/u.test(result?.code??''));
+        return sendJson(response,internalFailure?500:businessHttpStatus(result),result);
       }
       if (request.method === 'GET' && url.pathname === '/api/v1/snapshot') {
         return sendJson(response, 200, { ok: true, snapshot: store.getSnapshot() });
