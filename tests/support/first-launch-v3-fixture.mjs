@@ -6,8 +6,8 @@ import {join} from 'node:path';
 import {coreFixture} from './greenfield-core-fixture.mjs';
 const types=[['静物','产品3D主图'],['静物','细节图'],['静物','功能图'],['模特','模特'],['场景','场景']];
 const time=t=>`2026-10-12T${t}:00.000Z`;
-export async function launch(){
- const f=await coreFixture({initialized:false,schemaVersion:12,identities:[{token:'a'.repeat(40),subjectId:'Jenn',role:'administrator',resourceIds:['JSO-BIZ-RESOURCE-001']},{token:'b'.repeat(40),subjectId:'other',role:'administrator',resourceIds:['OTHER']},{token:'c'.repeat(40),subjectId:'scheduler',role:'scheduler',resourceIds:['JSO-BIZ-RESOURCE-001']}]});let server;
+export async function launch({kioskIdentities=null}={}){
+ const f=await coreFixture({kioskIdentities,initialized:false,schemaVersion:12,identities:[{token:'a'.repeat(40),subjectId:'Jenn',role:'administrator',resourceIds:['JSO-BIZ-RESOURCE-001']},{token:'b'.repeat(40),subjectId:'other',role:'administrator',resourceIds:['OTHER']},{token:'c'.repeat(40),subjectId:'scheduler',role:'scheduler',resourceIds:['JSO-BIZ-RESOURCE-001']}]});let server;
  try {
   assert.throws(()=>f.server(),/INITIALIZATION_REQUIRED/);assert.equal(f.initialize().ok,true);
   f.record.baseline.sha256=f.m.digest(readFileSync(f.filename));f.install();const prepared=f.server();assert.equal(prepared.store.readOnly,true);prepared.store.close();

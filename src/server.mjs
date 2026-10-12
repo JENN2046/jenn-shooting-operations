@@ -1,3 +1,5 @@
+import {createKioskOnlineOptionsFromEnv,requireKioskOnlineRuntimeV3} from './kiosk-online-runtime-v3.mjs';
+import {createKioskOnlineV3} from './kiosk-online-v3.mjs';
 import { createKioskServiceBindingV1, requireKioskServiceBindingV1, assertKioskContextIdentityV1 } from './kiosk-service-context-v1.mjs';
 import { createServer } from 'node:http';
 import { isAbsolute, resolve } from 'node:path';
@@ -187,8 +189,13 @@ export function createOperationsServer({
   kioskAllowedBriefHosts = [],
   schedulingAuthenticate,
   schedulingAllowedBriefHosts = [],
+  kioskOnlineRuntime,
   writeAdmissionMode = 'enabled',
 }) {
+  if(kioskOnlineRuntime!==undefined){
+    requireKioskOnlineRuntimeV3(kioskOnlineRuntime);
+    if(kioskAuthenticate!==undefined||kioskServiceBinding?.mode!=='DISABLED')throw new Error('KIOSK_V3_LEGACY_RUNTIME_CONFLICT');
+  }
   const startup = assertG3AuthorityReconciliationStartupAllowed({ databasePath });
   const coreAccepted = startup.reason === 'PROSPECTIVE_CORE_ACCEPTANCE';
   if (coreAccepted && (orphanCleanupMode !== 'disabled'
@@ -196,6 +203,8 @@ export function createOperationsServer({
       || !schedulingAuthenticate || (startup.prepared && writeAdmissionMode !== 'disabled'))) {
     throw new Error('G3_CORE_ACCEPTANCE_SERVER_CONFIG');
   }
+  if(coreAccepted&&(Boolean(kioskOnlineRuntime)!==(process.env.JSO_KIOSK_ONLINE_RUNTIME==='enabled')
+    ||(kioskOnlineRuntime&&!kioskOnlineRuntime.matchesConfig(process.env.JSO_KIOSK_ONLINE_IDENTITIES_JSON))))throw new Error('G3_CORE_ACCEPTANCE_KIOSK_CONFIG');
   requireKioskServiceBindingV1(kioskServiceBinding);
   if (kioskAuthenticate === undefined && kioskServiceBinding.mode === 'PROD11_SMOKE_ONLY') {
     throw new Error('KIOSK_SMOKE_CONFIG_REQUIRED');
@@ -229,6 +238,8 @@ export function createOperationsServer({
     orphanCleanupDomain,
     writeAdmissionControl,
   });
+  if(kioskOnlineRuntime&&!store.db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get()){store.close();throw new Error('KIOSK_V3_SCHEMA12_REQUIRED');}
+  const kioskOnline=kioskOnlineRuntime?createKioskOnlineV3({store,runtime:kioskOnlineRuntime,clock:effectiveClock}):null;
   if (!coreAccepted) store.cleanupOrphanUploads();
   const kiosk = kioskAuthenticate === undefined
     ? null
@@ -255,6 +266,7 @@ export function createOperationsServer({
     store,
     tokens,
     kiosk,
+    kioskOnline,
     scheduling,
     writeAdmissionControl,
   }));
@@ -359,6 +371,7 @@ if (invokedDirectly) {
     writeAdmissionMode,
     ...kioskRuntimeOptions,
     ...createBusinessRuntimeOptionsFromEnv(process.env),
+    ...createKioskOnlineOptionsFromEnv(process.env),
   });
 
   const enableWriteAdmission = () => {

@@ -13,7 +13,7 @@ import { ScheduleStore } from '../../src/store.mjs';
 import { maintenanceFixture } from './empty-db-maintenance-fixture.mjs';
 
 // Local fixture-only application copy. Production has no custody/uid override.
-export async function coreFixture({ initialized = true, schemaVersion = 11, identities = null } = {}) {
+export async function coreFixture({ initialized = true, schemaVersion = 11, identities = null, kioskIdentities = null } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'jso-core-synthetic-'));
   const maintenance = maintenanceFixture(undefined, { schemaVersion, greenfield: true });
   const app = join(root,'app'), custody = join(root,'custody');
@@ -31,7 +31,7 @@ export async function coreFixture({ initialized = true, schemaVersion = 11, iden
     .replace('if (p === dirname(p)) break;',`if (p === ${JSON.stringify(root)}) break;`));
   if (initialized) maintenance.execute();
   const quiescent=new DatabaseSync(filename);quiescent.exec('PRAGMA journal_mode=DELETE');quiescent.close();
-  const env={KIOSK_SERVICE_CONTEXT:'PROD11_PRODUCTION',JSO_BUSINESS_RUNTIME:'enabled',ORPHAN_CLEANUP_MODE:'disabled',JSO_BUSINESS_IDENTITIES_JSON:JSON.stringify(identities??[{token:'a'.repeat(40),subjectId:'test-admin',role:'administrator',resourceIds:['JSO-BIZ-RESOURCE-001']}]),UPLOAD_ROOT:uploads};
+  const env={...(kioskIdentities?{JSO_KIOSK_ONLINE_RUNTIME:'enabled',JSO_KIOSK_ONLINE_IDENTITIES_JSON:JSON.stringify(kioskIdentities)}:{}),KIOSK_SERVICE_CONTEXT:'PROD11_PRODUCTION',JSO_BUSINESS_RUNTIME:'enabled',ORPHAN_CLEANUP_MODE:'disabled',JSO_BUSINESS_IDENTITIES_JSON:JSON.stringify(identities??[{token:'a'.repeat(40),subjectId:'test-admin',role:'administrator',resourceIds:['JSO-BIZ-RESOURCE-001']}]),UPLOAD_ROOT:uploads};
   const saved=Object.fromEntries(Object.keys(env).map(k=>[k,process.env[k]]));Object.assign(process.env,env);
   const m=await import(pathToFileURL(modulePath)); const st=statSync(filename), now=Date.now(), h='a'.repeat(64);
   const record={version:schemaVersion===12?4:3,purpose:schemaVersion===12?'CORE_SCHEMA12_PROSPECTIVE_ACCEPTANCE':'CORE_SCHEMA11_PROSPECTIVE_ACCEPTANCE',acceptanceId:'SYNTHETIC-ONLY',state:'PREPARED',ownerSource:'SYNTHETIC TEST FIXTURE - NOT OWNER APPROVAL',ownerApprovedAt:new Date(now-1000).toISOString(),ownerTextSha256:m.digest('SYNTHETIC ONLY\n'),planSha256:h,release:{head:'a'.repeat(40),tree:'b'.repeat(40),imageDigest:'sha256:'+h,sourceSha256:m.sourceDigest()},target:{hostId:'synthetic-host',service:'synthetic-core',volumeName:'synthetic-volume',volumeSource:root,mountPoint:root,databasePath:filename,databaseIdentity:{device:st.dev,inode:st.ino},uploadRoot:uploads,uploadIdentity:{device:statSync(uploads).dev,inode:statSync(uploads).ino}},baseline:{schemaVersion,sha256:m.digest(readFileSync(filename)),sideFiles:'ABSENT_UNDER_EXCLUSIVE_MAINTENANCE',historicalEvidenceSha256:h,backupManifestSha256:h,restoreVerificationSha256:h},policy:{adminTrustAccepted:true,historicalCoverageRiskAccepted:true,sameTargetRestartAllowed:true,cleanup:'disabled',integrations:'disabled',runtimeConfigSha256:m.runtimeConfigDigest()},window:{start:new Date(now-10000).toISOString(),end:new Date(now+600000).toISOString()},activation:null};
@@ -42,7 +42,8 @@ export async function coreFixture({ initialized = true, schemaVersion = 11, iden
   for(const name of ['plan.txt','historical-evidence.json','backup-manifest.json','restore-verification.json'])writeFileSync(join(custody,name),evidence,{mode:0o644});
   install();
   const api=await import(pathToFileURL(join(app,'src/server.mjs')));
-  function server(mode='disabled'){return api.createOperationsServer({databasePath:filename,uploadRoot:uploads,orphanCleanupMode:'disabled',writeAdmissionMode:mode,cleanupIntervalMs:0,...api.createKioskRuntimeOptionsFromEnv(process.env),...businessOptions});}
+  function server(mode='disabled',extra={}){return api.createOperationsServer({databasePath:filename,uploadRoot:uploads,orphanCleanupMode:'disabled',writeAdmissionMode:mode,cleanupIntervalMs:0,...api.createKioskRuntimeOptionsFromEnv(process.env),...businessOptions,...onlineOptions,...extra});}
+  const {createKioskOnlineOptionsFromEnv}=await import(pathToFileURL(join(app,'src/kiosk-online-runtime-v3.mjs')));const onlineOptions=createKioskOnlineOptionsFromEnv(process.env);
   const {createBusinessRuntimeOptionsFromEnv}=await import(pathToFileURL(join(app,'src/business-runtime-auth-v1.mjs')));const businessOptions=createBusinessRuntimeOptionsFromEnv(process.env);
   return {root,app,custody,filename,uploads,m,record,install,activate,server,initialize:()=>maintenance.execute(),dataRoot:maintenance.root,close(){for(const [k,v]of Object.entries(saved)){if(v===undefined)delete process.env[k];else process.env[k]=v;}maintenance.close();rmSync(root,{recursive:true,force:true});}};
 }

@@ -33,6 +33,7 @@ const STATIC = new Map([
   ['/board.js', 'board.js'],
   ['/submit.js', 'submit.js'],
   ['/kiosk.js', 'kiosk.js'],
+  ['/kiosk-online-v3.js', 'kiosk-online-v3.js'],
   ['/kiosk-control-lock.js', 'kiosk-control-lock.js'],
   ['/kiosk-device-identity-v1.js', 'kiosk-device-identity-v1.js'],
   ['/kiosk-offline-queue-v2.js', 'kiosk-offline-queue-v2.js'],
@@ -241,6 +242,7 @@ export function createHttpApp({
   store,
   tokens = {},
   kiosk = null,
+  kioskOnline = null,
   scheduling = null,
   writeAdmissionMode = 'enabled',
   writeAdmissionControl,
@@ -250,6 +252,7 @@ export function createHttpApp({
   const kioskWrites = typeof kiosk?.applyRunEvent === 'function';
   const schedulingWrites = ['decideProposal','manage','generateProposal','reschedule'].some(name => typeof scheduling?.[name] === 'function');
   const kioskAdmission = kiosk?.writeAdmissionControl;
+  if(kioskOnline&&(!kioskOnline.writeAdmissionControl||kioskOnline.version!==3))throw new TypeError('valid online kiosk admission required');
   const schedulingAdmission = scheduling?.writeAdmissionControl;
 
   if (kioskWrites && kioskAdmission === undefined) {
@@ -262,6 +265,7 @@ export function createHttpApp({
   const suppliedControls = [
     storeAdmission,
     kioskAdmission,
+    kioskOnline?.writeAdmissionControl,
     schedulingAdmission,
     writeAdmissionControl,
   ].filter(control => control !== undefined);
@@ -295,6 +299,7 @@ export function createHttpApp({
 
       const schema12=Boolean(store.db?.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get());
       if(request.method==='GET'&&url.pathname==='/api/client-profile')return sendJson(response,200,{ok:true,protocolVersion:schema12?3:1});
+      if(schema12&&request.method==='GET'&&url.pathname==='/kiosk'&&kioskOnline)return serveStatic(response,'kiosk-online-v3.html');
       if(schema12&&request.method==='GET'&&['/submit','/submit/print','/submit/video','/kiosk'].includes(url.pathname))return serveStatic(response,'unavailable.html');
       if (request.method === 'GET' && STATIC.has(url.pathname)) {
         if (url.pathname === '/kiosk' && typeof kiosk?.authenticationChallenge === 'string') {
@@ -313,6 +318,23 @@ export function createHttpApp({
       if ((url.pathname.startsWith('/api/v2/') || ['/api/v1/snapshot','/api/v1/requests','/api/v1/uploads'].includes(url.pathname))
         && store.db?.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get()) {
         return sendJson(response, 409, {ok:false,code:'CLIENT_PROTOCOL_UPGRADE_REQUIRED',requiredVersion:3});
+      }
+      if(url.pathname.startsWith('/api/v3/kiosk/')){
+        if(!schema12)return sendJson(response,409,{ok:false,code:'CLIENT_PROTOCOL_UPGRADE_REQUIRED',requiredSchema:12});
+        if(!kioskOnline)return sendJson(response,503,{ok:false,code:'KIOSK_ONLINE_DISABLED'});
+        if([...url.searchParams].length)return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'});
+        const identity=await kioskOnline.authenticate(request);
+        if(!identity)return sendJson(response,401,{ok:false,code:'UNAUTHENTICATED'});
+        let result;
+        if(request.method==='GET'&&url.pathname==='/api/v3/kiosk/identity')result=kioskOnline.identity(identity);
+        else if(request.method==='GET'&&url.pathname==='/api/v3/kiosk/day')result=kioskOnline.day(identity);
+        else if(request.method==='POST'&&url.pathname==='/api/v3/kiosk/events')result=kioskOnline.record(identity,await readJson(request));
+        else {
+          const receipt=request.method==='GET'&&/^\/api\/v3\/kiosk\/events\/([A-Za-z0-9][A-Za-z0-9._:-]{7,127})$/u.exec(url.pathname);
+          if(receipt)result=kioskOnline.receipt(identity,receipt[1]);
+          else return sendJson(response,404,{ok:false,code:'NOT_FOUND'});
+        }
+        return sendJson(response,businessHttpStatus(result),result);
       }
       if (request.method === 'GET' && url.pathname === '/api/v1/snapshot') {
         return sendJson(response, 200, { ok: true, snapshot: store.getSnapshot() });
