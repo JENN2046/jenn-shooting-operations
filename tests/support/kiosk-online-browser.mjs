@@ -9,7 +9,7 @@ import {launch,scheduleOrders} from './first-launch-v3-fixture.mjs';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE||'/home/jenn/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs');
 const out=resolve(process.env.KIOSK_BROWSER_EVIDENCE||'../kiosk-online-evidence/browser');mkdirSync(out,{recursive:true});
 const token='KIOSK-BROWSER-SYNTHETIC-ONLY-NOT-PRODUCTION',admin='a'.repeat(40);
-const identities=[{token,subjectId:'OPERATOR-BROWSER-001',deviceId:'DEVICE-BROWSER-001',resourceId:'JSO-BIZ-RESOURCE-001'}];
+const identities=[{token,subjectId:'OPERATOR-BROWSER-001',deviceId:'DEVICE-BROWSER-001',resourceId:'JSO-BIZ-RESOURCE-001'},{token:'OTHER-KIOSK-BROWSER-SYNTHETIC-ONLY-001',subjectId:'OTHER-OPERATOR-001',deviceId:'OTHER-DEVICE-001',resourceId:'OTHER-RESOURCE-001'}];
 const f=await launch({kioskIdentities:identities});let running,browser,at='2026-10-12T01:00:00.000Z';
 const checks=[],errors=[];let posts=0;
 try{
@@ -55,7 +55,13 @@ try{
  // HTTP authority probes from actual browser, with synthetic identities only.
  const denied=await page.evaluate(async token=>{
   const h={Authorization:'Bearer '+token};return Promise.all(['/api/v3/business/state','/api/v3/kiosk/day?resourceId=OTHER','/api/v2/updates'].map(async p=>(await fetch(p,{headers:h})).status));
- },token);assert.deepEqual(denied,[401,400,409]);checks.push('operator denied management; resource override rejected; old protocol gate retained');
+ },token);assert.deepEqual(denied,[401,400,409]);
+ const state=await adminCall('/api/v3/business/state');
+ const forbidden=await page.evaluate(async ({command,otherToken,operatorToken})=>{
+  const call=async(path,t)=> (await fetch(path,{method:'POST',headers:{Authorization:'Bearer '+t,'Content-Type':'application/json'},body:JSON.stringify(command)})).status;
+  return [await call('/api/v3/kiosk/events',otherToken),await call('/api/v3/business/run-events',operatorToken)];
+ },{command:{eventId:'CROSS-RESOURCE-BROWSER',runId:'CROSS-RESOURCE-RUN',scheduleItemId:state.sessions[2].id,eventType:'start',expectedRunRevision:0,expectedScheduleRevision:state.revisions.scheduleRevision},otherToken:identities[1].token,operatorToken:token});
+ assert.deepEqual(forbidden,[403,401]);assert.equal(count(),4);checks.push('operator denied management; resource override rejected; old protocol gate retained');
  await page.locator('#online-logout').click();await login();assert.equal(await page.locator('#online-day li').count(),5);assert.equal(await page.evaluate(()=>localStorage.getItem('jenn.kiosk.offline-queue.v2')),legacy);
  // Management + upload + board regression on the same candidate source and DB.
  const manage=await context.newPage();manage.on('pageerror',e=>errors.push(e.message));await manage.goto(base+'/manage');await manage.locator('#token').fill(admin);await manage.locator('#login-button').click();await manage.locator('#workspace').waitFor();
@@ -68,4 +74,4 @@ try{
  await manage.screenshot({path:join(out,'03-board-reference-regression.png'),fullPage:true});await page.screenshot({path:join(out,'04-online-final.png'),fullPage:true});assert.deepEqual(errors,[]);
  writeFileSync(join(out,'result.json'),JSON.stringify({status:'PASS',at:new Date().toISOString(),host:hostname(),platform:process.platform,browser:browser.version(),sourceHead:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),sourceTree:execFileSync('git',['rev-parse','HEAD^{tree}'],{encoding:'utf8'}).trim(),gitStatus:execFileSync('git',['status','--short'],{encoding:'utf8'}).trim(),checks,errors,events:count(),scope:'Jenn local Ubuntu; isolated synthetic Schema12 fixture; real candidate source via existing coreFixture with fixture-only custody path/uid substitutions; no fixed image, production or real credentials. Business clock injected; system clock unchanged.'},null,2));
 }catch(error){writeFileSync(join(out,'failure.json'),JSON.stringify({error:error.stack,checks,errors},null,2));throw error;}
-finally{await browser?.close();if(running){await new Promise(r=>running.server.close(r));running.store.close();}f.close();}
+finally{await browser?.close();if(running){await new Promise(r=>running.server.close(r));if(running.store.db.isOpen)running.store.close();}f.close();}

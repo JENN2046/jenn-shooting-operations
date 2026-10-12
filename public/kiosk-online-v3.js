@@ -9,6 +9,7 @@ const time=s=>s?new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',month:
 const current=()=>model?.sessions.find(s=>s.id===selected);
 function allowed(){return Boolean(identity&&model&&fresh&&navigator.onLine&&controlling&&!busy&&!pending&&!storageBlocked&&!model.conflict&&model.writeAdmission==='enabled');}
 function controls(){
+ for(const b of $('online-day').querySelectorAll('button'))b.disabled=busy;
  const s=current(),live=model?.sessions.some(x=>['shooting','blocked'].includes(x.state));
  $('action-start').disabled=!(allowed()&&s?.supported&&s.state==='scheduled'&&!live);
  $('action-complete').disabled=!(allowed()&&s?.supported&&s.state==='shooting');
@@ -68,7 +69,7 @@ async function act(eventType){
 }
 $('online-login').addEventListener('submit',async event=>{
  event.preventDefault();if(busy)return;const e=++epoch;token=$('online-token').value;$('online-token').value='';busy=true;fresh=false;identity=null;model=null;controls();
- try{const who=await api('identity');if(e!==epoch)return;identity=who;pendingKey='jenn.kiosk.online-v3.pending:'+JSON.stringify([who.subjectId,who.deviceId,who.resourceId]);loadPending();$('online-login').hidden=true;$('online-logout').hidden=false;$('online-identity').textContent=`设备 ${who.deviceId} · 操作员 ${who.subjectId} · 资源 ${who.resourceId}`;say(pending?'发现上次待核对操作，请先核对；不会自动发送。':'在线模式：断网禁止操作。');await refresh();}
+ try{const who=await api('identity');if(e!==epoch)return;identity=who;pendingKey='jenn.kiosk.online-v3.pending:'+JSON.stringify([who.subjectId,who.deviceId,who.resourceId]);loadPending();$('online-login').hidden=true;$('online-logout').hidden=false;$('online-identity').textContent=`设备 ${who.deviceId} · 操作员 ${who.subjectId} · 资源 ${who.resourceId}`;if(!storageBlocked)say(pending?'发现上次待核对操作，请先核对；不会自动发送。':'在线模式：断网禁止操作。');await refresh();}
  catch(err){if(e===epoch){token='';identity=null;say(err.message);}}
  finally{if(e===epoch){busy=false;controls();}}
 });
@@ -87,7 +88,7 @@ $('online-reconcile').addEventListener('click',async()=>{
 $('online-retry').addEventListener('click',async()=>{if(!pending||!canRetry||busy||!fresh||!navigator.onLine||!controlling)return;const e=epoch;busy=true;controls();try{await sendPending();}finally{if(e===epoch){busy=false;await refresh();controls();}}});
 window.addEventListener('offline',()=>{fresh=false;controls();say('已离线，禁止操作；本页不使用离线队列。');});
 window.addEventListener('online',()=>{if(identity&&!busy)refresh();});
-window.addEventListener('storage',e=>{if(identity&&e.key===pendingKey&&!busy){loadPending();controls();}});
+window.addEventListener('storage',e=>{if(e.key==='jenn.kiosk.offline-queue.v2')$('legacy-warning').hidden=e.newValue===null;if(identity&&e.key===pendingKey&&!busy){loadPending();controls();}});
 try{$('legacy-warning').hidden=localStorage.getItem('jenn.kiosk.offline-queue.v2')===null;}catch{storageBlocked=true;say('浏览器存储不可用，现场操作保持关闭。');}
 const lock=createKioskControlLock({locks:navigator.locks,storage:localStorage,eventTarget:window,ownerId:uid('TAB'),onChange:s=>{controlling=s.controlling;controls();}});lock.start();
 window.addEventListener('pagehide',()=>lock.stop());

@@ -7,7 +7,7 @@
   <title>Jenn 摄制现场</title>
   <link rel="stylesheet" href="/kiosk.css?v=ui-20260922">
 </head>
-<body>
+<body class="online-kiosk">
   <a class="skip-link" href="#kiosk-main">跳至现场任务</a>
   <header class="kiosk-header">
     <div><p class="kicker">VCP 摄制运营</p><h1>现场控制台</h1></div>
@@ -20,7 +20,7 @@
   </header>
 
   <main id="kiosk-main" class="kiosk-shell">
-    <section class="current-panel" aria-label="设备登录">
+    <section class="current-panel online-access" aria-label="设备登录">
       <form id="online-login"><label for="online-token">设备操作凭据</label><input id="online-token" type="password" autocomplete="off" required><button type="submit">登录现场</button></form>
       <p id="online-identity"></p><button id="online-logout" type="button" hidden>退出现场</button>
       <p id="legacy-warning" hidden>检测到旧版离线队列。本页已隔离，保留原数据，不自动发送；请由负责人核对旧待发记录。</p>

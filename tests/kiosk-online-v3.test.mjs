@@ -95,7 +95,26 @@ test('prospective startup accepts only branded Schema12 online runtime; PREPARED
    assert.throws(()=>f.server('disabled',{kioskOnlineRuntime:{version:3}}),/KIOSK_V3_RUNTIME_REQUIRED/);
    assert.throws(()=>f.server('disabled',{kioskOnlineRuntime:runtime,kioskAuthenticate:()=>null}),/LEGACY_RUNTIME_CONFLICT/);
    if(version===11)assert.throws(()=>f.server('disabled',{kioskOnlineRuntime:runtime}),/SCHEMA12_REQUIRED/);
-   else {server=f.server('disabled',{kioskOnlineRuntime:runtime});assert.equal(server.store.readOnly,true);assert.equal(server.writeAdmissionControl.isDisabled(),true);assert.equal(server.writeAdmissionControl.enable().ok,false);}
+   else {assert.throws(()=>f.server('disabled',{kioskOnlineRuntime:make({identities:[{...identity,deviceId:'DIFFERENT-DEVICE'}]})}),/KIOSK_CONFIG/);server=f.server('disabled',{kioskOnlineRuntime:runtime});assert.equal(server.store.readOnly,true);assert.equal(server.writeAdmissionControl.isDisabled(),true);assert.equal(server.writeAdmissionControl.enable().ok,false);}
   }finally{server?.store.close();f.close();}
  }
+});
+
+test('all five Schema12 categories retain facts through online start/complete and exact replay',async()=>{
+ const f=await setup();try{
+  await scheduleOrders(f,5);
+  for(let i=0;i<5;i++){
+   let day=(await f.callKiosk('/api/v3/kiosk/day')).body;const s=day.sessions[i];f.setKioskTime(s.plannedStart);
+   const start={...command(s,day.revisions.scheduleRevision),eventId:`FIVE-START-${i}`,runId:`FIVE-RUN-00${i}`};
+   assert.equal((await f.callKiosk('/api/v3/kiosk/events',start)).status,200);
+   day=(await f.callKiosk('/api/v3/kiosk/day')).body;f.setKioskTime(s.plannedEnd);
+   const end={...command(day.sessions[i],day.revisions.scheduleRevision,'complete'),eventId:`FIVE-COMPLETE-${i}`};
+   assert.equal((await f.callKiosk('/api/v3/kiosk/events',end)).status,200);
+   assert.equal((await f.callKiosk('/api/v3/kiosk/events',end)).body.replayed,true);
+  }
+  const day=(await f.callKiosk('/api/v3/kiosk/day')).body;
+  assert.ok(day.sessions.every(s=>s.state==='completed'));
+  assert.equal(new Set(day.sessions.flatMap(s=>s.tasks.map(t=>t.shootingSubtype))).size,5);
+  assert.equal(f.server.store.db.prepare('SELECT count(*) n FROM production_events').get().n,10);
+ }finally{f.close();}
 });

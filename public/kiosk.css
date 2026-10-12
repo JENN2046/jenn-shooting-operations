@@ -84,3 +84,9 @@ dialog p { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .001ms !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* Online variant retains the existing task layout without stretching the selected card. */
+.online-kiosk .online-access { grid-column: 1 / -1; padding: 20px 28px; }
+.online-kiosk .current-panel { align-self: start; }
+.online-kiosk #online-day button { width: 100%; text-align: left; }
+.online-kiosk #online-token { max-width: 100%; }
