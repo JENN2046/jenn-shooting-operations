@@ -9,7 +9,7 @@ export function createKioskOnlineRuntimeV3({identities,forbiddenTokens=[]}) {
  const entries=identities.map(identity=>{
   if(!identity||Object.keys(identity).sort().join(',')!=='deviceId,resourceId,subjectId,token'
    ||!id(identity.deviceId)||!id(identity.resourceId)||!id(identity.subjectId)
-   ||typeof identity.token!=='string'||Buffer.byteLength(identity.token)<32||tokens.has(identity.token)||devices.has(identity.deviceId))throw new TypeError('KIOSK_V3_IDENTITY_INVALID');
+   ||typeof identity.token!=='string'||/[^\x21-\x7e]/u.test(identity.token)||Buffer.byteLength(identity.token)<32||tokens.has(identity.token)||devices.has(identity.deviceId))throw new TypeError('KIOSK_V3_IDENTITY_INVALID');
   tokens.add(identity.token);devices.add(identity.deviceId);
   const principal=createTrustedPrincipal({subjectId:identity.subjectId,role:'operator',resourceIds:[identity.resourceId]}).principal;
   return {bytes:Buffer.from(identity.token),identity:Object.freeze({principal,deviceId:identity.deviceId,resourceId:identity.resourceId})};

@@ -181,3 +181,26 @@ test('real SQLite receipt write failure rolls back all facts and same-ID retry r
   assert.equal(db.prepare('SELECT count(*) n FROM production_events').get().n,1);
  }finally{f.close();}
 });
+
+
+test('Kiosk tokens enforce visible ASCII without normalization or token disclosure at both startup entrypoints',()=>{
+ const accepted=['A'.repeat(32),'0123456789abcdef'.repeat(4),'AbC012-_'.repeat(5),'AbC012+/'.repeat(5)+'==',String.fromCharCode(...Array.from({length:94},(_,i)=>i+0x21))];
+ for(const token of accepted){
+  const input={...identity,token},raw=JSON.stringify([input]);
+  for(const runtime of [createKioskOnlineRuntimeV3({identities:[input]}),createKioskOnlineOptionsFromEnv({JSO_KIOSK_ONLINE_RUNTIME:'enabled',JSO_KIOSK_ONLINE_IDENTITIES_JSON:raw}).kioskOnlineRuntime]){
+   assert.equal(runtime.authenticate({headers:{authorization:'Bearer '+token}})?.deviceId,input.deviceId);
+   assert.equal(runtime.matchesConfig(raw),true);
+   assert.equal(runtime.authenticate({headers:{authorization:'Bearer '+token+' '}}),null);
+  }
+  assert.equal(input.token,token);
+ }
+ const base='SYNTHETIC-TOKEN-MUST-NOT-LEAK-000001';
+ const rejected=['A'.repeat(31),'',...[' ','\t','\r','\n','\0','\x1f','\x7f','é','中','🧪','\u00a0','\u200b','\ud800'].flatMap(c=>[c+base,base+c,base+c+'X'])];
+ for(const token of rejected){
+  const input={...identity,token},raw=JSON.stringify([input]);
+  for(const construct of [()=>createKioskOnlineRuntimeV3({identities:[input]}),()=>createKioskOnlineOptionsFromEnv({JSO_KIOSK_ONLINE_RUNTIME:'enabled',JSO_KIOSK_ONLINE_IDENTITIES_JSON:raw})]){
+   assert.throws(construct,error=>error instanceof TypeError&&error.message==='KIOSK_V3_IDENTITY_INVALID'&&!error.stack.includes(base));
+  }
+  assert.equal(input.token,token);
+ }
+});
