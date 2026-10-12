@@ -330,8 +330,13 @@ export function createHttpApp({
         else if(request.method==='GET'&&url.pathname==='/api/v3/kiosk/day')result=kioskOnline.day(identity);
         else if(request.method==='POST'&&url.pathname==='/api/v3/kiosk/events')result=kioskOnline.record(identity,await readJson(request));
         else {
-          const receipt=request.method==='GET'&&/^\/api\/v3\/kiosk\/events\/([A-Za-z0-9][A-Za-z0-9._:-]{7,127})$/u.exec(url.pathname);
-          if(receipt)result=kioskOnline.receipt(identity,receipt[1]);
+          const receipt=request.method==='GET'&&/^\/api\/v3\/kiosk\/events\/([^/]+)$/u.exec(url.pathname);
+          if(receipt){
+            let eventId;
+            try{eventId=decodeURIComponent(receipt[1]);}catch{return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'});}
+            if(!/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/u.test(eventId))return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'});
+            result=kioskOnline.receipt(identity,eventId);
+          }
           else return sendJson(response,404,{ok:false,code:'NOT_FOUND'});
         }
         return sendJson(response,businessHttpStatus(result),result);

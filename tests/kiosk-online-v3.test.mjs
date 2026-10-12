@@ -118,3 +118,42 @@ test('all five Schema12 categories retain facts through online start/complete an
   assert.equal(f.server.store.db.prepare('SELECT count(*) n FROM production_events').get().n,10);
  }finally{f.close();}
 });
+
+test('day query bounds history before details, retains Beijing boundaries and cross-day active runs',async()=>{
+ const f=await setup();try{
+  await scheduleOrders(f,1);
+  const {seedKioskDayRegression}=await import('./support/kiosk-day-regression.mjs');
+  const expected=seedKioskDayRegression(f.server.store.db),calls=[];
+  const db=f.server.store.db;
+  const instrumented={prepare(sql){
+   const statement=db.prepare(sql);return {get:(...args)=>statement.get(...args),all:(...args)=>{const result=statement.all(...args);calls.push({sql,args,count:result.length});return result;}};
+  }};
+  const runtime=createKioskOnlineRuntimeV3({identities:[identity]});
+  const online=createKioskOnlineV3({store:{db:instrumented,writeAdmissionControl:f.server.store.writeAdmissionControl},runtime,clock:()=>new Date('2026-10-12T15:59:59.999Z')});
+  const day=online.day(runtime.authenticate({headers:{authorization:'Bearer '+TOKEN}}));
+  assert.equal(day.sessions.length,5);for(const id of expected)assert.ok(day.sessions.some(s=>s.id===id),id);
+  assert.equal(day.conflict,true);assert.equal(day.sessions.find(s=>s.id==='OFFSET-GROUPED-DAY').supported,false);
+  const selection=calls.find(c=>c.sql.includes('WHERE id IN'));assert.equal(selection.count,5);
+  assert.equal(calls.filter(c=>c.sql.includes('WHERE schedule_item_id=?')||c.sql.includes('WHERE b.schedule_item_id=?')).length,10);
+  const plan=db.prepare('EXPLAIN QUERY PLAN '+selection.sql).all(...selection.args).map(r=>r.detail).join('\n');
+  assert.match(plan,/SEARCH schedule_items USING INDEX .*planned_start>\? AND planned_start<\?/);
+  assert.match(plan,/SCAN r USING INDEX production_runs_one_active_per_item_uq/);
+  f.setKioskTime('2026-10-12T16:00:00.000Z');const next=(await f.callKiosk('/api/v3/kiosk/day')).body;
+  assert.deepEqual(next.sessions.map(s=>s.id).sort(),['CROSS-DAY-blocked','CROSS-DAY-shooting','END-BEIJING-DAY'].sort());
+ }finally{f.close();}
+});
+
+test('receipt path decodes accepted event IDs once, rejects malformed encodings and preserves identity/replay',async()=>{
+ const f=await setup();try{
+  await scheduleOrders(f,1);const day=(await f.callKiosk('/api/v3/kiosk/day')).body;
+  const cmd={...command(day.sessions[0],day.revisions.scheduleRevision),eventId:'KIOSK:EVENT:001'};
+  assert.equal((await f.callKiosk('/api/v3/kiosk/events',cmd)).status,200);
+  for(const path of [cmd.eventId,encodeURIComponent(cmd.eventId)]){
+   const receipt=await f.callKiosk('/api/v3/kiosk/events/'+path);assert.equal(receipt.status,200);assert.equal(receipt.body.eventId,cmd.eventId);assert.equal(receipt.body.replayed,true);
+  }
+  assert.equal((await f.callKiosk('/api/v3/kiosk/events/'+encodeURIComponent(cmd.eventId),undefined,'OTHER-DEVICE-SYNTHETIC-ONLY-0000001')).status,403);
+  for(const id of ['KIOSK%3AEVENT%ZZ','KIOSK%3AEVENT%E0%A4%A','KIOSK%253AEVENT%253A001','KIOSK%2FEVENT%3A001'])assert.equal((await f.callKiosk('/api/v3/kiosk/events/'+id)).status,400,id);
+  assert.equal((await f.callKiosk('/api/v3/kiosk/events',cmd)).body.replayed,true);
+  assert.equal(f.server.store.db.prepare('SELECT count(*) n FROM production_events').get().n,1);
+ }finally{f.close();}
+});

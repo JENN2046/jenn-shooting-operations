@@ -20,16 +20,20 @@ function controls(){
  $('server-status').textContent=navigator.onLine?(fresh?'服务端：已同步':'服务端：待刷新'):'服务端：离线，禁止操作';
  $('lock-status').textContent=controlling?'控制权：当前页面':'控制权：另一页面或不可用';
 }
+const stateLabel=s=>s?.supported===false?'只读：需负责人处理':labels[s?.state]??'—';
 function slot(prefix,s){
+ const notice=$(prefix==='current'?'grouped-notice':'next-grouped-notice');
+ notice.hidden=!s||s.supported!==false;
+ notice.textContent=s?.allocationMode==='grouped_unallocated'?'组合场次只读：未拆分单任务工时，请交负责人处理。':'此场次不支持在线操作，只读；请交负责人处理。';
  $(prefix+'-title').textContent=s?s.tasks.map(t=>t.name).join(' / '):'暂无场次';
  $(prefix+'-time').textContent=s?`${time(s.plannedStart)} — ${time(s.plannedEnd)}`:'—';
  $(prefix+'-tasks').replaceChildren(...(s?.tasks??[]).map(t=>{const li=document.createElement('li');li.textContent=`${t.sku} · ${t.name} · ${t.kind==='静物'?'静物 / ':''}${t.shootingSubtype}`;return li;}));
 }
 function render(){
  $('online-current-label').textContent=selected&&model?.currentId===selected?'NOW / 当前场次':'所选场次';
- slot('current',current());$('confirmed-state').textContent='服务端：'+(labels[current()?.state]??'—');
+ slot('current',current());$('confirmed-state').textContent='服务端：'+stateLabel(current());
  slot('next',model?.sessions.find(s=>s.state==='scheduled'&&s.id!==selected));
- $('online-day').replaceChildren(...(model?.sessions??[]).map(s=>{const li=document.createElement('li'),b=document.createElement('button');b.type='button';b.textContent=`${time(s.plannedStart)} · ${s.tasks.map(t=>t.shootingSubtype+' '+t.name).join(' / ')} · ${labels[s.state]??s.state}`;b.disabled=busy;b.addEventListener('click',()=>{selected=s.id;render();});li.append(b);return li;}));controls();
+ $('online-day').replaceChildren(...(model?.sessions??[]).map(s=>{const li=document.createElement('li'),b=document.createElement('button');b.type='button';b.textContent=`${time(s.plannedStart)} · ${s.tasks.map(t=>t.shootingSubtype+' '+t.name).join(' / ')} · ${stateLabel(s)}`;b.disabled=busy;b.addEventListener('click',()=>{selected=s.id;render();});li.append(b);return li;}));controls();
 }
 function loadPending(){
  pending=null;storageBlocked=false;canRetry=false;

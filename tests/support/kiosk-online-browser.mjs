@@ -31,11 +31,14 @@ try{
  for(const name of ['产品3D主图','细节图','功能图','模特','场景'])assert.ok((await page.locator('#online-day').textContent()).includes(name));
  await page.waitForFunction(()=>!document.getElementById('action-start').disabled);checks.push('five categories and current/day list; scoped device login; old queue preserved and warned');
  await page.screenshot({path:join(out,'01-five-categories.png'),fullPage:true});
+ // Exercise client encodeURIComponent with an accepted colon-containing event ID.
+ await page.evaluate(()=>{const original=crypto.randomUUID.bind(crypto);crypto.randomUUID=()=>original().replace('-',':');});
  // Deliver once, deliberately lose response. This is transport recovery, not an exploit.
  await page.route('**/api/v3/kiosk/events',async route=>{await route.fetch();await route.abort('failed');await page.unroute('**/api/v3/kiosk/events');},{times:1});
  await page.locator('#action-start').evaluate(b=>{b.click();b.click();});await message('结果尚未确认');assert.equal(count(),1);assert.equal(posts,1);
  await page.screenshot({path:join(out,'02-response-lost.png'),fullPage:true});
- await page.reload();await login();assert.equal(await page.locator('#pending-count').textContent(),'1');assert.equal(count(),1);await page.locator('#online-reconcile').click();await message('上次操作已保存');assert.equal(await page.locator('#pending-count').textContent(),'0');checks.push('double-click single event; delivered/lost response; reload and re-login; receipt reconciliation without replay');
+ assert.ok(await page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('jenn.kiosk.online-v3.pending:')).some(k=>JSON.parse(localStorage.getItem(k)).command.eventId.includes(':'))));
+ await page.reload();await login();assert.equal(await page.locator('#pending-count').textContent(),'1');assert.equal(count(),1);await page.locator('#online-reconcile').click();await message('上次操作已保存');assert.equal(await page.locator('#pending-count').textContent(),'0');checks.push('double-click single event; delivered/lost response; reload and re-login; colon-ID receipt reconciliation without replay');
  at='2026-10-12T01:30:00.000Z';await page.locator('#action-complete').click();await page.locator('#complete-confirm').evaluate(b=>{b.click();b.click();});await message('操作已确认');assert.equal(count(),2);
  assert.ok(running.store.db.prepare('SELECT actor_id,device_id FROM production_events').all().every(e=>e.actor_id===identities[0].subjectId&&e.device_id===identities[0].deviceId));checks.push('complete once; correct operator/device provenance');
  await page.locator('#online-day button').nth(1).click();assert.equal(await page.locator('#online-current-label').textContent(),'所选场次');await context.setOffline(true);await page.waitForFunction(()=>!navigator.onLine&&document.getElementById('action-start').disabled);assert.equal(await page.locator('#action-start').isDisabled(),true);const beforeOffline=posts;await page.locator('#action-start').evaluate(b=>b.click());assert.equal(posts,beforeOffline);
@@ -71,7 +74,31 @@ try{
  await manage.locator('#reference-files').setInputFiles({name:'reference.png',mimeType:'image/png',buffer:png});await manage.getByRole('button',{name:'保存订单',exact:true}).click();await manage.locator('#message').filter({hasText:'订单已保存'}).waitFor();
  await manage.goto(base+'/');await manage.locator('#board-token').fill(admin);await manage.locator('#board-login button').click();await manage.locator('#board').waitFor();await manage.locator('.pending-summary').first().click();await manage.getByRole('button',{name:'查看参考图：reference.png',exact:true}).click();await manage.locator('#pending img').waitFor();assert.ok(await manage.locator('#pending img').evaluate(i=>i.complete&&i.naturalWidth>0));
  const image=await manage.locator('#pending img').getAttribute('src');await manage.waitForResponse(r=>r.url()===base+'/api/v3/business/board'&&r.status()===200,{timeout:40000});assert.equal(await manage.locator('#pending img').getAttribute('src'),image);checks.push('management order creation/upload and authenticated board image read; real30s poll retains image');
- await manage.screenshot({path:join(out,'03-board-reference-regression.png'),fullPage:true});await page.screenshot({path:join(out,'04-online-final.png'),fullPage:true});assert.deepEqual(errors,[]);
+ await manage.screenshot({path:join(out,'03-board-reference-regression.png'),fullPage:true});
+ const {seedKioskDayRegression}=await import('./kiosk-day-regression.mjs');
+ const boundaryIds=seedKioskDayRegression(running.store.db);
+ await page.locator('#online-refresh').click();await page.waitForFunction(()=>document.querySelectorAll('#online-day li').length===9);
+ let day=await page.evaluate(async t=>(await (await fetch('/api/v3/kiosk/day',{headers:{Authorization:'Bearer '+t}})).json()),token);
+ for(const id of boundaryIds)assert.ok(day.sessions.some(s=>s.id===id));
+ assert.ok(!day.sessions.some(s=>s.id.startsWith('HISTORY-')||['BEFORE-BEIJING-DAY','END-BEIJING-DAY','OTHER-RESOURCE-DAY'].includes(s.id)));
+ // Retire only the seeded cross-day fixtures so read-only cannot pass merely because of an active-run conflict.
+ running.store.db.prepare("UPDATE production_runs SET status='completed' WHERE id IN ('RUN-CROSS-DAY-shooting','RUN-CROSS-DAY-blocked')").run();
+ running.store.db.prepare("UPDATE schedule_items SET planned_start='2026-10-11T17:00:00.000Z' WHERE id='OFFSET-GROUPED-DAY'").run();
+ await page.locator('#online-refresh').click();await page.waitForFunction(()=>document.querySelectorAll('#online-day li').length===7);
+ day=await page.evaluate(async t=>(await (await fetch('/api/v3/kiosk/day',{headers:{Authorization:'Bearer '+t}})).json()),token);assert.equal(day.conflict,false);
+ const grouped=day.sessions.findIndex(s=>s.id==='OFFSET-GROUPED-DAY');
+ await page.locator('#online-day button').nth(grouped).click();
+ assert.match(await page.locator('#confirmed-state').textContent(),/只读/);assert.equal(await page.locator('#grouped-notice').isVisible(),true);
+ assert.match(await page.locator('#grouped-notice').textContent(),/组合场次只读.*负责人/);
+ assert.match(await page.locator('#online-day button').nth(grouped).textContent(),/只读/);
+ assert.equal(await page.locator('#action-start').isDisabled(),true);assert.equal(await page.locator('#action-complete').isDisabled(),true);
+ const beforeGrouped=posts;await page.locator('#action-start').evaluate(b=>b.click());assert.equal(posts,beforeGrouped);
+ await page.screenshot({path:join(out,'05-grouped-readonly.png'),fullPage:true});
+ await page.locator('#online-day button').nth(day.sessions.findIndex(s=>s.id==='START-BEIJING-DAY')).click();assert.equal(await page.locator('#grouped-notice').isVisible(),false);
+ assert.equal(await page.locator('#next-grouped-notice').isVisible(),true);assert.match(await page.locator('#next-grouped-notice').textContent(),/组合场次只读.*负责人/);await page.waitForFunction(()=>!document.getElementById('action-start').disabled);
+ const malformed=await page.evaluate(async t=>(await fetch('/api/v3/kiosk/events/KIOSK%3AEVENT%ZZ',{headers:{Authorization:'Bearer '+t}})).status,token);assert.equal(malformed,400);
+ checks.push('P2: 300 historical sessions excluded; exact Beijing day/offset boundaries and cross-day shooting/blocked retained; grouped selected/list explicitly read-only, reason visible, no write; notice cleared and start enabled for supported session; next grouped notice visible; malformed receipt encoding400');
+ await page.screenshot({path:join(out,'04-online-final.png'),fullPage:true});assert.deepEqual(errors,[]);
  writeFileSync(join(out,'result.json'),JSON.stringify({status:'PASS',at:new Date().toISOString(),host:hostname(),platform:process.platform,browser:browser.version(),sourceHead:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),sourceTree:execFileSync('git',['rev-parse','HEAD^{tree}'],{encoding:'utf8'}).trim(),gitStatus:execFileSync('git',['status','--short'],{encoding:'utf8'}).trim(),checks,errors,events:count(),scope:'Jenn local Ubuntu; isolated synthetic Schema12 fixture; real candidate source via existing coreFixture with fixture-only custody path/uid substitutions; no fixed image, production or real credentials. Business clock injected; system clock unchanged.'},null,2));
 }catch(error){writeFileSync(join(out,'failure.json'),JSON.stringify({error:error.stack,checks,errors},null,2));throw error;}
 finally{await browser?.close();if(running){await new Promise(r=>running.server.close(r));if(running.store.db.isOpen)running.store.close();}f.close();}
