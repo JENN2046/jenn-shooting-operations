@@ -6,21 +6,33 @@ import {canonicalJsonSchedulingV1 as json,digestCanonicalJsonSchedulingV1 as dig
 import {assertSchedulingQuiescenceV1} from './sqlite-scheduling-quiescence-v1.mjs';
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 const identifier=v=>typeof v==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(v);
-export function createBusinessRunV3({db,now,writeAdmission}) {
- return ({command,principal})=>{
+export function createBusinessRunV3(options) { return createRunRecorder(options, false); }
+export function createKioskRunV3(options) { return createRunRecorder(options, true); }
+function createRunRecorder({db,now,writeAdmission}, kiosk) {
+ return ({command,principal,deviceId,resourceId})=>{
   if(!writeAdmission())return {ok:false,code:'WRITE_ADMISSION_DISABLED'};
-  if(!validateTrustedPrincipal(principal).ok||principal.role!=='administrator')return {ok:false,code:'FORBIDDEN'};
-  const keys=['eventId','runId','scheduleItemId','eventType','expectedRunRevision'];
-  if(!command||Object.keys(command).length!==keys.length||!keys.every(k=>Object.hasOwn(command,k))||!identifier(command.eventId)||!identifier(command.runId)||typeof command.scheduleItemId!=='string'||!['start','complete'].includes(command.eventType)||!Number.isSafeInteger(command.expectedRunRevision)||command.expectedRunRevision<0)return {ok:false,code:'INVALID_RUN_EVENT_COMMAND'};
-  const operationId=`admin:${command.eventId}`,requestDigest=digest({kind:'business.run.v3',actor:principal.subjectId,command});
+  if(!validateTrustedPrincipal(principal).ok||principal.role!==(kiosk?'operator':'administrator'))return {ok:false,code:'FORBIDDEN'};
+  if(kiosk&&(!identifier(deviceId)||!identifier(resourceId)||principal.resourceIds.length!==1||principal.resourceIds[0]!==resourceId))return {ok:false,code:'FORBIDDEN'};
+  const keys=['eventId','runId','scheduleItemId','eventType','expectedRunRevision',...(kiosk?['expectedScheduleRevision']:[])];
+  if(!command||Object.keys(command).length!==keys.length||!keys.every(k=>Object.hasOwn(command,k))||!identifier(command.eventId)||!identifier(command.runId)||typeof command.scheduleItemId!=='string'||!['start','complete'].includes(command.eventType)||!Number.isSafeInteger(command.expectedRunRevision)||command.expectedRunRevision<0||(kiosk&&(!Number.isSafeInteger(command.expectedScheduleRevision)||command.expectedScheduleRevision<0)))return {ok:false,code:'INVALID_RUN_EVENT_COMMAND'};
+  const source=kiosk?'kiosk-online-v3':'owner-management-v3',kind=kiosk?'kiosk.online.run.v3':'business.run.v3';
+  const operationId=`${kiosk?'kiosk-online':'admin'}:${command.eventId}`,requestDigest=digest({kind,actor:principal.subjectId,...(kiosk?{deviceId,resourceId}:{}),command});
   try {db.exec('BEGIN IMMEDIATE');assertSchedulingQuiescenceV1({db,now});
    const item=db.prepare('SELECT * FROM schedule_items WHERE id=?').get(command.scheduleItemId);
    if(!item)fail('SCHEDULE_ITEM_NOT_FOUND');
+   if(kiosk&&item.resource_id!==resourceId)fail('FORBIDDEN');
    if(!writeAdmission()||!authorizeCapability({principal,capability:'submitRunEvent',resourceId:item.resource_id}).allowed)fail('FORBIDDEN');
    if(schedulingOperationIdOwnedByOtherV1(db,operationId,['operation'])||schedulingOperationIdOwnedByOtherV1(db,command.eventId,['operation']))fail('IDEMPOTENCY_KEY_REUSE');
    const prior=db.prepare('SELECT * FROM operations WHERE operation_id=?').get(operationId);
-   if(prior){if(prior.kind!=='business.run.v3'||prior.request_digest!==requestDigest)fail('IDEMPOTENCY_KEY_REUSE');const receipt=JSON.parse(prior.response_json);db.exec('COMMIT');return {...receipt,replayed:true};}
+   if(prior){if(prior.kind!==kind||prior.request_digest!==requestDigest)fail('IDEMPOTENCY_KEY_REUSE');const receipt=JSON.parse(prior.response_json);db.exec('COMMIT');return {...receipt,replayed:true};}
    if(db.prepare('SELECT 1 FROM operations WHERE operation_id=?').get(command.eventId))fail('IDEMPOTENCY_KEY_REUSE');
+   if(kiosk){
+    if(!db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get())fail('BUSINESS_SCHEMA12_REQUIRED');
+    if(db.prepare('SELECT schedule_revision FROM revision_counters WHERE id=1').get()?.schedule_revision!==command.expectedScheduleRevision)fail('SCHEDULING_REVISION_CONFLICT');
+    if(db.prepare('SELECT status FROM scheduling_resources WHERE resource_id=?').get(resourceId)?.status!=='active')fail('FORBIDDEN');
+    const date=v=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(v));
+    if(command.eventType==='start'&&date(item.planned_start)!==date(now()))fail('KIOSK_TODAY_ONLY');
+   }
    if(item.schedule_status!=='confirmed'||item.resource_resolution_status!=='resolved'||item.allocation_mode!=='single')fail('RUN_PREPARATION_REQUIRED');
    const active=db.prepare('SELECT v.schema_version,v.config_json FROM scheduling_active_config a JOIN scheduling_config_versions v ON v.config_version=a.config_version WHERE a.id=1').get();
    if(active?.schema_version!==3||JSON.parse(active.config_json).externalNotifications!=='disabled')fail('NOTIFICATION_POLICY_INVALID');
@@ -37,10 +49,11 @@ export function createBusinessRunV3({db,now,writeAdmission}) {
    }else if(history.length!==1||history[0].id!==command.runId||history[0].status!=='shooting')fail('RUN_PREPARATION_REQUIRED');
    const store=createSqliteRunEventStore({db,businessTimeZone:'Asia/Shanghai',ownsTransaction:false});
    const apply=createApplyRunEvent({store,clock:()=>new Date(at),auditRole:principal.role,notifications:'disabled',eventTimePolicy:({occurredAt,receivedAt})=>({ok:occurredAt===receivedAt})});
-   const result=apply({...command,occurredAt:at,actorId:principal.subjectId,deviceId:'owner-management-v3'});
+   const {expectedScheduleRevision,...eventCommand}=command;
+   const result=apply({...eventCommand,occurredAt:at,actorId:principal.subjectId,deviceId:kiosk?deviceId:'owner-management-v3'});
    if(!result.ok)fail(result.code);
-   const response={...result,source:'owner-management-v3',actor:principal.subjectId,recordedAt:at};
-   db.prepare('INSERT INTO operations(operation_id,kind,response_json,created_at,request_digest) VALUES(?,?,?,?,?)').run(operationId,'business.run.v3',json(response),at,requestDigest);
+   const response={...result,source,actor:principal.subjectId,...(kiosk?{deviceId,resourceId,eventId:command.eventId}:{}),recordedAt:at};
+   db.prepare('INSERT INTO operations(operation_id,kind,response_json,created_at,request_digest) VALUES(?,?,?,?,?)').run(operationId,kind,json(response),at,requestDigest);
    db.exec('COMMIT');return response;
   }catch(e){if(db.isTransaction)db.exec('ROLLBACK');return {ok:false,code:e.code??'RUN_EVENT_WRITE_FAILED'};}
  };

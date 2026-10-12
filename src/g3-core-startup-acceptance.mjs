@@ -88,7 +88,8 @@ function exact(value, keys) {
 }
 export function runtimeConfigDigest(env = process.env) {
   const keys = ['HOST','PORT','UPLOAD_ROOT','VIEWER_TOKEN','SUBMITTER_TOKEN','SCHEDULER_TOKEN','ADMIN_TOKEN',
-    'JSO_BUSINESS_RUNTIME','JSO_BUSINESS_IDENTITIES_JSON','KIOSK_SERVICE_CONTEXT'];
+    'JSO_BUSINESS_RUNTIME','JSO_BUSINESS_IDENTITIES_JSON','KIOSK_SERVICE_CONTEXT',
+    'JSO_KIOSK_ONLINE_RUNTIME','JSO_KIOSK_ONLINE_IDENTITIES_JSON'];
   return digest(canonical(Object.fromEntries(keys.map(k => [k, env[k] ?? null]))));
 }
 export function validateCoreRecord(record, { now = Date.now() } = {}) {
