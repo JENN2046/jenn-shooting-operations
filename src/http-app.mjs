@@ -1,5 +1,6 @@
 import { businessRoute, businessHttpStatus, safeBusinessException } from './business-http-v1.mjs';
-import { createReadStream } from 'node:fs';
+import { createReadStream, openSync, closeSync, fstatSync, readFileSync, constants } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +19,8 @@ const STATIC = new Map([
   ['/', 'board.html'],
   ['/board', 'board.html'],
   ['/manage', 'manage.html'],
+  ['/references.js', 'references.js'],
+  ['/board-model.js', 'board-model.js'],
   ['/manage.js', 'manage.js'],
   ['/manage.css', 'manage.css'],
   ['/submit', 'submit.html'],
@@ -290,6 +293,9 @@ export function createHttpApp({
         return sendJson(response, 200, { ok: true, service: 'jenn-shooting-operations' });
       }
 
+      const schema12=Boolean(store.db?.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get());
+      if(request.method==='GET'&&url.pathname==='/api/client-profile')return sendJson(response,200,{ok:true,protocolVersion:schema12?3:1});
+      if(schema12&&request.method==='GET'&&['/submit','/submit/print','/submit/video','/kiosk'].includes(url.pathname))return serveStatic(response,'unavailable.html');
       if (request.method === 'GET' && STATIC.has(url.pathname)) {
         if (url.pathname === '/kiosk' && typeof kiosk?.authenticationChallenge === 'string') {
           const authenticated = await authenticateKiosk(kiosk, request);
@@ -443,6 +449,37 @@ export function createHttpApp({
           return sendMapped(response, kioskFailure('INTERNAL_ERROR'));
         }
         return sendMapped(response, mapKioskRunEventHttpResult(result));
+      }
+
+      const referenceRead=request.method==='GET'&&/^\/api\/v3\/business\/references\/([A-Za-z0-9._:-]+)$/u.exec(url.pathname);
+      const referenceWrite=request.method==='POST'&&url.pathname==='/api/v3/business/references';
+      if(referenceRead||referenceWrite){
+        if(!schema12)return sendJson(response,409,{ok:false,code:'CLIENT_PROTOCOL_UPGRADE_REQUIRED',requiredSchema:12});
+        const auth=await authenticateScheduling(scheduling,request);
+        if(!auth.ok)return sendJson(response,auth.code==='FORBIDDEN'?403:401,{ok:false,code:auth.code});
+        if(referenceWrite){
+          const operationId=url.searchParams.get('operationId')||'';
+          if([...url.searchParams].length!==1||!url.searchParams.has('operationId'))return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'});
+          const allowed=scheduling.authorizeReferenceUpload({principal:auth.principal,operationId});
+          if(!allowed.ok)return sendJson(response,businessHttpStatus(allowed),allowed);
+          let originalName=String(request.headers['x-file-name']||'reference');try{originalName=decodeURIComponent(originalName);}catch{}
+          const contentType=String(request.headers['content-type']||'').split(';')[0].trim().toLowerCase();
+          const buffer=await readBuffer(request,12*1024*1024);
+          const result=store.saveUpload({operationId,originalName,contentType,kind:'image',buffer,role:auth.principal.role,deduplicate:true});
+          return sendJson(response,result.status,result);
+        }
+        if([...url.searchParams].length)return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'});
+        const allowed=scheduling.authorizeReferenceRead({principal:auth.principal,uploadId:referenceRead[1]});
+        if(!allowed.ok)return sendJson(response,businessHttpStatus(allowed),allowed);
+        const asset=store.db.prepare('SELECT * FROM uploads WHERE id=?').get(referenceRead[1]);
+        if(!store.uploadRoot||!asset?.stored_name||!/^([a-f0-9]{64})\.(jpg|png|webp|gif|heic)$/u.test(asset.stored_name))return sendJson(response,404,{ok:false,code:'REFERENCE_NOT_FOUND'});
+        let fd;
+        try{
+          fd=openSync(join(store.uploadRoot,asset.stored_name),constants.O_RDONLY|constants.O_NOFOLLOW);
+          const st=fstatSync(fd);if(!st.isFile()||st.size!==asset.size||st.size>12*1024*1024)throw new Error('REFERENCE_INVALID');
+          const bytes=readFileSync(fd);if(createHash('sha256').update(bytes).digest('hex')!==asset.sha256)throw new Error('REFERENCE_INVALID');
+          response.writeHead(200,{'Content-Type':asset.content_type,'Content-Length':bytes.length,'Cache-Control':'no-store'});return response.end(bytes);
+        }catch{return sendJson(response,404,{ok:false,code:'REFERENCE_NOT_FOUND'});}finally{if(fd!==undefined)closeSync(fd);}
       }
 
       const business = businessRoute(request.method, url.pathname);

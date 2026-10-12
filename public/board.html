@@ -10,10 +10,10 @@
   <a class="skip-link" href="#main">跳至内容</a>
   <header class="topbar">
     <a class="brand" href="/board"><strong>Jenn 拍摄排班</strong><span>拍摄工作台</span></a>
-    <nav aria-label="主导航"><a href="/board" aria-current="page">排班</a><a href="/manage">工作安排</a><a class="nav-submit" href="/submit">＋ 提需求</a></nav>
+    <nav aria-label="主导航"><a href="/board" aria-current="page">排班</a><a href="/manage">工作安排</a><a id="create-order-link" class="nav-submit" href="/submit">＋ 提需求</a></nav>
   </header>
   <main id="main" class="shell board-shell">
-    <div class="load-state"><p id="message" class="board-status" role="status">正在读取排班…</p><button id="retry" class="secondary-button" type="button" hidden>重新读取</button></div>
+    <form id="board-login" hidden><label>Jenn 访问令牌 <input id="board-token" type="password" autocomplete="off" required></label><button>登录看板</button><p>令牌仅保存在当前页面内存中，退出或刷新后需重新登录。</p></form><button id="board-logout" type="button" hidden>退出</button><div class="load-state"><p id="message" class="board-status" role="status">正在读取排班…</p><button id="retry" class="secondary-button" type="button" hidden>重新读取</button></div>
     <section id="board" class="board" hidden>
       <div class="board-heading">
         <div><h1>拍摄排班</h1><p id="calendar-title" class="calendar-title" aria-live="polite"></p></div>

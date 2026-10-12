@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>工作安排 · Jenn</title><link rel="stylesheet" href="/manage.css"></head>
-<body><header><a href="/manage">Jenn 拍摄工作台</a><span>工作安排</span></header>
+<body><header><a href="/manage">Jenn 拍摄工作台</a><a href="/">拍摄看板</a><span>工作安排</span></header>
 <main><h1>安排工作，也留出调整的余地</h1><p class="muted">工作日历决定可拍时间。改期前，会检查摄影师占用、午休和拍后缓冲。</p>
 <form id="login"><label>管理访问令牌<input id="token" type="password" autocomplete="off" required></label><button id="login-button">连接工作台</button><small>令牌只在当前页面内存中使用。</small></form>
 <p id="message" role="status" aria-live="polite"></p><section id="unknown" hidden><strong>上一次操作结果待核对</strong><p>暂不提交新操作，先读取原操作的结果。</p><button id="reconcile" type="button">核对结果</button></section>
@@ -30,7 +30,7 @@
 <label>优先级<select id="order-priority" required><option value="">请选择</option><option value="p0">P0</option><option value="p1">P1</option><option value="p2">P2</option></select></label>
 <label>光照配置<input id="order-light" required maxlength="120"></label><label>反光<select id="order-reflectivity"><option value="unknown">未知</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option></select></label>
 <label>拍摄简述<input id="order-brief" required maxlength="100"></label><label>备注<textarea id="order-note" maxlength="2000"></textarea></label></div>
-<button type="submit">保存订单</button><button id="order-new" type="button">切换为新建</button></form>
+<fieldset id="order-references"><legend>参考图（可选，仅新建订单）</legend><input id="reference-files" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,image/heic"><p>JPEG、PNG、WebP、GIF、HEIC；最多10张，每张12 MB，总计40 MB。保存订单时先上传，再关联；不替换已有订单附件。</p><ul id="reference-selection"></ul></fieldset><button type="submit">保存订单</button><button id="order-new" type="button">切换为新建</button></form>
 <h3>订单分类与统计</h3><label>筛选<select id="order-filter"><option value="all">全部</option><option value="静物">静物全部</option><option value="产品3D主图">产品3D主图</option><option value="细节图">细节图</option><option value="功能图">功能图</option><option value="模特">模特</option><option value="场景">场景图</option><option value="细节">历史细节（未细分）</option></select></label><p id="order-counts"></p><div id="order-list"></div>
 <h3>登记实际执行</h3><p>仅在真实发生时点击；记录服务器当前时间，不支持补录或更正。预计结束请使用下方现场预览。</p><label>场次<select id="actual-item"></select></label><p id="actual-item-notice" role="status"></p><button id="actual-start" type="button">现在开拍</button><button id="actual-complete" type="button">现在完成</button></section>
 <section><h2>逐单拍摄时长</h2><p>管理员填写该单预计拍摄分钟数，不改变已排场次。静物包括独立记录的产品3D主图、细节图、功能图；模特与场景图分别记录。</p><div id="requests"></div></section><section><h2>现场变化与当天后续安排</h2><p>仅预览同摄影师当天后续，保持顺序。预计结束不是实际完成；已发生、锁定的安排不改写。不自动跨天、加班或取消。</p>

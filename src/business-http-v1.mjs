@@ -12,6 +12,7 @@ const POST = new Map([
   ['/api/v2/business/proposals', ['generateProposal']],
 ]);
 export function businessRoute(method, pathname) {
+  if(method==='GET'&&pathname==='/api/v3/business/board')return {method:'readBoard'};
   pathname=pathname.replace(/^\/api\/v3\/business(?=\/)/u,'/api/v2/business');
   if (method === 'GET' && pathname === '/api/v2/business/state') return { method: 'readManagement' };
   if (method === 'POST' && POST.has(pathname)) { const [method,kind]=POST.get(pathname);return {method,kind}; }

@@ -94,6 +94,23 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
   const dynamic = createDynamicDayAdjustment({db,now:clock,refreshProjections,writeAdmission:()=>!writeAdmissionControl.isDisabled()});
   const permitWrite = () => !writeAdmissionControl.isDisabled();
   return {
+    authorizeReferenceUpload({principal,operationId}) {
+      if(!db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get())return denied('BUSINESS_SCHEMA12_REQUIRED');
+      if(!ownsRequestCatalogue(principal))return denied('FORBIDDEN');
+      if(db.prepare('SELECT 1 FROM operations WHERE operation_id=?').get(operationId))return denied('UPLOAD_ORDER_ALREADY_SAVED');
+      return {ok:true};
+    },
+    authorizeReferenceRead({principal,uploadId}) {
+      if(!db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get())return denied('BUSINESS_SCHEMA12_REQUIRED');
+      const asset=db.prepare('SELECT * FROM uploads WHERE id=? AND kind=?').get(uploadId,'image');
+      if(!asset?.claimed_task_id||!ownsRequest(principal,asset.claimed_task_id))return denied('FORBIDDEN');
+      return {ok:true};
+    },
+    readBoard({principal}) {
+      if(!db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get())return denied('BUSINESS_SCHEMA12_REQUIRED');
+      if(!ownsRequestCatalogue(principal))return denied('FORBIDDEN');
+      return this.readManagement({principal});
+    },
     recordActualEvent(input) {return db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get()?runEvent(input):denied('BUSINESS_SCHEMA12_REQUIRED');},
     createOrder(input) {return db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get()?orders.create(input):denied('BUSINESS_SCHEMA12_REQUIRED');},
     editOrder(input) {return db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get()?orders.edit(input):denied('BUSINESS_SCHEMA12_REQUIRED');},
@@ -121,7 +138,7 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
           estimatedEnd:input.endAt,bufferAfterMinutes:input.bufferAfterMinutes,
           confirmedAt:receipt.createdAt,operationId:receipt.operationId,scheduleRevision:receipt.scheduleRevision});
       }
-      const orderFacts=orderRows.map(r=>({id:r.id,name:r.name,kind:r.kind,shootingSubtype:r.shooting_subtype,lifecycle:r.request_lifecycle,
+      const orderFacts=orderRows.map(r=>({references:db.prepare("SELECT id,original_name AS name,content_type AS contentType,size FROM uploads WHERE claimed_task_id=? AND kind='image' ORDER BY claimed_order,id").all(r.id),id:r.id,name:r.name,kind:r.kind,shootingSubtype:r.shooting_subtype,lifecycle:r.request_lifecycle,
         editable:r.request_lifecycle==='open'&&!db.prepare('SELECT 1 FROM schedule_item_tasks WHERE task_id=?').get(r.id)&&!db.prepare('SELECT 1 FROM production_runs WHERE task_id=?').get(r.id),
         submission:{schemaVersion:3,productionType:r.production_type,sku:r.sku,name:r.name,kind:r.kind,shootingSubtype:r.shooting_subtype,aspectRatio:r.aspect_ratio,
           deliverables:{type:'flat',count:r.deliverable_count},requestedBy:r.requested_by,desiredDate:r.desired_date,note:r.note??'',coreBriefSummary:r.core_brief_summary??'',sampleStatus:r.sample_status,lightingPreset:r.lighting_preset,reflectivity:r.reflectivity,priority:r.priority,uploadIds:[]}}));
@@ -133,7 +150,7 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
         sessions: db.prepare(`SELECT id, resource_id AS resourceId, planned_start AS plannedStart, planned_end AS plannedEnd,
           buffer_after_minutes AS bufferAfterMinutes, schedule_status AS status, lock_status AS lockStatus,
           EXISTS(SELECT 1 FROM production_runs r WHERE r.schedule_item_id=s.id) AS hasRunHistory
-          FROM schedule_items s ORDER BY planned_start,id`).all().filter(s => principal.resourceIds.includes(s.resourceId)).map(s=>({...s,confirmedForecast:forecasts.get(s.id)??null,runs:db.prepare('SELECT id,status,run_revision AS runRevision,started_at AS startedAt,completed_at AS completedAt FROM production_runs WHERE schedule_item_id=? ORDER BY created_at,id').all(s.id),requestNames:db.prepare('SELECT r.name FROM schedule_item_tasks b JOIN requests_v2 r ON r.id=b.task_id WHERE b.schedule_item_id=? ORDER BY b.display_order').all(s.id).map(r=>r.name)})),
+          FROM schedule_items s ORDER BY planned_start,id`).all().filter(s => principal.resourceIds.includes(s.resourceId)).map(s=>({...s,requestIds:db.prepare('SELECT task_id FROM schedule_item_tasks WHERE schedule_item_id=? ORDER BY display_order').all(s.id).map(r=>r.task_id),confirmedForecast:forecasts.get(s.id)??null,runs:db.prepare('SELECT id,status,run_revision AS runRevision,started_at AS startedAt,completed_at AS completedAt FROM production_runs WHERE schedule_item_id=? ORDER BY created_at,id').all(s.id),requestNames:db.prepare('SELECT r.name FROM schedule_item_tasks b JOIN requests_v2 r ON r.id=b.task_id WHERE b.schedule_item_id=? ORDER BY b.display_order').all(s.id).map(r=>r.name)})),
         requests: ownsRequestCatalogue(principal) ? db.prepare(`SELECT r.id,r.name,r.kind,r.sample_status AS sampleStatus,r.priority,r.production_type AS productionType,
           r.shooting_subtype AS shootingSubtype,q.duration_estimate_json AS durationEstimateJson
           FROM requests_v2 r LEFT JOIN scheduling_request_requirements q ON q.request_id=r.id

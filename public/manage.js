@@ -1,10 +1,12 @@
+import {mergeFiles,fileSelectionError} from './common.js';
+import {referenceGallery,clearReferenceImages} from './references.js';
 const $=s=>document.querySelector(s);
-let dayPreview=null;
+let dayPreview=null,editingOrder=null;
 let token='',state=null,preview=null,published=null,publishedBinding=null,editing=null,proposal=null,busy=false;
 let pending=null;try{pending=JSON.parse(sessionStorage.getItem('jso.pending.operation')||'null');}catch{}
 const messages={DYNAMIC_FORECAST_NOT_CURRENT:'需要已有的正在拍摄或受阻执行记录；未确认的实际状态不能当作已知。',DYNAMIC_OCCUPANCY_UNKNOWN:'已有占用信息不完整，请先核对。',DYNAMIC_PREVIEW_CHANGED:'现场、安排或配置已变化，请重新预览。',DYNAMIC_TODAY_ONLY:'仅支持北京时间当天，结束时间必须晚于现在。',DYNAMIC_UNRESOLVED:'存在未解决项，整批未保存。',FORBIDDEN:'没有这个资源的操作权限。',WRITE_ADMISSION_DISABLED:'当前处于禁写状态，不能保存。',CALENDAR_HAS_CONFLICTS:'新规则与已排场次冲突，请先改期。',SCHEDULING_REVISION_CONFLICT:'安排已被其他操作更新，请刷新并重新核对。',RESCHEDULE_REVISION_CONFLICT:'安排已变化，请刷新后重新核对。',SCHEDULING_RESOURCE_OVERLAP_OR_UNKNOWN:'与已有拍摄或缓冲冲突，或存在尚未确定的占用。',PAST_CALENDAR_CHANGE_FORBIDDEN:'历史工作规则需要保留，请选择今天或以后的生效日。',SCHEDULING_QUIESCENCE_HELD:'维护操作正在持锁，暂不能修改。',OPERATION_NOT_FOUND:'暂未找到回执，不能据此认定未提交。请保持待核对状态。',CONFIG_SCHEMA_TRANSITION_REQUIRES_REVIEW:'已有旧版日历需要单独迁移，页面暂不直接转换。'};
 function say(text){$('#message').textContent=text;}
-function syncBusy(){document.querySelectorAll('button').forEach(b=>b.disabled=busy||Boolean(pending)&&!['login-button','reconcile','refresh','logout'].includes(b.id));$('#unknown').hidden=!pending;}
+function syncBusy(){$('#reference-files').disabled=busy||Boolean(pending)||Boolean(editingOrder);document.querySelectorAll('button').forEach(b=>b.disabled=busy||Boolean(pending)&&!['login-button','reconcile','refresh','logout'].includes(b.id));$('#unknown').hidden=!pending;}
 function savePending(value){pending=value;if(value)sessionStorage.setItem('jso.pending.operation',JSON.stringify(value));else sessionStorage.removeItem('jso.pending.operation');syncBusy();}
 function fail(result){return new Error(messages[result.code]||`操作未完成：${result.code||'请稍后核对'}`);}
 async function api(path,body){const response=await fetch(path,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});let result;try{result=await response.json();}catch{throw new Error('响应无法确认，请核对原操作结果。');}if(!response.ok||!result.ok)throw Object.assign(fail(result),{definite:response.status<500,result});return result;}
@@ -52,7 +54,7 @@ function render(){
 }
 // All user times are explicit Asia/Shanghai; host timezone is irrelevant.
 function local(iso){const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(iso)).map(v=>[v.type,v.value]));return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;}
-async function refresh(){state=await api('/api/v3/business/state');render();}
+async function refresh(){state=await api('/api/v3/business/state');clearReferenceImages();render();}
 function previewBinding(){return {expectedProjectionRevision:state.revisions?.projectionRevision,baseConfigDigest:active()?.configDigest??null};}
 function buildConfig(){const config=draftBase();if(![2,3].includes(config.schemaVersion))throw new Error('旧版日历需要迁移后再编辑。');const cal=config.resourceCalendars[0],effectiveFrom=$('#effective').value;
  if(effectiveFrom<state.businessToday)throw new Error('请选择今天或以后的生效日期。');
@@ -67,7 +69,7 @@ function buildConfig(){const config=draftBase();if(![2,3].includes(config.schema
 function syncSaturday(){$('#anchor-label').hidden=$('#saturday').value!=='alternating';$('#anchor').required=$('#saturday').value==='alternating';}
 $('#saturday').addEventListener('change',syncSaturday);
 $('#login').addEventListener('submit',e=>{e.preventDefault();work(async()=>{token=$('#token').value;$('#token').value='';await refresh();say('已读取工作安排。');});});
-$('#logout').addEventListener('click',()=>{token='';state=null;$('#workspace').hidden=true;$('#login').hidden=false;say('已退出。未确认操作的引用仍保留，供下次核对。');});
+$('#logout').addEventListener('click',()=>{token='';state=null;clearReferenceImages();$('#order-list').replaceChildren();if(!pending)resetOrderForm();$('#workspace').hidden=true;$('#login').hidden=false;say('已退出。未确认操作的引用仍保留，供下次核对。');});
 $('#refresh').addEventListener('click',()=>work(refresh));
 $('#register').addEventListener('click',()=>work(async()=>{if(!state.revisions)throw new Error('尚未建立初始化控制记录，不能在页面自动初始化。');await mutation('/api/v3/business/resources',{operationId:newId('RESOURCE'),expectedScheduleRevision:state.revisions.scheduleRevision,expectedProjectionRevision:state.revisions.projectionRevision,resource:state.initialResource});await refresh();say('已登记一个摄影师资源。');}));
 $('#add-exception').addEventListener('click',()=>{exceptionRow();invalidate();});$('#calendar-form').addEventListener('input',invalidate);
@@ -91,7 +93,7 @@ $('#inspect-saved').addEventListener('click',()=>work(async()=>{
 $('#activate').addEventListener('click',()=>work(async()=>{if(!published)throw new Error('请先核对待生效规则。');await activate(published,publishedBinding);}));
 $('#reschedule-form').addEventListener('submit',e=>{e.preventDefault();work(async()=>{const config=active();if(!config||!editing)throw new Error('请先选择场次及有效日历。');const iso=id=>new Date(`${$('#shoot-date').value}T${$(id).value}:00+08:00`).toISOString();await mutation(`/api/v3/business/schedule-items/${encodeURIComponent(editing.id)}/reschedule`,{operationId:newId('MOVE'),scheduleItemId:editing.id,resourceId:editing.resourceId,plannedStart:iso('#shoot-start'),plannedEnd:iso('#shoot-end'),expectedScheduleRevision:state.revisions.scheduleRevision,expectedProjectionRevision:state.revisions.projectionRevision,configDigest:config.configDigest});$('#reschedule-form').hidden=true;editing=null;await refresh();say('改期已保存，未发送外部通知。');});});
 $('#cancel-edit').addEventListener('click',()=>{$('#reschedule-form').hidden=true;editing=null;});
-$('#reconcile').addEventListener('click',()=>work(async()=>{if(!pending)return;const result=await api(`/api/v3/business/operations/${encodeURIComponent(pending.id)}`);if(result.ok){savePending(null);await refresh();say('已找到原操作回执，请查看当前状态后继续。');}}));
+$('#reconcile').addEventListener('click',()=>work(async()=>{if(!pending)return;const result=await api(`/api/v3/business/operations/${encodeURIComponent(pending.id)}`);if(result.ok){const wasOrder=pending.path==='/api/v3/business/requests';savePending(null);if(wasOrder)resetOrderForm();await refresh();say('已找到原操作回执，请查看当前状态后继续。');}}));
 $('#proposal-form').addEventListener('submit',e=>{e.preventDefault();work(async()=>{const start=new Date(`${$('#plan-from').value}T00:00:00+08:00`),end=new Date(`${$('#plan-through').value}T00:00:00+08:00`);end.setTime(end.getTime()+86400000);proposal=await mutation('/api/v3/business/proposals',{operationId:newId('PLAN'),planningWindowStart:start.toISOString(),planningWindowEnd:end.toISOString(),resourceScope:state.resources.map(r=>r.resource_id)});renderProposal();say('提案已生成，尚未采用。');});});
 function renderProposal(){const p=proposal.proposal;const out=$('#proposal');out.replaceChildren();const items=JSON.parse(p.proposedItemsJson),diagnostics=JSON.parse(p.diagnosticsJson);for(const i of items)out.append(row('p',`${i.requestId} · ${local(i.plannedStart)} — ${local(i.plannedEnd)}`));for(const d of diagnostics)out.append(row('p',`待处理：${d.code} ${d.requestId||''}`));if(!items.length)out.append(row('p','没有可采用场次，请完善任务资料或调整范围。'));
  for(const [type,text]of [['accept','采用全部场次'],['reject','放弃这份提案']]){if(type==='accept'&&!items.length)continue;const b=row('button',text);b.type='button';b.addEventListener('click',()=>work(async()=>{await mutation(`/api/v3/proposals/${encodeURIComponent(p.proposalId)}/decisions`,{decisionId:newId('DECISION'),proposalId:p.proposalId,decisionType:type,selectedProposalItemIds:type==='accept'?items.map(i=>i.proposalItemId):null,decisionNote:null,reasonCode:type==='reject'?'HUMAN_REJECTED':null});out.replaceChildren(row('p',type==='accept'?'已采用。':'已放弃。'));await refresh();say('提案处理完成。');}));out.append(b);}}
@@ -142,7 +144,20 @@ const dynamicReason=code=>({PREDECESSOR_ORDER_CONFLICT:'不能越过原先前序
 $('#dynamic-confirm').addEventListener('click',()=>work(async()=>{if(!dayPreview?.preview.canApply)throw new Error('请先完成可行的预览。');await mutation('/api/v3/business/day-adjustment/apply',{operationId:newId('DAY'),input:dayPreview.preview.input,previewDigest:dayPreview.previewDigest});await refresh();say('整批调整已保存；实际事实未改写，未发送外部通知。');}));
 
 function durationFields(config){return [['duration-detail','细节'],['duration-model','模特'],['duration-scene','场景'],...(config.schemaVersion===3?[['duration-main3d','产品3D主图'],['duration-still-detail','细节图'],['duration-function','功能图']]:[])];}
-let editingOrder=null;
+let draftOperationId=newId('ORDER'),referenceFiles=[],referenceUploads=new Map();
+function resetOrderDraft(){draftOperationId=newId('ORDER');referenceFiles=[];referenceUploads.clear();$('#reference-files').value='';$('#reference-selection').replaceChildren();}
+function resetOrderForm(){resetOrderDraft();$('#order-form').reset();editingOrder=null;$('#order-references').disabled=false;$('#order-edit-state').textContent='新建订单';syncOrderCategory();}
+function renderReferenceSelection(){const list=$('#reference-selection');list.replaceChildren();for(const file of referenceFiles)list.append(row('li',file.name+' · '+(referenceUploads.has(file)?'已上传，待订单关联':'待上传')));}
+$('#reference-files').addEventListener('change',()=>{if(busy||pending||editingOrder)return;const files=mergeFiles(referenceFiles,Array.from($('#reference-files').files));const error=fileSelectionError(files.map(file=>({file,kind:'image'})));if(error){say(error);$('#reference-files').value='';return;}referenceFiles=files;renderReferenceSelection();});
+async function uploadReferences(){
+ for(const file of referenceFiles){if(referenceUploads.has(file))continue;
+  const response=await fetch('/api/v3/business/references?operationId='+encodeURIComponent(draftOperationId),{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':file.type,'X-File-Name':encodeURIComponent(file.name)},body:file});
+  const result=await response.json();if(!response.ok||!result.ok)throw new Error('参考图上传未完成：'+(result.code||'请重试')+'；订单尚未保存。');
+  referenceUploads.set(file,result.upload.id);renderReferenceSelection();
+ }
+ return [...new Set(referenceFiles.map(f=>referenceUploads.get(f)))];
+}
+
 const orderFields={sku:'sku',name:'name',requestedBy:'requested',desiredDate:'date',aspectRatio:'ratio',sampleStatus:'sample',priority:'priority',lightingPreset:'light',reflectivity:'reflectivity',coreBriefSummary:'brief',note:'note'};
 function renderOrderPanel(){
  $('#order-panel').hidden=state.protocolVersion!==3||state.principal.role!=='administrator';
@@ -150,18 +165,19 @@ function renderOrderPanel(){
  const names=['产品3D主图','细节图','功能图','模特','场景','细节'];
  $('#order-counts').textContent=`全部 ${facts.length}；静物 ${facts.filter(r=>r.kind==='静物').length}；`+names.map(n=>`${n==='细节'?'历史细节（未细分）':n} ${facts.filter(r=>r.shootingSubtype===n).length}`).join('；');
  $('#order-list').replaceChildren();
- for(const r of facts.filter(r=>filter==='all'||(filter==='静物'?r.kind==='静物':r.shootingSubtype===filter))){const line=row('p',`${r.name} · ${r.kind==='静物'?'静物 / ':''}${r.shootingSubtype==='细节'?'历史细节（未细分）':r.shootingSubtype} · ${r.lifecycle}`);if(r.editable&&r.shootingSubtype!=='细节'){const b=row('button','维护未排订单');b.type='button';b.addEventListener('click',()=>{editingOrder=r.id;const v=r.submission;for(const [key,id]of Object.entries(orderFields))$('#order-'+id).value=v[key]??'';$('#order-category').value=v.kind;$('#order-subtype').value=v.shootingSubtype;$('#order-count').value=v.deliverables.count;$('#order-edit-state').textContent='维护：'+r.name;syncOrderCategory();});line.append(b);}$('#order-list').append(line);}
+ for(const r of facts.filter(r=>filter==='all'||(filter==='静物'?r.kind==='静物':r.shootingSubtype===filter))){const line=row('p',`${r.name} · ${r.kind==='静物'?'静物 / ':''}${r.shootingSubtype==='细节'?'历史细节（未细分）':r.shootingSubtype} · ${r.lifecycle}`);if(r.editable&&r.shootingSubtype!=='细节'){const b=row('button','维护未排订单');b.type='button';b.addEventListener('click',()=>{editingOrder=r.id;resetOrderDraft();$('#order-references').disabled=true;const v=r.submission;for(const [key,id]of Object.entries(orderFields))$('#order-'+id).value=v[key]??'';$('#order-category').value=v.kind;$('#order-subtype').value=v.shootingSubtype;$('#order-count').value=v.deliverables.count;$('#order-edit-state').textContent='维护：'+r.name;syncOrderCategory();});line.append(b);}line.append(referenceGallery(r.references,()=>token));$('#order-list').append(line);}
  renderSessionChoice('actual-item',state.sessions.filter(s=>s.status==='confirmed'),s=>`${s.requestNames?.join('、')||s.id} · ${local(s.plannedStart)} · ${s.runs?.[0]?.status||'未开始'}`);
 }
 function syncOrderCategory(){$('#order-subtype-label').hidden=$('#order-category').value!=='静物';}
 $('#order-category').addEventListener('change',syncOrderCategory);
 $('#order-filter').addEventListener('change',renderOrderPanel);
-$('#order-new').addEventListener('click',()=>{editingOrder=null;$('#order-edit-state').textContent='新建订单';});
+$('#order-new').addEventListener('click',()=>{editingOrder=null;resetOrderDraft();$('#order-references').disabled=false;$('#order-edit-state').textContent='新建订单';});
 $('#order-form').addEventListener('submit',e=>{e.preventDefault();work(async()=>{
- const category=$('#order-category').value;const submission={schemaVersion:3,operationId:newId('ORDER'),productionType:'平面',kind:category,shootingSubtype:category==='静物'?$('#order-subtype').value:category,deliverables:{type:'flat',count:Number($('#order-count').value)},uploadIds:[]};
+ const category=$('#order-category').value;const submission={schemaVersion:3,operationId:editingOrder?newId('ORDER'):draftOperationId,productionType:'平面',kind:category,shootingSubtype:category==='静物'?$('#order-subtype').value:category,deliverables:{type:'flat',count:Number($('#order-count').value)},uploadIds:[]};
  for(const [key,id]of Object.entries(orderFields))submission[key]=$('#order-'+id).value;
+ if(!editingOrder)submission.uploadIds=await uploadReferences();
  const command={submission,expectedScheduleRevision:state.revisions.scheduleRevision,expectedProjectionRevision:state.revisions.projectionRevision,...(editingOrder?{requestId:editingOrder}:{})};
- await mutation(editingOrder?'/api/v3/business/requests/edit':'/api/v3/business/requests',command);editingOrder=null;$('#order-edit-state').textContent='新建订单';await refresh();say('订单已保存，请明确逐单时长后预览首次排期。');
+ await mutation(editingOrder?'/api/v3/business/requests/edit':'/api/v3/business/requests',command);resetOrderForm();await refresh();say('订单已保存，请明确逐单时长后预览首次排期。');
 });});
 async function actualEvent(eventType){const s=state.sessions.find(s=>s.id===$('#actual-item').value);if(!s)throw new Error('请选择已确认场次。');const run=s.runs?.[0];await mutation('/api/v3/business/run-events',{eventId:newId('ACTUAL'),runId:run?.id||newId('RUN'),scheduleItemId:s.id,eventType,expectedRunRevision:run?.runRevision??0});await refresh();say(eventType==='start'?'已按当前时间记录实际开拍。':'已按当前时间记录实际完成。');}
 $('#actual-start').addEventListener('click',()=>work(()=>actualEvent('start')));
