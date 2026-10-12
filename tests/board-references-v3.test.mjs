@@ -70,3 +70,21 @@ test('Schema11 keeps its existing public snapshot and static submission page; V3
   assert.equal(f.server.store.db.prepare('SELECT count(*) n FROM uploads').get().n,0);assert.deepEqual(readFileSync(f.filename),before);
  }finally{await close(f);}
 });
+
+test('V3 upload persistence accepts only unsubmitted operations and leaves saved-order attachments unchanged',async()=>{
+ const f=await launch();try{
+  const input={operationId:'SYNTHETIC-ORDER-0',originalName:'reference.png',contentType:'image/png',kind:'image',buffer:png,role:'administrator',deduplicate:true,requireUnsubmittedOperation:true};
+  const asset=f.server.store.saveUpload(input);assert.equal(asset.status,201);
+  assert.equal(f.server.store.saveUpload(input).upload.id,asset.upload.id);
+  const revisions=(await f.state()).revisions;
+  const command={submission:{...submission(0),uploadIds:[asset.upload.id]},expectedScheduleRevision:revisions.scheduleRevision,expectedProjectionRevision:revisions.projectionRevision};
+  await f.ok('/api/v3/business/requests',command);
+  const {readdirSync}=await import('node:fs');
+  const files=readdirSync(f.uploads).sort();
+  const rows=f.server.store.db.prepare('SELECT * FROM uploads ORDER BY id').all();
+  assert.deepEqual(f.server.store.saveUpload({...input,originalName:'later.png'}),{ok:false,status:409,code:'UPLOAD_ORDER_ALREADY_SAVED'});
+  assert.deepEqual(f.server.store.db.prepare('SELECT * FROM uploads ORDER BY id').all(),rows);
+  assert.deepEqual(readdirSync(f.uploads).sort(),files);
+  await f.ok('/api/v3/business/requests',command);
+ }finally{f.close();}
+});

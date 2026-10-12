@@ -1,7 +1,7 @@
 import { showMessage, dateKey, mondayOf, minutes, sessionState, layoutSessions } from './common.js?v=ui-20260922';
 
 import {boardView,beijingParts} from './board-model.js';
-import {referenceGallery,clearReferenceImages} from './references.js';
+import {referenceGallery,clearReferenceImages,retainReferenceImages} from './references.js?v=board-references-20261012';
 let protocolVersion=1,token='',authEpoch=0;
 const displayState=(session,tasks)=>protocolVersion===3?session.actualState:sessionState(session,tasks);
 const today=()=>protocolVersion===3?new Date(beijingParts(new Date()).date+'T12:00:00'):new Date();
@@ -18,6 +18,7 @@ let anchorDate = new Date();
 let openCard;
 let pinnedCard;
 let clockTimer;
+const expandedPending=new Set();
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -255,6 +256,8 @@ function renderCalendar() {
 function renderPending(snapshot) {
   const scheduled = new Set(snapshot.sessions.flatMap(session => session.ids));
   const tasks = snapshot.tasks.filter(task => !scheduled.has(task.id) && task.status !== 'cancelled');
+  const validIds=new Set(tasks.map(task=>task.id));
+  for(const id of expandedPending)if(!validIds.has(id))expandedPending.delete(id);
   $('#pending-count').textContent = tasks.length;
   const cards = tasks.map(task => {
     const item = element('article', 'pending-task');
@@ -263,11 +266,12 @@ function renderPending(snapshot) {
     button.append(element('strong', '', task.name), element('span', 'muted', taskType(task)));
     if (task.request?.desiredDate) button.append(element('small', '', '期望 ' + task.request.desiredDate.slice(5).replace('-', '月') + '日'));
     const detail = element('div', 'pending-detail');
-    detail.hidden = true;
+    detail.hidden = !expandedPending.has(task.id);
     detail.append(element('p', '', 'SKU · ' + task.sku), element('p', 'preserve-lines', task.deliver), element('p', 'muted', task.request?.requestedBy || task.client));
-    button.setAttribute('aria-expanded', 'false');
+    button.setAttribute('aria-expanded', String(!detail.hidden));
     button.addEventListener('click', () => {
       detail.hidden = !detail.hidden;
+      if(detail.hidden)expandedPending.delete(task.id);else expandedPending.add(task.id);
       button.setAttribute('aria-expanded', String(!detail.hidden));
     });
     detail.append(referenceGallery(task.references,()=>token));
@@ -293,17 +297,18 @@ async function loadBoard() {
     }
     const response=await fetch(protocolVersion===3?'/api/v3/business/board':'/api/v1/snapshot',{headers:token?{Authorization:'Bearer '+token}:{}});
     if(!response.ok)throw Error(response.status===401?'登录失效或令牌无效，请重新登录。':response.status===403?'没有此看板的访问权限。':'排班读取失败，请刷新重试。');
-    const result=await response.json();if(epoch!==authEpoch)return;const detailId=$('#session-dialog').open?$('#session-dialog').dataset.sessionId:null;clearReferenceImages();
+    const result=await response.json();if(epoch!==authEpoch)return;const detailId=$('#session-dialog').open?$('#session-dialog').dataset.sessionId:null;
     currentSnapshot=protocolVersion===3?boardView(result):result.snapshot;
+    retainReferenceImages(currentSnapshot.tasks.flatMap(task=>task.references||[]));
     if(protocolVersion===3&&!board.dataset.loaded)anchorDate=today();
     board.dataset.loaded='yes';renderCalendar();renderPending(currentSnapshot);if(detailId){const selected=currentSnapshot.sessions.find(s=>s.id===detailId);if(selected)showDetails(selected,currentSnapshot.tasks.filter(t=>selected.ids.includes(t.id)));else $('#session-dialog').close();}
     $('#revision').textContent='数据版本 '+currentSnapshot.revision+' · 看板只读';board.hidden=false;
     $('#board-login').hidden=true;$('#board-logout').hidden=protocolVersion!==3;showMessage(message,'');
     clearInterval(clockTimer);clockTimer=setInterval(protocolVersion===3?loadBoard:updateLiveStates,30000);
-  }catch(e){if(epoch!==authEpoch)return;board.hidden=true;currentSnapshot=null;clearReferenceImages();clearInterval(clockTimer);$('#session-dialog').close();$('#session-dialog-content').replaceChildren();$('#pending').replaceChildren();calendar.replaceChildren();if(protocolVersion===3)$('#board-login').hidden=false;showMessage(message,e.message,'error');$('#retry').hidden=false;}
+  }catch(e){if(epoch!==authEpoch)return;board.hidden=true;currentSnapshot=null;clearReferenceImages();expandedPending.clear();clearInterval(clockTimer);$('#session-dialog').close();$('#session-dialog-content').replaceChildren();$('#pending').replaceChildren();calendar.replaceChildren();if(protocolVersion===3)$('#board-login').hidden=false;showMessage(message,e.message,'error');$('#retry').hidden=false;}
 }
-$('#board-login').addEventListener('submit',e=>{e.preventDefault();authEpoch++;token=$('#board-token').value;$('#board-token').value='';loadBoard();});
-$('#board-logout').addEventListener('click',()=>{authEpoch++;token='';currentSnapshot=null;clearInterval(clockTimer);clearReferenceImages();board.hidden=true;$('#board-login').hidden=false;$('#board-logout').hidden=true;$('#session-dialog').close();$('#session-dialog-content').replaceChildren();$('#pending').replaceChildren();calendar.replaceChildren();agenda.replaceChildren();showMessage(message,'已退出。');});
+$('#board-login').addEventListener('submit',e=>{e.preventDefault();authEpoch++;clearReferenceImages();expandedPending.clear();token=$('#board-token').value;$('#board-token').value='';loadBoard();});
+$('#board-logout').addEventListener('click',()=>{authEpoch++;token='';currentSnapshot=null;clearInterval(clockTimer);clearReferenceImages();expandedPending.clear();board.hidden=true;$('#board-login').hidden=false;$('#board-logout').hidden=true;$('#session-dialog').close();$('#session-dialog-content').replaceChildren();$('#pending').replaceChildren();calendar.replaceChildren();agenda.replaceChildren();showMessage(message,'已退出。');});
 
 function updateLiveStates() {
   if (!currentSnapshot) return;

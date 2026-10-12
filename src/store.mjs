@@ -655,7 +655,7 @@ export class ScheduleStore {
     }
   }
 
-  saveUpload({ operationId, originalName, contentType, kind, buffer, role = 'submitter', deduplicate = false }) {
+  saveUpload({ operationId, originalName, contentType, kind, buffer, role = 'submitter', deduplicate = false, requireUnsubmittedOperation = false }) {
     if (this.writeAdmissionControl.isDisabled()) return writeAdmissionFailure();
     if (typeof operationId !== 'string' || !OPERATION_ID.test(operationId)) {
       return { ok: false, status: 422, code: 'INVALID_OPERATION_ID' };
@@ -671,6 +671,10 @@ export class ScheduleStore {
       return { ok: false, status: 415, code: 'UPLOAD_SIGNATURE_MISMATCH' };
     }
     return transaction(this.db, () => {
+      // V3 order submission and upload persistence share this write transaction boundary.
+      if (requireUnsubmittedOperation && this.db.prepare('SELECT 1 FROM operations WHERE operation_id=?').get(operationId)) {
+        return { ok: false, status: 409, code: 'UPLOAD_ORDER_ALREADY_SAVED' };
+      }
       if(deduplicate){
         const sha=createHash('sha256').update(buffer).digest('hex');
         const prior=this.db.prepare('SELECT id,original_name AS name,content_type AS contentType,kind,size,sha256 FROM uploads WHERE operation_id=? AND original_name=? AND content_type=? AND kind=? AND sha256=? AND claimed_task_id IS NULL').get(operationId,safeName(originalName),contentType,kind,sha);

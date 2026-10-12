@@ -465,7 +465,7 @@ export function createHttpApp({
           let originalName=String(request.headers['x-file-name']||'reference');try{originalName=decodeURIComponent(originalName);}catch{}
           const contentType=String(request.headers['content-type']||'').split(';')[0].trim().toLowerCase();
           const buffer=await readBuffer(request,12*1024*1024);
-          const result=store.saveUpload({operationId,originalName,contentType,kind:'image',buffer,role:auth.principal.role,deduplicate:true});
+          const result=store.saveUpload({operationId,originalName,contentType,kind:'image',buffer,role:auth.principal.role,deduplicate:true,requireUnsubmittedOperation:true});
           return sendJson(response,result.status,result);
         }
         if([...url.searchParams].length)return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'});
