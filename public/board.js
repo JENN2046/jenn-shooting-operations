@@ -1,7 +1,7 @@
 import { showMessage, dateKey, mondayOf, minutes, sessionState, layoutSessions } from './common.js?v=ui-20260922';
 
 import {boardView,beijingParts} from './board-model.js';
-import {referenceGallery,clearReferenceImages,retainReferenceImages} from './references.js';
+import {referenceGallery,clearReferenceImages,retainReferenceImages} from './references.js?v=board-references-20261012';
 let protocolVersion=1,token='',authEpoch=0;
 const displayState=(session,tasks)=>protocolVersion===3?session.actualState:sessionState(session,tasks);
 const today=()=>protocolVersion===3?new Date(beijingParts(new Date()).date+'T12:00:00'):new Date();
