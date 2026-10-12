@@ -48,7 +48,7 @@ try{
  // A legitimate management reschedule occurs after the screen was read.
  await page.route('**/api/v3/kiosk/events',async route=>{
   const state=await adminCall('/api/v3/business/state'),item=state.sessions[2],config=state.configs.find(c=>c.active);
-  await adminCall('/api/v3/business/schedule-items/'+item.id+'/reschedule',{operationId:'BROWSER-CONCURRENT-MOVE',scheduleItemId:item.id,resourceId:item.resourceId,plannedStart:item.plannedStart,plannedEnd:item.plannedEnd,expectedScheduleRevision:state.revisions.scheduleRevision,expectedProjectionRevision:state.revisions.projectionRevision,configDigest:config.configDigest});
+  await adminCall('/api/v3/business/schedule-items/'+item.id+'/reschedule',{operationId:'BROWSER-CONCURRENT-MOVE',scheduleItemId:item.id,resourceId:item.resourceId,plannedStart:item.plannedStart,plannedEnd:new Date(Date.parse(item.plannedEnd)-60000).toISOString(),expectedScheduleRevision:state.revisions.scheduleRevision,expectedProjectionRevision:state.revisions.projectionRevision,configDigest:config.configDigest});
   await route.continue();
  },{times:1});
  await page.locator('#action-start').click();await message('排期已变化');assert.equal(count(),4);checks.push('stale schedule version refused after real management mutation');

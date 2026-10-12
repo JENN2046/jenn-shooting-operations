@@ -91,5 +91,6 @@ window.addEventListener('storage',e=>{if(identity&&e.key===pendingKey&&!busy){lo
 try{$('legacy-warning').hidden=localStorage.getItem('jenn.kiosk.offline-queue.v2')===null;}catch{storageBlocked=true;say('浏览器存储不可用，现场操作保持关闭。');}
 const lock=createKioskControlLock({locks:navigator.locks,storage:localStorage,eventTarget:window,ownerId:uid('TAB'),onChange:s=>{controlling=s.controlling;controls();}});lock.start();
 window.addEventListener('pagehide',()=>lock.stop());
+window.addEventListener('pageshow',()=>{lock.start();fresh=false;if(identity&&!busy)refresh();});
 setInterval(()=>{if(identity&&!busy&&navigator.onLine&&!document.hidden)refresh();},15000);
 render();
