@@ -1,3 +1,5 @@
+import { readAgentBusinessFactsV3 } from './agent-business-facts-v3.mjs';
+import { agentCommandDigest } from './jso-agent-api-v1.mjs';
 import { canonicalJsonSchedulingV1, digestCanonicalJsonSchedulingV1 } from './scheduling-contract-v1.mjs';
 import { authorizeCapability, validateTrustedPrincipal } from './authorization-v2.mjs';
 import { normalizeSchedulingConfig, compileSchedulingCalendarDate } from './scheduling-admin-contract-v2.mjs';
@@ -64,6 +66,28 @@ export function createAgentSchedulingServiceV1({ db, proposalStore, application,
     throw new TypeError('trusted database, proposal store, application and write-admission control required');
   }
   return Object.freeze({
+    previewShift({principal, command}) {
+      if (!exact(command,['operationId','scheduleItemId','resourceId','minutes','expectedScheduleRevision','expectedProjectionRevision'])) return denied('INVALID_REQUEST');
+      if (!scoped(principal,[command.resourceId])) return denied('FORBIDDEN');
+      if (!Number.isSafeInteger(command.minutes) || command.minutes===0 || Math.abs(command.minutes)>1440) return denied('SHIFT_MINUTES_INVALID');
+      const row=db.prepare('SELECT planned_start,planned_end,resource_id FROM schedule_items WHERE id=?').get(command.scheduleItemId);
+      if (!row || row.resource_id!==command.resourceId) return denied('SCHEDULE_ITEM_NOT_FOUND');
+      const configRow=activeConfig(db),config=validConfig(configRow);
+      if (!config || config.businessTimeZone!=='Asia/Shanghai') return denied('SCHEDULING_CONFIG_INVALID');
+      const start=new Date(Date.parse(row.planned_start)+command.minutes*60000).toISOString();
+      const end=new Date(Date.parse(row.planned_end)+command.minutes*60000).toISOString();
+      const day=value=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value));
+      if(day(start)!==day(row.planned_start)||day(end)!==day(row.planned_end))return denied('SHIFT_MUST_REMAIN_SAME_DAY');
+      const {minutes,...ids}=command;
+      const result=this.proposeReschedule({principal,command:{...ids,plannedStart:start,plannedEnd:end,configDigest:configRow.config_digest}});
+      return result.ok ? {...result,impact:{movedScheduleItemIds:[command.scheduleItemId],minutes,otherSessionsChanged:0,notifications:'none'}} : result;
+    },
+    proposeReschedule({ principal, command }) {
+      if (!scoped(principal, [command?.resourceId])) return denied('FORBIDDEN');
+      if (typeof application.previewReschedule !== 'function') return denied('PREVIEW_UNAVAILABLE');
+      const result = application.previewReschedule({ principal, command });
+      return result.ok ? { ...result, commandDigest: agentCommandDigest('reschedule', result.command), requiresOwnerConfirmation: true } : result;
+    },
     readState({ principal, command }) {
       if (!businessSchemaReady(db)) return denied('BUSINESS_SCHEMA11_REQUIRED');
       if (!exact(command, ['resourceScope'])) return denied('INVALID_REQUEST');
@@ -77,6 +101,7 @@ export function createAgentSchedulingServiceV1({ db, proposalStore, application,
           buffer_after_minutes AS bufferAfterMinutes,schedule_status AS status,lock_status AS lockStatus
           FROM schedule_items ORDER BY planned_start,id`).all().filter(r => command.resourceScope.includes(r.resourceId));
         return { ok: true, revisions: revisions(db), resources, sessions,
+          ...readAgentBusinessFactsV3(db, command.resourceScope),
           activeConfig: row ? { configVersion: row.config_version, configDigest: row.config_digest, businessTimeZone: config.businessTimeZone } : null,
           writeAdmission: writeAdmissionControl.isDisabled() ? 'disabled' : 'enabled' };
       });

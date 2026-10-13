@@ -1,0 +1,37 @@
+{
+  "name": "JennShootingOperationsCandidate",
+  "displayName": "JSO Schema12 本地候选",
+  "version": "0.0.1",
+  "pluginType": "synchronous",
+  "communication": {
+    "protocol": "stdio",
+    "timeout": 15000
+  },
+  "entryPoint": {
+    "type": "nodejs",
+    "command": "node native-tool.mjs"
+  },
+  "capabilities": {
+    "invocationCommands": [
+      {
+        "description": "读取 resourceScope 内权威订单、五类别、资源、排程与进度。payload_json 为 JSON 字符串。",
+        "commandIdentifier": "read_state"
+      },
+      {
+        "description": "校验改期并返回 before/after 与摘要；不写入。payload_json 必须含原操作 ID、排程 ID、资源、起止时间、两个预期版本和配置摘要。",
+        "commandIdentifier": "propose_reschedule"
+      },
+      {
+        "description": "仅执行独立 Owner 已确认的精确命令。不可自行确认；失败或未知结果不能自动重试。",
+        "commandIdentifier": "reschedule"
+      },
+      {
+        "description": "按原 operationId 核对执行回执；不要生成新 ID 重试。",
+        "commandIdentifier": "read_receipt"
+      }
+    ]
+  },
+  "manifestVersion": "1.0.0",
+  "configSchema": {},
+  "description": "Local candidate only. Fixed loopback JSO Agent boundary, independent assistant identity; no self-approval or memory writes."
+}
