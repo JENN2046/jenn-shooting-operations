@@ -263,6 +263,10 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
       const found = proposalStore.read(proposalId);
       return !found.ok || scoped(principal, found.proposal.resourceScope) ? found : denied('FORBIDDEN');
     },
+    previewReschedule({ command, principal }) {
+      const schema = requireBusinessSchema(); if (schema) return schema;
+      return reschedules.preview(command, principal);
+    },
     reschedule({ command, principal, executionGuard }) {
       const schema = requireBusinessSchema(); if (schema) return schema;
       return reschedules.reschedule(command, principal, { executionGuard });

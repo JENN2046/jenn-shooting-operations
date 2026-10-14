@@ -4,7 +4,7 @@ import { canonicalJsonSchedulingV1 } from './scheduling-contract-v1.mjs';
 
 export const JSO_AGENT_PATH = '/api/v2/agent/tools';
 export const JSO_AGENT_COMMANDS = Object.freeze({
-  read_state: 'readState', preview_calendar: 'previewCalendar',
+  preview_shift: 'previewShift', propose_reschedule: 'proposeReschedule', read_state: 'readState', preview_calendar: 'previewCalendar',
   generate_proposal: 'generateProposal', adopt_proposal: 'adoptProposal',
   reschedule: 'reschedule', read_receipt: 'readReceipt',
 });
@@ -91,7 +91,7 @@ function validGrant(g, subjectId) {
  * Planner principals have the existing viewer capability, not a scheduler credential.
  * A service instance must own a single serialized SQLite connection.
  */
-export function createJsoAgentApplication({ service, identities, claimGrantAttempt, clock = () => new Date() }) {
+export function createJsoAgentApplication({ service, identities, claimGrantAttempt, resolveGrant = () => null, isGrantActive = () => true, clock = () => new Date() }) {
   if (!service || Object.values(JSO_AGENT_COMMANDS).some(k => typeof service[k] !== 'function')
     || !Array.isArray(identities) || identities.length === 0) throw new TypeError('Trusted agent service and identities required');
   const tokens = new Set();
@@ -131,7 +131,10 @@ export function createJsoAgentApplication({ service, identities, claimGrantAttem
         const time = clock().getTime();
         if (!Number.isFinite(time)) return fail('APPROVAL_WINDOW_INVALID');
         grant = identity.grants.find(g => g.action === action && g.commandDigest === digest
-          && time >= Date.parse(g.notBefore) && time < Date.parse(g.expiresAt));
+          && time >= Date.parse(g.notBefore) && time < Date.parse(g.expiresAt))
+          ?? await resolveGrant({subjectId:identity.principal.subjectId,action,commandDigest:digest});
+        if (grant && (!validGrant(grant,identity.principal.subjectId) || grant.action!==action || grant.commandDigest!==digest
+          || time < Date.parse(grant.notBefore) || time >= Date.parse(grant.expiresAt) || !isGrantActive(grant))) grant=null;
         if (!grant) return fail('EXACT_APPROVAL_REQUIRED');
         // Persist the attempt before dispatch. A restart or parallel application instance must
         // observe the same claim and refuse a second dispatch, including after RESULT_UNKNOWN.
@@ -145,7 +148,7 @@ export function createJsoAgentApplication({ service, identities, claimGrantAttem
       try {
         const executionGuard = () => {
           const time = clock().getTime();
-          return !write || (Number.isFinite(time) && time >= Date.parse(grant.notBefore) && time < Date.parse(grant.expiresAt));
+          return !write || (isGrantActive(grant) && Number.isFinite(time) && time >= Date.parse(grant.notBefore) && time < Date.parse(grant.expiresAt));
         };
         const result = await service[JSO_AGENT_COMMANDS[action]]({ command, principal: identity.principal, executionGuard });
         if (typeof result?.ok !== 'boolean') return fail(write ? 'RESULT_UNKNOWN' : 'SERVICE_RESULT_INVALID');

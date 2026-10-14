@@ -50,14 +50,15 @@ export function createSqliteScheduleRescheduleStoreV1({ db, now, refreshProjecti
     return { ok: true, receipt };
   }
   return Object.freeze({ readOperation,
-    reschedule(input, principal, { executionGuard = () => true } = {}) {
+    preview(input, principal) { return this.reschedule(input, principal, { previewOnly: true }); },
+    reschedule(input, principal, { executionGuard = () => true, previewOnly = false } = {}) {
       if (typeof executionGuard !== 'function') return denied('INVALID_EXECUTION_GUARD');
       const normalized = normalizeScheduleRescheduleCommandV1(input);
       if (!normalized.ok) return normalized;
       const { command, commandDigest } = normalized;
-      if (!allowed(principal, command.resourceId)) return denied('RESOURCE_FORBIDDEN');
+      if (!(previewOnly ? validateTrustedPrincipal(principal).ok && authorizeCapability({ principal, capability: 'readSchedule', resourceId: command.resourceId }).allowed : allowed(principal, command.resourceId))) return denied('RESOURCE_FORBIDDEN');
       if (writeAdmission() !== true) return denied('WRITE_ADMISSION_CLOSED');
-      db.exec('BEGIN IMMEDIATE');
+      db.exec(previewOnly ? 'BEGIN DEFERRED' : 'BEGIN IMMEDIATE');
       try {
         const result = apply();
         if (result.ok && executionGuard() !== true) {
@@ -72,6 +73,7 @@ export function createSqliteScheduleRescheduleStoreV1({ db, now, refreshProjecti
         assertSchedulingQuiescenceV1({ db, now });
         assertGf15CommandPacketV1(db, command, null);
         const prior = db.prepare('SELECT command_digest, actor_id FROM schedule_reschedule_operations WHERE operation_id = ?').get(command.operationId);
+        if (prior && previewOnly) return denied('IDEMPOTENCY_KEY_REUSE');
         if (prior) return prior.command_digest === commandDigest && prior.actor_id === principal.subjectId
           ? { ...readOperation(command.operationId, principal), exactReplay: true } : denied('IDEMPOTENCY_KEY_REUSE');
         // Prevent reusing a key owned by another canonical operation family.
@@ -120,6 +122,7 @@ export function createSqliteScheduleRescheduleStoreV1({ db, now, refreshProjecti
         const after = { ...state(row), plannedStart: command.plannedStart, plannedEnd: command.plannedEnd,
           bufferAfterMinutes: buffer.bufferAfterMinutes, bufferSource: active.config_version };
         if (canonicalJsonSchedulingV1(after) === canonicalJsonSchedulingV1(state(row))) return denied('RESCHEDULE_NO_CHANGE');
+        if (previewOnly) return { ok: true, command, before: state(row), after, validation: 'CURRENT_STATE_RECHECKED_ON_EXECUTION' };
         const nextSchedule = counters.schedule_revision + 1, nextProjection = counters.projection_revision + 1;
         db.prepare(`UPDATE schedule_items SET planned_start = ?, planned_end = ?, buffer_after_minutes = ?, buffer_source = ?, business_updated_at = ? WHERE id = ?`).run(after.plannedStart, after.plannedEnd, after.bufferAfterMinutes, after.bufferSource, at, row.id);
         const changed = db.prepare(`UPDATE revision_counters SET schedule_revision = ?, projection_revision = ?, updated_at = ? WHERE id = 1 AND schedule_revision = ? AND projection_revision = ?`).run(nextSchedule, nextProjection, at, counters.schedule_revision, counters.projection_revision).changes;
