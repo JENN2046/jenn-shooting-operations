@@ -189,6 +189,7 @@ export function createOperationsServer({
   kioskAllowedBriefHosts = [],
   schedulingAuthenticate,
   schedulingAllowedBriefHosts = [],
+  conversationBoundaryFactory,
   kioskOnlineRuntime,
   writeAdmissionMode = 'enabled',
 }) {
@@ -262,14 +263,18 @@ export function createOperationsServer({
         clock: effectiveClock,
         allowedBriefHosts: schedulingAllowedBriefHosts,
       });
-  const server = createServer(createHttpApp({
+  let boundary;
+  try { boundary = conversationBoundaryFactory?.({store,ownerAuthenticate:schedulingAuthenticate,clock:effectiveClock}); }
+  catch (error) { store.close(); throw error; }
+  const ordinary = createHttpApp({
     store,
     tokens,
     kiosk,
     kioskOnline,
     scheduling,
     writeAdmissionControl,
-  }));
+  });
+  const server = createServer((req,res) => boundary && new URL(req.url,'http://localhost').pathname.startsWith('/api/v2/agent/') ? boundary.handler(req,res) : ordinary(req,res));
   const cleanupTimer = !coreAccepted && cleanupIntervalMs > 0
     ? setInterval(() => {
         try {
@@ -343,7 +348,7 @@ export function createKioskRuntimeOptionsFromEnv(env = process.env) {
 }
 
 const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (invokedDirectly) {
+export function startOperationsFromEnv({conversationBoundaryFactory} = {}) {
   const host = process.env.HOST || '127.0.0.1';
   const port = Number(process.env.PORT || 3800);
   let databasePath = process.env.DATABASE_PATH || './data/shooting-operations.sqlite';
@@ -372,6 +377,7 @@ if (invokedDirectly) {
     ...kioskRuntimeOptions,
     ...createBusinessRuntimeOptionsFromEnv(process.env),
     ...createKioskOnlineOptionsFromEnv(process.env),
+    conversationBoundaryFactory,
   });
 
   const enableWriteAdmission = () => {
@@ -390,4 +396,6 @@ if (invokedDirectly) {
   server.listen(port, host, () => {
     console.log(`Jenn Shooting Operations listening on ${host}:${port}`);
   });
+  return server;
 }
+if (invokedDirectly) startOperationsFromEnv();
