@@ -44,15 +44,16 @@ export function createConversationBoundary({store,identities,ownerAuthenticate,c
     return {ok:true,operationId:command.operationId,commandDigest:digest};
   }
   async function handler(req,res){
+    const send=(status,result)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(result));};
+    try{
     if(req.url==='/api/v2/agent/owner-session'&&req.method==='GET'){
       const principal=await ownerAuthenticate(req);const ok=validateTrustedPrincipal(principal).ok&&principal.role==='administrator';
       res.writeHead(ok?200:403,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(ok?{ok:true,subjectId:principal.subjectId,role:principal.role,resourceIds:[...principal.resourceIds]}:{ok:false,code:'OWNER_REQUIRED'}));return;
     }
-    if(req.url!=='/api/v2/agent/owner-delegation')return agentHandler(req,res);
-    const send=(status,result)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(result));};
+    if(req.url!=='/api/v2/agent/owner-delegation')return await agentHandler(req,res);
     if(req.method!=='POST')return send(405,{ok:false,code:'METHOD_NOT_ALLOWED'});
-    try{
-      let raw='';for await(const c of req){raw+=c;if(Buffer.byteLength(raw)>32768)return send(413,{ok:false,code:'REQUEST_TOO_LARGE'});}
+      const chunks=[];let bytes=0;for await(const c of req){const chunk=Buffer.isBuffer(c)?c:Buffer.from(c);bytes+=chunk.length;if(bytes>32768)return send(413,{ok:false,code:'REQUEST_TOO_LARGE'});chunks.push(chunk);}
+      const raw=Buffer.concat(chunks).toString('utf8');
       const result=await ownerCall(req.headers.authorization,JSON.parse(raw));send(result.code==='OWNER_REQUIRED'?403:200,result);
     }catch{send(503,{ok:false,code:'SERVICE_UNAVAILABLE'});}
   }
