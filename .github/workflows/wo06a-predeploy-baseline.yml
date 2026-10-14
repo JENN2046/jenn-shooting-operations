@@ -56,49 +56,58 @@ jobs:
             exit 1
           fi
 
-      - name: Empty-volume container startup
+      - name: Protected default path refuses empty-volume startup
         shell: bash
         run: |
           set -euo pipefail
-          docker volume create jso_wo06a_data >/dev/null
-          docker run -d --name jso-wo06a             -p 127.0.0.1:3800:3800             -v jso_wo06a_data:/app/data             -e VIEWER_TOKEN=viewer-token-wo06a-000000000001             -e SUBMITTER_TOKEN=submitter-token-wo06a-000000001             -e SCHEDULER_TOKEN=scheduler-token-wo06a-000000001             -e ADMIN_TOKEN=admin-token-wo06a-00000000001             jenn-shooting-operations:wo06a
+          name="jso-protected-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker volume create "$name" >/dev/null
+          docker run -d --name "$name" -v "$name:/app/data" jenn-shooting-operations:wo06a
+          code="$(timeout 30 docker wait "$name")"
+          test "$code" != "0"
+          docker logs "$name" > protected-startup.log 2>&1
+          grep -F 'G3_AUTHORITY_RECONCILIATION_STARTUP_BLOCKED' protected-startup.log
+          if grep -F 'Jenn Shooting Operations listening' protected-startup.log; then exit 1; fi
+          docker run --rm --entrypoint node -v "$name:/app/data:ro" jenn-shooting-operations:wo06a -e "const fs=require('node:fs');if(fs.readdirSync('/app/data').length)throw Error('protected startup wrote data');"
 
-          for attempt in $(seq 1 30); do
-            if node -e "fetch('http://127.0.0.1:3800/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
-              break
-            fi
-            if [ "$attempt" -eq 30 ]; then
-              docker logs jso-wo06a >&2 || true
-              exit 1
-            fi
-            sleep 1
-          done
-
-          uid="$(docker exec jso-wo06a id -u)"
-          test "$uid" != "0"
-          docker exec jso-wo06a test -f /app/data/shooting-operations.sqlite
-
-      - name: Same-volume restart
+      - name: Ordinary non-production empty-volume startup and same-volume persistence
         shell: bash
         run: |
           set -euo pipefail
-          docker rm -f jso-wo06a >/dev/null
-          docker run -d --name jso-wo06a-restart             -p 127.0.0.1:3800:3800             -v jso_wo06a_data:/app/data             -e VIEWER_TOKEN=viewer-token-wo06a-000000000001             -e SUBMITTER_TOKEN=submitter-token-wo06a-000000001             -e SCHEDULER_TOKEN=scheduler-token-wo06a-000000001             -e ADMIN_TOKEN=admin-token-wo06a-00000000001             jenn-shooting-operations:wo06a
+          name="jso-ordinary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker volume create "$name" >/dev/null
+          start() {
+            docker run -d --name "$name" -v "$name:/app/data" \
+              -e DATABASE_PATH=/app/data/ci-ordinary.sqlite \
+              -e KIOSK_SERVICE_CONTEXT=WO03_ISOLATED_ACCEPTANCE \
+              -e VIEWER_TOKEN=viewer-token-wo06a-000000000001 \
+              -e SUBMITTER_TOKEN=submitter-token-wo06a-000000001 \
+              -e SCHEDULER_TOKEN=scheduler-token-wo06a-000000001 \
+              -e ADMIN_TOKEN=admin-token-wo06a-00000000001 \
+              jenn-shooting-operations:wo06a
+            for attempt in $(seq 1 30); do
+              if docker exec "$name" node -e "fetch('http://127.0.0.1:3800/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then return; fi
+              sleep 1
+            done
+            docker logs "$name" >&2
+            return 1
+          }
+          start
+          test "$(docker exec "$name" id -u)" != "0"
+          docker exec "$name" test -f /app/data/ci-ordinary.sqlite
+          docker stop "$name" >/dev/null
+          docker rm "$name" >/dev/null
+          # Offline synthetic state in this disposable ordinary database only.
+          docker run --rm --entrypoint node -v "$name:/app/data" jenn-shooting-operations:wo06a -e "const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync('/app/data/ci-ordinary.sqlite');db.exec(\"INSERT INTO audit_log(action,role,entity_id,revision,result,created_at) VALUES ('ci.persistence','system','ordinary-restart-proof',0,'synthetic','2026-10-14T00:00:00.000Z')\");db.close();"
+          start
+          docker exec "$name" node -e "const {DatabaseSync}=require('node:sqlite');const db=new DatabaseSync('/app/data/ci-ordinary.sqlite',{readOnly:true});if(db.prepare(\"SELECT entity_id FROM audit_log WHERE action='ci.persistence'\").get().entity_id!=='ordinary-restart-proof')throw Error('persistence lost');if(!db.prepare('SELECT COUNT(*) AS n FROM schema_migrations').get().n)throw Error('schema missing');db.close();"
 
-          for attempt in $(seq 1 30); do
-            if node -e "fetch('http://127.0.0.1:3800/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
-              exit 0
-            fi
-            if [ "$attempt" -eq 30 ]; then
-              docker logs jso-wo06a-restart >&2 || true
-              exit 1
-            fi
-            sleep 1
-          done
-
-      - name: Cleanup
+      - name: Cleanup only this run's disposable resources
         if: always()
         shell: bash
         run: |
-          docker rm -f jso-wo06a jso-wo06a-restart >/dev/null 2>&1 || true
-          docker volume rm -f jso_wo06a_data >/dev/null 2>&1 || true
+          for kind in protected ordinary; do
+            name="jso-${kind}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            docker rm -f "$name" >/dev/null 2>&1 || true
+            docker volume rm "$name" >/dev/null 2>&1 || true
+          done

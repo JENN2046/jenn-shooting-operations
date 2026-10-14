@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { link, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { link, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -152,4 +152,25 @@ test('compose and image preserve fail-closed reconciliation defaults', async () 
   assert.match(compose, /WRITE_ADMISSION_MODE: \$\{WRITE_ADMISSION_MODE:-disabled\}/);
   assert.match(compose, /ORPHAN_CLEANUP_MODE: \$\{ORPHAN_CLEANUP_MODE:-disabled\}/);
   assert.match(dockerfile, /g3-authority-binding-reconciliation\.r1\.json/);
+});
+
+test('ordinary absent path remains absent after gate evaluation', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'jso-gate-no-write-'));
+  try {
+    const databasePath = join(root, 'absent.sqlite');
+    assert.deepEqual(assertG3AuthorityReconciliationStartupAllowed({databasePath,reconciliationRecord:record}), {allowed:true,reason:'NON_PRODUCTION_DATABASE_PATH'});
+    assert.deepEqual(await readdir(root), []);
+  } finally { await rm(root, {recursive:true,force:true}); }
+});
+
+test('protected rejection does not create or change database or sidefiles', async () => {
+  const databasePath = '/app/data/shooting-operations.sqlite';
+  const paths = ['', '-wal', '-shm', '-journal'].map(suffix => databasePath + suffix);
+  const metadata = async () => Promise.all(paths.map(async path => {
+    try { const s = await stat(path); return [s.ino,s.size,s.mtimeMs]; }
+    catch (error) { if(error.code === 'ENOENT') return null; throw error; }
+  }));
+  const before = await metadata();
+  assert.throws(() => assertG3AuthorityReconciliationStartupAllowed({databasePath,reconciliationRecord:record}), /G3_AUTHORITY_RECONCILIATION_STARTUP_BLOCKED/);
+  assert.deepEqual(await metadata(), before);
 });
