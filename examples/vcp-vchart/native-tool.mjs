@@ -30,7 +30,8 @@ export function fixedLocalJsoPort({endpoint,token,fetchImpl=fetch}) {
 // Same isolated stdio contract as the existing JennShootingOperations plugin.
 if(process.argv[1] && import.meta.url === (await import('node:url')).pathToFileURL(process.argv[1]).href) {
   try {
-    let text='';for await(const chunk of process.stdin){text+=chunk;if(Buffer.byteLength(text)>270336)throw new Error('too large');}
+    const chunks=[];let bytes=0;for await(const chunk of process.stdin){bytes+=chunk.length;if(bytes>270336)throw new Error('too large');chunks.push(chunk);}
+    const text=Buffer.concat(chunks).toString('utf8');
     const {parseJsoAgentEnvelope}=await import('../../src/jso-agent-api-v1.mjs');
     const parsed=parseJsoAgentEnvelope(text);
     if(!parsed.ok)throw new Error('invalid envelope');
