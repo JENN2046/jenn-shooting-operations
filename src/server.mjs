@@ -269,15 +269,16 @@ export function createOperationsServer({
   let boundary;
   try { boundary = conversationBoundaryFactory?.({store,ownerAuthenticate:schedulingAuthenticate,clock:effectiveClock}); }
   catch (error) { store.close(); throw error; }
-  const ordinary = createHttpApp({
+  const app = createHttpApp({
     store,
     tokens,
     kiosk,
     kioskOnline,
     scheduling,
+    conversationBoundary: boundary,
     writeAdmissionControl,
   });
-  const server = createServer((req,res) => boundary && new URL(req.url,'http://localhost').pathname.startsWith('/api/v2/agent/') ? boundary.handler(req,res) : ordinary(req,res));
+  const server = createServer(app);
   const cleanupTimer = !coreAccepted && cleanupIntervalMs > 0
     ? setInterval(() => {
         try {

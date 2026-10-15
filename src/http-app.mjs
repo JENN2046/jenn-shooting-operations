@@ -244,6 +244,7 @@ export function createHttpApp({
   kiosk = null,
   kioskOnline = null,
   scheduling = null,
+  conversationBoundary = null,
   writeAdmissionMode = 'enabled',
   writeAdmissionControl,
 }) {
@@ -290,6 +291,10 @@ export function createHttpApp({
           ok: false,
           code: 'WRITE_ADMISSION_DISABLED',
         });
+      }
+
+      if (conversationBoundary && url.pathname.startsWith('/api/v2/agent/')) {
+        return await conversationBoundary.handler(request, response);
       }
 
       if (request.method === 'GET' && url.pathname === '/healthz') {
