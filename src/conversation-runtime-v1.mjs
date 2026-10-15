@@ -22,7 +22,8 @@ export function conversationFactoryFromEnv(env=process.env){
   createBusinessRuntimeAuthV1({identities:businessIdentities});
  } catch { throw Error('CONVERSATION_BUSINESS_AUTH_REQUIRED'); }
  // Compare the same UTF-8 bytes used by both authenticators, across every role/scope.
- const businessTokens=businessIdentities.map(({token})=>Buffer.from(token));
+ const businessTokens=[...businessIdentities.map(({token})=>token),
+  env.SCHEDULER_TOKEN,env.ADMIN_TOKEN].filter(token=>typeof token==='string').map(token=>Buffer.from(token));
  if(identities.some(identity=>typeof identity?.token==='string'
    && businessTokens.some(token=>token.equals(Buffer.from(identity.token))))) {
   throw Error('CONVERSATION_CREDENTIAL_OVERLAP');
@@ -32,7 +33,8 @@ export function conversationFactoryFromEnv(env=process.env){
   return createConversationBoundary({store,identities,ownerAuthenticate,clock});
  };
  factories.set(factory, {agents:identityDigest(env.JSO_AGENT_IDENTITIES_JSON),
-  business:identityDigest(env.JSO_BUSINESS_IDENTITIES_JSON)});
+  business:identityDigest(env.JSO_BUSINESS_IDENTITIES_JSON),
+  legacyScheduler:identityDigest(env.SCHEDULER_TOKEN),legacyAdmin:identityDigest(env.ADMIN_TOKEN)});
  return factory;
 }
 
@@ -49,6 +51,8 @@ export function assertConversationStartupBinding({startup, factory, ownerAuthent
  if (!factories.has(factory)
    || factories.get(factory).agents !== identityDigest(env.JSO_AGENT_IDENTITIES_JSON)
    || factories.get(factory).business !== identityDigest(env.JSO_BUSINESS_IDENTITIES_JSON)
+   || factories.get(factory).legacyScheduler !== identityDigest(env.SCHEDULER_TOKEN)
+   || factories.get(factory).legacyAdmin !== identityDigest(env.ADMIN_TOKEN)
    || !matchesBusinessRuntimeConfig(ownerAuthenticate, env)) {
   throw Error('G3_CORE_ACCEPTANCE_CONVERSATION_CONFIG');
  }

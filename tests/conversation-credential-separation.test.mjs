@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {conversationFactoryFromEnv,assertConversationStartupBinding} from '../src/conversation-runtime-v1.mjs';
 import {createBusinessRuntimeOptionsFromEnv} from '../src/business-runtime-auth-v1.mjs';
+import {createAuthorizer} from '../src/auth.mjs';
 
 const token=label=>label.padEnd(40,'x');
 const business=(credential,role='administrator')=>({token:credential,subjectId:role,role,resourceIds:['OWNER-R']});
@@ -25,6 +26,30 @@ test('overlap is checked using authentication bytes, including UTF-8 replacement
  const env=config([business(token('shared')+'\ud800')],[agent(token('shared')+'\ufffd')]);
  assert.throws(()=>conversationFactoryFromEnv(env),/CONVERSATION_CREDENTIAL_OVERLAP/);
 });
+
+for(const key of ['SCHEDULER_TOKEN','ADMIN_TOKEN']){
+ test(`conversation rejects agent credentials shared with legacy ${key}`,()=>{
+  const credential=token('agent');
+  const env=config([business(token('owner'))],[agent(credential)]);
+  const legacy=createAuthorizer({[key==='ADMIN_TOKEN'?'administrator':'scheduler']:credential});
+  assert.equal(legacy({headers:{authorization:'Bearer '+credential}},'scheduler').allowed,true);
+  for(const [agentToken,legacyToken] of [[credential,credential],[credential+'\ud800',credential+'\ufffd']]){
+   assert.throws(()=>conversationFactoryFromEnv({...env,[key]:legacyToken,
+     JSO_AGENT_IDENTITIES_JSON:JSON.stringify([agent(agentToken)])}),
+     {message:'CONVERSATION_CREDENTIAL_OVERLAP'});
+  }
+  assert.equal(typeof conversationFactoryFromEnv({...env,[key]:token('separate-legacy')}),'function');
+ });
+
+ test(`startup rejects a factory checked before legacy ${key} changed`,()=>{
+  const env=config([business(token('owner'))],[agent(token('agent'))]);
+  const factory=conversationFactoryFromEnv(env);
+  const {schedulingAuthenticate:ownerAuthenticate}=createBusinessRuntimeOptionsFromEnv(env);
+  assert.throws(()=>assertConversationStartupBinding({
+    startup:{reason:'PROSPECTIVE_CORE_ACCEPTANCE',integrations:'native-vcp-conversation-v1'},
+    factory,ownerAuthenticate,env:{...env,[key]:token('agent')}}),/CONVERSATION_CONFIG/);
+ });
+}
 
 test('factory requires valid explicit business identities to establish separation',()=>{
  const env=config([business(token('owner'))],[agent(token('agent'))]);

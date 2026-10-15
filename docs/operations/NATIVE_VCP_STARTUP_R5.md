@@ -30,6 +30,9 @@ the existing per-command owner delegation remains required.
 The conversation factory rejects preconfigured nonempty `grants` in agent identities;
 omit `grants` or use an empty array. Static grants supported by other agent compositions
 cannot substitute for live owner delegation in R5.
+Agent credentials must also be distinct from business identities and the legacy
+`SCHEDULER_TOKEN`/`ADMIN_TOKEN`, so the schema11 composition cannot bypass delegation
+through the legacy snapshot endpoint.
 
 The JSO boundary is HTTP behind the trusted ToolBox connection. R5 does not independently
 prove that a remote client used a physical keypress or WebSocket: the reviewed
