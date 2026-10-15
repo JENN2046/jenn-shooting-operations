@@ -60,6 +60,17 @@ test('factory requires valid explicit business identities to establish separatio
  }
 });
 
+test('conversation refuses legacy Basic kiosk configuration without reading its password file',()=>{
+ const env=config([business(token('owner'))],[agent(token('agent'))]);
+ for(const path of ['/nonexistent/legacy-kiosk.json','  /nonexistent/legacy-kiosk.json  ']){
+  assert.throws(()=>conversationFactoryFromEnv({...env,KIOSK_AUTH_CONFIG_PATH:path}),
+   {message:'CONVERSATION_LEGACY_KIOSK_CONFLICT'});
+ }
+ for(const path of [undefined,'','  ']){
+  assert.equal(typeof conversationFactoryFromEnv({...env,KIOSK_AUTH_CONFIG_PATH:path}),'function');
+ }
+});
+
 for(const mode of ['planner','executor'])test(`conversation rejects ${mode} credentials shared with online kiosk`,()=>{
  const credential=token('agent');
  const env={...config([business(token('owner'))],[agent(credential,mode)]),

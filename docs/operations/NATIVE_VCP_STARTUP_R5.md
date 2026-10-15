@@ -35,6 +35,11 @@ Agent credentials must also be distinct from business identities and the legacy
 through the legacy snapshot endpoint.
 Outside R5, when online Kiosk is enabled alongside conversation, its identities are
 validated and their tokens must also be distinct from every agent credential.
+Conversation and the legacy Basic-auth kiosk are not a supported composition.
+A nonblank `KIOSK_AUTH_CONFIG_PATH` rejects conversation startup before reading
+the password file; direct server composition also rejects a legacy kiosk
+authenticator alongside a conversation factory before opening the store.
+Run the legacy kiosk separately; no password collision scanning is added.
 
 The JSO boundary is HTTP behind the trusted ToolBox connection. R5 does not independently
 prove that a remote client used a physical keypress or WebSocket: the reviewed

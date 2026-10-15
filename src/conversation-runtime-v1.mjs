@@ -8,6 +8,8 @@ const factories = new WeakMap();
 const identityDigest = value => createHash('sha256').update(value ?? '').digest('hex');
 
 export function conversationFactoryFromEnv(env=process.env){
+ if(typeof env.KIOSK_AUTH_CONFIG_PATH==='string' && env.KIOSK_AUTH_CONFIG_PATH.trim())
+  throw Error('CONVERSATION_LEGACY_KIOSK_CONFLICT');
  if(env.JSO_BUSINESS_RUNTIME!=='enabled')throw Error('CONVERSATION_BUSINESS_AUTH_REQUIRED');
  let identities;try{identities=JSON.parse(env.JSO_AGENT_IDENTITIES_JSON);}catch{throw Error('CONVERSATION_AGENT_IDENTITIES_REQUIRED');}
  if(!Array.isArray(identities)||!identities.length)throw Error('CONVERSATION_AGENT_IDENTITIES_REQUIRED');

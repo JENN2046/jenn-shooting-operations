@@ -194,6 +194,8 @@ export function createOperationsServer({
   kioskOnlineRuntime,
   writeAdmissionMode = 'enabled',
 }) {
+  if(conversationBoundaryFactory!==undefined && kioskAuthenticate!==undefined)
+    throw new Error('CONVERSATION_LEGACY_KIOSK_CONFLICT');
   if(kioskOnlineRuntime!==undefined){
     requireKioskOnlineRuntimeV3(kioskOnlineRuntime);
     if(kioskAuthenticate!==undefined||kioskServiceBinding?.mode!=='DISABLED')throw new Error('KIOSK_V3_LEGACY_RUNTIME_CONFLICT');

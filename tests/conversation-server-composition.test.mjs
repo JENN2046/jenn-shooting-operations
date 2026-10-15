@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,rmSync} from 'node:fs';
+import {mkdtempSync,rmSync,readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
@@ -10,6 +10,14 @@ import {createOperationsServer} from '../src/server.mjs';
 import {createBusinessRuntimeOptionsFromEnv} from '../src/business-runtime-auth-v1.mjs';
 import {conversationFactoryFromEnv} from '../src/server-conversation.mjs';
 const env={JSO_BUSINESS_RUNTIME:'enabled',JSO_BUSINESS_IDENTITIES_JSON:JSON.stringify([{token:'owner'.padEnd(40,'x'),subjectId:'synthetic-owner',role:'administrator',resourceIds:['R']}]),JSO_AGENT_IDENTITIES_JSON:JSON.stringify([{token:'agent'.padEnd(40,'x'),subjectId:'synthetic-agent',mode:'executor',resourceIds:['R']}])};
+test('direct composition rejects legacy kiosk before opening any store',t=>{
+ const root=mkdtempSync(join(tmpdir(),'jso-conversation-legacy-'));
+ t.after(()=>rmSync(root,{recursive:true,force:true}));
+ assert.throws(()=>createOperationsServer({databasePath:join(root,'db.sqlite'),
+  kioskAuthenticate:()=>null,conversationBoundaryFactory:conversationFactoryFromEnv(env)}),
+  {message:'CONVERSATION_LEGACY_KIOSK_CONFLICT'});
+ assert.deepEqual(readdirSync(root),[]);
+});
 test('opt-in composition uses same initialized store and normal verifier; no token leaks',async t=>{
  const factory=conversationFactoryFromEnv(env);let observed;
  const runtime=createBusinessRuntimeOptionsFromEnv(env);
