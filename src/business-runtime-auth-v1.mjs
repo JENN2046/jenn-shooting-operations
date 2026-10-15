@@ -1,5 +1,12 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { createTrustedPrincipal } from './authorization-v2.mjs';
+
+const configBindings = new WeakMap();
+const configDigest = value => createHash('sha256').update(value ?? '').digest('hex');
+export function matchesBusinessRuntimeConfig(authenticate, env) {
+  return env.JSO_BUSINESS_RUNTIME === 'enabled'
+    && configBindings.get(authenticate) === configDigest(env.JSO_BUSINESS_IDENTITIES_JSON);
+}
 
 // Explicit server-side identities; never derive role/scope from browser input.
 export function createBusinessRuntimeAuthV1({ identities }) {
@@ -27,5 +34,7 @@ export function createBusinessRuntimeOptionsFromEnv(env) {
   let identities;
   try { identities = JSON.parse(env.JSO_BUSINESS_IDENTITIES_JSON); }
   catch { throw new TypeError('Explicit business identities required'); }
-  return { schedulingAuthenticate: createBusinessRuntimeAuthV1({ identities }) };
+  const schedulingAuthenticate = createBusinessRuntimeAuthV1({ identities });
+  configBindings.set(schedulingAuthenticate, configDigest(env.JSO_BUSINESS_IDENTITIES_JSON));
+  return { schedulingAuthenticate };
 }

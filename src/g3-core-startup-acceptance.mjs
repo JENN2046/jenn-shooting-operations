@@ -19,6 +19,7 @@ const ajv = new Ajv({ strict: true, allErrors: false });
 addFormats(ajv);
 const valid = ajv.compile(JSON.parse(readFileSync(SCHEMA, 'utf8')));
 const validV4 = ajv.compile(JSON.parse(readFileSync(new URL('../contracts/g3-forward-reconciliation-exception.r4.schema.json',import.meta.url),'utf8')));
+const validV5 = ajv.compile(JSON.parse(readFileSync(new URL('../contracts/g3-forward-reconciliation-exception.r5.schema.json',import.meta.url),'utf8')));
 const fail = code => { throw new Error(`G3_CORE_ACCEPTANCE_${code}`); };
 const need = (value, code) => { if (!value) fail(code); };
 export const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -86,14 +87,19 @@ function jsonMaterial(name) {
 function exact(value, keys) {
   need(value && canonical(Object.keys(value).sort()) === canonical(keys.sort()), 'RECORD_FIELDS');
 }
-export function runtimeConfigDigest(env = process.env) {
+export function runtimeConfigDigest(env = process.env, version = 4) {
   const keys = ['HOST','PORT','UPLOAD_ROOT','VIEWER_TOKEN','SUBMITTER_TOKEN','SCHEDULER_TOKEN','ADMIN_TOKEN',
     'JSO_BUSINESS_RUNTIME','JSO_BUSINESS_IDENTITIES_JSON','KIOSK_SERVICE_CONTEXT',
     'JSO_KIOSK_ONLINE_RUNTIME','JSO_KIOSK_ONLINE_IDENTITIES_JSON'];
-  return digest(canonical(Object.fromEntries(keys.map(k => [k, env[k] ?? null]))));
+  // Preserve R3/R4 digest semantics. R5 additionally binds the exact agent configuration
+  // and the certified composition; raw identity material is never returned or stored.
+  if (version === 5) keys.push('JSO_AGENT_IDENTITIES_JSON');
+  const values = Object.fromEntries(keys.map(k => [k, env[k] ?? null]));
+  if (version === 5) values.conversationComposition = 'native-vcp-conversation-v1';
+  return digest(canonical(values));
 }
 export function validateCoreRecord(record, { now = Date.now() } = {}) {
-  need((record?.version===4?validV4:valid)(record), 'RECORD_INVALID');
+  need((record?.version===5?validV5:record?.version===4?validV4:valid)(record), 'RECORD_INVALID');
   const start = Date.parse(record.window.start), end = Date.parse(record.window.end);
   need(start < end && Date.parse(record.ownerApprovedAt) <= now, 'WINDOW');
   if (record.state === 'PREPARED') {
@@ -263,7 +269,7 @@ export function loadCoreAcceptance(databasePath) {
     && installed.runtimeConfigSha256 === record.policy.runtimeConfigSha256, 'INSTALLATION_BINDING');
   // Image/host/mount identity is an administrator attestation, not container self-report.
   need(sourceDigest() === record.release.sourceSha256, 'CODE_CHANGED');
-  need(runtimeConfigDigest() === record.policy.runtimeConfigSha256, 'CONFIG_CHANGED');
+  need(runtimeConfigDigest(process.env, record.version) === record.policy.runtimeConfigSha256, 'CONFIG_CHANGED');
   need(process.env.KIOSK_SERVICE_CONTEXT === 'PROD11_PRODUCTION'
     && process.env.JSO_BUSINESS_RUNTIME === 'enabled'
     && process.env.ORPHAN_CLEANUP_MODE === 'disabled', 'CORE_SCOPE');
@@ -271,5 +277,5 @@ export function loadCoreAcceptance(databasePath) {
   validateCoreUploadRoot(record.target);
   validateCoreDatabase(record, databasePath);
   return Object.freeze({ allowed: true, reason: 'PROSPECTIVE_CORE_ACCEPTANCE',
-    prepared: state === 'PREPARED', target: Object.freeze(record.target), acceptanceId: record.acceptanceId });
+    prepared: state === 'PREPARED', integrations: record.policy.integrations, target: Object.freeze(record.target), acceptanceId: record.acceptanceId });
 }

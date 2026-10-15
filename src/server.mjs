@@ -1,3 +1,4 @@
+import {assertConversationStartupBinding} from './conversation-runtime-v1.mjs';
 import {createKioskOnlineOptionsFromEnv,requireKioskOnlineRuntimeV3} from './kiosk-online-runtime-v3.mjs';
 import {createKioskOnlineV3} from './kiosk-online-v3.mjs';
 import { createKioskServiceBindingV1, requireKioskServiceBindingV1, assertKioskContextIdentityV1 } from './kiosk-service-context-v1.mjs';
@@ -199,6 +200,8 @@ export function createOperationsServer({
   }
   const startup = assertG3AuthorityReconciliationStartupAllowed({ databasePath });
   const coreAccepted = startup.reason === 'PROSPECTIVE_CORE_ACCEPTANCE';
+  assertConversationStartupBinding({startup, factory:conversationBoundaryFactory,
+    ownerAuthenticate:schedulingAuthenticate, kioskOnlineRuntime});
   if (coreAccepted && (orphanCleanupMode !== 'disabled'
       || kioskAuthenticate !== undefined || kioskServiceBinding?.mode !== 'DISABLED'
       || !schedulingAuthenticate || (startup.prepared && writeAdmissionMode !== 'disabled'))) {
