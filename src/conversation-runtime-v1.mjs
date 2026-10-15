@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import {createConversationBoundary} from './jso-conversation-boundary-v1.mjs';
 import {createBusinessRuntimeAuthV1,matchesBusinessRuntimeConfig} from './business-runtime-auth-v1.mjs';
+import {assertValidJsoAgentIdentities} from './jso-agent-api-v1.mjs';
 
 const factories = new WeakMap();
 const identityDigest = value => createHash('sha256').update(value ?? '').digest('hex');
@@ -14,6 +15,7 @@ export function conversationFactoryFromEnv(env=process.env){
    && (!Array.isArray(identity.grants)||identity.grants.length!==0))) {
   throw Error('CONVERSATION_STATIC_GRANTS_FORBIDDEN');
  }
+ assertValidJsoAgentIdentities(identities);
  let businessIdentities;
  try {
   businessIdentities=JSON.parse(env.JSO_BUSINESS_IDENTITIES_JSON);

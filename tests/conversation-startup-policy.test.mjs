@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync, rmSync} from 'node:fs';
+import {readFileSync, rmSync, existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {spawnSync} from 'node:child_process';
@@ -50,7 +50,7 @@ test('R5 agent credential, resource, subject, mode and owner drift fail before s
  f.activate();const before=readFileSync(f.filename);
  for(const [key,replacement] of [['token','another-token'.padEnd(40,'x')],['subjectId','other'],['resourceIds',['OTHER']],['mode','observer']]){
  const parsed=JSON.parse(agents);parsed[0][key]=replacement;process.env.JSO_AGENT_IDENTITIES_JSON=JSON.stringify(parsed);
- assert.throws(()=>f.server('enabled',{conversationBoundaryFactory:f.factory()}),/CONFIG_CHANGED/);
+ assert.throws(()=>f.server('enabled',{conversationBoundaryFactory:f.factory()}),key==='mode'?/Invalid agent identity/:/CONFIG_CHANGED/);
  }
  delete process.env.JSO_AGENT_IDENTITIES_JSON;
  assert.throws(()=>f.m.loadCoreAcceptance(f.filename),/CONFIG_CHANGED/);
@@ -66,6 +66,27 @@ test('R5 missing/revoked materials and unknown integration do not authorize a bo
  f.record.policy.integrations='native-vcp-conversation-v1';f.activate();
  rmSync(join(f.custody,'owner-approval.json'));assert.throws(()=>f.server('enabled',{conversationBoundaryFactory:f.factory()}));
  f.install();rmSync(join(f.custody,'acceptance.json'));assert.throws(()=>f.server('enabled',{conversationBoundaryFactory:f.factory()}));
+ }finally{f.close();}
+});
+
+test('R5 freshly pinned invalid agent identities fail before any store opens',async()=>{
+ const f=await fixture();try{
+ const valid=JSON.parse(agents)[0];
+ const invalid=[
+  [{...valid,token:'short'}], [{...valid,token:42}], [{...valid,mode:'observer'}],
+  [{...valid,resourceIds:[]}], [{...valid,resourceIds:['']}],
+  [{...valid,resourceIds:[valid.resourceIds[0],valid.resourceIds[0]]}],
+  [{...valid,subjectId:''}], [valid,{...valid,subjectId:'other'}], [null],
+ ];
+ const before=readFileSync(f.filename);
+ for(const identities of invalid){
+  process.env.JSO_AGENT_IDENTITIES_JSON=JSON.stringify(identities);
+  f.record.policy.runtimeConfigSha256=f.m.runtimeConfigDigest(process.env,5);f.activate();
+  assert.equal(f.m.loadCoreAcceptance(f.filename).prepared,false,'the invalid configuration is genuinely pinned');
+  assert.throws(()=>f.server('enabled',{conversationBoundaryFactory:f.factory()}),/Invalid agent/);
+  assert.deepEqual(readFileSync(f.filename),before);
+  for(const suffix of ['-wal','-shm','-journal'])assert.equal(existsSync(f.filename+suffix),false,suffix);
+ }
  }finally{f.close();}
 });
 test('R5 certified boundary serves owner identity with unchanged grants and restarts in separate processes',async()=>{
