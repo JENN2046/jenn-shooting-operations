@@ -27,6 +27,9 @@ composition. It rejects omitted, replaced or stale factories/authenticators befo
 opening the store. This check binds the actual closures, not caller-provided metadata.
 ACTIVE R5 cannot attach Kiosk online runtime. No new grant or identity is issued;
 the existing per-command owner delegation remains required.
+The conversation factory rejects preconfigured nonempty `grants` in agent identities;
+omit `grants` or use an empty array. Static grants supported by other agent compositions
+cannot substitute for live owner delegation in R5.
 
 The JSO boundary is HTTP behind the trusted ToolBox connection. R5 does not independently
 prove that a remote client used a physical keypress or WebSocket: the reviewed

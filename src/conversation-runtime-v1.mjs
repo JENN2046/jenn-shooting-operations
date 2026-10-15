@@ -9,6 +9,11 @@ export function conversationFactoryFromEnv(env=process.env){
  if(env.JSO_BUSINESS_RUNTIME!=='enabled')throw Error('CONVERSATION_BUSINESS_AUTH_REQUIRED');
  let identities;try{identities=JSON.parse(env.JSO_AGENT_IDENTITIES_JSON);}catch{throw Error('CONVERSATION_AGENT_IDENTITIES_REQUIRED');}
  if(!Array.isArray(identities)||!identities.length)throw Error('CONVERSATION_AGENT_IDENTITIES_REQUIRED');
+ // Conversation authority comes only from live per-command owner delegation.
+ if(identities.some(identity=>identity?.grants!==undefined
+   && (!Array.isArray(identity.grants)||identity.grants.length!==0))) {
+  throw Error('CONVERSATION_STATIC_GRANTS_FORBIDDEN');
+ }
  let businessIdentities;
  try {
   businessIdentities=JSON.parse(env.JSO_BUSINESS_IDENTITIES_JSON);
