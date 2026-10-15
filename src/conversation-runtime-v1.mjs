@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 import {createConversationBoundary} from './jso-conversation-boundary-v1.mjs';
 import {createBusinessRuntimeAuthV1,matchesBusinessRuntimeConfig} from './business-runtime-auth-v1.mjs';
 import {assertValidJsoAgentIdentities} from './jso-agent-api-v1.mjs';
+import {createKioskOnlineOptionsFromEnv} from './kiosk-online-runtime-v3.mjs';
 
 const factories = new WeakMap();
 const identityDigest = value => createHash('sha256').update(value ?? '').digest('hex');
@@ -21,8 +22,11 @@ export function conversationFactoryFromEnv(env=process.env){
   businessIdentities=JSON.parse(env.JSO_BUSINESS_IDENTITIES_JSON);
   createBusinessRuntimeAuthV1({identities:businessIdentities});
  } catch { throw Error('CONVERSATION_BUSINESS_AUTH_REQUIRED'); }
+ // Validate the co-mounted runtime before trusting its credential list.
+ const {kioskOnlineRuntime}=createKioskOnlineOptionsFromEnv(env);
+ const kioskIdentities=kioskOnlineRuntime ? JSON.parse(env.JSO_KIOSK_ONLINE_IDENTITIES_JSON) : [];
  // Compare the same UTF-8 bytes used by both authenticators, across every role/scope.
- const businessTokens=[...businessIdentities.map(({token})=>token),
+ const businessTokens=[...businessIdentities.map(({token})=>token),...kioskIdentities.map(({token})=>token),
   env.SCHEDULER_TOKEN,env.ADMIN_TOKEN].filter(token=>typeof token==='string').map(token=>Buffer.from(token));
  if(identities.some(identity=>typeof identity?.token==='string'
    && businessTokens.some(token=>token.equals(Buffer.from(identity.token))))) {

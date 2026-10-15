@@ -33,6 +33,8 @@ cannot substitute for live owner delegation in R5.
 Agent credentials must also be distinct from business identities and the legacy
 `SCHEDULER_TOKEN`/`ADMIN_TOKEN`, so the schema11 composition cannot bypass delegation
 through the legacy snapshot endpoint.
+Outside R5, when online Kiosk is enabled alongside conversation, its identities are
+validated and their tokens must also be distinct from every agent credential.
 
 The JSO boundary is HTTP behind the trusted ToolBox connection. R5 does not independently
 prove that a remote client used a physical keypress or WebSocket: the reviewed

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {conversationFactoryFromEnv,assertConversationStartupBinding} from '../src/conversation-runtime-v1.mjs';
 import {createBusinessRuntimeOptionsFromEnv} from '../src/business-runtime-auth-v1.mjs';
 import {createAuthorizer} from '../src/auth.mjs';
+import {createKioskOnlineOptionsFromEnv} from '../src/kiosk-online-runtime-v3.mjs';
 
 const token=label=>label.padEnd(40,'x');
 const business=(credential,role='administrator')=>({token:credential,subjectId:role,role,resourceIds:['OWNER-R']});
@@ -56,6 +57,25 @@ test('factory requires valid explicit business identities to establish separatio
  for(const invalid of [undefined,'{','null','{}','[]',JSON.stringify([business('short')])]){
   assert.throws(()=>conversationFactoryFromEnv({...env,JSO_BUSINESS_IDENTITIES_JSON:invalid}),
     /CONVERSATION_BUSINESS_AUTH_REQUIRED/);
+ }
+});
+
+for(const mode of ['planner','executor'])test(`conversation rejects ${mode} credentials shared with online kiosk`,()=>{
+ const credential=token('agent');
+ const env={...config([business(token('owner'))],[agent(credential,mode)]),
+  JSO_KIOSK_ONLINE_RUNTIME:'enabled',
+  JSO_KIOSK_ONLINE_IDENTITIES_JSON:JSON.stringify([{token:credential,subjectId:'operator-001',deviceId:'device-001',resourceId:'resource-001'}])};
+ const {kioskOnlineRuntime}=createKioskOnlineOptionsFromEnv(env);
+ assert.ok(kioskOnlineRuntime.authenticate({headers:{authorization:'Bearer '+credential}}));
+ assert.throws(()=>conversationFactoryFromEnv(env),{message:'CONVERSATION_CREDENTIAL_OVERLAP'});
+ assert.equal(typeof conversationFactoryFromEnv({...env,JSO_AGENT_IDENTITIES_JSON:JSON.stringify([agent(token('separate-agent'),mode)])}),'function');
+ assert.equal(typeof conversationFactoryFromEnv({...env,JSO_KIOSK_ONLINE_RUNTIME:'disabled'}),'function');
+});
+
+test('conversation validates enabled online kiosk configuration before creating its factory',()=>{
+ const env={...config([business(token('owner'))],[agent(token('agent'))]),JSO_KIOSK_ONLINE_RUNTIME:'enabled'};
+ for(const raw of [undefined,'{','null','[]',JSON.stringify([{token:token('agent')}])]){
+  assert.throws(()=>conversationFactoryFromEnv({...env,JSO_KIOSK_ONLINE_IDENTITIES_JSON:raw}),/KIOSK_V3_/);
  }
 });
 
