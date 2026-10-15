@@ -93,14 +93,16 @@ function prepareAgentIdentities(identities) {
   return identities.map(identity => {
     if (!identity || typeof identity !== 'object' || Array.isArray(identity)) throw new TypeError('Invalid agent identity');
     const { token, subjectId, mode, resourceIds, grants = [] } = identity;
-    if (typeof token !== 'string' || Buffer.byteLength(token) < 32 || tokens.has(token)
+    const bytes = typeof token === 'string' ? Buffer.from(token) : null;
+    const tokenKey = bytes?.toString('hex');
+    if (!bytes || bytes.length < 32 || tokens.has(tokenKey)
       || !['planner', 'executor'].includes(mode) || !resourceIds?.length
       || !Array.isArray(grants) || (mode === 'planner' && grants.length)
       || grants.some(g => !validGrant(g, subjectId))) throw new TypeError('Invalid agent identity');
-    tokens.add(token);
+    tokens.add(tokenKey);
     const trusted = createTrustedPrincipal({ subjectId, role: mode === 'planner' ? 'viewer' : 'scheduler', resourceIds });
     if (!trusted.ok) throw new TypeError('Invalid agent principal');
-    return { bytes: Buffer.from(token), mode, principal: trusted.principal, grants: structuredClone(grants) };
+    return { bytes, mode, principal: trusted.principal, grants: structuredClone(grants) };
   });
 }
 

@@ -13,12 +13,14 @@ export function createBusinessRuntimeAuthV1({ identities }) {
   if (!Array.isArray(identities) || identities.length === 0) throw new TypeError('Business identities required');
   const seen = new Set();
   const entries = identities.map(({ token, subjectId, role, resourceIds }) => {
-    if (typeof token !== 'string' || Buffer.byteLength(token) < 32 || seen.has(token)
+    const bytes = typeof token === 'string' ? Buffer.from(token) : null;
+    const tokenKey = bytes?.toString('hex');
+    if (!bytes || bytes.length < 32 || seen.has(tokenKey)
       || !['administrator','scheduler'].includes(role) || !resourceIds?.length) throw new TypeError('Invalid business identity');
-    seen.add(token);
+    seen.add(tokenKey);
     const principal = createTrustedPrincipal({ subjectId, role, resourceIds });
     if (!principal.ok) throw new TypeError('Invalid business identity');
-    return { bytes: Buffer.from(token), principal: principal.principal };
+    return { bytes, principal: principal.principal };
   });
   return request => {
     const header = request?.headers?.authorization;
