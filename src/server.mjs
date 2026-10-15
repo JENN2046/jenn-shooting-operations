@@ -1,3 +1,4 @@
+import {assertConversationStartupBinding} from './conversation-runtime-v1.mjs';
 import {createKioskOnlineOptionsFromEnv,requireKioskOnlineRuntimeV3} from './kiosk-online-runtime-v3.mjs';
 import {createKioskOnlineV3} from './kiosk-online-v3.mjs';
 import { createKioskServiceBindingV1, requireKioskServiceBindingV1, assertKioskContextIdentityV1 } from './kiosk-service-context-v1.mjs';
@@ -189,15 +190,20 @@ export function createOperationsServer({
   kioskAllowedBriefHosts = [],
   schedulingAuthenticate,
   schedulingAllowedBriefHosts = [],
+  conversationBoundaryFactory,
   kioskOnlineRuntime,
   writeAdmissionMode = 'enabled',
 }) {
+  if(conversationBoundaryFactory!==undefined && kioskAuthenticate!==undefined)
+    throw new Error('CONVERSATION_LEGACY_KIOSK_CONFLICT');
   if(kioskOnlineRuntime!==undefined){
     requireKioskOnlineRuntimeV3(kioskOnlineRuntime);
     if(kioskAuthenticate!==undefined||kioskServiceBinding?.mode!=='DISABLED')throw new Error('KIOSK_V3_LEGACY_RUNTIME_CONFLICT');
   }
   const startup = assertG3AuthorityReconciliationStartupAllowed({ databasePath });
   const coreAccepted = startup.reason === 'PROSPECTIVE_CORE_ACCEPTANCE';
+  assertConversationStartupBinding({startup, factory:conversationBoundaryFactory,
+    ownerAuthenticate:schedulingAuthenticate, kioskOnlineRuntime});
   if (coreAccepted && (orphanCleanupMode !== 'disabled'
       || kioskAuthenticate !== undefined || kioskServiceBinding?.mode !== 'DISABLED'
       || !schedulingAuthenticate || (startup.prepared && writeAdmissionMode !== 'disabled'))) {
@@ -262,14 +268,19 @@ export function createOperationsServer({
         clock: effectiveClock,
         allowedBriefHosts: schedulingAllowedBriefHosts,
       });
-  const server = createServer(createHttpApp({
+  let boundary;
+  try { boundary = conversationBoundaryFactory?.({store,ownerAuthenticate:schedulingAuthenticate,clock:effectiveClock}); }
+  catch (error) { store.close(); throw error; }
+  const app = createHttpApp({
     store,
     tokens,
     kiosk,
     kioskOnline,
     scheduling,
+    conversationBoundary: boundary,
     writeAdmissionControl,
-  }));
+  });
+  const server = createServer(app);
   const cleanupTimer = !coreAccepted && cleanupIntervalMs > 0
     ? setInterval(() => {
         try {
@@ -343,7 +354,7 @@ export function createKioskRuntimeOptionsFromEnv(env = process.env) {
 }
 
 const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (invokedDirectly) {
+export function startOperationsFromEnv({conversationBoundaryFactory} = {}) {
   const host = process.env.HOST || '127.0.0.1';
   const port = Number(process.env.PORT || 3800);
   let databasePath = process.env.DATABASE_PATH || './data/shooting-operations.sqlite';
@@ -372,6 +383,7 @@ if (invokedDirectly) {
     ...kioskRuntimeOptions,
     ...createBusinessRuntimeOptionsFromEnv(process.env),
     ...createKioskOnlineOptionsFromEnv(process.env),
+    conversationBoundaryFactory,
   });
 
   const enableWriteAdmission = () => {
@@ -390,4 +402,6 @@ if (invokedDirectly) {
   server.listen(port, host, () => {
     console.log(`Jenn Shooting Operations listening on ${host}:${port}`);
   });
+  return server;
 }
+if (invokedDirectly) startOperationsFromEnv();

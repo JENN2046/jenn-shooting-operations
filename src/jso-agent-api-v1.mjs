@@ -87,6 +87,30 @@ function validGrant(g, subjectId) {
     && Number.isFinite(Date.parse(g.notBefore)) && Date.parse(g.expiresAt) > Date.parse(g.notBefore);
 }
 
+function prepareAgentIdentities(identities) {
+  if (!Array.isArray(identities) || identities.length === 0) throw new TypeError('Trusted agent identities required');
+  const tokens = new Set();
+  return identities.map(identity => {
+    if (!identity || typeof identity !== 'object' || Array.isArray(identity)) throw new TypeError('Invalid agent identity');
+    const { token, subjectId, mode, resourceIds, grants = [] } = identity;
+    const bytes = typeof token === 'string' ? Buffer.from(token) : null;
+    const tokenKey = bytes?.toString('hex');
+    if (!bytes || bytes.length < 32 || tokens.has(tokenKey)
+      || !['planner', 'executor'].includes(mode) || !resourceIds?.length
+      || !Array.isArray(grants) || (mode === 'planner' && grants.length)
+      || grants.some(g => !validGrant(g, subjectId))) throw new TypeError('Invalid agent identity');
+    tokens.add(tokenKey);
+    const trusted = createTrustedPrincipal({ subjectId, role: mode === 'planner' ? 'viewer' : 'scheduler', resourceIds });
+    if (!trusted.ok) throw new TypeError('Invalid agent principal');
+    return { bytes, mode, principal: trusted.principal, grants: structuredClone(grants) };
+  });
+}
+
+// The same contract can be checked before constructing any store or service.
+export function assertValidJsoAgentIdentities(identities) {
+  prepareAgentIdentities(identities);
+}
+
 /** Trusted server construction only. Identity/grants are never read from model arguments.
  * Planner principals have the existing viewer capability, not a scheduler credential.
  * A service instance must own a single serialized SQLite connection.
@@ -94,18 +118,7 @@ function validGrant(g, subjectId) {
 export function createJsoAgentApplication({ service, identities, claimGrantAttempt, resolveGrant = () => null, isGrantActive = () => true, clock = () => new Date() }) {
   if (!service || Object.values(JSO_AGENT_COMMANDS).some(k => typeof service[k] !== 'function')
     || !Array.isArray(identities) || identities.length === 0) throw new TypeError('Trusted agent service and identities required');
-  const tokens = new Set();
-  const entries = identities.map(identity => {
-    const { token, subjectId, mode, resourceIds, grants = [] } = identity;
-    if (typeof token !== 'string' || Buffer.byteLength(token) < 32 || tokens.has(token)
-      || !['planner', 'executor'].includes(mode) || !resourceIds?.length
-      || !Array.isArray(grants) || (mode === 'planner' && grants.length)
-      || grants.some(g => !validGrant(g, subjectId))) throw new TypeError('Invalid agent identity');
-    tokens.add(token);
-    const trusted = createTrustedPrincipal({ subjectId, role: mode === 'planner' ? 'viewer' : 'scheduler', resourceIds });
-    if (!trusted.ok) throw new TypeError('Invalid agent principal');
-    return { bytes: Buffer.from(token), mode, principal: trusted.principal, grants: structuredClone(grants) };
-  });
+  const entries = prepareAgentIdentities(identities);
   if (entries.some(entry => entry.grants.length > 0) && typeof claimGrantAttempt !== 'function') {
     throw new TypeError('Durable agent grant-attempt store required');
   }
