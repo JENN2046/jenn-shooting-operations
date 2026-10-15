@@ -33,6 +33,9 @@ cannot substitute for live owner delegation in R5.
 Agent credentials must also be distinct from business identities and the legacy
 `SCHEDULER_TOKEN`/`ADMIN_TOKEN`, so the schema11 composition cannot bypass delegation
 through the legacy snapshot endpoint.
+The existing business runtime validator also rejects business credentials shared
+with any enabled legacy viewer, submitter, scheduler or administrator credential.
+Distinct credentials may coexist; conversation uses this same business validation.
 Outside R5, when online Kiosk is enabled alongside conversation, its identities are
 validated and their tokens must also be distinct from every agent credential.
 Conversation and the legacy Basic-auth kiosk are not a supported composition.

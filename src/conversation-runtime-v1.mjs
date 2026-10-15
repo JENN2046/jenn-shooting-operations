@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {createConversationBoundary} from './jso-conversation-boundary-v1.mjs';
-import {createBusinessRuntimeAuthV1,matchesBusinessRuntimeConfig} from './business-runtime-auth-v1.mjs';
+import {createBusinessRuntimeOptionsFromEnv,matchesBusinessRuntimeConfig} from './business-runtime-auth-v1.mjs';
 import {assertValidJsoAgentIdentities} from './jso-agent-api-v1.mjs';
 import {createKioskOnlineOptionsFromEnv} from './kiosk-online-runtime-v3.mjs';
 
@@ -22,7 +22,7 @@ export function conversationFactoryFromEnv(env=process.env){
  let businessIdentities;
  try {
   businessIdentities=JSON.parse(env.JSO_BUSINESS_IDENTITIES_JSON);
-  createBusinessRuntimeAuthV1({identities:businessIdentities});
+  createBusinessRuntimeOptionsFromEnv(env);
  } catch { throw Error('CONVERSATION_BUSINESS_AUTH_REQUIRED'); }
  // Validate the co-mounted runtime before trusting its credential list.
  const {kioskOnlineRuntime}=createKioskOnlineOptionsFromEnv(env);
