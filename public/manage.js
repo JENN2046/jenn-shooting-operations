@@ -22,7 +22,7 @@ function exceptionRow(value={date:'',status:'closed',windows:[]}){
  const date=make('日期','date',value.date);date.required=true;
  const label=row('label','当天安排'),select=document.createElement('select');for(const [v,t] of [['closed','休息'],['custom','自定义时段']]){const o=row('option',t);o.value=v;select.append(o);}select.value=value.status;label.append(select);e.append(label);
  const times=['第一段开始','第一段结束','第二段开始（可选）','第二段结束（可选）'].map((t,i)=>make(t,'time',value.windows[Math.floor(i/2)]?.[i%2?'end':'start']));
- const remove=row('button','删除例外');remove.type='button';remove.className='secondary';remove.addEventListener('click',()=>{e.remove();invalidate();});e.append(remove);
+ const remove=row('button','删除例外');remove.type='button';remove.className='secondary';remove.addEventListener('click',()=>{pageDraftDirty=true;e.remove();invalidate();});e.append(remove);
  const past=value.date&&value.date<state.businessToday;if(past){remove.dataset.locked='yes';e.querySelectorAll('input,select,button').forEach(el=>el.disabled=true);}
  const enabled=()=>times.forEach(t=>t.disabled=past||select.value==='closed');select.addEventListener('change',enabled);enabled();
  e.values=()=>({date:date.value,status:select.value,windows:select.value==='closed'?[]:[{start:times[0].value,end:times[1].value},...(times[2].value||times[3].value?[{start:times[2].value,end:times[3].value}]:[])]});$('#exceptions').append(e);
@@ -75,7 +75,7 @@ $('#login').addEventListener('submit',e=>{e.preventDefault();work(async()=>{toke
 $('#logout').addEventListener('click',()=>{token='';state=null;clearReferenceImages();$('#order-list').replaceChildren();if(!pending)resetOrderForm();$('#workspace').hidden=true;$('#login').hidden=false;say('已退出。未确认操作的引用仍保留，供下次核对。');});
 $('#refresh').addEventListener('click',()=>work(refresh));
 $('#register').addEventListener('click',()=>work(async()=>{if(!state.revisions)throw new Error('尚未建立初始化控制记录，不能在页面自动初始化。');await mutation('/api/v3/business/resources',{operationId:newId('RESOURCE'),expectedScheduleRevision:state.revisions.scheduleRevision,expectedProjectionRevision:state.revisions.projectionRevision,resource:state.initialResource});await refresh();say('已登记一个摄影师资源。');}));
-$('#add-exception').addEventListener('click',()=>{exceptionRow();invalidate();});$('#calendar-form').addEventListener('input',invalidate);
+$('#add-exception').addEventListener('click',()=>{pageDraftDirty=true;exceptionRow();invalidate();});$('#calendar-form').addEventListener('input',invalidate);
 $('#calendar-form').addEventListener('submit',e=>{e.preventDefault();work(async()=>{preview=await api('/api/v3/business/config/preview',{configJson:buildConfig(),...previewBinding()});$('#preview').hidden=false;$('#preview-summary').textContent=preview.impact.ok?'未发现与现有场次冲突。保存会生成新版本，随后尝试生效。':messages[preview.impact.code]||`不能生效：${preview.impact.code}`;$('#conflicts').replaceChildren(...(preview.impact.conflicts||[]).map(c=>row('li',`${c.scheduleItemId}：不在新工作时段内`)));$('#publish').dataset.locked=preview.impact.ok?'':'yes';say('预览完成。');});});
 async function activate(version,binding){if(!binding)throw new Error('请重新核对这份规则。');const config=state.configs.find(c=>c.configVersion===version);if(!config)throw new Error('请刷新并选择已保存配置。');const checked=await api('/api/v3/business/config/preview',{configJson:config.configJson,...binding});if(!checked.impact.ok)throw fail(checked.impact);await mutation('/api/v3/business/config/activate',{operationId:newId('ACTIVATE'),configVersion:version,expectedProjectionRevision:checked.expectedProjectionRevision});await refresh();say('新工作规则已生效。既有场次未被移动。');}
 $('#publish').addEventListener('click',()=>work(async()=>{if(!preview?.impact.ok)throw new Error('请先完成无冲突预览。');const version=newId('calendar');const binding={expectedProjectionRevision:preview.expectedProjectionRevision,baseConfigDigest:preview.baseConfigDigest};await mutation('/api/v3/business/config/publish',{operationId:newId('PUBLISH'),configVersion:version,algorithmVersion:preview.configJson.schemaVersion===3?'deterministic-scheduler-v2':'deterministic-scheduler-v1',calendarCompilerVersion:`calendar-compiler-v${preview.configJson.schemaVersion}`,estimatePolicyVersion:'estimate-policy-v1',configJson:preview.configJson,configDigest:preview.configDigest});await refresh();published=version;$('#published').hidden=false;try{await activate(version,binding);}catch(e){say(`配置已保存，尚未生效。${e.message}`);}}));
@@ -195,8 +195,8 @@ async function refreshScheduleAutomatically(){
  const controller=automaticController=new AbortController(),deadline=window.setTimeout(()=>controller.abort(),10000);
  try{const next=await api('/api/v3/business/state',undefined,controller.signal);
   if(token!==identityToken||state!==original||busy||pending)return;
-  const keys=['scheduleRevision','projectionRevision'];
-  if(keys.some(k=>next.revisions?.[k]<(automaticDisplayed||state.revisions)?.[k])||keys.every(k=>next.revisions?.[k]===state.revisions?.[k]))return;
+  const keys=['scheduleRevision','projectionRevision'],displayed=automaticDisplayed||state.revisions;
+  if(keys.some(k=>next.revisions?.[k]<displayed?.[k])||keys.every(k=>next.revisions?.[k]===displayed?.[k]))return;
   automaticDisplayed=next.revisions;
   const draft=pageDraftDirty||editingOrder||editing||dayPreview||preview||proposal||published||referenceFiles.length;
   if(draft){renderSessions(next);$('#auto-sync-state').textContent='排班已更新；未保存的编辑已保留，请刷新后重新核对。';}
