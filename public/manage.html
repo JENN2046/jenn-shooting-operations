@@ -4,7 +4,7 @@
 <main><h1>安排工作，也留出调整的余地</h1><p class="muted">工作日历决定可拍时间。改期前，会检查摄影师占用、午休和拍后缓冲。</p>
 <form id="login"><label>管理访问令牌<input id="token" type="password" autocomplete="off" required></label><button id="login-button">连接工作台</button><small>令牌只在当前页面内存中使用。</small></form>
 <p id="message" role="status" aria-live="polite"></p><section id="unknown" hidden><strong>上一次操作结果待核对</strong><p>暂不提交新操作，先读取原操作的结果。</p><button id="reconcile" type="button">核对结果</button></section>
-<section id="workspace" hidden><div class="toolbar"><p id="identity"></p><button id="refresh" type="button">刷新状态</button><button id="logout" type="button">退出</button></div>
+<section id="workspace" hidden><div class="toolbar"><p id="identity"></p><small id="auto-sync-state" role="status">排班会自动更新。</small><button id="refresh" type="button">刷新状态</button><button id="logout" type="button">退出</button></div>
 <section id="setup" hidden><h2>一个摄影师，一份产能</h2><p>登记 Jenn 摄影师，模特、静物和场景共用同一资源，最多同时拍一场。</p><button id="register" type="button">登记摄影师</button></section>
 <section id="calendar-panel"><h2>工作日历</h2><p id="config-state"></p><form id="calendar-form">
 <fieldset id="calendar-fields"><legend>日常工作时段（北京时间）</legend><div class="grid">
