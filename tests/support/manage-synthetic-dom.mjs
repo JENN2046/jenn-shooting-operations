@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 export function dom(){
  const all=[],ids=new Map();
  class Element{
- constructor(tag){this.tagName=tag;this.children=[];this.handlers={};this.dataset={};this.value='';this.textContent='';this.hidden=false;this.disabled=false;all.push(this);}
+ constructor(tag){this.tagName=tag;this.children=[];this.handlers={};this.dataset={};this.style={};this.value='';this.textContent='';this.hidden=false;this.disabled=false;all.push(this);}
  append(...elements){this.children.push(...elements);if(this.tagName==='select'&&!this.value&&elements.length)this.value=elements[0].value;}
  replaceChildren(...elements){this.children=[];this.value=this.tagName==='select'?'':this.value;this.append(...elements);}
  addEventListener(event,fn){(this.handlers[event]??=[]).push(fn);}

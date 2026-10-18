@@ -1,8 +1,8 @@
 import { showMessage, dateKey, mondayOf, minutes, sessionState, layoutSessions } from './common.js?v=ui-20260922';
 
 import {boardView,beijingParts} from './board-model.js';
-import {referenceGallery,clearReferenceImages,retainReferenceImages} from './references.js?v=board-references-20261012';
-let protocolVersion=1,token='',authEpoch=0;
+import {referenceGallery,clearReferenceImages,retainReferenceImages} from './references.js?v=public-board-20261018-r1';
+let protocolVersion=1,token='',authEpoch=0,publicBoard=false;
 const displayState=(session,tasks)=>protocolVersion===3?session.actualState:sessionState(session,tasks);
 const today=()=>protocolVersion===3?new Date(beijingParts(new Date()).date+'T12:00:00'):new Date();
 const $ = selector => document.querySelector(selector);
@@ -88,7 +88,7 @@ function showDetails(session, tasks) {
     for (const [label, value] of pairs) {
       if (value) description.append(element('dt', '', label), element('dd', '', value));
     }
-    section.append(description,referenceGallery(task.references,()=>token));
+    section.append(description,referenceGallery(task.references,()=>token,publicBoard));
     return section;
   });
   content.replaceChildren(head, ...sections);
@@ -274,7 +274,7 @@ function renderPending(snapshot) {
       if(detail.hidden)expandedPending.delete(task.id);else expandedPending.add(task.id);
       button.setAttribute('aria-expanded', String(!detail.hidden));
     });
-    detail.append(referenceGallery(task.references,()=>token));
+    detail.append(referenceGallery(task.references,()=>token,publicBoard));
     item.append(button, detail);
     return item;
   });
@@ -284,18 +284,28 @@ function renderPending(snapshot) {
   if (link) link.href = protocolVersion===3?'/manage':'/submit';
 }
 
+function clearBoardReadView(){
+  board.hidden=true;currentSnapshot=null;clearReferenceImages();expandedPending.clear();clearInterval(clockTimer);
+  $('#session-dialog').close();$('#session-dialog-content').replaceChildren();$('#pending').replaceChildren();calendar.replaceChildren();agenda.replaceChildren();
+}
+
 async function loadBoard() {
-  const epoch=authEpoch;
+  let epoch=authEpoch;
   $('#retry').hidden=true;showMessage(message,'正在读取排班…');
   try{
-    const profile=await fetch('/api/client-profile');if(!profile.ok)throw Error('服务暂时不可用，请稍后重试。');
+    const profile=await fetch('/api/client-profile',{credentials:'omit',cache:'no-store'});if(!profile.ok)throw Error('服务暂时不可用，请稍后重试。');
     const profileResult=await profile.json();if(epoch!==authEpoch)return;protocolVersion=profileResult.protocolVersion;
-    if(protocolVersion===3){
-      $('#create-order-link').href='/manage';$('#create-order-link').textContent='＋ 新建订单';
-      document.querySelector('.legend').textContent='北京时间 · 实际进度以开拍和完成记录为准';
-      if(!token){board.hidden=true;$('#board-login').hidden=false;showMessage(message,'请使用 Jenn 业务身份登录。');return;}
+    const nextPublicBoard=profileResult.publicBoard===true;
+    if(publicBoard!==nextPublicBoard){
+      authEpoch++;epoch=authEpoch;token='';clearBoardReadView();$('#board-token').value='';$('#board-login').hidden=true;$('#board-logout').hidden=true;
     }
-    const response=await fetch(protocolVersion===3?'/api/v3/business/board':'/api/v1/snapshot',{headers:token?{Authorization:'Bearer '+token}:{}});
+    publicBoard=nextPublicBoard;
+    if(protocolVersion===3){
+      $('#create-order-link').href='/manage';$('#create-order-link').textContent='＋ 新建订单';$('#create-order-link').hidden=publicBoard;document.querySelector('.pending-panel').hidden=publicBoard;
+      document.querySelector('.legend').textContent='北京时间 · 实际进度以开拍和完成记录为准';
+      if(!token&&!publicBoard){clearBoardReadView();$('#board-login').hidden=false;showMessage(message,'请使用 Jenn 业务身份登录。');return;}
+    }
+    const response=await fetch(protocolVersion===3?(publicBoard?'/api/v3/public/board':'/api/v3/business/board'):'/api/v1/snapshot',{credentials:publicBoard?'omit':'same-origin',cache:'no-store',headers:!publicBoard&&token?{Authorization:'Bearer '+token}:{}});
     if(!response.ok)throw Error(response.status===401?'登录失效或令牌无效，请重新登录。':response.status===403?'没有此看板的访问权限。':'排班读取失败，请刷新重试。');
     const result=await response.json();if(epoch!==authEpoch)return;const detailId=$('#session-dialog').open?$('#session-dialog').dataset.sessionId:null;
     currentSnapshot=protocolVersion===3?boardView(result):result.snapshot;
@@ -303,12 +313,12 @@ async function loadBoard() {
     if(protocolVersion===3&&!board.dataset.loaded)anchorDate=today();
     board.dataset.loaded='yes';renderCalendar();renderPending(currentSnapshot);if(detailId){const selected=currentSnapshot.sessions.find(s=>s.id===detailId);if(selected)showDetails(selected,currentSnapshot.tasks.filter(t=>selected.ids.includes(t.id)));else $('#session-dialog').close();}
     $('#revision').textContent='数据版本 '+currentSnapshot.revision+' · 看板只读';board.hidden=false;
-    $('#board-login').hidden=true;$('#board-logout').hidden=protocolVersion!==3;showMessage(message,'');
+    $('#board-login').hidden=true;$('#board-logout').hidden=protocolVersion!==3||publicBoard;showMessage(message,'');
     clearInterval(clockTimer);clockTimer=setInterval(protocolVersion===3?loadBoard:updateLiveStates,30000);
-  }catch(e){if(epoch!==authEpoch)return;board.hidden=true;currentSnapshot=null;clearReferenceImages();expandedPending.clear();clearInterval(clockTimer);$('#session-dialog').close();$('#session-dialog-content').replaceChildren();$('#pending').replaceChildren();calendar.replaceChildren();if(protocolVersion===3)$('#board-login').hidden=false;showMessage(message,e.message,'error');$('#retry').hidden=false;}
+  }catch(e){if(epoch!==authEpoch)return;clearBoardReadView();if(protocolVersion===3&&!publicBoard)$('#board-login').hidden=false;showMessage(message,e.message,'error');$('#retry').hidden=false;}
 }
 $('#board-login').addEventListener('submit',e=>{e.preventDefault();authEpoch++;clearReferenceImages();expandedPending.clear();token=$('#board-token').value;$('#board-token').value='';loadBoard();});
-$('#board-logout').addEventListener('click',()=>{authEpoch++;token='';currentSnapshot=null;clearInterval(clockTimer);clearReferenceImages();expandedPending.clear();board.hidden=true;$('#board-login').hidden=false;$('#board-logout').hidden=true;$('#session-dialog').close();$('#session-dialog-content').replaceChildren();$('#pending').replaceChildren();calendar.replaceChildren();agenda.replaceChildren();showMessage(message,'已退出。');});
+$('#board-logout').addEventListener('click',()=>{authEpoch++;token='';clearBoardReadView();$('#board-login').hidden=false;$('#board-logout').hidden=true;showMessage(message,'已退出。');});
 
 function updateLiveStates() {
   if (!currentSnapshot) return;

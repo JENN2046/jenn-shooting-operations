@@ -1,6 +1,6 @@
 import {browserSession} from './browser-session.js?v=jso-session-field-20261018-r1';
 import {mergeFiles,fileSelectionError} from './common.js';
-import {referenceGallery,clearReferenceImages} from './references.js?v=jso-session-field-20261018-r1';
+import {referenceGallery,clearReferenceImages} from './references.js?v=public-board-20261018-r1';
 const $=s=>document.querySelector(s);
 let dayPreview=null,editingOrder=null,pageDraftDirty=false;
 let token='',state=null,preview=null,published=null,publishedBinding=null,editing=null,proposal=null,busy=false;

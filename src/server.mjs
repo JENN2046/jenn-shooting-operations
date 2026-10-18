@@ -196,6 +196,7 @@ export function createOperationsServer({
   kioskOnlineRuntime,
   browserSessionRuntime,
   writeAdmissionMode = 'enabled',
+  publicBoardEnabled = false,
 }) {
   if(conversationBoundaryFactory!==undefined && kioskAuthenticate!==undefined)
     throw new Error('CONVERSATION_LEGACY_KIOSK_CONFLICT');
@@ -207,6 +208,7 @@ export function createOperationsServer({
   const startup = assertG3AuthorityReconciliationStartupAllowed({ databasePath });
   const coreAccepted = startup.reason === 'PROSPECTIVE_CORE_ACCEPTANCE';
   if(coreAccepted&&(Boolean(browserSessionRuntime)!==Boolean(browserSessionConfigDigest(process.env))||(startup.prepared&&browserSessionRuntime)))throw Error('G3_CORE_ACCEPTANCE_BROWSER_SESSION_CONFIG');
+  if(coreAccepted&&publicBoardEnabled!==(process.env.JSO_PUBLIC_BOARD==='enabled'))throw new Error('G3_CORE_ACCEPTANCE_PUBLIC_BOARD_CONFIG');
   assertConversationStartupBinding({startup, factory:conversationBoundaryFactory,
     ownerAuthenticate:schedulingAuthenticate, kioskOnlineRuntime});
   if (coreAccepted && (orphanCleanupMode !== 'disabled'
@@ -285,6 +287,7 @@ export function createOperationsServer({
     conversationBoundary: boundary,
     browserSessionRuntime,
     ownerField:browserSessionRuntime?createOwnerFieldV1({store,runtime:browserSessionRuntime,clock:effectiveClock}):null,
+    publicBoardEnabled,
     writeAdmissionControl,
   });
   const server = createServer(app);
@@ -378,6 +381,8 @@ export function startOperationsFromEnv({conversationBoundaryFactory} = {}) {
   const orphanCleanupEnableEpoch = process.env.ORPHAN_CLEANUP_ENABLE_EPOCH || undefined;
   const orphanCleanupDomain = process.env.ORPHAN_CLEANUP_DOMAIN || undefined;
   const writeAdmissionMode = process.env.WRITE_ADMISSION_MODE || 'enabled';
+  if(![undefined,'disabled','enabled'].includes(process.env.JSO_PUBLIC_BOARD))throw new Error('INVALID_PUBLIC_BOARD_MODE');
+  const publicBoardEnabled=process.env.JSO_PUBLIC_BOARD==='enabled';
   const kioskRuntimeOptions = createKioskRuntimeOptionsFromEnv(process.env);
   const { server, writeAdmissionControl } = createOperationsServer({
     databasePath,
@@ -388,6 +393,7 @@ export function startOperationsFromEnv({conversationBoundaryFactory} = {}) {
     orphanCleanupDomain,
     writeAdmissionMode,
     ...kioskRuntimeOptions,
+    publicBoardEnabled,
     ...createBusinessRuntimeOptionsFromEnv(process.env),
     ...createBrowserSessionOptionsFromEnv(process.env),
     ...createKioskOnlineOptionsFromEnv(process.env),

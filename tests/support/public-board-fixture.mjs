@@ -1,0 +1,22 @@
+import {launch,createOrder} from './first-launch-v3-fixture.mjs';
+import assert from 'node:assert/strict';
+export const png=Buffer.from('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','base64');
+export async function publicFixture(){
+ const f=await launch({publicBoard:true});
+ const upload=(operationId)=>{const r=f.server.store.saveUpload({operationId,originalName:'Synthetic reference.png',contentType:'image/png',kind:'image',buffer:png,role:'administrator',deduplicate:true,requireUnsubmittedOperation:true});assert.equal(r.ok,true);return r.upload.id;};
+ const ids=[];
+ for(let i=0;i<5;i++){
+  const image=upload(`SYNTHETIC-ORDER-${i}`);ids.push(image);
+  const {result}=await createOrder(f,i,{uploadIds:[image],requestedBy:'Synthetic customer visible',note:'Synthetic customer instructions visible'});
+  f.server.store.db.prepare('UPDATE requests_v2 SET client=? WHERE id=?').run('Distinct synthetic customer',result.requestId);
+  const r=(await f.state()).revisions;
+  await f.ok(`/api/v3/business/requests/${result.requestId}/duration`,{operationId:`PUBLIC-DURATION-${i}`,requestId:result.requestId,expectedScheduleRevision:r.scheduleRevision,expectedProjectionRevision:r.projectionRevision,durationMinutes:30});
+ }
+ const g=await f.ok('/api/v3/business/proposals',{operationId:'PUBLIC-GENERATE',planningWindowStart:'2026-10-12T00:00:00.000Z',planningWindowEnd:'2026-10-12T16:00:00.000Z',resourceScope:[f.resourceId]});
+ const p=g.proposal,items=JSON.parse(p.proposedItemsJson);
+ await f.ok(`/api/v3/proposals/${p.proposalId}/decisions`,{decisionId:'PUBLIC-ACCEPT',proposalId:p.proposalId,decisionType:'accept',selectedProposalItemIds:items.map(i=>i.proposalItemId),decisionNote:null,reasonCode:null});
+ const pendingImage=upload('PUBLIC-PENDING');await createOrder(f,0,{operationId:'PUBLIC-PENDING',sku:'HIDDEN-PENDING',name:'Hidden pending order',uploadIds:[pendingImage]});
+ const orphan=upload('PUBLIC-ORPHAN');f.server.store.db.prepare('UPDATE uploads SET claimed_task_id=? WHERE id=?').run('ABSENT-ORDER',orphan);
+ const unclaimed=upload('PUBLIC-UNCLAIMED');
+ return {...f,ids,pendingImage,orphan,unclaimed};
+}

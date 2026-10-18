@@ -96,6 +96,7 @@ export function runtimeConfigDigest(env = process.env, version = 4) {
   // and the certified composition; raw identity material is never returned or stored.
   if (version === 5) keys.push('JSO_AGENT_IDENTITIES_JSON');
   const values = Object.fromEntries(keys.map(k => [k, env[k] ?? null]));
+  if (env.JSO_PUBLIC_BOARD === 'enabled') values.publicBoard = 'Jenn-scheduled-read-only-v1';
   if (version === 5) values.conversationComposition = 'native-vcp-conversation-v1';
   const browser=browserSessionConfigDigest(env);if(browser)values.browserSessions=browser;
   return digest(canonical(values));
