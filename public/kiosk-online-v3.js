@@ -161,7 +161,7 @@ if(ownerMode){
  window.addEventListener('jso-field-view',async e=>{
   viewActive=Boolean(e.detail?.active);
   if(!viewActive){releaseControl();$('complete-dialog').close();return;}
-  if(identity){await refresh();if(identity&&fresh){requestControl();if(queued()?.pendingCount)void synchronize();}}
+  if(identity){await refresh();if(identity&&model&&!accessBlocked&&(fresh||offlineRead||!navigator.onLine)){requestControl();if(fresh&&queued()?.pendingCount)void synchronize();}}
  });
  if(browserSession.authenticated)void restoreOwner();
 }
