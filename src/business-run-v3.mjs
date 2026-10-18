@@ -7,18 +7,21 @@ import {canonicalJsonSchedulingV1 as json,digestCanonicalJsonSchedulingV1 as dig
 import {assertSchedulingQuiescenceV1} from './sqlite-scheduling-quiescence-v1.mjs';
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 const identifier=v=>typeof v==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(v);
-export function createBusinessRunV3(options) { return createRunRecorder(options, false); }
-export function createKioskRunV3(options) { return createRunRecorder(options, true); }
-function createRunRecorder({db,now,writeAdmission}, kiosk) {
+export function createBusinessRunV3(options) { return createRunRecorder(options, 'owner-server'); }
+export function createKioskRunV3(options) { return createRunRecorder(options, 'operator-device'); }
+export function createOwnerDeviceRunV1(options) { return createRunRecorder(options, 'owner-device'); }
+function createRunRecorder({db,now,writeAdmission}, mode) {
+ const kiosk=mode!=='owner-server',ownerDevice=mode==='owner-device';
  return ({command,principal,deviceId,resourceId})=>{
   if(!writeAdmission())return {ok:false,code:'WRITE_ADMISSION_DISABLED'};
-  if(!validateTrustedPrincipal(principal).ok||principal.role!==(kiosk?'operator':'administrator'))return {ok:false,code:'FORBIDDEN'};
-  if(kiosk&&(!identifier(deviceId)||!isSchedulingIdentifierV1(resourceId)||principal.resourceIds.length!==1||principal.resourceIds[0]!==resourceId))return {ok:false,code:'FORBIDDEN'};
+  if(!validateTrustedPrincipal(principal).ok||principal.role!==(!kiosk||ownerDevice?'administrator':'operator'))return {ok:false,code:'FORBIDDEN'};
+  if(kiosk&&(!identifier(deviceId)||!isSchedulingIdentifierV1(resourceId)||(!ownerDevice&&principal.resourceIds.length!==1)||!principal.resourceIds.includes(resourceId)))return {ok:false,code:'FORBIDDEN'};
   const declared=kiosk&&command?.recordingMode==='device-declared';
+  if(ownerDevice&&!declared)return {ok:false,code:'INVALID_RUN_EVENT_COMMAND'};
   const keys=['eventId','runId','scheduleItemId','eventType','expectedRunRevision',...(kiosk?['expectedScheduleRevision']:[]),...(declared?['recordingMode','occurredAt']:[])];
   if(!command||Object.keys(command).length!==keys.length||!keys.every(k=>Object.hasOwn(command,k))||!identifier(command.eventId)||!identifier(command.runId)||typeof command.scheduleItemId!=='string'||!['start','complete'].includes(command.eventType)||!Number.isSafeInteger(command.expectedRunRevision)||command.expectedRunRevision<0||(kiosk&&(!Number.isSafeInteger(command.expectedScheduleRevision)||command.expectedScheduleRevision<0)))return {ok:false,code:'INVALID_RUN_EVENT_COMMAND'};
-  const source=declared?'kiosk-device-declared-v3':kiosk?'kiosk-online-v3':'owner-management-v3',kind=kiosk?'kiosk.online.run.v3':'business.run.v3';
-  const operationId=`${kiosk?'kiosk-online':'admin'}:${command.eventId}`,requestDigest=digest({kind,actor:principal.subjectId,...(kiosk?{deviceId,resourceId}:{}),command});
+  const source=ownerDevice?'owner-device-declared-v1':declared?'kiosk-device-declared-v3':kiosk?'kiosk-online-v3':'owner-management-v3',kind=ownerDevice?'business.owner-device.run.v1':kiosk?'kiosk.online.run.v3':'business.run.v3';
+  const operationId=`${ownerDevice?'owner-device':kiosk?'kiosk-online':'admin'}:${command.eventId}`,requestDigest=digest({kind,actor:principal.subjectId,...(kiosk?{deviceId,resourceId}:{}),command});
   try {db.exec('BEGIN IMMEDIATE');assertSchedulingQuiescenceV1({db,now});
    const item=db.prepare('SELECT * FROM schedule_items WHERE id=?').get(command.scheduleItemId);
    if(!item)fail('SCHEDULE_ITEM_NOT_FOUND');

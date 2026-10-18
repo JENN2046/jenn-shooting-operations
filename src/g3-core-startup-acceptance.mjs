@@ -1,3 +1,4 @@
+import {browserSessionConfigDigest} from './browser-session-v1.mjs';
 import { createHash } from 'node:crypto';
 import { constants, closeSync, existsSync, fstatSync, lstatSync, openSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -96,6 +97,7 @@ export function runtimeConfigDigest(env = process.env, version = 4) {
   if (version === 5) keys.push('JSO_AGENT_IDENTITIES_JSON');
   const values = Object.fromEntries(keys.map(k => [k, env[k] ?? null]));
   if (version === 5) values.conversationComposition = 'native-vcp-conversation-v1';
+  const browser=browserSessionConfigDigest(env);if(browser)values.browserSessions=browser;
   return digest(canonical(values));
 }
 export function validateCoreRecord(record, { now = Date.now() } = {}) {

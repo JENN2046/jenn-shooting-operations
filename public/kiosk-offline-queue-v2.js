@@ -1,4 +1,4 @@
-import {validateKioskQueueItemV3,validKioskDayV3,validKioskResultV3,matchesKioskReceiptV3} from './kiosk-queue-protocol-v3.js?v=kiosk-v3-resource-id-20261018-r4';
+import {validateKioskQueueItemV3,validKioskDayV3,validKioskResultV3,matchesKioskReceiptV3,validateOwnerFieldItemV1,validOwnerFieldDayV1,matchesOwnerFieldReceiptV1} from './kiosk-queue-protocol-v3.js?v=jso-session-field-20261018-r1';
 const EVENT_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/u;
 const IDENTIFIER = /^\S(?:[\s\S]*\S)?$/u;
 const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/iu;
@@ -336,7 +336,7 @@ function validateQueueState(value, protocolVersion = 2) {
   const eventIds = new Set();
   let priorSequence = null;
   for (const rawItem of value.items) {
-    const validation = (protocolVersion === 3 ? validateKioskQueueItemV3 : validateKioskQueueItem)(rawItem);
+    const validation = (protocolVersion === 4 ? validateOwnerFieldItemV1 : protocolVersion === 3 ? validateKioskQueueItemV3 : validateKioskQueueItem)(rawItem);
     if (!validation.ok || eventIds.has(rawItem.eventId)) return failure('QUEUE_STATE_INVALID');
     if (priorSequence !== null && rawItem.localSequence !== priorSequence + 1) {
       return failure('QUEUE_STATE_INVALID');
@@ -441,11 +441,13 @@ function clockTimestamp(clock) {
 }
 
 function validRefreshBody(body, resourceId, protocolVersion = 2) {
+  if (protocolVersion === 4) return validOwnerFieldDayV1(body, resourceId);
   if (protocolVersion === 3) return validKioskDayV3(body, resourceId);
   return validateKioskCurrentResponse(body).ok && body.resourceId === resourceId;
 }
 
 function applied(response, head, protocolVersion = 2) {
+  if (protocolVersion === 4) return response.status === 200 && matchesOwnerFieldReceiptV1(response.body, head);
   if (protocolVersion === 3) return response.status === 200 && matchesKioskReceiptV3(response.body, head);
   const exactStatus = (response?.status === 201 && response?.body?.replayed === false)
     || (response?.status === 200 && response?.body?.replayed === true);
@@ -458,7 +460,7 @@ function applied(response, head, protocolVersion = 2) {
 }
 
 function reviewRequired(response, head, protocolVersion = 2) {
-  if (protocolVersion === 3) return response.status === 422 && response.body?.code === 'EVENT_TIME_REVIEW_REQUIRED';
+  if (protocolVersion >= 3) return response.status === 422 && response.body?.code === 'EVENT_TIME_REVIEW_REQUIRED';
   return validateKioskRunEventResponse(response?.body).ok
     && response.body.ok === false
     && response.body.code === 'EVENT_TIME_REVIEW_REQUIRED'
@@ -504,7 +506,7 @@ export function createBrowserQueueStorage({
     throw new TypeError('localStorage-compatible storage is required');
   }
   if (typeof key !== 'string' || key === '') throw new TypeError('storage key is required');
-  if (![2,3].includes(protocolVersion) || (protocolVersion === 3 && key === 'jenn.kiosk.offline-queue.v2')) throw new TypeError('distinct V3 queue key required');
+  if (![2,3,4].includes(protocolVersion) || (protocolVersion >= 3 && key === 'jenn.kiosk.offline-queue.v2')) throw new TypeError('distinct V3 queue key required');
   const metaKey = `${key}.meta`;
   const itemPrefix = `${key}.item.`;
   const sequencePrefix = `${key}.sequence.`;
@@ -551,7 +553,7 @@ export function createBrowserQueueStorage({
       const candidate = storage.key(index);
       if (typeof candidate !== 'string' || !candidate.startsWith(itemPrefix)) continue;
       const parsed = JSON.parse(storage.getItem(candidate));
-      const validation = (protocolVersion === 3 ? validateKioskQueueItemV3 : validateKioskQueueItem)(parsed);
+      const validation = (protocolVersion === 4 ? validateOwnerFieldItemV1 : protocolVersion === 3 ? validateKioskQueueItemV3 : validateKioskQueueItem)(parsed);
       if (
         !validation.ok
         || candidate !== itemKey(validation.item)
@@ -736,7 +738,7 @@ export function createKioskOfflineQueue({ storage, transport, clock } = {}) {
       if (['conflict', 'reviewRequired'].includes(loaded.state.syncStatus)) {
         return failure('QUEUE_REPLAY_BLOCKED', { syncStatus: loaded.state.syncStatus });
       }
-      const validation = (storage.protocolVersion === 3 ? validateKioskQueueItemV3 : validateKioskQueueItem)(rawItem);
+      const validation = (storage.protocolVersion === 4 ? validateOwnerFieldItemV1 : storage.protocolVersion === 3 ? validateKioskQueueItemV3 : validateKioskQueueItem)(rawItem);
       if (!validation.ok) return validation;
       if (rawItem.localSequence !== loaded.state.nextLocalSequence) {
         return failure('LOCAL_SEQUENCE_MISMATCH', {
@@ -838,7 +840,7 @@ export function createKioskOfflineQueue({ storage, transport, clock } = {}) {
         const latest = reloadHead(storage, head);
         if (!latest.ok) return latest;
         state = latest.state;
-        if (storage.protocolVersion === 3 && response?.status === 409 && response.body?.code === 'LEGACY_ONLINE_EVENT_REVIEW_REQUIRED') {
+        if (storage.protocolVersion >= 3 && response?.status === 409 && response.body?.code === 'LEGACY_ONLINE_EVENT_REVIEW_REQUIRED') {
           return outcome(state, serverStatus, { processed, stopCode: response.body.code });
         }
         if (protocolFailure(response) || response.status >= 500) {
@@ -855,8 +857,8 @@ export function createKioskOfflineQueue({ storage, transport, clock } = {}) {
           );
         }
         if (
-          !(storage.protocolVersion === 3 ? validKioskResultV3(response.body) : validateKioskRunEventResponse(response.body).ok)
-          || !(storage.protocolVersion === 3 ? (response.body.ok ? response.status === 200 : response.status >= 400) : validResultHttpStatus(response))
+          !(storage.protocolVersion >= 3 ? validKioskResultV3(response.body) : validateKioskRunEventResponse(response.body).ok)
+          || !(storage.protocolVersion >= 3 ? (response.body.ok ? response.status === 200 : response.status >= 400) : validResultHttpStatus(response))
         ) {
           return outcome(state, serverStatus, { processed });
         }

@@ -1,7 +1,11 @@
-import {createBrowserQueueStorage,createKioskOfflineQueue} from '/kiosk-offline-queue-v2.js?v=kiosk-v3-resource-id-20261018-r4';
-import {createKioskTransportV3} from '/kiosk-queue-protocol-v3.js?v=kiosk-v3-resource-id-20261018-r4';
-import {deriveKioskActionState,createKioskControlLock} from '/kiosk-control-lock.js?v=kiosk-v3-resource-id-20261018-r4';
+import {createBrowserQueueStorage,createKioskOfflineQueue} from '/kiosk-offline-queue-v2.js?v=jso-session-field-20261018-r1';
+import {createKioskTransportV3,createOwnerFieldTransportV1} from '/kiosk-queue-protocol-v3.js?v=jso-session-field-20261018-r1';
+import {deriveKioskActionState,createKioskControlLock} from '/kiosk-control-lock.js?v=jso-session-field-20261018-r1';
+import {browserSession} from '/browser-session.js?v=jso-session-field-20261018-r1';
 const $=id=>document.getElementById(id);
+const ownerMode=Boolean($('owner-field')),protocolVersion=ownerMode?4:3;
+let viewActive=!ownerMode;
+
 const labels={scheduled:'待开始',shooting:'拍摄中',blocked:'已暂停（需工作安排处理）',completed:'已完成',unsupported:'需负责人处理'};
 const messages={SCHEDULING_REVISION_CONFLICT:'排期已变化，请刷新核对后再操作。',RUN_REVISION_CONFLICT:'现场状态已变化，请刷新核对。',RESOURCE_ALREADY_RUNNING:'本资源已有正在拍摄的场次。',RUN_PREPARATION_REQUIRED:'场次状态已变化或尚未就绪，请核对。',FORBIDDEN:'此设备无权操作该资源。',WRITE_ADMISSION_DISABLED:'当前处于禁写状态。',KIOSK_TODAY_ONLY:'只能开始北京时间当天的场次。',UNAUTHENTICATED:'设备身份无效，请重新登录。'};
 let token='',identity=null,model=null,selected=null,pending=null,pendingKey=null,storageBlocked=false,busy=false,fresh=false,controlling=false,controlAcquiring=false,epoch=0,canRetry=false,queue=null,queueKey=null,accessBlocked=false,offlineRead=false;
@@ -13,12 +17,12 @@ function queued(){try{const q=queue?.inspect();if(q&&!q.ok)storageBlocked=true;r
 function action(s){
  return deriveKioskActionState({serverItem:s?{scheduleItemId:s.id,runId:s.run?.id??null,runRevision:s.run?.runRevision??0,runState:s.state}:null,pendingItems:queued()?.items.filter(i=>i.scheduleItemId===s?.id)??[],controlling,busy});
 }
-function allowed(){const q=queued();return Boolean(identity&&model&&(fresh||offlineRead||!navigator.onLine)&&controlling&&!busy&&!pending&&!storageBlocked&&!accessBlocked&&!model.conflict&&model.writeAdmission==='enabled'&&q&&!q.items.some(i=>i.recordingMode==='server-received')&&!['conflict','reviewRequired'].includes(q.syncStatus));}
+function allowed(){const q=queued();return Boolean(viewActive&&identity&&model&&(fresh||offlineRead||!navigator.onLine)&&controlling&&!busy&&!pending&&!storageBlocked&&!accessBlocked&&!model.conflict&&model.writeAdmission==='enabled'&&q&&!q.items.some(i=>i.recordingMode==='server-received')&&!['conflict','reviewRequired'].includes(q.syncStatus));}
 function installQueue(){
  const binding={subjectId:identity.subjectId,deviceId:identity.deviceId,resourceId:identity.resourceId},e=epoch;
- queueKey='jenn.kiosk.queue.v3:'+JSON.stringify([binding.subjectId,binding.deviceId,binding.resourceId]);
- const storage=createBrowserQueueStorage({storage:localStorage,key:queueKey,protocolVersion:3});
- const transport=createKioskTransportV3({fetchImpl:fetch,binding,getToken:()=>token,isCurrent:()=>e===epoch&&!!identity&&controlling&&!accessBlocked,onReceipt:(r,item)=>{
+ queueKey=(ownerMode?'jso.field.owner.v1:':'jenn.kiosk.queue.v3:')+JSON.stringify([binding.subjectId,binding.deviceId,binding.resourceId]);
+ const storage=createBrowserQueueStorage({storage:localStorage,key:queueKey,protocolVersion});
+ const transport=(ownerMode?createOwnerFieldTransportV1:createKioskTransportV3)({fetchImpl:ownerMode?browserSession.request.bind(browserSession):fetch,binding,getToken:()=>token,isCurrent:()=>e===epoch&&!!identity&&viewActive&&controlling&&!accessBlocked,onReceipt:(r,item)=>{
   const s=model?.sessions.find(s=>s.id===item.scheduleItemId);
   if(s&&r.runRevision>=(s.run?.runRevision??0)){s.state=r.resultingState;s.run={id:r.runId,status:r.resultingState,runRevision:r.runRevision,startedAt:r.startedAt,completedAt:r.completedAt};}
  }});
@@ -64,12 +68,13 @@ function savePending(value){
  pending=value;canRetry=false;
 }
 async function api(path,body){
- const response=await fetch('/api/v3/kiosk/'+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+token,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),cache:'no-store',signal:AbortSignal.timeout(12000)});
+ const binding=identity?JSON.stringify([identity.subjectId,identity.deviceId,identity.resourceId]):'';
+ const response=await (ownerMode?browserSession.request.bind(browserSession):fetch)((ownerMode?'/api/v3/field/':'/api/v3/kiosk/')+path,{method:body?'POST':'GET',headers:{...(ownerMode?(path==='identity'?{}:{'X-JSO-Field-Binding':binding}):{Authorization:'Bearer '+token}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),cache:'no-store',signal:AbortSignal.timeout(12000)});
  const data=await response.json();if(!response.ok||!data.ok)throw Object.assign(Error(messages[data.code]??'暂未完成，请刷新核对。'),{code:data.code,status:response.status});return data;
 }
 function releaseControl(){lock.stop();controlling=false;controlAcquiring=false;controls();}
-function requestControl(){if(!identity||controlAcquiring)return;if(!controlling){lock.stop();lock.start();}}
-function logout(){epoch++;releaseControl();token='';identity=null;model=null;pending=null;pendingKey=null;queue=null;queueKey=null;accessBlocked=false;offlineRead=false;selected=null;busy=false;fresh=false;canRetry=false;$('online-login').hidden=false;$('online-logout').hidden=true;$('online-identity').textContent='';$('complete-dialog').close();render();}
+function requestControl(){if(!viewActive||!identity||controlAcquiring)return;if(!controlling){lock.stop();lock.start();}}
+function logout(){epoch++;releaseControl();token='';identity=null;model=null;pending=null;pendingKey=null;queue=null;queueKey=null;accessBlocked=false;offlineRead=false;selected=null;busy=false;fresh=false;canRetry=false;$('online-login').hidden=ownerMode;$('online-logout').hidden=true;$('online-identity').textContent='';$('complete-dialog').close();render();}
 async function refresh(){
  const e=epoch;fresh=false;controls();
  try{const next=await api('day');if(e!==epoch)return;model=next;accessBlocked=false;fresh=true;offlineRead=false;if(!model.sessions.some(s=>s.id===selected))selected=model.currentId??model.sessions.find(s=>s.state==='scheduled')?.id??model.sessions[0]?.id??null;render();}
@@ -85,7 +90,7 @@ async function sendPending(){
  }
 }
 async function synchronize(){
- if(!queue||pending||busy||!identity||!controlling||!navigator.onLine||accessBlocked)return;
+ if(!viewActive||!queue||pending||busy||!identity||!controlling||!navigator.onLine||accessBlocked)return;
  const e=epoch;busy=true;controls();
  try{
   const result=await queue.replay({resourceId:identity.resourceId});if(e!==epoch)return;
@@ -100,19 +105,19 @@ async function act(eventType){
  const s=current(),a=action(s);if(!s?.supported||!a.actions.includes(eventType)||!['start','complete'].includes(eventType))return;
  const q=queued();if(!q)return;const stored=queueStorageState();if(!stored)return;
  const prior=q.items.filter(i=>i.scheduleItemId===s.id).at(-1);
- const item={schemaVersion:3,eventId:uid('KIOSK-EVENT'),runId:a.runId??uid('KIOSK-RUN'),scheduleItemId:s.id,eventType,expectedRunRevision:a.expectedRunRevision,expectedScheduleRevision:prior?.expectedScheduleRevision??model.revisions.scheduleRevision,occurredAt:new Date().toISOString(),recordingMode:'device-declared',subjectId:identity.subjectId,deviceId:identity.deviceId,resourceId:identity.resourceId,localSequence:stored.nextLocalSequence};
+ const item={schemaVersion:protocolVersion,eventId:uid(ownerMode?'OWNER-EVENT':'KIOSK-EVENT'),runId:a.runId??uid(ownerMode?'OWNER-RUN':'KIOSK-RUN'),scheduleItemId:s.id,eventType,expectedRunRevision:a.expectedRunRevision,expectedScheduleRevision:prior?.expectedScheduleRevision??model.revisions.scheduleRevision,occurredAt:new Date().toISOString(),recordingMode:'device-declared',subjectId:identity.subjectId,deviceId:identity.deviceId,resourceId:identity.resourceId,localSequence:stored.nextLocalSequence};
  const saved=queue.enqueue(item);if(!saved.ok){storageBlocked=true;say('无法持久保存本机记录，未发送。');controls();return;}
  say('已保存本机现场记录：设备声明时间，待同步。');render();
  if(navigator.onLine)await synchronize();
 }
-function queueStorageState(){try{return createBrowserQueueStorage({storage:localStorage,key:queueKey,protocolVersion:3}).load()??{nextLocalSequence:0};}catch{storageBlocked=true;say('无法读取本机记录，已停止操作。');controls();return null;}}
+function queueStorageState(){try{return createBrowserQueueStorage({storage:localStorage,key:queueKey,protocolVersion}).load()??{nextLocalSequence:0};}catch{storageBlocked=true;say('无法读取本机记录，已停止操作。');controls();return null;}}
 $('online-login').addEventListener('submit',async event=>{
  event.preventDefault();if(busy)return;releaseControl();const e=++epoch;token=$('online-token').value;$('online-token').value='';busy=true;fresh=false;identity=null;model=null;controls();
  try{const who=await api('identity');if(e!==epoch)return;identity=who;requestControl();pendingKey='jenn.kiosk.online-v3.pending:'+JSON.stringify([who.subjectId,who.deviceId,who.resourceId]);loadPending();installQueue();$('online-login').hidden=true;$('online-logout').hidden=false;$('online-identity').textContent=`设备 ${who.deviceId} · 操作员 ${who.subjectId} · 资源 ${who.resourceId}`;if(!storageBlocked)say(pending?'发现上次待核对操作，请先核对；不会自动发送。':'已加载场次；断网时可先记录本机现场时间。');await refresh();}
  catch(err){if(e===epoch){releaseControl();token='';identity=null;say(err.message);}}
  finally{if(e===epoch){busy=false;controls();if(!pending&&queued()?.pendingCount)void synchronize();}}
 });
-$('online-logout').addEventListener('click',()=>{logout();say('已退出；未确认操作仍保留，重新登录同一身份后核对。');});
+$('online-logout').addEventListener('click',async()=>{if(ownerMode)await browserSession.logout();logout();say('已退出；未确认操作仍保留，重新登录同一身份后核对。');});
 $('action-start').addEventListener('click',()=>act('start'));
 $('action-complete').addEventListener('click',()=>{if(!$('action-complete').disabled)$('complete-dialog').showModal();});
 $('complete-cancel').addEventListener('click',()=>$('complete-dialog').close());
@@ -127,11 +132,36 @@ $('online-reconcile').addEventListener('click',async()=>{
 });
 $('online-retry').addEventListener('click',async()=>{if(!pending||!canRetry||busy||!fresh||!navigator.onLine||!controlling)return;const e=epoch;busy=true;controls();try{await sendPending();}finally{if(e===epoch){busy=false;await refresh();controls();}}});
 window.addEventListener('offline',()=>{fresh=false;offlineRead=true;controls();say('已离线；保留已读场次，操作记录设备声明时间并先存本机。');});
-window.addEventListener('online',()=>{if(identity&&!busy){if(queued()?.pendingCount)void synchronize();else void refresh();}});
-window.addEventListener('storage',e=>{if(e.key==='jenn.kiosk.offline-queue.v2')$('legacy-warning').hidden=e.newValue===null;if(identity&&!busy){if(e.key===pendingKey)loadPending();if(e.key===pendingKey||e.key?.startsWith(queueKey+'.'))render();}});
+window.addEventListener('online',()=>{if(viewActive&&identity&&!busy){if(queued()?.pendingCount)void synchronize();else void refresh();}});
+window.addEventListener('storage',e=>{if(e.key==='jenn.kiosk.offline-queue.v2')$('legacy-warning').hidden=e.newValue===null;if(viewActive&&identity&&!busy){if(e.key===pendingKey)loadPending();if(e.key===pendingKey||e.key?.startsWith(queueKey+'.'))render();}});
 try{$('legacy-warning').hidden=localStorage.getItem('jenn.kiosk.offline-queue.v2')===null;}catch{storageBlocked=true;say('浏览器存储不可用，现场操作保持关闭。');}
-const lock=createKioskControlLock({locks:navigator.locks,storage:localStorage,eventTarget:window,ownerId:uid('TAB'),onChange:s=>{controlAcquiring=s.status==='acquiring';controlling=s.controlling;controls();}});
+const lock=createKioskControlLock({locks:navigator.locks,storage:localStorage,eventTarget:window,ownerId:uid('TAB'),...(ownerMode?{key:'jso.field.owner.control-lock.v1',lockName:'jso.field.owner.control.v1'}:{}),onChange:s=>{controlAcquiring=s.status==='acquiring';controlling=s.controlling;controls();}});
 window.addEventListener('pagehide',()=>{fresh=false;releaseControl();});
-window.addEventListener('pageshow',async()=>{fresh=false;if(identity&&!busy){await refresh();if(identity&&fresh)requestControl();}});
-setInterval(()=>{if(identity&&!busy&&navigator.onLine&&!document.hidden){if(queued()?.pendingCount)void synchronize();else void refresh();}},15000);
+window.addEventListener('pageshow',async()=>{fresh=false;if(viewActive&&identity&&!busy){await refresh();if(identity&&fresh)requestControl();}});
+setInterval(()=>{if(viewActive&&identity&&!busy&&navigator.onLine&&!document.hidden){if(queued()?.pendingCount)void synchronize();else void refresh();}},15000);
 render();
+
+// The shared terminal retains its Bearer flow; the personal view restores only
+// the authenticated administrator and uses a separate durable queue namespace.
+async function restoreOwner(){
+ if(!ownerMode||!browserSession.authenticated)return;
+ releaseControl();const e=++epoch;busy=true;identity=null;model=null;fresh=false;
+ try{
+  const who=await api('identity');if(e!==epoch)return;
+  if(who.role!=='administrator'||who.protocolVersion!==4)throw Error('本人身份不匹配，请重新登录。');
+  identity=who;pendingKey='jso.field.owner.pending.v1:'+JSON.stringify([who.subjectId,who.deviceId,who.resourceId]);
+  loadPending();installQueue();$('online-login').hidden=true;$('online-logout').hidden=false;
+  $('online-identity').textContent=`本人 ${who.subjectId} · 资源 ${who.resourceId}`;
+  await refresh();if(e===epoch&&viewActive)requestControl();
+ }catch(err){if(e===epoch){logout();say(err.message);}}
+ finally{if(e===epoch){busy=false;render();if(viewActive&&queued()?.pendingCount)void synchronize();}}
+}
+if(ownerMode){
+ window.addEventListener('jso-session-changed',()=>{if(browserSession.authenticated)void restoreOwner();else logout();});
+ window.addEventListener('jso-field-view',async e=>{
+  viewActive=Boolean(e.detail?.active);
+  if(!viewActive){releaseControl();$('complete-dialog').close();return;}
+  if(identity){await refresh();if(identity&&fresh){requestControl();if(queued()?.pendingCount)void synchronize();}}
+ });
+ if(browserSession.authenticated)void restoreOwner();
+}

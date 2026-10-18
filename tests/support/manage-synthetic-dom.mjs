@@ -25,5 +25,7 @@ export function dom(){
 }
 
 export function managementScript(){
- return ['common.js','references.js','manage.js'].map(name=>readFileSync(new URL('../../public/'+name,import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace(/export /g,'')).join('\n');
+ // This legacy in-process DOM suite exercises the disabled session path.
+ // Enabled Cookie lifecycle is covered by the isolated HTTPS browser fixture.
+ return 'const browserSession={enabled:false,authenticated:false,init:async()=>({enabled:false})};\n'+['common.js','references.js','manage.js'].map(name=>readFileSync(new URL('../../public/'+name,import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace(/export /g,'')).join('\n');
 }

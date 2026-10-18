@@ -22,6 +22,7 @@ const STATIC = new Map([
   ['/references.js', 'references.js'],
   ['/board-model.js', 'board-model.js'],
   ['/manage.js', 'manage.js'],
+  ['/browser-session.js','browser-session.js'],
   ['/manage.css', 'manage.css'],
   ['/submit', 'submit.html'],
   ['/submit/print', 'submit-print.html'],
@@ -246,6 +247,8 @@ export function createHttpApp({
   kioskOnline = null,
   scheduling = null,
   conversationBoundary = null,
+  browserSessionRuntime = null,
+  ownerField = null,
   writeAdmissionMode = 'enabled',
   writeAdmissionControl,
 }) {
@@ -286,6 +289,13 @@ export function createHttpApp({
     securityHeaders(response);
     const url = new URL(request.url, 'http://local.invalid');
     try {
+      if(browserSessionRuntime&&await browserSessionRuntime.handle(request,response,url))return;
+      if(!browserSessionRuntime&&request.method==='GET'&&url.pathname==='/api/v3/session')return sendJson(response,200,{ok:true,enabled:false,authenticated:false});
+      let cookieWriteGuard=null;
+      const revalidateCookieWrite=()=>{if(!cookieWriteGuard)return true;const next=browserSessionRuntime.checkWrite(request);if(!next.ok||next.sid!==cookieWriteGuard.sid){sendJson(response,next.status??401,{ok:false,code:next.code??'SESSION_CONTEXT_CHANGED'});return false;}return true;};
+      if(browserSessionRuntime&&browserSessionRuntime.hasCookie(request)&&/^\/api\/v3\/(?:business|field|proposals)\//u.test(url.pathname)&&!['GET','HEAD','OPTIONS'].includes(request.method)){
+        const guard=browserSessionRuntime.checkWrite(request);if(!guard.ok)return sendJson(response,guard.status,{ok:false,code:guard.code});cookieWriteGuard=guard;
+      }
       if (admission.isDisabled()
           && !['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
         return sendJson(response, 503, {
@@ -324,6 +334,20 @@ export function createHttpApp({
       if ((url.pathname.startsWith('/api/v2/') || ['/api/v1/snapshot','/api/v1/requests','/api/v1/uploads'].includes(url.pathname))
         && store.db?.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get()) {
         return sendJson(response, 409, {ok:false,code:'CLIENT_PROTOCOL_UPGRADE_REQUIRED',requiredVersion:3});
+      }
+      if(url.pathname.startsWith('/api/v3/field/')){
+        if(!ownerField)return sendJson(response,404,{ok:false,code:'NOT_FOUND'});
+        if(!schema12)return sendJson(response,409,{ok:false,code:'CLIENT_PROTOCOL_UPGRADE_REQUIRED'});
+        if(url.search)return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'});
+        const identity=ownerField.authenticate(request);if(!identity)return sendJson(response,401,{ok:false,code:'SESSION_REQUIRED'});
+        if(request.method==='GET'&&url.pathname==='/api/v3/field/identity')return sendJson(response,200,ownerField.identity(identity));
+        if(!ownerField.binding(identity,request))return sendJson(response,409,{ok:false,code:'FIELD_CONTEXT_CHANGED'});
+        let result;
+        if(request.method==='GET'&&url.pathname==='/api/v3/field/day')result=ownerField.day(identity);
+        else if(request.method==='POST'&&url.pathname==='/api/v3/field/events'){const command=await readJson(request);if(!revalidateCookieWrite())return;result=ownerField.record(identity,command);}
+        else {const receipt=request.method==='GET'&&/^\/api\/v3\/field\/events\/([A-Za-z0-9][A-Za-z0-9._:-]{7,127})$/u.exec(url.pathname);if(!receipt)return sendJson(response,404,{ok:false,code:'NOT_FOUND'});result=ownerField.receipt(identity,receipt[1]);}
+        const internal=result?.ok!==true&&(['RUN_EVENT_WRITE_FAILED','INTERNAL_ERROR'].includes(result?.code)||/^(?:ERR|SQLITE)(?:_|$)/u.test(result?.code??''));
+        return sendJson(response,internal?500:businessHttpStatus(result),result);
       }
       if(url.pathname.startsWith('/api/v3/kiosk/')){
         if(!schema12)return sendJson(response,409,{ok:false,code:'CLIENT_PROTOCOL_UPGRADE_REQUIRED',requiredSchema:12});
@@ -500,6 +524,7 @@ export function createHttpApp({
           let originalName=String(request.headers['x-file-name']||'reference');try{originalName=decodeURIComponent(originalName);}catch{}
           const contentType=String(request.headers['content-type']||'').split(';')[0].trim().toLowerCase();
           const buffer=await readBuffer(request,12*1024*1024);
+          if(!revalidateCookieWrite())return;
           const result=store.saveUpload({operationId,originalName,contentType,kind:'image',buffer,role:auth.principal.role,deduplicate:true,requireUnsubmittedOperation:true});
           return sendJson(response,result.status,result);
         }
@@ -530,6 +555,7 @@ export function createHttpApp({
         }
         if (request.method==='POST') {
           input.command=await readJson(request);
+          if(!revalidateCookieWrite())return;
           if (!input.command || typeof input.command!=='object' || Array.isArray(input.command)) return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'});
           if (business.key && input.command[business.key]!==input[business.key]) return sendJson(response,400,{ok:false,code:'PATH_COMMAND_MISMATCH'});
           if (business.kind) input.kind=business.kind;
@@ -570,6 +596,7 @@ export function createHttpApp({
             code: error?.message === 'invalid JSON' ? 'INVALID_JSON' : 'INVALID_REQUEST',
           });
         }
+        if(!revalidateCookieWrite())return;
         if (!command || typeof command !== 'object' || Array.isArray(command)) {
           return sendJson(response, 400, { ok: false, code: 'INVALID_REQUEST' });
         }

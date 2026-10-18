@@ -61,7 +61,7 @@ test('Jenn and Unicode business resource offline queues reload, recover a lost r
  }
 });
 test('new Kiosk HTML and every module dependency share one cache version; V2 remains available',()=>{
- const version='kiosk-v3-resource-id-20261018-r4';
+ const version='jso-session-field-20261018-r1';
  for(const file of ['kiosk-online-v3.html','kiosk-online-v3.js','kiosk-offline-queue-v2.js']){
  const source=readFileSync(new URL('../public/'+file,import.meta.url),'utf8');const references=[...source.matchAll(/(?:src=\"|from ['\"])([^'\"]+\.js\?v=([^'\"]+))/g)];assert.ok(references.length);for(const ref of references)assert.equal(ref[2],version);
  assert.doesNotMatch(source,/kiosk-v3-offline-20261018-r3/);

@@ -191,6 +191,7 @@ export function createKioskControlLock({
   setRepeating = globalThis.setInterval,
   clearRepeating = globalThis.clearInterval,
   key = 'jenn.kiosk.control-lock.v2',
+  lockName = 'jenn.kiosk.control.v2',
   onChange = () => {},
 } = {}) {
   if (typeof ownerId !== 'string' || ownerId === '') throw new TypeError('ownerId is required');
@@ -284,7 +285,7 @@ export function createKioskControlLock({
     let request;
     try {
       request = locks.request(
-        'jenn.kiosk.control.v2',
+        lockName,
         { mode: 'exclusive', ifAvailable: true },
         async lock => {
           if (stopped) return;

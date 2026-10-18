@@ -1,3 +1,5 @@
+import {createBrowserSessionOptionsFromEnv,requireBrowserSessionRuntime,browserSessionConfigDigest} from './browser-session-v1.mjs';
+import {createOwnerFieldV1} from './owner-field-v1.mjs';
 import {assertConversationStartupBinding} from './conversation-runtime-v1.mjs';
 import {createKioskOnlineOptionsFromEnv,requireKioskOnlineRuntimeV3} from './kiosk-online-runtime-v3.mjs';
 import {createKioskOnlineV3} from './kiosk-online-v3.mjs';
@@ -192,6 +194,7 @@ export function createOperationsServer({
   schedulingAllowedBriefHosts = [],
   conversationBoundaryFactory,
   kioskOnlineRuntime,
+  browserSessionRuntime,
   writeAdmissionMode = 'enabled',
 }) {
   if(conversationBoundaryFactory!==undefined && kioskAuthenticate!==undefined)
@@ -200,8 +203,10 @@ export function createOperationsServer({
     requireKioskOnlineRuntimeV3(kioskOnlineRuntime);
     if(kioskAuthenticate!==undefined||kioskServiceBinding?.mode!=='DISABLED')throw new Error('KIOSK_V3_LEGACY_RUNTIME_CONFLICT');
   }
+  if(browserSessionRuntime)requireBrowserSessionRuntime(browserSessionRuntime,process.env);
   const startup = assertG3AuthorityReconciliationStartupAllowed({ databasePath });
   const coreAccepted = startup.reason === 'PROSPECTIVE_CORE_ACCEPTANCE';
+  if(coreAccepted&&(Boolean(browserSessionRuntime)!==Boolean(browserSessionConfigDigest(process.env))||(startup.prepared&&browserSessionRuntime)))throw Error('G3_CORE_ACCEPTANCE_BROWSER_SESSION_CONFIG');
   assertConversationStartupBinding({startup, factory:conversationBoundaryFactory,
     ownerAuthenticate:schedulingAuthenticate, kioskOnlineRuntime});
   if (coreAccepted && (orphanCleanupMode !== 'disabled'
@@ -264,7 +269,7 @@ export function createOperationsServer({
     ? null
     : createSchedulingV2Application({
         store,
-        authenticate: schedulingAuthenticate,
+        authenticate: request=>browserSessionRuntime?.hasCookie(request)?browserSessionRuntime.authenticate(request):schedulingAuthenticate(request),
         clock: effectiveClock,
         allowedBriefHosts: schedulingAllowedBriefHosts,
       });
@@ -278,6 +283,8 @@ export function createOperationsServer({
     kioskOnline,
     scheduling,
     conversationBoundary: boundary,
+    browserSessionRuntime,
+    ownerField:browserSessionRuntime?createOwnerFieldV1({store,runtime:browserSessionRuntime,clock:effectiveClock}):null,
     writeAdmissionControl,
   });
   const server = createServer(app);
@@ -382,6 +389,7 @@ export function startOperationsFromEnv({conversationBoundaryFactory} = {}) {
     writeAdmissionMode,
     ...kioskRuntimeOptions,
     ...createBusinessRuntimeOptionsFromEnv(process.env),
+    ...createBrowserSessionOptionsFromEnv(process.env),
     ...createKioskOnlineOptionsFromEnv(process.env),
     conversationBoundaryFactory,
   });
