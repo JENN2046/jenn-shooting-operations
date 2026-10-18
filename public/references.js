@@ -20,7 +20,7 @@ export function referenceGallery(references,getToken){
    if(!entry){
     entry={};images.set(id,entry);
     entry.pending=(async()=>{
-     const response=await fetch('/api/v3/business/references/'+encodeURIComponent(reference.id),{headers:{Authorization:'Bearer '+token}});
+     const response=await fetch('/api/v3/business/references/'+encodeURIComponent(reference.id),{headers:token?{Authorization:'Bearer '+token}:{}});
      if(!response.ok)throw Error('参考图读取失败，请重新登录或刷新后重试。');
      const blob=await response.blob();
      if(current!==generation||images.get(id)!==entry||token!==getToken())return;

@@ -1,15 +1,16 @@
+import {browserSession} from './browser-session.js?v=jso-session-field-20261018-r1';
 import {mergeFiles,fileSelectionError} from './common.js';
-import {referenceGallery,clearReferenceImages} from './references.js';
+import {referenceGallery,clearReferenceImages} from './references.js?v=jso-session-field-20261018-r1';
 const $=s=>document.querySelector(s);
 let dayPreview=null,editingOrder=null,pageDraftDirty=false;
 let token='',state=null,preview=null,published=null,publishedBinding=null,editing=null,proposal=null,busy=false;
 let pending=null;try{pending=JSON.parse(sessionStorage.getItem('jso.pending.operation')||'null');}catch{}
 const messages={DYNAMIC_FORECAST_NOT_CURRENT:'需要已有的正在拍摄或受阻执行记录；未确认的实际状态不能当作已知。',DYNAMIC_OCCUPANCY_UNKNOWN:'已有占用信息不完整，请先核对。',DYNAMIC_PREVIEW_CHANGED:'现场、安排或配置已变化，请重新预览。',DYNAMIC_TODAY_ONLY:'仅支持北京时间当天，结束时间必须晚于现在。',DYNAMIC_UNRESOLVED:'存在未解决项，整批未保存。',FORBIDDEN:'没有这个资源的操作权限。',WRITE_ADMISSION_DISABLED:'当前处于禁写状态，不能保存。',CALENDAR_HAS_CONFLICTS:'新规则与已排场次冲突，请先改期。',SCHEDULING_REVISION_CONFLICT:'安排已被其他操作更新，请刷新并重新核对。',RESCHEDULE_REVISION_CONFLICT:'安排已变化，请刷新后重新核对。',SCHEDULING_RESOURCE_OVERLAP_OR_UNKNOWN:'与已有拍摄或缓冲冲突，或存在尚未确定的占用。',PAST_CALENDAR_CHANGE_FORBIDDEN:'历史工作规则需要保留，请选择今天或以后的生效日。',SCHEDULING_QUIESCENCE_HELD:'维护操作正在持锁，暂不能修改。',OPERATION_NOT_FOUND:'暂未找到回执，不能据此认定未提交。请保持待核对状态。',CONFIG_SCHEMA_TRANSITION_REQUIRES_REVIEW:'已有旧版日历需要单独迁移，页面暂不直接转换。'};
 function say(text){$('#message').textContent=text;}
-function syncBusy(){$('#reference-files').disabled=busy||Boolean(pending)||Boolean(editingOrder);document.querySelectorAll('button').forEach(b=>b.disabled=busy||Boolean(pending)&&!['login-button','reconcile','refresh','logout'].includes(b.id));$('#unknown').hidden=!pending;}
+function syncBusy(){$('#reference-files').disabled=busy||Boolean(pending)||Boolean(editingOrder);document.querySelectorAll('#management-view button,#login button,#unknown button,#view-switch button').forEach(b=>b.disabled=busy||Boolean(pending)&&!['login-button','reconcile','refresh','logout'].includes(b.id));$('#unknown').hidden=!pending;}
 function savePending(value){pending=value;if(value)sessionStorage.setItem('jso.pending.operation',JSON.stringify(value));else sessionStorage.removeItem('jso.pending.operation');syncBusy();}
 function fail(result){return new Error(messages[result.code]||`操作未完成：${result.code||'请稍后核对'}`);}
-async function api(path,body,signal){const response=await fetch(path,{signal,method:body?'POST':'GET',headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});let result;try{result=await response.json();}catch{throw new Error('响应无法确认，请核对原操作结果。');}if(!response.ok||!result.ok)throw Object.assign(fail(result),{definite:response.status<500,result});return result;}
+async function api(path,body,signal){const init={signal,method:body?'POST':'GET',headers:{...(browserSession.enabled?{}:{Authorization:`Bearer ${token}`}),...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined};const response=await(browserSession.enabled?browserSession.request(path,init):fetch(path,init));let result;try{result=await response.json();}catch{throw new Error('响应无法确认，请核对原操作结果。');}if(!response.ok||!result.ok)throw Object.assign(fail(result),{definite:response.status<500,result});return result;}
 async function mutation(path,body){if(pending)throw new Error('请先核对上一次操作。');savePending({path,body,id:body.operationId||body.decisionId||body.submission?.operationId||(body.eventId?`admin:${body.eventId}`:undefined)});try{const r=await api(path,body);savePending(null);return r;}catch(e){if(e.definite)savePending(null);throw e;}}
 async function work(fn){if(busy)return;busy=true;syncBusy();say('正在处理…');try{await fn();if($('#message').textContent==='正在处理…')say('已更新当前显示。');}catch(e){say(e.message);}finally{busy=false;syncBusy();}}
 function newId(prefix){return `${prefix}-${crypto.randomUUID()}`;}
@@ -33,7 +34,7 @@ function renderSessions(snapshot){
  if(!snapshot.sessions.length)$('#sessions').append(row('p','暂无已排场次。'));
 }
 function render(){
- $('#workspace').hidden=false;$('#login').hidden=true;$('#identity').textContent=`${state.principal.subjectId} · ${state.writeAdmission==='disabled'?'当前禁写':'可编辑'} · 北京时间`;
+ $('#workspace').hidden=false;$('#login').hidden=true;$('#view-switch').hidden=!browserSession.enabled;$('#identity').textContent=`${state.principal.subjectId} · ${state.writeAdmission==='disabled'?'当前禁写':'可编辑'} · 北京时间`;
  $('#setup').hidden=state.resources.length>0||state.principal.role!=='administrator';
  const current=active();$('#config-state').textContent=current?'当前规则已生效。后续修改会保留历史版本。':'尚未设置工作日历。';
  $('#calendar-fields').disabled=state.principal.role!=='administrator'||!state.resources.length;
@@ -71,8 +72,8 @@ function buildConfig(){const config=draftBase();if(![2,3].includes(config.schema
 }
 function syncSaturday(){$('#anchor-label').hidden=$('#saturday').value!=='alternating';$('#anchor').required=$('#saturday').value==='alternating';}
 $('#saturday').addEventListener('change',syncSaturday);
-$('#login').addEventListener('submit',e=>{e.preventDefault();work(async()=>{token=$('#token').value;$('#token').value='';await refresh();say('已读取工作安排。');});});
-$('#logout').addEventListener('click',()=>{token='';state=null;clearReferenceImages();$('#order-list').replaceChildren();if(!pending)resetOrderForm();$('#workspace').hidden=true;$('#login').hidden=false;say('已退出。未确认操作的引用仍保留，供下次核对。');});
+$('#login').addEventListener('submit',e=>{e.preventDefault();work(async()=>{const entered=$('#token').value;$('#token').value='';await browserSession.init();if(browserSession.enabled){await browserSession.login(entered);token='';}else token=entered;await refresh();say('已读取工作安排。');});});
+$('#logout').addEventListener('click',async()=>{const confirmed=!browserSession.enabled||await browserSession.logout();token='';state=null;clearReferenceImages();$('#order-list').replaceChildren();if(!pending)resetOrderForm();$('#workspace').hidden=true;$('#login').hidden=false;$('#view-switch').hidden=true;showView(false);say(confirmed?'已退出。未确认操作和现场队列仍保留。':'本机已锁定；服务端退出待联网确认。现场队列仍保留。');});
 $('#refresh').addEventListener('click',()=>work(refresh));
 $('#register').addEventListener('click',()=>work(async()=>{if(!state.revisions)throw new Error('尚未建立初始化控制记录，不能在页面自动初始化。');await mutation('/api/v3/business/resources',{operationId:newId('RESOURCE'),expectedScheduleRevision:state.revisions.scheduleRevision,expectedProjectionRevision:state.revisions.projectionRevision,resource:state.initialResource});await refresh();say('已登记一个摄影师资源。');}));
 $('#add-exception').addEventListener('click',()=>{pageDraftDirty=true;exceptionRow();invalidate();});$('#calendar-form').addEventListener('input',invalidate);
@@ -154,7 +155,7 @@ function renderReferenceSelection(){const list=$('#reference-selection');list.re
 $('#reference-files').addEventListener('change',()=>{if(busy||pending||editingOrder)return;const files=mergeFiles(referenceFiles,Array.from($('#reference-files').files));const error=fileSelectionError(files.map(file=>({file,kind:'image'})));if(error){say(error);$('#reference-files').value='';return;}referenceFiles=files;renderReferenceSelection();});
 async function uploadReferences(){
  for(const file of referenceFiles){if(referenceUploads.has(file))continue;
-  const response=await fetch('/api/v3/business/references?operationId='+encodeURIComponent(draftOperationId),{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':file.type,'X-File-Name':encodeURIComponent(file.name)},body:file});
+  const path='/api/v3/business/references?operationId='+encodeURIComponent(draftOperationId),init={method:'POST',headers:{...(browserSession.enabled?{}:{Authorization:'Bearer '+token}),'Content-Type':file.type,'X-File-Name':encodeURIComponent(file.name)},body:file};const response=await(browserSession.enabled?browserSession.request(path,init):fetch(path,init));
   const result=await response.json();if(!response.ok||!result.ok)throw new Error('参考图上传未完成：'+(result.code||'请重试')+'；订单尚未保存。');
   referenceUploads.set(file,result.upload.id);renderReferenceSelection();
  }
@@ -190,7 +191,7 @@ $('#actual-complete').addEventListener('click',()=>work(()=>actualEvent('complet
 // their original CAS base; never silently rebase an unsaved form onto new facts.
 let automaticRead=false,automaticTimer=null,automaticController=null,automaticDisplayed=null;
 async function refreshScheduleAutomatically(){
- if(automaticRead||!token||!state||busy||pending||document.hidden)return;
+ if(automaticRead||(!token&&!browserSession.authenticated)||!state||busy||pending||document.hidden)return;
  const original=state,identityToken=token;automaticRead=true;
  const controller=automaticController=new AbortController(),deadline=window.setTimeout(()=>controller.abort(),10000);
  try{const next=await api('/api/v3/business/state',undefined,controller.signal);
@@ -213,3 +214,14 @@ if(typeof window!=='undefined'){
  window.addEventListener('pagehide',()=>{window.clearInterval(automaticTimer);automaticTimer=null;automaticController?.abort();});
  window.addEventListener('pageshow',start);start();
 }
+
+function showView(field){
+ $('#management-view').hidden=field;$('#owner-field').hidden=!field;
+ if(browserSession.enabled){window.dispatchEvent(new CustomEvent('jso-field-view',{detail:{active:field}}));location.hash=field?'field':'manage';}
+}
+$('#view-manage').addEventListener('click',()=>showView(false));
+$('#view-field').addEventListener('click',()=>{if(pending||busy){say('请先核对当前管理操作。');return;}showView(true);});
+if(typeof window!=='undefined')window.addEventListener('jso-session-changed',()=>{
+ if(browserSession.enabled&&!browserSession.authenticated){clearReferenceImages();state=null;$('#workspace').hidden=true;$('#login').hidden=false;$('#view-switch').hidden=true;showView(false);}
+});
+if(typeof window!=='undefined')(async()=>{try{await browserSession.init();if(browserSession.enabled){$('#login-policy').textContent='凭据仅用于换取安全会话，不保存在浏览器存储中。会话过期或服务重启后需重新登录；本人现场原记录保留。';await import('./kiosk-online-v3.js?v=jso-session-field-20261018-r1');if(browserSession.authenticated){await refresh();$('#view-switch').hidden=false;showView(location.hash==='#field');}}}catch{say('会话暂未恢复，请联网后重新登录；未确认记录仍保留。');}})();
