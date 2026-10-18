@@ -1,3 +1,4 @@
+import {validateKioskQueueItemV3,validKioskDayV3,validKioskResultV3,matchesKioskReceiptV3} from './kiosk-queue-protocol-v3.js?v=kiosk-v3-offline-20261018-r3';
 const EVENT_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/u;
 const IDENTIFIER = /^\S(?:[\s\S]*\S)?$/u;
 const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/iu;
@@ -318,7 +319,7 @@ function validCache(cache) {
   );
 }
 
-function validateQueueState(value) {
+function validateQueueState(value, protocolVersion = 2) {
   if (
     !exactKeys(value, STATE_KEYS)
     || value.schemaVersion !== 2
@@ -335,7 +336,7 @@ function validateQueueState(value) {
   const eventIds = new Set();
   let priorSequence = null;
   for (const rawItem of value.items) {
-    const validation = validateKioskQueueItem(rawItem);
+    const validation = (protocolVersion === 3 ? validateKioskQueueItemV3 : validateKioskQueueItem)(rawItem);
     if (!validation.ok || eventIds.has(rawItem.eventId)) return failure('QUEUE_STATE_INVALID');
     if (priorSequence !== null && rawItem.localSequence !== priorSequence + 1) {
       return failure('QUEUE_STATE_INVALID');
@@ -385,7 +386,7 @@ function stateFailure(code) {
 
 function itemFingerprint(item) {
   return JSON.stringify(Object.fromEntries(
-    [...ITEM_KEYS].toSorted()
+    Object.keys(item).toSorted()
       .filter(key => Object.hasOwn(item, key))
       .map(key => [key, item[key]]),
   ));
@@ -410,19 +411,19 @@ function loadState(storage) {
     return stateFailure('QUEUE_STATE_INVALID');
   }
   if (raw === null || raw === undefined) return { ok: true, state: initialState() };
-  const validation = validateQueueState(raw);
+  const validation = validateQueueState(raw, storage.protocolVersion);
   return validation.ok ? validation : stateFailure(validation.code);
 }
 
 function commitState(storage, baseState, nextState) {
-  const validation = validateQueueState(nextState);
+  const validation = validateQueueState(nextState, storage.protocolVersion);
   if (!validation.ok) return failure(validation.code);
   try {
     const committed = storage.commit({
       baseState: clone(baseState),
       nextState: clone(validation.state),
     });
-    const committedValidation = validateQueueState(committed);
+    const committedValidation = validateQueueState(committed, storage.protocolVersion);
     if (!committedValidation.ok) return failure('QUEUE_STATE_INVALID');
     return { ok: true, state: committedValidation.state };
   } catch {
@@ -439,11 +440,13 @@ function clockTimestamp(clock) {
   }
 }
 
-function validRefreshBody(body, resourceId) {
+function validRefreshBody(body, resourceId, protocolVersion = 2) {
+  if (protocolVersion === 3) return validKioskDayV3(body, resourceId);
   return validateKioskCurrentResponse(body).ok && body.resourceId === resourceId;
 }
 
-function applied(response, head) {
+function applied(response, head, protocolVersion = 2) {
+  if (protocolVersion === 3) return response.status === 200 && matchesKioskReceiptV3(response.body, head);
   const exactStatus = (response?.status === 201 && response?.body?.replayed === false)
     || (response?.status === 200 && response?.body?.replayed === true);
   return validateKioskRunEventResponse(response?.body).ok
@@ -454,7 +457,8 @@ function applied(response, head) {
     && response.body.runId === head.runId;
 }
 
-function reviewRequired(response, head) {
+function reviewRequired(response, head, protocolVersion = 2) {
+  if (protocolVersion === 3) return response.status === 422 && response.body?.code === 'EVENT_TIME_REVIEW_REQUIRED';
   return validateKioskRunEventResponse(response?.body).ok
     && response.body.ok === false
     && response.body.code === 'EVENT_TIME_REVIEW_REQUIRED'
@@ -487,6 +491,7 @@ function validResultHttpStatus(response) {
 export function createBrowserQueueStorage({
   storage,
   key = 'jenn.kiosk.offline-queue.v2',
+  protocolVersion = 2,
 } = {}) {
   if (
     !storage
@@ -499,6 +504,7 @@ export function createBrowserQueueStorage({
     throw new TypeError('localStorage-compatible storage is required');
   }
   if (typeof key !== 'string' || key === '') throw new TypeError('storage key is required');
+  if (![2,3].includes(protocolVersion) || (protocolVersion === 3 && key === 'jenn.kiosk.offline-queue.v2')) throw new TypeError('distinct V3 queue key required');
   const metaKey = `${key}.meta`;
   const itemPrefix = `${key}.item.`;
   const sequencePrefix = `${key}.sequence.`;
@@ -545,7 +551,7 @@ export function createBrowserQueueStorage({
       const candidate = storage.key(index);
       if (typeof candidate !== 'string' || !candidate.startsWith(itemPrefix)) continue;
       const parsed = JSON.parse(storage.getItem(candidate));
-      const validation = validateKioskQueueItem(parsed);
+      const validation = (protocolVersion === 3 ? validateKioskQueueItemV3 : validateKioskQueueItem)(parsed);
       if (
         !validation.ok
         || candidate !== itemKey(validation.item)
@@ -604,12 +610,13 @@ export function createBrowserQueueStorage({
   }
 
   return Object.freeze({
+    protocolVersion,
     load() {
       return loadFromRecords();
     },
     commit({ baseState, nextState }) {
-      const base = validateQueueState(baseState);
-      const next = validateQueueState(nextState);
+      const base = validateQueueState(baseState, protocolVersion);
+      const next = validateQueueState(nextState, protocolVersion);
       if (!base.ok || !next.ok) throw new Error('QUEUE_STATE_INVALID');
       const nextIds = new Set(next.state.items.map(item => item.eventId));
       for (const item of base.state.items) {
@@ -729,7 +736,7 @@ export function createKioskOfflineQueue({ storage, transport, clock } = {}) {
       if (['conflict', 'reviewRequired'].includes(loaded.state.syncStatus)) {
         return failure('QUEUE_REPLAY_BLOCKED', { syncStatus: loaded.state.syncStatus });
       }
-      const validation = validateKioskQueueItem(rawItem);
+      const validation = (storage.protocolVersion === 3 ? validateKioskQueueItemV3 : validateKioskQueueItem)(rawItem);
       if (!validation.ok) return validation;
       if (rawItem.localSequence !== loaded.state.nextLocalSequence) {
         return failure('LOCAL_SEQUENCE_MISMATCH', {
@@ -793,7 +800,7 @@ export function createKioskOfflineQueue({ storage, transport, clock } = {}) {
         }
         serverStatus = { kind: 'unchanged', current: null };
       } else {
-        if (!validRefreshBody(refresh.body, resourceId)) {
+        if (!validRefreshBody(refresh.body, resourceId, storage.protocolVersion)) {
           return outcome(state, { kind: 'unavailable', current: null }, { processed: 0 });
         }
         projectionRevision = refresh.body.projectionRevision;
@@ -831,6 +838,9 @@ export function createKioskOfflineQueue({ storage, transport, clock } = {}) {
         const latest = reloadHead(storage, head);
         if (!latest.ok) return latest;
         state = latest.state;
+        if (storage.protocolVersion === 3 && response?.status === 409 && response.body?.code === 'LEGACY_ONLINE_EVENT_REVIEW_REQUIRED') {
+          return outcome(state, serverStatus, { processed, stopCode: response.body.code });
+        }
         if (protocolFailure(response) || response.status >= 500) {
           return outcome(state, serverStatus, { processed });
         }
@@ -845,12 +855,12 @@ export function createKioskOfflineQueue({ storage, transport, clock } = {}) {
           );
         }
         if (
-          !validateKioskRunEventResponse(response.body).ok
-          || !validResultHttpStatus(response)
+          !(storage.protocolVersion === 3 ? validKioskResultV3(response.body) : validateKioskRunEventResponse(response.body).ok)
+          || !(storage.protocolVersion === 3 ? (response.body.ok ? response.status === 200 : response.status >= 400) : validResultHttpStatus(response))
         ) {
           return outcome(state, serverStatus, { processed });
         }
-        if (applied(response, head)) {
+        if (applied(response, head, storage.protocolVersion)) {
           if (!latest.headPresent) {
             processed += 1;
             continue;
@@ -870,7 +880,7 @@ export function createKioskOfflineQueue({ storage, transport, clock } = {}) {
           processed += 1;
           continue;
         }
-        if (reviewRequired(response, head)) {
+        if (reviewRequired(response, head, storage.protocolVersion)) {
           if (!latest.headPresent) continue;
           const nextState = { ...state, syncStatus: 'reviewRequired' };
           const saved = commitState(storage, state, nextState);

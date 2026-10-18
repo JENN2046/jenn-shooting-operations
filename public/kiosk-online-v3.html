@@ -13,7 +13,7 @@
     <div><p class="kicker">VCP 摄制运营</p><h1>现场控制台</h1></div>
     <div class="status-cluster" aria-label="现场连接状态">
       <span id="server-status" class="status-pill" data-state="stale">服务端：等待同步</span>
-      <span id="sync-status" class="status-pill" data-state="synced">在线模式：不离线排队</span>
+      <span id="sync-status" class="status-pill" data-state="synced">现场记录先存本机，联网核对回执</span>
       <span id="lock-status" class="status-pill" data-state="readonly">控制权：只读</span>
       <span class="pending-pill">待核对 <strong id="pending-count">0</strong></span>
     </div>
@@ -25,9 +25,10 @@
       <p id="online-identity"></p><button id="online-logout" type="button" hidden>退出现场</button>
       <p id="legacy-warning" hidden>检测到旧版离线队列。本页已隔离，保留原数据，不自动发送；请由负责人核对旧待发记录。</p>
       <button id="online-refresh" type="button" disabled>刷新场次</button>
-      <button id="online-reconcile" type="button" hidden>核对上次操作结果</button>
+      <button id="online-reconcile" type="button" hidden>同步／核对现场记录</button>
       <button id="online-retry" type="button" hidden>按原编号重试</button>
     </section>
+    <ul id="offline-records" aria-label="本机待同步现场记录"></ul>
     <p id="live-message" class="live-message" aria-live="polite" aria-atomic="true"></p>
     <section class="current-panel" aria-labelledby="current-title">
       <div class="section-heading">
@@ -75,10 +76,10 @@
 
   <dialog id="complete-dialog" aria-labelledby="complete-title" aria-describedby="complete-description">
     <h2 id="complete-title">确认完成整个场次？</h2>
-    <p id="complete-description">此操作按服务器收到请求的时间记录完成。断网时不能操作。</p>
+    <p id="complete-description">开拍和完成均保存点按时的设备声明时间；联网核对成功后成为服务端事实，服务器接收时间另行记录。</p>
     <div class="dialog-actions"><button id="complete-confirm" type="button" class="complete">确认完成</button><button id="complete-cancel" type="button" class="secondary">返回检查</button></div>
   </dialog>
 
-  <script type="module" src="/kiosk-online-v3.js?v=online-v3-20261012"></script>
+  <script type="module" src="/kiosk-online-v3.js?v=kiosk-v3-offline-20261018-r3"></script>
 </body>
 </html>

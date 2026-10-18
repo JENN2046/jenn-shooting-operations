@@ -37,6 +37,7 @@ const STATIC = new Map([
   ['/kiosk-control-lock.js', 'kiosk-control-lock.js'],
   ['/kiosk-device-identity-v1.js', 'kiosk-device-identity-v1.js'],
   ['/kiosk-offline-queue-v2.js', 'kiosk-offline-queue-v2.js'],
+  ['/kiosk-queue-protocol-v3.js', 'kiosk-queue-protocol-v3.js'],
 ]);
 const TYPES = new Map([
   ['.html', 'text/html; charset=utf-8'],
