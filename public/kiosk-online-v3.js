@@ -1,6 +1,6 @@
-import {createBrowserQueueStorage,createKioskOfflineQueue} from '/kiosk-offline-queue-v2.js?v=kiosk-v3-offline-20261018-r2';
-import {createKioskTransportV3} from '/kiosk-queue-protocol-v3.js?v=kiosk-v3-offline-20261018-r2';
-import {deriveKioskActionState,createKioskControlLock} from '/kiosk-control-lock.js?v=kiosk-v3-offline-20261018-r2';
+import {createBrowserQueueStorage,createKioskOfflineQueue} from '/kiosk-offline-queue-v2.js?v=kiosk-v3-offline-20261018-r3';
+import {createKioskTransportV3} from '/kiosk-queue-protocol-v3.js?v=kiosk-v3-offline-20261018-r3';
+import {deriveKioskActionState,createKioskControlLock} from '/kiosk-control-lock.js?v=kiosk-v3-offline-20261018-r3';
 const $=id=>document.getElementById(id);
 const labels={scheduled:'待开始',shooting:'拍摄中',blocked:'已暂停（需工作安排处理）',completed:'已完成',unsupported:'需负责人处理'};
 const messages={SCHEDULING_REVISION_CONFLICT:'排期已变化，请刷新核对后再操作。',RUN_REVISION_CONFLICT:'现场状态已变化，请刷新核对。',RESOURCE_ALREADY_RUNNING:'本资源已有正在拍摄的场次。',RUN_PREPARATION_REQUIRED:'场次状态已变化或尚未就绪，请核对。',FORBIDDEN:'此设备无权操作该资源。',WRITE_ADMISSION_DISABLED:'当前处于禁写状态。',KIOSK_TODAY_ONLY:'只能开始北京时间当天的场次。',UNAUTHENTICATED:'设备身份无效，请重新登录。'};
@@ -72,7 +72,7 @@ function requestControl(){if(!identity||controlAcquiring)return;if(!controlling)
 function logout(){epoch++;releaseControl();token='';identity=null;model=null;pending=null;pendingKey=null;queue=null;queueKey=null;accessBlocked=false;offlineRead=false;selected=null;busy=false;fresh=false;canRetry=false;$('online-login').hidden=false;$('online-logout').hidden=true;$('online-identity').textContent='';$('complete-dialog').close();render();}
 async function refresh(){
  const e=epoch;fresh=false;controls();
- try{const next=await api('day');if(e!==epoch)return;model=next;fresh=true;offlineRead=false;if(!model.sessions.some(s=>s.id===selected))selected=model.currentId??model.sessions.find(s=>s.state==='scheduled')?.id??model.sessions[0]?.id??null;render();}
+ try{const next=await api('day');if(e!==epoch)return;model=next;accessBlocked=false;fresh=true;offlineRead=false;if(!model.sessions.some(s=>s.id===selected))selected=model.currentId??model.sessions.find(s=>s.state==='scheduled')?.id??model.sessions[0]?.id??null;render();}
  catch(err){if(e!==epoch)return;if(err.status===401){logout();say(err.message);return;}fresh=false;offlineRead=!err.status||err.status>=500;if(err.status===403){accessBlocked=true;releaseControl();}render();say(navigator.onLine?err.message:'已离线；保留上次已读场次，现场记录先存本机。');}
 }
 async function sendPending(){

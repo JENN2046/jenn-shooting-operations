@@ -1,4 +1,4 @@
-import {validateKioskQueueItemV3,validKioskDayV3,validKioskResultV3,matchesKioskReceiptV3} from './kiosk-queue-protocol-v3.js?v=kiosk-v3-offline-20261018-r2';
+import {validateKioskQueueItemV3,validKioskDayV3,validKioskResultV3,matchesKioskReceiptV3} from './kiosk-queue-protocol-v3.js?v=kiosk-v3-offline-20261018-r3';
 const EVENT_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/u;
 const IDENTIFIER = /^\S(?:[\s\S]*\S)?$/u;
 const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/iu;
