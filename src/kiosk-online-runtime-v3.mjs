@@ -1,4 +1,5 @@
 import {timingSafeEqual} from 'node:crypto';
+import {isSchedulingIdentifierV1} from './scheduling-contract-v1.mjs';
 import {createTrustedPrincipal} from './authorization-v2.mjs';
 const runtimes=new WeakSet();
 const id=v=>typeof v==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(v);
@@ -8,7 +9,7 @@ export function createKioskOnlineRuntimeV3({identities,forbiddenTokens=[]}) {
  const tokens=new Set(forbiddenTokens),devices=new Set();
  const entries=identities.map(identity=>{
   if(!identity||Object.keys(identity).sort().join(',')!=='deviceId,resourceId,subjectId,token'
-   ||!id(identity.deviceId)||!id(identity.resourceId)||!id(identity.subjectId)
+   ||!id(identity.deviceId)||!isSchedulingIdentifierV1(identity.resourceId)||!id(identity.subjectId)
    ||typeof identity.token!=='string'||/[^\x21-\x7e]/u.test(identity.token)||Buffer.byteLength(identity.token)<32||tokens.has(identity.token)||devices.has(identity.deviceId))throw new TypeError('KIOSK_V3_IDENTITY_INVALID');
   tokens.add(identity.token);devices.add(identity.deviceId);
   const principal=createTrustedPrincipal({subjectId:identity.subjectId,role:'operator',resourceIds:[identity.resourceId]}).principal;

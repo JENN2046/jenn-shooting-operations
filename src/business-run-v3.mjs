@@ -3,7 +3,7 @@ import {schedulingOperationIdOwnedByOtherV1} from './sqlite-scheduling-operation
 import {createApplyRunEvent} from './run-event-use-case-v2.mjs';
 import {createSqliteRunEventStore} from './sqlite-run-event-store-v2.mjs';
 import {authorizeCapability,validateTrustedPrincipal} from './authorization-v2.mjs';
-import {canonicalJsonSchedulingV1 as json,digestCanonicalJsonSchedulingV1 as digest} from './scheduling-contract-v1.mjs';
+import {canonicalJsonSchedulingV1 as json,digestCanonicalJsonSchedulingV1 as digest,isSchedulingIdentifierV1} from './scheduling-contract-v1.mjs';
 import {assertSchedulingQuiescenceV1} from './sqlite-scheduling-quiescence-v1.mjs';
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 const identifier=v=>typeof v==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(v);
@@ -13,7 +13,7 @@ function createRunRecorder({db,now,writeAdmission}, kiosk) {
  return ({command,principal,deviceId,resourceId})=>{
   if(!writeAdmission())return {ok:false,code:'WRITE_ADMISSION_DISABLED'};
   if(!validateTrustedPrincipal(principal).ok||principal.role!==(kiosk?'operator':'administrator'))return {ok:false,code:'FORBIDDEN'};
-  if(kiosk&&(!identifier(deviceId)||!identifier(resourceId)||principal.resourceIds.length!==1||principal.resourceIds[0]!==resourceId))return {ok:false,code:'FORBIDDEN'};
+  if(kiosk&&(!identifier(deviceId)||!isSchedulingIdentifierV1(resourceId)||principal.resourceIds.length!==1||principal.resourceIds[0]!==resourceId))return {ok:false,code:'FORBIDDEN'};
   const declared=kiosk&&command?.recordingMode==='device-declared';
   const keys=['eventId','runId','scheduleItemId','eventType','expectedRunRevision',...(kiosk?['expectedScheduleRevision']:[]),...(declared?['recordingMode','occurredAt']:[])];
   if(!command||Object.keys(command).length!==keys.length||!keys.every(k=>Object.hasOwn(command,k))||!identifier(command.eventId)||!identifier(command.runId)||typeof command.scheduleItemId!=='string'||!['start','complete'].includes(command.eventType)||!Number.isSafeInteger(command.expectedRunRevision)||command.expectedRunRevision<0||(kiosk&&(!Number.isSafeInteger(command.expectedScheduleRevision)||command.expectedScheduleRevision<0)))return {ok:false,code:'INVALID_RUN_EVENT_COMMAND'};

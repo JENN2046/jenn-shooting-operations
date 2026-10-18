@@ -51,7 +51,7 @@ test('R5 repinned Kiosk drift rejects stale factories and actual runtimes before
 test('R5 freshly pinned invalid or overlapping Kiosk configuration fails before opening store',async()=>{
  const f=await fixture();try{
  const before=readFileSync(f.filename);
- for(const raw of ['', '{', '[]',JSON.stringify([{...kiosk,token:'z'.repeat(40)}]),JSON.stringify([{...kiosk,token:'a'.repeat(40)}]),JSON.stringify([{...kiosk,deviceId:'short'}]),JSON.stringify([{...kiosk,resourceId:'short'}])]){
+ for(const raw of ['', '{', '[]',JSON.stringify([{...kiosk,token:'z'.repeat(40)}]),JSON.stringify([{...kiosk,token:'a'.repeat(40)}]),JSON.stringify([{...kiosk,deviceId:'short'}]),JSON.stringify([{...kiosk,resourceId:' Jenn '}])]){
  process.env.JSO_KIOSK_ONLINE_IDENTITIES_JSON=raw;f.pin();f.activate();
  assert.throws(()=>f.server('enabled',{conversationBoundaryFactory:f.factory()}),/KIOSK_V3_|CREDENTIAL_OVERLAP/);
  assert.deepEqual(readFileSync(f.filename),before);

@@ -1,5 +1,10 @@
 // V3 wire contract only. Persistence and replay remain in the existing Kiosk queue.
 const id=v=>typeof v==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(v);
+// Equivalent to scheduling-contract-v1.isSchedulingIdentifierV1 for resource references.
+// Keep device, operator, event and run identifiers on their existing strict contract.
+export const validKioskResourceIdV3=v=>typeof v==='string'&&v.length>0&&v===v.trim()
+ &&[...v].length<=160&&/\S/u.test(v)&&!/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(v)
+ &&!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(v);
 const revision=v=>Number.isSafeInteger(v)&&v>=0;
 const time=v=>{try{return new Date(v).toISOString()===v;}catch{return false;}};
 const fields=['schemaVersion','eventId','runId','scheduleItemId','eventType','expectedRunRevision','expectedScheduleRevision','occurredAt','recordingMode','subjectId','deviceId','resourceId','localSequence'];
@@ -11,13 +16,14 @@ export function kioskCommandV3(item){
 }
 export function validateKioskQueueItemV3(v){
  const valid=v&&Object.keys(v).length===fields.length&&fields.every(k=>Object.hasOwn(v,k))
- &&v.schemaVersion===3&&['eventId','runId','scheduleItemId','subjectId','deviceId','resourceId'].every(k=>id(v[k]))
+ &&v.schemaVersion===3&&['eventId','runId','scheduleItemId','subjectId','deviceId'].every(k=>id(v[k]))
+ &&validKioskResourceIdV3(v.resourceId)
  &&['expectedRunRevision','expectedScheduleRevision','localSequence'].every(k=>revision(v[k]))
  &&['start','complete'].includes(v.eventType)&&['device-declared','server-received'].includes(v.recordingMode)&&time(v.occurredAt);
  return valid?{ok:true,item:structuredClone(v)}:{ok:false,code:'INVALID_QUEUE_ITEM'};
 }
 export function validKioskDayV3(v,resourceId){
- return v?.ok===true&&v.protocolVersion===3&&v.resourceId===resourceId&&id(v.subjectId)&&id(v.deviceId)
+ return v?.ok===true&&v.protocolVersion===3&&v.resourceId===resourceId&&validKioskResourceIdV3(v.resourceId)&&id(v.subjectId)&&id(v.deviceId)
  &&time(v.serverTime)&&revision(v.revisions?.scheduleRevision)&&revision(v.revisions?.projectionRevision)&&Array.isArray(v.sessions);
 }
 export function matchesKioskReceiptV3(r,item){

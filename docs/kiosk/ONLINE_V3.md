@@ -4,7 +4,7 @@
 
 ## 显式启用与权限
 
-`JSO_KIOSK_ONLINE_RUNTIME=enabled` 和 `JSO_KIOSK_ONLINE_IDENTITIES_JSON` 提供数组，每项恰为 `token,subjectId,deviceId,resourceId`。这是部署保管人提供的配置，不在仓库发行真实身份。token 仅允许可见ASCII字符 `0x21–0x7E`（不含任何空白、控制字符或非ASCII），至少32字节、不得重复或与业务/旧角色环境凭据相同；设备不可重复；标识使用8–128字符的字母数字及 `._:-`。默认不启用；配置非法则停止启动。
+`JSO_KIOSK_ONLINE_RUNTIME=enabled` 和 `JSO_KIOSK_ONLINE_IDENTITIES_JSON` 提供数组，每项恰为 `token,subjectId,deviceId,resourceId`。这是部署保管人提供的配置，不在仓库发行真实身份。token 仅允许可见ASCII字符 `0x21–0x7E`（不含任何空白、控制字符或非ASCII），至少32字节、不得重复或与业务/旧角色环境凭据相同；设备不可重复；subjectId/deviceId仍使用8–128字符的字母数字及 `._:-`。resourceId引用既有业务资源，复用权威业务ID合同：非空、首尾无空白、最多160个Unicode码点，无控制字符、行分隔符或未配对surrogate；例如既有资源`Jenn`直接复用，不重命名或复制资源。默认不启用；配置非法则停止启动。
 
 服务端固定 `operator` 角色，只给一个资源的读排期和现场事件能力。客户端不能指定角色或设备，不能使用管理端身份。在线版与旧 Kiosk 认证不能同时启用；旧 `KIOSK_SERVICE_CONTEXT` 仍需既有合法且 DISABLED 的绑定。新运行时经构造器校验，只有 Schema12 才能接入，不取消旧 `/api/v2/*` 的协议闸门。两个新环境配置字段纳入既有runtimeConfigDigest，首发启动核对注入运行时与获准环境身份一致。既有启动准入、维护锁及 PREPARED 只读要求保持；需要主动写入仍必须已有 ACTIVE 许可。不要仅为测试改生产准入。
 
@@ -67,4 +67,4 @@
 
 本页面新产生的开拍/完成始终使用device-declared；即使点按时显示在线，未送达后的补交也不得把发生时间改为恢复联网时刻。服务器received_at/recordedAt独立保留。旧单条pending保留原命令与手动回执核对/原编号重试；旧队列server-received记录先查原回执，未找到时只保留并提示负责人核对，不自动POST、不修改编号/摘要/时间模式。其未解决前暂停新增记录；后续同步仍可查找迟到回执。已存在的混合模式冲突不自动改写或纠正。
 
-HTML入口及其队列、V3适配器、控制锁依赖统一使用?v=kiosk-v3-offline-20261018-r3；共享队列内部适配器import也使用同一版本。JS仍沿用300秒缓存，版本URL避免新入口复用旧缓存；旧V2入口和默认队列协议保留。未来修改这组模块须统一更新该版本。已经打开的旧页面需重新导航加载新HTML；本次不引入热替换。
+HTML入口及其队列、V3适配器、控制锁依赖统一使用?v=kiosk-v3-resource-id-20261018-r4；共享队列内部适配器import也使用同一版本。JS仍沿用300秒缓存，版本URL避免新入口复用旧缓存；旧V2入口和默认队列协议保留。未来修改这组模块须统一更新该版本。已经打开的旧页面需重新导航加载新HTML；本次不引入热替换。

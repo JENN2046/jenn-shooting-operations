@@ -1,6 +1,6 @@
-import {createBrowserQueueStorage,createKioskOfflineQueue} from '/kiosk-offline-queue-v2.js?v=kiosk-v3-offline-20261018-r3';
-import {createKioskTransportV3} from '/kiosk-queue-protocol-v3.js?v=kiosk-v3-offline-20261018-r3';
-import {deriveKioskActionState,createKioskControlLock} from '/kiosk-control-lock.js?v=kiosk-v3-offline-20261018-r3';
+import {createBrowserQueueStorage,createKioskOfflineQueue} from '/kiosk-offline-queue-v2.js?v=kiosk-v3-resource-id-20261018-r4';
+import {createKioskTransportV3} from '/kiosk-queue-protocol-v3.js?v=kiosk-v3-resource-id-20261018-r4';
+import {deriveKioskActionState,createKioskControlLock} from '/kiosk-control-lock.js?v=kiosk-v3-resource-id-20261018-r4';
 const $=id=>document.getElementById(id);
 const labels={scheduled:'待开始',shooting:'拍摄中',blocked:'已暂停（需工作安排处理）',completed:'已完成',unsupported:'需负责人处理'};
 const messages={SCHEDULING_REVISION_CONFLICT:'排期已变化，请刷新核对后再操作。',RUN_REVISION_CONFLICT:'现场状态已变化，请刷新核对。',RESOURCE_ALREADY_RUNNING:'本资源已有正在拍摄的场次。',RUN_PREPARATION_REQUIRED:'场次状态已变化或尚未就绪，请核对。',FORBIDDEN:'此设备无权操作该资源。',WRITE_ADMISSION_DISABLED:'当前处于禁写状态。',KIOSK_TODAY_ONLY:'只能开始北京时间当天的场次。',UNAUTHENTICATED:'设备身份无效，请重新登录。'};
