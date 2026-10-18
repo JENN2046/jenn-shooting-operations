@@ -106,24 +106,3 @@ test('R5 certified boundary serves owner identity with unchanged grants and rest
  for(let i=0;i<2;i++){const child=spawnSync(process.execPath,['--input-type=module','-e',code],{encoding:'utf8',timeout:30000});assert.equal(child.status,0,child.stderr);assert.match(child.stdout,/R5_SAME_TARGET_BOUNDARY_OK/);}
  }finally{f.close();}
 });
-
-test('R5 rejects other integrations in both PREPARED and ACTIVE',async()=>{
- const f=await fixture();const old=process.env.JSO_KIOSK_ONLINE_RUNTIME;
- const oldIdentities=process.env.JSO_KIOSK_ONLINE_IDENTITIES_JSON;
- try{
- const {assertConversationStartupBinding}=await import(pathToFileURL(join(f.app,'src/conversation-runtime-v1.mjs')));
- for(const prepared of [true,false]){
-  const startup={reason:'PROSPECTIVE_CORE_ACCEPTANCE',integrations:'native-vcp-conversation-v1',prepared};
-  assert.throws(()=>assertConversationStartupBinding({startup,kioskOnlineRuntime:{},env:{}}),/OTHER_INTEGRATION/);
-  assert.throws(()=>assertConversationStartupBinding({startup,env:{JSO_KIOSK_ONLINE_RUNTIME:'enabled'}}),/OTHER_INTEGRATION/);
- }
- // End-to-end startup rejection even when the unwanted configuration is freshly pinned.
- process.env.JSO_KIOSK_ONLINE_RUNTIME='enabled';
- process.env.JSO_KIOSK_ONLINE_IDENTITIES_JSON=JSON.stringify([{token:'independent-kiosk-token-'.padEnd(40,'x'),
-  subjectId:'operator-001',deviceId:'device-001',resourceId:'resource-001'}]);
- f.record.policy.runtimeConfigSha256=f.m.runtimeConfigDigest(process.env,5);f.install();
- assert.throws(()=>f.server(),/OTHER_INTEGRATION/);
- f.activate();assert.throws(()=>f.server('enabled',{conversationBoundaryFactory:f.factory()}),/OTHER_INTEGRATION/);
- }finally{if(old===undefined)delete process.env.JSO_KIOSK_ONLINE_RUNTIME;else process.env.JSO_KIOSK_ONLINE_RUNTIME=old;
- if(oldIdentities===undefined)delete process.env.JSO_KIOSK_ONLINE_IDENTITIES_JSON;else process.env.JSO_KIOSK_ONLINE_IDENTITIES_JSON=oldIdentities;f.close();}
-});

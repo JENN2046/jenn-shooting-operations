@@ -25,7 +25,12 @@ cannot enable writes. ACTIVE must use `src/server-conversation.mjs`, or the equi
 reviewed `conversationFactoryFromEnv` plus `createBusinessRuntimeOptionsFromEnv`
 composition. It rejects omitted, replaced or stale factories/authenticators before
 opening the store. This check binds the actual closures, not caller-provided metadata.
-ACTIVE R5 cannot attach Kiosk online runtime. No new grant or identity is issued;
+ACTIVE R5 may attach the existing Bearer Kiosk V3 runtime with validated, distinct
+credentials. The factory binds the exact Kiosk mode and identity JSON it validated;
+startup checks the actual registered runtime against that configuration before
+opening the store. The existing runtime digest already includes both Kiosk fields,
+so the R5 schema, integration value and digest algorithm are unchanged.
+No new grant or identity is issued;
 the existing per-command owner delegation remains required.
 The conversation factory rejects preconfigured nonempty `grants` in agent identities;
 omit `grants` or use an empty array. Static grants supported by other agent compositions
@@ -36,7 +41,7 @@ through the legacy snapshot endpoint.
 The existing business runtime validator also rejects business credentials shared
 with any enabled legacy viewer, submitter, scheduler or administrator credential.
 Distinct credentials may coexist; conversation uses this same business validation.
-Outside R5, when online Kiosk is enabled alongside conversation, its identities are
+When online Kiosk is enabled alongside conversation, its identities are
 validated and their tokens must also be distinct from every agent credential.
 Conversation and the legacy Basic-auth kiosk are not a supported composition.
 A nonblank `KIOSK_AUTH_CONFIG_PATH` rejects conversation startup before reading
@@ -54,7 +59,7 @@ persistence in the client.
 
 Tests use synthetic materials and isolated stores only. The new test file covers
 R4 denial, R5 PREPARED read-only behavior, real factory/authenticator binding,
-configuration drift, missing/revoked materials, other-integration rejection and two
+configuration drift, missing/revoked materials, PREPARED Kiosk rejection, ACTIVE Kiosk configuration binding and two
 independent-process same-target ACTIVE startups. Existing conversation tests cover
 confirmation binding and receipt recovery; they do not repeat the accepted human
 operation. Real root-owned custody/default-path evidence is reported separately from

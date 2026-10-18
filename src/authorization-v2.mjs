@@ -1,3 +1,4 @@
+import {isSchedulingIdentifierV1} from './scheduling-contract-v1.mjs';
 const IDENTIFIER = /^\S(?:[\s\S]*\S)?$/u;
 const MAX_IDENTIFIER_LENGTH = 160;
 
@@ -69,7 +70,7 @@ function validateResourceIds(resourceIds) {
   if (!Array.isArray(resourceIds)) return failure('INVALID_RESOURCE_SCOPE');
   const seen = new Set();
   for (const resourceId of resourceIds) {
-    if (!validIdentifier(resourceId) || seen.has(resourceId)) {
+    if (!isSchedulingIdentifierV1(resourceId) || seen.has(resourceId)) {
       return failure('INVALID_RESOURCE_SCOPE');
     }
     seen.add(resourceId);
@@ -146,7 +147,7 @@ export function authorizeCapability({ principal, capability, resourceId } = {}) 
     return Object.freeze({ allowed: false, code: 'RESOURCE_ID_REQUIRED' });
   }
   if (resourceId !== undefined) {
-    if (!validIdentifier(resourceId)) {
+    if (!isSchedulingIdentifierV1(resourceId)) {
       return Object.freeze({ allowed: false, code: 'INVALID_RESOURCE_ID' });
     }
     if (!principal.resourceIds.includes(resourceId)) {
