@@ -13,7 +13,7 @@ Explicitly set `JSO_BROWSER_SESSION_RUNTIME=enabled` and `JSO_BROWSER_ORIGIN` to
 one exact HTTPS origin (no path or trailing slash). TLS termination must preserve
 Cookie/Origin headers. `JSO_BROWSER_SESSION_TTL_MS` defaults to 28800000 (8 h,
 maximum 24 h); `JSO_BROWSER_SESSION_IDLE_MS` defaults to 1800000 (30 min).
-Successful authenticated writes reset idle time; reads do not. Production enablement
+Session/Origin/CSRF-validated write activity resets idle time; reads do not. Production enablement
 requires a newly accepted source/runtime binding through the existing release
 process; copying files or adding environment settings to an old acceptance does
 not authorize startup. Disabled/unset preserves prior runtime digest semantics.
