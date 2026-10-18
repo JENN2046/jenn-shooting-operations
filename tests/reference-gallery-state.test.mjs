@@ -35,3 +35,18 @@ test('opened and pending reference images survive redraw, while removal and iden
   clearReferenceImages();globalThis.document=saved.document;globalThis.fetch=saved.fetch;URL.createObjectURL=saved.create;URL.revokeObjectURL=saved.revoke;
  }
 });
+
+test('public image preview sends no credential and retains download when the browser cannot decode it',async()=>{
+ const saved={document:globalThis.document,fetch:globalThis.fetch,create:URL.createObjectURL,revoke:URL.revokeObjectURL};let request;
+ globalThis.document={createElement:tag=>new Element(tag)};URL.createObjectURL=()=> 'blob:synthetic-visible';URL.revokeObjectURL=()=>{};
+ globalThis.fetch=async(path,options)=>{request={path,options};return{ok:true,blob:async()=>new Blob(['synthetic'])};};
+ const ref={id:'UP-VISIBLE',name:'reference.heic'};
+ try{
+  const gallery=referenceGallery([ref],()=> 'must-not-be-transmitted',true);const button=gallery.children[0];button.dispatchEvent(new Event('click'));await tick();
+  assert.equal(request.path,'/api/v3/public/board/references/UP-VISIBLE');assert.equal(request.options.headers.Authorization,undefined);
+  const image=gallery.children.find(x=>x.tagName==='img');assert.ok(image);assert.equal(button.hidden,true);
+  image.dispatchEvent(new Event('error'));assert.equal(gallery.children.some(x=>x.tagName==='img'),false);assert.equal(button.hidden,false);assert.match(button.textContent,/浏览器无法预览/);
+  assert.equal(gallery.children.find(x=>x.tagName==='a').download,ref.name);
+  clearReferenceImages();globalThis.fetch=async()=>({ok:false});const failed=referenceGallery([ref],()=>'',true);failed.children[0].dispatchEvent(new Event('click'));await tick();assert.match(failed.children[0].textContent,/刷新看板/);assert.doesNotMatch(failed.children[0].textContent,/登录/);
+ }finally{clearReferenceImages();globalThis.document=saved.document;globalThis.fetch=saved.fetch;URL.createObjectURL=saved.create;URL.revokeObjectURL=saved.revoke;}
+});

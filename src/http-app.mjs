@@ -1,3 +1,4 @@
+import {readPublicSchedulingBoard} from './scheduling-board-read-model.mjs';
 import { businessRoute, businessHttpStatus, safeBusinessException } from './business-http-v1.mjs';
 import { createReadStream, openSync, closeSync, fstatSync, readFileSync, constants } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -240,6 +241,18 @@ function requireRole(authorize, request, response, role) {
   return auth;
 }
 
+function serveReferenceImage(store,uploadId,response) {
+        const asset=store.db.prepare('SELECT * FROM uploads WHERE id=?').get(uploadId);
+        if(!store.uploadRoot||!asset?.stored_name||!/^([a-f0-9]{64})\.(jpg|png|webp|gif|heic)$/u.test(asset.stored_name))return sendJson(response,404,{ok:false,code:'REFERENCE_NOT_FOUND'});
+        let fd;
+        try{
+          fd=openSync(join(store.uploadRoot,asset.stored_name),constants.O_RDONLY|constants.O_NOFOLLOW);
+          const st=fstatSync(fd);if(!st.isFile()||st.size!==asset.size||st.size>12*1024*1024)throw new Error('REFERENCE_INVALID');
+          const bytes=readFileSync(fd);if(createHash('sha256').update(bytes).digest('hex')!==asset.sha256)throw new Error('REFERENCE_INVALID');
+          response.writeHead(200,{'Content-Type':asset.content_type,'Content-Length':bytes.length,'Cache-Control':'no-store'});return response.end(bytes);
+        }catch{return sendJson(response,404,{ok:false,code:'REFERENCE_NOT_FOUND'});}finally{if(fd!==undefined)closeSync(fd);}
+}
+
 export function createHttpApp({
   store,
   tokens = {},
@@ -249,9 +262,11 @@ export function createHttpApp({
   conversationBoundary = null,
   browserSessionRuntime = null,
   ownerField = null,
+  publicBoardEnabled = false,
   writeAdmissionMode = 'enabled',
   writeAdmissionControl,
 }) {
+  if(typeof publicBoardEnabled!=='boolean')throw new TypeError('public board flag must be boolean');
   const authorize = createAuthorizer(tokens);
   const storeAdmission = store?.writeAdmissionControl;
   const kioskWrites = typeof kiosk?.applyRunEvent === 'function';
@@ -314,7 +329,7 @@ export function createHttpApp({
       }
 
       const schema12=Boolean(store.db?.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get());
-      if(request.method==='GET'&&url.pathname==='/api/client-profile')return sendJson(response,200,{ok:true,protocolVersion:schema12?3:1});
+      if(request.method==='GET'&&url.pathname==='/api/client-profile')return sendJson(response,200,{ok:true,protocolVersion:schema12?3:1,...(schema12&&publicBoardEnabled?{publicBoard:true}:{})});
       if(schema12&&request.method==='GET'&&url.pathname==='/kiosk'&&kioskOnline)return serveStatic(response,'kiosk-online-v3.html');
       if(schema12&&request.method==='GET'&&['/submit','/submit/print','/submit/video','/kiosk'].includes(url.pathname))return serveStatic(response,'unavailable.html');
       if (request.method === 'GET' && STATIC.has(url.pathname)) {
@@ -510,6 +525,17 @@ export function createHttpApp({
         return sendMapped(response, mapKioskRunEventHttpResult(result));
       }
 
+      if(url.pathname==='/api/v3/public/board'||url.pathname.startsWith('/api/v3/public/board/')){
+        if(!publicBoardEnabled||!schema12||request.method!=='GET')return sendJson(response,404,{ok:false,code:'NOT_FOUND'});
+        if([...url.searchParams].length)return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'});
+        const image=/^\/api\/v3\/public\/board\/references\/([A-Za-z0-9._:-]+)$/u.exec(url.pathname);
+        if(url.pathname!=='/api/v3/public/board'&&!image)return sendJson(response,404,{ok:false,code:'NOT_FOUND'});
+        const view=readPublicSchedulingBoard(store.db);
+        if(!image)return sendJson(response,200,view);
+        if(!view.orderFacts.some(order=>order.references.some(ref=>ref.id===image[1])))return sendJson(response,404,{ok:false,code:'REFERENCE_NOT_FOUND'});
+        return serveReferenceImage(store,image[1],response);
+      }
+
       const referenceRead=request.method==='GET'&&/^\/api\/v3\/business\/references\/([A-Za-z0-9._:-]+)$/u.exec(url.pathname);
       const referenceWrite=request.method==='POST'&&url.pathname==='/api/v3/business/references';
       if(referenceRead||referenceWrite){
@@ -531,15 +557,7 @@ export function createHttpApp({
         if([...url.searchParams].length)return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'});
         const allowed=scheduling.authorizeReferenceRead({principal:auth.principal,uploadId:referenceRead[1]});
         if(!allowed.ok)return sendJson(response,businessHttpStatus(allowed),allowed);
-        const asset=store.db.prepare('SELECT * FROM uploads WHERE id=?').get(referenceRead[1]);
-        if(!store.uploadRoot||!asset?.stored_name||!/^([a-f0-9]{64})\.(jpg|png|webp|gif|heic)$/u.test(asset.stored_name))return sendJson(response,404,{ok:false,code:'REFERENCE_NOT_FOUND'});
-        let fd;
-        try{
-          fd=openSync(join(store.uploadRoot,asset.stored_name),constants.O_RDONLY|constants.O_NOFOLLOW);
-          const st=fstatSync(fd);if(!st.isFile()||st.size!==asset.size||st.size>12*1024*1024)throw new Error('REFERENCE_INVALID');
-          const bytes=readFileSync(fd);if(createHash('sha256').update(bytes).digest('hex')!==asset.sha256)throw new Error('REFERENCE_INVALID');
-          response.writeHead(200,{'Content-Type':asset.content_type,'Content-Length':bytes.length,'Cache-Control':'no-store'});return response.end(bytes);
-        }catch{return sendJson(response,404,{ok:false,code:'REFERENCE_NOT_FOUND'});}finally{if(fd!==undefined)closeSync(fd);}
+        return serveReferenceImage(store,referenceRead[1],response);
       }
 
       const business = businessRoute(request.method, url.pathname);

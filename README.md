@@ -85,3 +85,11 @@ npm run uploads:cleanup -- --apply
 到同一上传卷内的专用 `.cleanup` 目录，数据库提交后才最终删除；进程在提交前终止
 时，后续 Store 会依据仍存在的上传记录自动恢复该文件。恢复只扫描 `.cleanup`
 目录，不会随永久保留的已认领资产数量线性变慢。
+
+### Optional public daily board (Schema12)
+
+`JSO_PUBLIC_BOARD=enabled` exposes only confirmed, resolved Jenn schedule items and their associated order details/reference images at the existing board page. Unscheduled orders, cancelled/draft items, management state, configuration history and credentials are excluded. Anyone with the public URL can read those scheduled customer details and download the associated images. The default is disabled. This flag is bound by the existing runtime configuration digest (including R5); use a matching immutable image/source and acceptance installation rather than editing a live container.
+
+The public read routes are `GET /api/v3/public/board` and `GET /api/v3/public/board/references/:id`. A reference must belong to an actual order in that public schedule; knowing an arbitrary upload ID is insufficient. Existing business/management reads, all mutations and uploads keep their original authentication. `/manage` continues to use the administrator's private credential; no credential is embedded in the public board.
+
+公开看板开关默认关闭；启用后任何可访问链接者都能读取约定排期、客户说明与关联参考图，系统不识别“同事”。公共JSON和图片请求不携带Cookie或Bearer，管理页的现有浏览器会话、本人V4队列、Agent及独立Kiosk认证保持。启用时沿用现有R5 source/image/runtime绑定，同时保留browserSessions配置摘要；本变更不自动启用生产。
