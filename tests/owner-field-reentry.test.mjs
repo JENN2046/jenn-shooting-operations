@@ -6,6 +6,7 @@ import {randomUUID} from 'node:crypto';
 import {dom} from './support/manage-synthetic-dom.mjs';
 import {browserStorage} from './support/kiosk-offline-fixture.mjs';
 import {deriveKioskActionState,createKioskControlLock} from '../public/kiosk-control-lock.js';
+import {encodeOwnerFieldBindingV1} from '../public/kiosk-queue-protocol-v3.js';
 const settle=async()=>{await new Promise(r=>setImmediate(r));await new Promise(r=>setImmediate(r));};
 function lockManager(){const held=new Map();return {held,request:async(name,options,callback)=>{if(held.has(name))return callback(null);const entry={};held.set(name,entry);try{return await callback({name});}finally{if(held.get(name)===entry)held.delete(name);}}};}
 function page(locks,{request=async()=>{throw TypeError('synthetic offline');}}={}){
@@ -13,7 +14,7 @@ function page(locks,{request=async()=>{throw TypeError('synthetic offline');}}={
  ids.get('complete-dialog').close=()=>{};
  const window={addEventListener(name,fn){const a=handlers.get(name)??[];a.push(fn);handlers.set(name,a);},removeEventListener(){}};
  const browserSession={authenticated:false,request};
- const context=vm.createContext({document,window,navigator:{locks,onLine:false},localStorage:browserStorage(),browserSession,deriveKioskActionState,createKioskControlLock,crypto:{randomUUID},Date,Intl,AbortSignal,structuredClone,setInterval:()=>1});
+ const context=vm.createContext({document,window,navigator:{locks,onLine:false},localStorage:browserStorage(),browserSession,deriveKioskActionState,createKioskControlLock,encodeOwnerFieldBindingV1,crypto:{randomUUID},Date,Intl,AbortSignal,structuredClone,setInterval:()=>1});
  const source=readFileSync(new URL('../public/kiosk-online-v3.js',import.meta.url),'utf8').replace(/^import .*;\n/gm,'');
  vm.runInContext(source+`\nglobalThis.seed=()=>{identity={subjectId:'Jenn',deviceId:'BROWSER-SYNTHETIC-001',resourceId:'Jenn'};model={sessions:[{id:'SESSION-SYNTHETIC-001',state:'scheduled',supported:true,run:null,tasks:[{name:'synthetic',sku:'synthetic',shootingSubtype:'产品3D主图'}]}],revisions:{scheduleRevision:1},writeAdmission:'enabled',conflict:false};selected=model.sessions[0].id;queue={inspect:()=>({ok:true,items:[],pendingCount:0,syncStatus:'idle'})};render();};globalThis.state=()=>({controlling,viewActive,identity});`,context);
  context.seed();return {ids,browserSession,state:context.state,async fire(name,detail){await Promise.all((handlers.get(name)??[]).map(fn=>fn({detail})));await settle();}};

@@ -293,7 +293,7 @@ export function createHttpApp({
       if(!browserSessionRuntime&&request.method==='GET'&&url.pathname==='/api/v3/session')return sendJson(response,200,{ok:true,enabled:false,authenticated:false});
       let cookieWriteGuard=null;
       const revalidateCookieWrite=()=>{if(!cookieWriteGuard)return true;const next=browserSessionRuntime.checkWrite(request);if(!next.ok||next.sid!==cookieWriteGuard.sid){sendJson(response,next.status??401,{ok:false,code:next.code??'SESSION_CONTEXT_CHANGED'});return false;}return true;};
-      if(browserSessionRuntime&&browserSessionRuntime.hasCookie(request)&&/^\/api\/v3\/(?:business|field|proposals)\//u.test(url.pathname)&&!['GET','HEAD','OPTIONS'].includes(request.method)){
+      if(browserSessionRuntime&&browserSessionRuntime.hasCookie(request)&&/^\/api\/v[23]\/(?:business|field|proposals)\//u.test(url.pathname)&&!['GET','HEAD','OPTIONS'].includes(request.method)){
         const guard=browserSessionRuntime.checkWrite(request);if(!guard.ok)return sendJson(response,guard.status,{ok:false,code:guard.code});cookieWriteGuard=guard;
       }
       if (admission.isDisabled()

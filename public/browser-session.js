@@ -1,4 +1,4 @@
-let current={enabled:false,authenticated:false},epoch=0,initial,logoutInFlight,authenticationInFlight;
+let current={enabled:false,authenticated:false},epoch=0,logoutEpoch=0,initial,logoutInFlight,authenticationInFlight;
 const logoutKey='jso.browser.logout-pending',deviceKey='jso.browser.device-id.v1',sessionKey='jso.browser.session-changed.v1';
 const emit=()=>window.dispatchEvent(new CustomEvent('jso-session-changed',{detail:{authenticated:current.authenticated}}));
 const publish=value=>{current=value;epoch++;emit();};
@@ -16,17 +16,17 @@ async function discardAuthentication(s){
 export const browserSession={
  get enabled(){return current.enabled;},get authenticated(){return current.authenticated;},get state(){return current;},
  init(){return initial??=(async()=>{const generation=epoch;let s;try{s=await raw('/api/v3/session');}catch(e){if(e.status===404){publish({enabled:false,authenticated:false});return current;}throw e;}
-  if(generation!==epoch)return discardAuthentication(s);
+  if(generation!==epoch)throw Error('SESSION_CONTEXT_CHANGED');
   if(s.enabled&&localStorage.getItem(logoutKey)){
    if(s.authenticated){try{await raw('/api/v3/session/logout',{},s.csrfToken);}catch(e){if(e.status!==401)throw e;}}
    localStorage.removeItem(logoutKey);s={enabled:true,authenticated:false};
   }
-  if(generation!==epoch)return discardAuthentication(s);publish(s);return current;})().catch(e=>{initial=null;throw e;});},
+  if(generation!==epoch)throw Error('SESSION_CONTEXT_CHANGED');publish(s);return current;})().catch(e=>{initial=null;throw e;});},
  async login(token){
   const intent=epoch;if(logoutInFlight)await logoutInFlight;if(authenticationInFlight)await authenticationInFlight.catch(()=>{});
-  if(intent!==epoch)throw Error('SESSION_CONTEXT_CHANGED');const generation=epoch;
+  if(intent!==epoch)throw Error('SESSION_CONTEXT_CHANGED');const generation=epoch,logoutGeneration=logoutEpoch;
   const operation=(async()=>{const deviceId=await device();if(generation!==epoch)throw Error('SESSION_CONTEXT_CHANGED');
-   const s=await raw('/api/v3/session/login',{token,deviceId});if(generation!==epoch)return discardAuthentication(s);
+   const s=await raw('/api/v3/session/login',{token,deviceId});if(generation!==epoch){if(logoutGeneration!==logoutEpoch||localStorage.getItem(logoutKey))return discardAuthentication(s);localStorage.setItem(sessionKey,crypto.randomUUID());throw Error('SESSION_CONTEXT_CHANGED');}
    if(localStorage.getItem(deviceKey)!==s.deviceId)return discardAuthentication(s);
    localStorage.removeItem(logoutKey);localStorage.setItem(sessionKey,crypto.randomUUID());publish(s);return s;
   })();authenticationInFlight=operation;
@@ -44,8 +44,8 @@ export const browserSession={
  },
  async logout(){
   if(logoutInFlight)return logoutInFlight;
-  const pendingAuthentication=authenticationInFlight??initial;localStorage.setItem(logoutKey,'1');publish({enabled:true,authenticated:false});
+  const pendingAuthentication=authenticationInFlight??initial;logoutEpoch++;localStorage.setItem(logoutKey,'1');publish({enabled:true,authenticated:false});
   logoutInFlight=(async()=>{try{await pendingAuthentication?.catch(()=>{});const latest=await raw('/api/v3/session');if(latest.authenticated){try{await raw('/api/v3/session/logout',{},latest.csrfToken);}catch(e){if(e.status!==401)throw e;}}localStorage.removeItem(logoutKey);return true;}catch{return false;}finally{logoutInFlight=null;}})();return logoutInFlight;
  },
 };
-window.addEventListener('storage',e=>{if((e.key===logoutKey||e.key===sessionKey)&&e.newValue)publish({enabled:current.enabled,authenticated:false});});
+window.addEventListener('storage',e=>{if(!e.newValue)return;if(e.key===logoutKey){logoutEpoch++;publish({enabled:current.enabled,authenticated:false});}else if(e.key===sessionKey)publish({enabled:current.enabled,authenticated:false});});

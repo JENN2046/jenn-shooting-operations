@@ -1,3 +1,4 @@
+import {encodeOwnerFieldBindingV1} from '../public/kiosk-queue-protocol-v3.js';
 import {createOwnerDeviceRunV1} from './business-run-v3.mjs';
 import {readFieldDay} from './field-day-v3.mjs';
 import {requireBrowserSessionRuntime} from './browser-session-v1.mjs';
@@ -6,7 +7,7 @@ export function createOwnerFieldV1({store,runtime,clock=()=>new Date()}){
  const {db,writeAdmissionControl}=store,record=createOwnerDeviceRunV1({db,now:clock,writeAdmission:()=>!writeAdmissionControl.isDisabled()});
  return {
   authenticate:req=>runtime.fieldIdentity(req),
-  binding(identity,req){return req.headers['x-jso-field-binding']===JSON.stringify([identity.principal.subjectId,identity.deviceId,identity.resourceId]);},
+  binding(identity,req){return req.headers['x-jso-field-binding']===encodeOwnerFieldBindingV1({subjectId:identity.principal.subjectId,deviceId:identity.deviceId,resourceId:identity.resourceId});},
   identity(identity){return {ok:true,protocolVersion:4,subjectId:identity.principal.subjectId,role:'administrator',deviceId:identity.deviceId,resourceId:identity.resourceId};},
   day(identity){return readFieldDay({db,identity,clock,writeAdmissionControl,protocolVersion:4});},
   record(identity,command){return record({command,...identity});},

@@ -1,5 +1,5 @@
 import {createBrowserQueueStorage,createKioskOfflineQueue} from '/kiosk-offline-queue-v2.js?v=jso-session-field-20261018-r1';
-import {createKioskTransportV3,createOwnerFieldTransportV1} from '/kiosk-queue-protocol-v3.js?v=jso-session-field-20261018-r1';
+import {createKioskTransportV3,createOwnerFieldTransportV1,encodeOwnerFieldBindingV1} from '/kiosk-queue-protocol-v3.js?v=jso-session-field-20261018-r1';
 import {deriveKioskActionState,createKioskControlLock} from '/kiosk-control-lock.js?v=jso-session-field-20261018-r1';
 import {browserSession} from '/browser-session.js?v=jso-session-field-20261018-r1';
 const $=id=>document.getElementById(id);
@@ -68,7 +68,7 @@ function savePending(value){
  pending=value;canRetry=false;
 }
 async function api(path,body){
- const binding=identity?JSON.stringify([identity.subjectId,identity.deviceId,identity.resourceId]):'';
+ const binding=identity?encodeOwnerFieldBindingV1(identity):'';
  const response=await (ownerMode?browserSession.request.bind(browserSession):fetch)((ownerMode?'/api/v3/field/':'/api/v3/kiosk/')+path,{method:body?'POST':'GET',headers:{...(ownerMode?(path==='identity'?{}:{'X-JSO-Field-Binding':binding}):{Authorization:'Bearer '+token}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),cache:'no-store',signal:AbortSignal.timeout(12000)});
  const data=await response.json();if(!response.ok||!data.ok)throw Object.assign(Error(messages[data.code]??'暂未完成，请刷新核对。'),{code:data.code,status:response.status});return data;
 }

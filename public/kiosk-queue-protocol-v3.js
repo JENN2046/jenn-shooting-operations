@@ -1,3 +1,5 @@
+// Shared ASCII wire encoding; server compares the same canonical binding.
+export const encodeOwnerFieldBindingV1=b=>encodeURIComponent(JSON.stringify([b.subjectId,b.deviceId,b.resourceId]));
 // V3 wire contract only. Persistence and replay remain in the existing Kiosk queue.
 const id=v=>typeof v==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(v);
 // Equivalent to scheduling-contract-v1.isSchedulingIdentifierV1 for resource references.
@@ -53,7 +55,7 @@ export const createOwnerFieldTransportV1=options=>createFieldTransport(options,t
 function createFieldTransport({fetchImpl,binding,getToken,isCurrent=()=>true,onReceipt=()=>{}},owner){
  const call=async(path,body)=>{
   if(!isCurrent())throw Error('KIOSK_CONTEXT_CHANGED');
-  const response=await fetchImpl((owner?'/api/v3/field/':'/api/v3/kiosk/')+path,{method:body?'POST':'GET',headers:{...(owner?{'X-JSO-Field-Binding':JSON.stringify([binding.subjectId,binding.deviceId,binding.resourceId])}:{Authorization:'Bearer '+getToken()}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),cache:'no-store',signal:AbortSignal.timeout(12000)});
+  const response=await fetchImpl((owner?'/api/v3/field/':'/api/v3/kiosk/')+path,{method:body?'POST':'GET',headers:{...(owner?{'X-JSO-Field-Binding':encodeOwnerFieldBindingV1(binding)}:{Authorization:'Bearer '+getToken()}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),cache:'no-store',signal:AbortSignal.timeout(12000)});
   const bodyResult=await response.json();if(!isCurrent())throw Error('KIOSK_CONTEXT_CHANGED');
   return {status:response.status,body:bodyResult};
  };
