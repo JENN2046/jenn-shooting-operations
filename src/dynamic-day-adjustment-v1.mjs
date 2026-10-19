@@ -16,13 +16,19 @@ function validInput(v){return exact(v,['scheduleItemId','resourceId','mode','pla
   &&iso(v.endAt)&&(v.mode==='forecast'?v.plannedStart===null:iso(v.plannedStart)&&v.plannedStart<v.endAt)
   &&Number.isSafeInteger(v.bufferAfterMinutes)&&v.bufferAfterMinutes>=0&&v.bufferAfterMinutes<=1440;}
 
-// A bounded, manual day adjustment. Estimates are receipt facts, never run events.
+// A bounded adjustment within the planned date, including future dates.
+// Current-run forecasts remain today-only; estimates never become run events.
 export function createDynamicDayAdjustment({db,now,refreshProjections,writeAdmission}) {
   function calculate(input,principal){
     if(!validInput(input))return fail('DYNAMIC_INPUT_INVALID');
     if(!allowed(principal,input.resourceId))return fail('FORBIDDEN');
     const at=now().toISOString(),today=date(at);
-    if(date(input.endAt)!==today||input.endAt<=at||(input.mode==='plan'&&(date(input.plannedStart)!==today||input.plannedStart<=at)))return fail('DYNAMIC_TODAY_ONLY');
+    const adjustmentDate=input.mode==='plan'?date(input.plannedStart):today;
+    if(input.mode==='forecast'){
+      if(date(input.endAt)!==today||input.endAt<=at)return fail('DYNAMIC_TODAY_ONLY');
+    }else if(adjustmentDate<today||date(input.endAt)!==adjustmentDate||input.plannedStart<=at){
+      return fail('DYNAMIC_PLAN_SAME_DATE_ONLY');
+    }
     const revisions=db.prepare('SELECT * FROM revision_counters WHERE id=1').get();
     const active=db.prepare(`SELECT v.* FROM scheduling_active_config a JOIN scheduling_config_versions v ON v.config_version=a.config_version WHERE a.id=1`).get();
     const resource=db.prepare('SELECT * FROM scheduling_resources WHERE resource_id=?').get(input.resourceId);
@@ -31,12 +37,12 @@ export function createDynamicDayAdjustment({db,now,refreshProjections,writeAdmis
     if(!normalized.ok||normalized.configDigest!==active.config_digest||normalized.config.businessTimeZone!=='Asia/Shanghai')return fail('DYNAMIC_CONFIG_INVALID');
     const calendar=normalized.config.resourceCalendars.find(c=>c.resourceId===input.resourceId);
     if(calendar?.capabilityDigest!==resource.capability_digest)return fail('DYNAMIC_CONFIG_INVALID');
-    const compiled=compileSchedulingCalendarDate({configJson:normalized.config,resourceId:input.resourceId,date:today,calendarCompilerVersion:active.calendar_compiler_version,timeZoneDataVersion:process.versions.tz});
+    const compiled=compileSchedulingCalendarDate({configJson:normalized.config,resourceId:input.resourceId,date:adjustmentDate,calendarCompilerVersion:active.calendar_compiler_version,timeZoneDataVersion:process.versions.tz});
     if(!compiled.ok)return compiled;
     const rows=db.prepare(`SELECT * FROM schedule_items WHERE schedule_status<>'cancelled' AND (resource_id=? OR resource_resolution_status='unresolved') ORDER BY planned_start,id`).all(input.resourceId);
     if(rows.some(r=>r.resource_resolution_status!=='resolved'||!iso(r.planned_start)||!iso(r.planned_end)||r.planned_end<=r.planned_start||!Number.isSafeInteger(r.buffer_after_minutes)||r.buffer_after_minutes<0))return fail('DYNAMIC_OCCUPANCY_UNKNOWN');
     const anchor=rows.find(r=>r.id===input.scheduleItemId&&r.resource_id===input.resourceId);
-    if(!anchor||!iso(anchor.planned_start)||date(anchor.planned_start)!==today)return fail('DYNAMIC_ANCHOR_NOT_FOUND');
+    if(!anchor||!iso(anchor.planned_start)||date(anchor.planned_start)!==adjustmentDate)return fail('DYNAMIC_ANCHOR_NOT_FOUND');
     const ids=new Set(rows.map(r=>r.id));
     const runs=db.prepare('SELECT * FROM production_runs ORDER BY id').all().filter(r=>ids.has(r.schedule_item_id));
     const bindings=db.prepare(`SELECT b.*,r.request_lifecycle FROM schedule_item_tasks b JOIN requests_v2 r ON r.id=b.task_id ORDER BY b.schedule_item_id,b.display_order`).all().filter(r=>ids.has(r.schedule_item_id));
@@ -57,7 +63,7 @@ export function createDynamicDayAdjustment({db,now,refreshProjections,writeAdmis
     if(rows.some(r=>r.resource_resolution_status!=='resolved'||!iso(r.planned_start)||!iso(r.planned_end)||r.planned_end<=r.planned_start||!Number.isSafeInteger(r.buffer_after_minutes)))unresolved.push({code:'UNKNOWN_OCCUPANCY'});
     const windows=compiled.windows.map(w=>({start:Date.parse(w.start),end:Date.parse(w.end)}));
     const fits=(s,e)=>windows.some(w=>s>=w.start&&e<=w.end);
-    const index=rows.indexOf(anchor),suffix=rows.slice(index+1).filter(r=>iso(r.planned_start)&&date(r.planned_start)===today);
+    const index=rows.indexOf(anchor),suffix=rows.slice(index+1).filter(r=>iso(r.planned_start)&&date(r.planned_start)===adjustmentDate);
     const end=Date.parse(input.endAt)+input.bufferAfterMinutes*60000;
     // Forecast occupancy starts at the actual start; the anchor plan stays immutable.
     const start=Date.parse(input.mode==='plan'?input.plannedStart:actual.started_at);
@@ -75,7 +81,7 @@ export function createDynamicDayAdjustment({db,now,refreshProjections,writeAdmis
     };
     for(const r of rows.filter(r=>r!==anchor&&!suffix.includes(r))){
       const occupiedEnd=release(r);
-      if(rows.indexOf(r)<index&&date(r.planned_start)===today&&start<occupiedEnd)unresolved.push({code:'PREDECESSOR_ORDER_CONFLICT',scheduleItemId:r.id});
+      if(rows.indexOf(r)<index&&date(r.planned_start)===adjustmentDate&&start<occupiedEnd)unresolved.push({code:'PREDECESSOR_ORDER_CONFLICT',scheduleItemId:r.id});
       if(Date.parse(r.planned_start)<end&&occupiedEnd>start)unresolved.push({code:'ANCHOR_FIXED_CONFLICT',scheduleItemId:r.id});
       fixed.push({start:Date.parse(r.planned_start),end:occupiedEnd});
     }
@@ -98,7 +104,7 @@ export function createDynamicDayAdjustment({db,now,refreshProjections,writeAdmis
       cursor=selected+total;
     }
     const snapshotDigest=digest(JSON.parse(JSON.stringify({revisions,active,resource,rows,runs,bindings,notifications})));
-    const preview={version:1,kind:'dynamic-day-adjustment',input,today,snapshotDigest,configDigest:active.config_digest,configVersion:active.config_version,
+    const preview={version:1,kind:'dynamic-day-adjustment',input,today,...(adjustmentDate!==today?{adjustmentDate}:{}),snapshotDigest,configDigest:active.config_digest,configVersion:active.config_version,
       expectedScheduleRevision:revisions.schedule_revision,expectedProjectionRevision:revisions.projection_revision,
       forecast:input.mode==='forecast'?{source:'owner-estimate',scheduleItemId:anchor.id,estimatedEnd:input.endAt,bufferAfterMinutes:input.bufferAfterMinutes,actualFactsChanged:false}:null,
       changes,unresolved,warnings,canApply:unresolved.length===0};

@@ -93,3 +93,9 @@ npm run uploads:cleanup -- --apply
 The public read routes are `GET /api/v3/public/board` and `GET /api/v3/public/board/references/:id`. A reference must belong to an actual order in that public schedule; knowing an arbitrary upload ID is insufficient. Existing business/management reads, all mutations and uploads keep their original authentication. `/manage` continues to use the administrator's private credential; no credential is embedded in the public board.
 
 公开看板开关默认关闭；启用后任何可访问链接者都能读取约定排期、客户说明与关联参考图，系统不识别“同事”。公共JSON和图片请求不携带Cookie或Bearer，管理页的现有浏览器会话、本人V4队列、Agent及独立Kiosk认证保持。启用时沿用现有R5 source/image/runtime绑定，同时保留browserSessions配置摘要；本变更不自动启用生产。
+
+## 图表中的未来日期计划调整
+
+未开拍、未锁定且无执行记录的已确认场次，可在其原北京时间日期内拖动（含未来日期）。复用 day-adjustment preview/apply：按该日期的工作日历和缓冲计算，并在预览中列出该日期后续场次的影响；不自动跨天。正在拍摄或受阻的预计结束调整仍仅限当天，不改写实际开拍／完成事实。跨日期移动继续使用管理页拍摄改期。
+
+保存继续使用原预览摘要、版本核对、幂等操作和回执；自动补读沿用认证 HTTP 约5秒轮询。其他日期固定占用与不确定实际结束仍保守核验，不能通过选择未来日期绕过冲突。需要配套 JsoChartEditor 提示升级；此源码候选不代表已部署。
