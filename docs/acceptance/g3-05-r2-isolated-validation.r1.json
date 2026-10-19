@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "task": "G3_05_R2_MINIMAL_IMPLEMENTATION_ISOLATED_VALIDATION_R1",
+  "status": "PASS_FOR_IMPLEMENTATION_REVIEW_NOT_PRODUCTION",
+  "methodSha256": "e1acba51102404d87e756b0e6a502c6a9cd92bbe4a2136c0f6d8c41b19b6ffd0",
+  "ownerApprovalSha256": "c012e2e599799902a9c4c3ab06c61739cd220a99b137c1ce8770efe5239c38a0",
+  "contractSha256": "a0a6266e5e9accb3f8d06fe299b66274a068f6951e0b1e67e4942a024691e5ec",
+  "exceptionSha256": "7011c2d9aaa799d45f992df40e55a4bb45fce59149df3fffb907937d8aaebe77",
+  "code": {
+    "g3-collect-production-evidence.py": "ce1c7b499c56f3d1525978d9bef32a2cbcb877fe95cc725dd125e65c58810ab5",
+    "g3-forward-adoption-readonly-witness-r2.py": "51cbdbc04e9d2c637c43daf050a9fb6573a979309dba40ba91ddc25ec7c21d42",
+    "g3-forward-adoption-readonly-witness.py": "95ca51db7174eaffc8ce9cee8f85f0440ec1253fb8a2e00dc89b42649775ccfc",
+    "g3_r2_acceptance.py": "12378d7aae20335970a6202c0f5a8fd787ac9e76fcdf82e629a638fc0c74a567",
+    "g3_r2_bootstrap.py": "a0ebeda481c296a281be95b43fcc68b8405c78a14086fc64958f0c6ad934fe17",
+    "g3_r2_collector.py": "171f57e4d5ef10e0250d550e93756a450e2040b3989ce61e5b27eb1f6a9e2007",
+    "g3_r2_common.py": "200541367b498449c4ab7ed199653c111c925962a1047bf7b55f889b3ac802c6",
+    "g3_r2_custody.py": "0899577ad6efab52f606dd2f6de962962b58ba093b7929d8ffac37b4ec29beb2",
+    "g3_r2_snapshot.py": "9ebeed1ee3f58cc512592015ee4e976f8165490e4fc31727d8155f1cd9095d2f",
+    "g3_r2_transport.py": "475d3eced526cb78c8b1124e717a54c23ff964b93055f59dfb6cf56280f56af1",
+    "verify-g3-production-evidence.py": "1cf2aa48314e4daa543731e3e75bf032c5a15d83ca93cf339d1a3d16fb682e1f"
+  },
+  "guestRuntime": {
+    "executableSha256": "1643dacd9feaedc58f3cc581e4d22577dfe25c09b10282936186ccf0f2e61118",
+    "python": "3.12.3",
+    "sqlite": "3.45.1",
+    "sqliteExtensionSha256": "b30bc4b6a8fa3c80fa0ff79b752e811ffda985497155501691c1d169b289b238",
+    "sqliteLibrarySha256": "f2cd05de8b6f71ea9d0495a6f9ff9cae844b15d9c45b7ef49ee0af0f81658cc7"
+  },
+  "collectorRuntime": {
+    "executableSha256": "52e0a13e60a981d8c4b6478be2ba5176f69da07948a056bf49cf6f077e30cb41",
+    "python": "3.14.4",
+    "sqlite": "3.46.1",
+    "sqliteExtensionSha256": "d1cfe7116cd7683b0ec01eb6de449f6d4fe1bee45046ae4c289599d2e4ee69f6",
+    "sqliteLibrarySha256": "4633a4be13fdf05cb0f859e04fb06077a1fe30a90e405721a23873bd1f3d88a8"
+  },
+  "finalLabManifestSha256": "98812ced8857128d504fabab54aa34802fdc8adbad17352762129452c144842f",
+  "finalLabChallenge": "83046c2bc89d37fcd4408999cc15a8bf26fcbffeca8bed57b68910da5df2ad12",
+  "validation": {
+    "pythonUnitTests": {
+      "pass": 28,
+      "productionProfileFixtureHistoricalDigestExplicitlyMocked": true,
+      "productionEvidenceClaimed": false
+    },
+    "realExt4E1": {
+      "pass": 9
+    },
+    "realNamespaceCopies": {
+      "pass": 10,
+      "timeoutCase": "REAL_TIMER_ACCELERATED_150MS_NOT_FULL_120S_WAIT"
+    },
+    "E2": {
+      "pass": 16,
+      "includesRealSshAndExplicitlyLabelledTranscriptMutations": true
+    },
+    "localRuntimeMismatchBeforeChallenge": {
+      "pass": 1
+    },
+    "registeredHistoricalChainOffline": {
+      "pass": 9,
+      "newProductionAcceptance": false
+    },
+    "fullRepository": {
+      "pass": 1120,
+      "skipped": 1,
+      "failed": 0,
+      "node": "24.21.0",
+      "pathWorkaround": "BYTE_IDENTICAL_ASCII_CHECKOUT_EXISTING_URL_PATHNAME_LIMITATION"
+    }
+  },
+  "cleanup": {
+    "status": "DISPOSABLE_RESOURCES_REMOVED",
+    "scope": "LAB_ONLY",
+    "vmUuid": "08db74de-04c1-4e82-bb34-b9c0c942996e",
+    "qemuPid": 2419589,
+    "qemuStopped": true,
+    "loopbackPortClosed": true,
+    "workDirectoryRemoved": true,
+    "labHomeRemoved": true,
+    "rawEvidenceArchivedAndByteVerified": true,
+    "retainedManifestSha256": "d2d34eaf6e46626249020ead2cf098f96412dffedb47b2b28311c9e78ba1dd48",
+    "productionActions": 0
+  },
+  "evidenceLocation": "Jenn artifacts/g3-05-r1/r2-implementation-r1 (independent local custody, not GitHub raw-evidence publication)",
+  "evidenceSha256": {
+    "unit-tests-final.log": "6d59d0adddf4e6960acc4468bf71d75ab917b6fd908b0f8adea4abf8bdcb0c39",
+    "full-check-ascii.log": "143e297e01c1ec8b9b20d006b2c04d0e6e247c0ce663f747ab7337686132a728",
+    "offline-reference-chain-results.json": "c13356140c6c275147cc12bb3ad155889d96489e9e661771ba339a719eac718f",
+    "vm/e1-targeted-results.json": "baf2875448f5ef6ae7056be849a434d4abf288dc80f40723cb38941f162d82c0",
+    "vm/namespace-targeted-results.json": "9953847eca5d0612aa0e1d31c3ac653343477dbbf67231e5ad0b300ba5409118",
+    "vm/e2-targeted-final-results.json": "1b24cee35b393bef1046d92d7dcb7787eb58f461cec36e9bddb7d96f6da57a8e",
+    "vm/collector-runtime-negative-results.json": "63e9071ccbef006eff97acee1ddbfe85dc6d29cc14fb16e3fbb5114a2eac0b98",
+    "vm/positive-4/e2-collector.json": "30c880bf335c4d48b4b44315f932a2c128b8ddb6c317eff89e425ef0c15903e3",
+    "vm/positive-4/e2-independent-fresh-replay.json": "30c880bf335c4d48b4b44315f932a2c128b8ddb6c317eff89e425ef0c15903e3",
+    "vm/final-guest-state.json": "b32642a948f80d1019f6f3b6a294654033d4ea549319c3e2e5075f604da809f5",
+    "vm/cleanup-final.json": "015e770cdb362f95127a41da8fcd41562b6a22cdc5824b1deea5d01f1336cac7",
+    "vm/retained/manifest.json": "d2d34eaf6e46626249020ead2cf098f96412dffedb47b2b28311c9e78ba1dd48"
+  },
+  "priorFailedLabAttempts": "Preserved. Parent-permission and SSH quoted known-host path failures remain recorded; corrected revisions used new challenges.",
+  "limits": {
+    "historicalWriterCoverage": "NOT_PROVEN",
+    "historicalWalCompleteness": "NOT_PROVEN",
+    "productionActions": 0,
+    "productionEvidenceAccepted": false,
+    "mergeAuthorized": false,
+    "productionExecutionAuthorized": false,
+    "g3_06Allowed": false,
+    "writerReadmissionAllowed": false,
+    "serviceStartAllowed": false
+  },
+  "nextApproval": "EXACT_PR_HEAD_AND_BASE_MERGE_ONLY; production packet requires actual canonical and another approval"
+}
