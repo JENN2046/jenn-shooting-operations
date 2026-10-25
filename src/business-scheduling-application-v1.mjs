@@ -1,3 +1,4 @@
+import {createBusinessCancelV3} from './business-cancel-v3.mjs';
 import {readSchedulingBoardFacts} from './scheduling-board-read-model.mjs';
 import {createBusinessRunV3} from './business-run-v3.mjs';
 import {createBusinessOrderV3} from './business-order-v3.mjs';
@@ -92,6 +93,7 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
     writeAdmission: () => !writeAdmissionControl.isDisabled() });
   const runEvent = createBusinessRunV3({db,now:clock,writeAdmission:()=>!writeAdmissionControl.isDisabled()});
   const orders = createBusinessOrderV3({db,now:clock,refreshProjections,writeAdmission:()=>!writeAdmissionControl.isDisabled()});
+  const cancelUnstarted=createBusinessCancelV3({db,now:clock,refreshProjections,writeAdmission:()=>!writeAdmissionControl.isDisabled()});
   const dynamic = createDynamicDayAdjustment({db,now:clock,refreshProjections,writeAdmission:()=>!writeAdmissionControl.isDisabled()});
   const permitWrite = () => !writeAdmissionControl.isDisabled();
   return {
@@ -200,7 +202,7 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
       const schema = requireBusinessSchema(); if (schema) return schema;
       if (!scoped(principal, principal?.resourceIds)) return denied('FORBIDDEN');
       const own=db.prepare('SELECT kind,response_json FROM operations WHERE operation_id=?').get(operationId);
-      if(own && ['business.order.create.v3','business.order.edit.v3','business.run.v3','business.notificationPolicy.v3'].includes(own.kind)){
+      if(own && ['business.order.create.v3','business.order.edit.v3','business.run.v3','business.notificationPolicy.v3','business.cancel.v3'].includes(own.kind)){
         const receipt=JSON.parse(own.response_json);
         if(principal.role!=='administrator'||(receipt.actor&&receipt.actor!==principal.subjectId))return denied('FORBIDDEN');
         if(receipt.requestId&&!ownsRequest(principal,receipt.requestId))return denied('FORBIDDEN');
@@ -244,6 +246,11 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
       if (!scoped(principal, principal?.resourceIds)) return denied('FORBIDDEN');
       const found = proposalStore.read(proposalId);
       return !found.ok || scoped(principal, found.proposal.resourceScope) ? found : denied('FORBIDDEN');
+    },
+    cancelUnstarted({command,principal}) {
+      const schema=requireBusinessSchema();if(schema)return schema;
+      if(!ownsRequestCatalogue(principal))return denied('FORBIDDEN');
+      return cancelUnstarted({command,principal});
     },
     previewReschedule({ command, principal }) {
       const schema = requireBusinessSchema(); if (schema) return schema;
