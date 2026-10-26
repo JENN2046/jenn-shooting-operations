@@ -116,7 +116,12 @@ class Compatibility(unittest.TestCase):
         with self.assertRaises(OSError):w.capture(str(alias/'pre.sqlite'),str(self.active),'synthetic')
 
     def test_parent_permission_drift(self):
+        # mkdir inherits the caller's umask. Establish a real 0755 -> 0700
+        # transition even under umask 0077; the comparator assertion is unchanged.
+        os.chmod(self.data,0o755)
+        self.assertEqual(self.data.stat().st_mode & 0o777,0o755)
         self.during_inspection(lambda:os.chmod(self.data,0o700),'PARENT_CHAIN_CHANGED')
+        self.assertEqual(self.data.stat().st_mode & 0o777,0o700)
 
     def test_ancestor_inode_replacement_same_leaf(self):
         # Replace ancestor while retaining the original child directory and leaf inodes.

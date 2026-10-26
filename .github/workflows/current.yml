@@ -1,0 +1,71 @@
+name: Current development
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: current-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  current:
+    name: Schema12 / V3 current gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.14'
+      - name: Install declared dependencies
+        run: npm ci --ignore-scripts
+      - name: Run current gate (includes test classification completeness)
+        run: npm run check:current
+
+  compat:
+    name: Compatibility gate (manual)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.14'
+      - run: npm ci --ignore-scripts
+      - run: npm run check:compat
+
+  historical:
+    name: Historical assurance gate (manual)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.21.0
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.14'
+      - run: npm ci --ignore-scripts
+      - name: Run historical gate with explicit process umask
+        shell: bash
+        run: |
+          umask 0022
+          npm run check:historical
