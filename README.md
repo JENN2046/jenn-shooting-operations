@@ -19,25 +19,27 @@ Jenn Shooting Operations 是 `jenn-shooting-planner` 的独立协作服务边界
 
 ## 当前阶段
 
-**G1 CORE_CANONICAL / G2 MINIMAL_RELEASE_CONTRACT 已关闭**。本次生产前置动作以
-`codex/v2-1-architecture-freeze @ a4199fdb14808ebb866943148a222b0d4300d66e`
-为 authority base。
+截至 **2026-10-25（America/Adak）**，默认成果主线已更名为 **`main`**，
+业务源码基线为 `56b620ba48a886536941420b73f589088df98280`（#78）。
+Schema12 / V3 业务路径已经包含五类订单、排程与预计结束、实际开拍/完成、参考图、
+管理员会话与本人现场、受限 Kiosk 及 R5 原生对话接入。
 
-当前 Gate 仍是 **G3 SCHEMA11_CUTOVER Preparation**。已完成
-`G3_PREP_SOURCE_PREFIX_ALIGNMENT_6_TO_10`，并进一步冻结了 exact Schema10 pre-state、
-recovery proof、writer containment、exact image 与 `G3_SCHEMA11_ATOMIC_EXCHANGE_R1`
-execution boundary。
+腾讯开发机与 Linux 日常 Chat 已完成指定测试场次的图表读取、后移 15 分钟保存、
+恢复保存及原回执核对；原生日历源码和读取状态修正见扩展仓库 #24。
+源码合并、具体部署和客户端实际验收分别记录，其他设备与环境不自动继承本次验收。
 
-当前唯一审批目标为
-`sha256:4834377362f153aebd2223e5f38af4750c30558f290a10710dd5948fd3688caf`。
-**Human approval 仍为 NOT_REQUESTED，executable G3 packet 仍为 NOT_CREATED，Schema11 cutover
-未授权、未开始，normal writers 继续 blocked。**
+旧 G3 Schema11 记录属于历史域切换与治理路线：物理切换曾完成，但授权核对与
+UNKNOWN 恢复另有边界，#63 仍未合并。它们保留历史效力，不能作为所有当前实例
+仍停在准备期的结论。完整阶段、取舍、来源与保留问题见[项目开发史](docs/PROJECT_DEVELOPMENT_HISTORY.md)。
 
 ## 入口
 
-- [G3 Schema11 Exact Cutover Target R1](docs/operations/G3_SCHEMA11_EXACT_CUTOVER_TARGET_R1.md)
-- [G3 Source-Prefix Alignment 6→10 R1](docs/operations/G3_PREP_SOURCE_PREFIX_ALIGNMENT_6_TO_10_R1.md)
-- [G3 Schema 11 Cutover Preparation R1](docs/operations/G3_SCHEMA11_CUTOVER_PREPARATION_R1.md)
+- [项目开发史](docs/PROJECT_DEVELOPMENT_HISTORY.md)
+- [Schema12 首发业务路径](docs/operations/first-launch-v3.md)
+- [R5 原生对话接入](docs/operations/NATIVE_VCP_STARTUP_R5.md)
+- [历史 G3 Schema11 Exact Cutover Target R1](docs/operations/G3_SCHEMA11_EXACT_CUTOVER_TARGET_R1.md)
+- [历史 G3 Source-Prefix Alignment 6→10 R1](docs/operations/G3_PREP_SOURCE_PREFIX_ALIGNMENT_6_TO_10_R1.md)
+- [历史 G3 Schema11 Cutover Preparation R1](docs/operations/G3_SCHEMA11_CUTOVER_PREPARATION_R1.md)
 - [G2 Minimal Release Contract](docs/operations/G2_MINIMAL_RELEASE_CONTRACT.md)
 - [JSO Core Canonical R1](docs/JSO_CORE_CANONICAL_R1.md)
 - [执行计划（历史初始阶段计划）](docs/EXECUTION_PLAN.md)
