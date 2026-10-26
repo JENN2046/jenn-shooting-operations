@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "recordType": "OWNER_METHOD_APPROVAL_CHAT_TRANSCRIPTION",
+  "source": "Direct human message in current Codex task; transcription, not a cryptographic signature",
+  "methodId": "G3_05_RESTRICTED_RECOVERY_REFERENCE_METHOD_R2",
+  "methodSha256": "e1acba51102404d87e756b0e6a502c6a9cd92bbe4a2136c0f6d8c41b19b6ffd0",
+  "reviewedPrHead": "358a713d7d7969544466bb85c971ef7c19c5bf2b",
+  "verbatim": "APPROVE G3_05_RESTRICTED_RECOVERY_REFERENCE_METHOD_R2\nmethodSha256:\ne1acba51102404d87e756b0e6a502c6a9cd92bbe4a2136c0f6d8c41b19b6ffd0\nprHead:\n358a713d7d7969544466bb85c971ef7c19c5bf2b\n我明确接受该固定恢复参照可能遗漏历史已提交数据、且该历史完整性仍为 NOT_PROVEN 的剩余风险。\n本次仅批准 R2 方法及其限定的后续合同、最小实现和隔离验证准备。\n不授权 PR 合并、生产执行、2/2 即时准入、G3-06、writer 放行或服务启动。\n",
+  "historicalWalCompleteness": "NOT_PROVEN",
+  "methodApproved": true,
+  "contractAndImplementationPreparationAllowed": true,
+  "isolatedValidationAllowed": true,
+  "mergeAuthorized": false,
+  "productionExecutionAuthorized": false,
+  "productionEvidenceAdmitted": false,
+  "g3_06Allowed": false,
+  "writerReadmissionAllowed": false,
+  "serviceStartAllowed": false
+}

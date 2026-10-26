@@ -1,0 +1,30 @@
+# G3-05 R2 remote entry candidate R1
+
+Status: `BLOCKED_BY_EXISTING_FORWARDING_POLICY`. This is a reviewable candidate for [PR #63 P1](https://github.com/JENN2046/jenn-shooting-operations/pull/63#discussion_r4236334645), not a completed repair or production acceptance. The P1 remains unresolved. Prior exact-head merge approval does not authorize these changed bytes.
+
+## Bounded change
+
+The collector now requests no remote session (`ssh -N -T -n`) and forwards one private local Unix socket to the fixed `/run/jso-g3-r2/capture.sock`. A separately started, root-custodied one-shot endpoint validates the fixed request and invokes the existing capture program using an absolute argv and fixed environment. No account, shared SSH policy, signature scheme, permanent service or trusted principal is introduced. The R1 witness, R1 signature verifier, E1/E3 algorithms, approved method and historical receipts are unchanged.
+
+The endpoint parent chain must equal the separately approved device/inode/owner/mode records. The root-owned socket grants connection access to the approved account's primary group; peer credentials must match that account. It accepts one request, including malformed requests, and removes only its own socket. The collector has no remote-start, arbitrary-command, stale-socket-removal or shell-fallback interface.
+
+Jenn requires an independently reviewed endpoint deployment record and original source material in the fixed approved store, binding host/boot, code, runtime and full endpoint parent chain. These hashes bind evidence; they do not prove the truth of a self-written assertion. Installation and launch cannot be bootstrapped through the unverified capture path. A production packet needs its own approved independent installation procedure and material; none exists in this candidate.
+
+The original challenge consumption, freshness, semantic checks and ledger remain mandatory. Raw witness streams and exit code are framed separately from SSH stdout/stderr and tunnel termination. Frames are capped at 3 MiB, decoded witness streams at 1 MiB each. Canonical encoding, exact fields, challenge/manifest/parent bindings, exact tunnel command, successful tunnel shutdown and confirmed cleanup are mandatory. Partial output and uncertain cleanup remain preserved and rejected. Old transport receipts are historical evidence only; they do not validate this new entry path.
+
+## Validation and stopping point
+
+- 54 focused Python tests pass; contract and source-reference validation passes. Added cases cover fixed no-session arguments, invalid endpoint profiles, malformed/truncated/noncanonical frames, parent drift, bounded streams, fixed requests, unprivileged entry rejection, and preservation of partial output when cleanup is uncertain. Mocked cases are synthetic, not authenticated SSH acceptance.
+- An independent limited static review found no new material issue after approved-parent enforcement and cleanup-record retention were corrected. It does not establish real transport acceptance.
+- A fresh, disposable KVM guest used real ext4, Python 3.12.3 / SQLite 3.45.1, loopback SSH, no host shares and restricted networking. Setup and root endpoint launch were independently recorded through its local UUID-bound QEMU serial console. Only synthetic databases and lab approval were installed.
+- The real collector attempt failed before reaching the endpoint. Its challenge was consumed once and durably ended `UNKNOWN`; empty witness/frame streams and the original SSH error are retained. The listener subsequently exited with failure and removed its socket. Benign user shell startup markers were not triggered. This is not a successful no-shell capture.
+- One bounded diagnostic used only an inert `fixture-only` socket, no database capture or challenge reuse. The same connection was denied. `journalctl -t sshd` records the path request denial for both connections. No further connection attempts followed confirmation of the denial.
+- The guest used OpenSSH 9.6p1 Ubuntu-3ubuntu13.18 with `AllowTcpForwarding no` and `AllowStreamLocalForwarding yes`. Upstream [session.c](https://raw.githubusercontent.com/openssh/openssh-portable/V_9_6_P1/session.c) and [channels.c](https://raw.githubusercontent.com/openssh/openssh-portable/V_9_6_P1/channels.c) explain the shared administrative channel permission check; [serverloop.c](https://raw.githubusercontent.com/openssh/openssh-portable/V_9_6_P1/serverloop.c) explains why the reported streamlocal error was generic `connect failed`. Actual server denial, rather than that diagnostic wording alone, determines the stop.
+- No SSH policy, socket access mode or account authority was widened after denial. There was no fallback transport, automatic UNKNOWN retry or production connection.
+- Raw trust/evidence files were archived and byte-verified before cleanup. The exact UUID/PID VM was stopped; its loopback port, temporary work directory, private test key and lab home were removed. Final guest observation confirmed original protected synthetic objects and no endpoint/copy residue.
+
+Original records are retained on Jenn under `artifacts/g3-05-r1/pr63-final-review-closure-r1/p1-remote-entry`, including failed attempts and the independent static review. The archived lab-file manifest SHA-256 is `178187e8387a2ba48fab51c050dad4c4149d16d48ca348c966e151405136c030`.
+
+The remaining real acceptance condition is one no-shell capture, independent Jenn replay and confirmed cleanup in an authorized isolated environment whose existing policy permits this fixed channel. This document does not authorize a policy change or fresh attempt. Until that condition and final reviews pass, P1 and the merge gate stay blocked. Production installation-source material remains a separate future production prerequisite.
+
+Method SHA-256 remains `e1acba51102404d87e756b0e6a502c6a9cd92bbe4a2136c0f6d8c41b19b6ffd0`. Historical WAL completeness stays `NOT_PROVEN`; G3-05 stays `BLOCKED`. Production actions are zero. No merge, G3-06, writer readmission or service-start authority is granted.
