@@ -59,6 +59,19 @@ node scripts/validate-current-planner.mjs `
 
 ## 本地验证
 
+日常 Schema12/V3 修改使用当前开发 gate：
+
+```sh
+npm run check:current
+```
+
+兼容、历史保障分别使用 `npm run check:compat`、`npm run check:historical`。
+混合职责的测试文件会明确出现在多个 lane；新增测试必须加入
+`tests/test-lanes.json`，每条 lane 都会先校验完整性。
+逐项职责、完整回归要求与固定验证环境见[测试 lanes](docs/TEST_LANES.md)。
+
+原有完整回归入口继续保留：
+
 ```powershell
 npm run check
 ```

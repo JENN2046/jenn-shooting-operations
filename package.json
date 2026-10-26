@@ -6,6 +6,13 @@
   "scripts": {
     "start": "node src/server.mjs",
     "test": "node --test tests/*.test.mjs",
+    "test:current": "node scripts/test-lanes.mjs current",
+    "test:compat": "node scripts/test-lanes.mjs compat",
+    "test:historical": "node scripts/test-lanes.mjs historical",
+    "validate:test-lanes": "node scripts/test-lanes.mjs --check",
+    "check:current": "npm run test:current",
+    "check:compat": "npm run validate:test-lanes && npm run validate:contract && npm run test:compat",
+    "check:historical": "npm run validate:test-lanes && npm run validate:shadow && npm run validate:production-manifest && npm run validate:production-greenfield-authority && npm run validate:g2-release-contract && npm run validate:g3-source-prefix-alignment && npm run validate:g3-cutover-preparation && npm run validate:g3-terminal-receipt && npm run validate:g3-authority-reconciliation && npm run test:historical",
     "check": "npm run validate:contract && npm run validate:shadow && npm run validate:production-manifest && npm run validate:production-greenfield-authority && npm run validate:g2-release-contract && npm run validate:g3-source-prefix-alignment && npm run validate:g3-cutover-preparation && npm run validate:g3-terminal-receipt && npm run validate:g3-authority-reconciliation && npm test",
     "backup": "node scripts/backup.mjs",
     "uploads:cleanup": "node scripts/cleanup-uploads.mjs",

@@ -1,0 +1,905 @@
+{
+  "schemaVersion": 1,
+  "auditCommit": "4b4e145394ccb7c84f174f37a307c5ff8cdf4ed8",
+  "tests": [
+    {
+      "file": "agent-scheduling-service-v1.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "viewer reads scoped state/calendar and nonempty proposal without any persistent write, including disabled admission; exact preview adoption commits one nonempty schedule and replays without regenerating or duplicating facts"
+    },
+    {
+      "file": "authorization-v2.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "the five-role capability matrix is explicit and non-linear; trusted principals derive immutable capabilities from role"
+    },
+    {
+      "file": "board-asset-version.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "board entry and references dependency bypass pre-change cache keys and resolve through static routing"
+    },
+    {
+      "file": "board-references-v3.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "Schema12 board and reference bytes require business identity; upload is replay-safe and claimed atomically by its order; reference upload preserves per-file, count, batch, signature and order-ownership limits"
+    },
+    {
+      "file": "browser-session-client.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "late ${phase} cannot undo logout; cleanup failure=${failLogout} is honest and durable"
+    },
+    {
+      "file": "browser-session-cross-window.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "login broadcast cancels stale init=${authenticatedReply} without logging out the new session; a stale read after another window login cannot render or revoke the replacement; explicit logout still propagates"
+    },
+    {
+      "file": "browser-session-field.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "protected admin Cookie restores same Jenn view, csrf/origin isolation, logout/revoke/expiry/reboot fail closed; owner device queue reuses core: Jenn actor and device timestamps, lost receipt, logout and same-context recovery without duplicate POST"
+    },
+    {
+      "file": "browser-session-legacy-csrf.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "legacy Cookie writes use the same Origin/CSRF and post-body guard; Bearer remains usable"
+    },
+    {
+      "file": "business-cancel-v3.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "authenticated cancellation retains history/binding/time, closes order/session once, audits, recovers original receipt, no run/notification; historical unknown occupancy still blocks until explicit cancellation; new future session preview then works"
+    },
+    {
+      "file": "business-legacy-credential-separation.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "reused scheduler credential would authenticate as a business owner without configuration separation; business configuration rejects ${key} reuse for either business role"
+    },
+    {
+      "file": "business-management-v1.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. business auth is explicit, server trusted, unique-token and resource scoped; business HTTP fails closed on pre-cutover schema10 without migrating it"
+    },
+    {
+      "file": "business-v3-boundaries.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "canonical intake checks real auth/scope, global ID/version, no guessed sample; unbound edit only; intake does not claim old assets; owned attachment accepted; write fault rolls back order, receipt and counters"
+    },
+    {
+      "file": "callback-admission-v1.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "Retained unwired notification capability assurance; support remains UNRESOLVED. runtime-facing ports and the frozen action allowlist fail closed when unwired; raw request gates reject size, content type, and duplicate normalized headers before verifier"
+    },
+    {
+      "file": "callback-ports-v1.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "Retained unwired notification capability assurance; support remains UNRESOLVED. nonce digest is deterministic, domain-separated, and low disclosure; explicit fake replay store models claim, in-flight, receipt replay, and mismatched reuse"
+    },
+    {
+      "file": "classification-schema12.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "v3 preserves all still-life subtypes and v2 explicitly rejects them; Schema11 upgrades without reclassifying historical DETAIL, keeps FK and published markers; runtime never upgrades"
+    },
+    {
+      "file": "cleanup-uploads.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "upload maintenance defaults to dry-run and requires explicit apply; upload maintenance rejects unsafe age and unknown arguments"
+    },
+    {
+      "file": "contract-validation-v2.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "V1 strict-write and legacy-read reproduce the frozen parity matrix; V1 strict-write enforces civil time, calendar date, RFC 3339 and safe revision"
+    },
+    {
+      "file": "conversation-credential-separation.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "factory rejects ${mode} credentials shared with a ${role} before store construction; overlap is checked using authentication bytes, including UTF-8 replacement aliases"
+    },
+    {
+      "file": "conversation-identity-validation.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "conversation validates ${name} before returning a trusted factory"
+    },
+    {
+      "file": "conversation-kiosk-binding.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "R5 PREPARED denies Kiosk; ACTIVE matching Bearer composition shares authenticated HTTP; R5 repinned Kiosk drift rejects stale factories and actual runtimes before opening store"
+    },
+    {
+      "file": "conversation-server-composition.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "direct composition rejects legacy kiosk before opening any store; opt-in composition uses same initialized store and normal verifier; no token leaks"
+    },
+    {
+      "file": "conversation-startup-policy.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "R4 retains its digest and core-only behavior; conversation cannot mount; R5 PREPARED stays byte-identical and cannot mount the boundary or enable writes"
+    },
+    {
+      "file": "conversation-static-grants.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "conversation rejects otherwise valid static ${action} grants before creating a factory; conversation accepts omitted and empty grants for both identity modes"
+    },
+    {
+      "file": "deterministic-scheduler-v1.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "priority, Buffer and fallback produce a deterministic proposal across input permutation; a real maximum desired date sorts before null when only one slot is available"
+    },
+    {
+      "file": "dingtalk-card-builders-v1.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. builds the three frozen minimal-disclosure cards with exact fields; card builders reject unknown or sensitive fields instead of silently projecting them"
+    },
+    {
+      "file": "dingtalk-port-v1.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. unconfigured adapter is exact, deterministic and fail closed without network; mock must be explicitly injected and normalizes exact success results"
+    },
+    {
+      "file": "domain-rules-v2.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. production run follows the regular ADP-007 transition path; production run supports only the frozen cancellation paths"
+    },
+    {
+      "file": "dynamic-day-adjustment.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "HTTP day preview, atomic apply, stable order, lunch, persisted exact replay and scoped receipts; buffer is per anchor and does not rewrite defaults or successors buffers"
+    },
+    {
+      "file": "early-start-forecast-v3.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "admin ${label} start → forecast preview → confirm moves successors without changing plan or actual facts; forecast rejects unstarted, future actual start, completed and invalid time windows without writes"
+    },
+    {
+      "file": "empty-db-maintenance-schema11.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "Schema11 supported initializer persists counters, both projections, audit and exact receipt without resource defaults; normal synthetic CLI supports explicit Schema11 packets, never infers authorization"
+    },
+    {
+      "file": "empty-db-maintenance-v1.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. startup remains schema-only; explicit initialization seals counter/projections, audit and immutable exact replay; resource, publication and explicit activation reuse services atomically with separate exact receipts"
+    },
+    {
+      "file": "event-time-policy-v2.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "local-v1 policy exposes frozen five-minute and twenty-four-hour bounds; equal time and both exact policy boundaries are allowed inclusively"
+    },
+    {
+      "file": "first-launch-v3.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "synthetic Schema12 creation/init/acceptance → five canonical orders → first scheduling → actual events and manual forecast → independent persisted read"
+    },
+    {
+      "file": "future-day-adjustment.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "future plan preview uses target date, shifts only its successors, applies once and recovers exact receipt; future target calendar closure and reduced windows prevent all writes"
+    },
+    {
+      "file": "g2-minimal-release-contract.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "G2 contract freezes exactly six invariants and no G2 production authority; G2 artifact binding matches the exact Schema 11 migration in canonical source"
+    },
+    {
+      "file": "g3-authority-binding-reconciliation.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "G3 reconciliation preserves physical COMMITTED while blocking governance closure; G3 reconciliation captures the exact pre-execution authority mismatch"
+    },
+    {
+      "file": "g3-authority-reconciliation-rollback-surface.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "UNKNOWN rollback is sealed and recovery surface is exact but not executable; recovery target must bind the exact prior UNKNOWN attempt"
+    },
+    {
+      "file": "g3-authority-reconciliation-startup-gate.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. reconciliation blocks both frozen production database paths; reconciliation startup gate normalizes production path aliases"
+    },
+    {
+      "file": "g3-core-startup-acceptance.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. PREPARED uses a truly read-only store, cannot enable writes, and leaves bytes/schema/directories unchanged; ACTIVE persists business calendar through changed digest and independent-process reopen plus save"
+    },
+    {
+      "file": "g3-forward-adoption-witness.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "synthetic negative witnesses test the read-only comparator, not the production database; Ed25519 signature proves a transcript signature, not adoption or containment"
+    },
+    {
+      "file": "g3-forward-reconciliation-exception.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "versioned exception is a closed non-executable design, never an existing cutover packet; G2 byte pin and historical facts are checked against existing authority artifacts"
+    },
+    {
+      "file": "g3-in-place-adoption-proof.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "in-place proof preserves the historical G3 failure instead of laundering it; strong physical evidence is not promoted to full independent replay"
+    },
+    {
+      "file": "g3-schema11-cutover-preparation.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "G3 preparation binds all evidence into one exact authority target; G3 preparation cannot represent an approval or executable packet"
+    },
+    {
+      "file": "gf15-capabilities-v1.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "canonical migration history determines the next request ordinal; an unrelated open candidate fails before GF15 mutation; acceptance rolls back schedule, revisions, decision, audit and isolation on ${table} failure"
+    },
+    {
+      "file": "gf15-quiescence-and-race-v1.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. legacy V1 snapshot and submission stores cannot mutate around the durable Scheduling lease; lease identity, exact acquisition/release, wrong owner, stale holder and durable recovery fail closed"
+    },
+    {
+      "file": "gf15-schema-v1.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. migration 7 preserves all six historical checksums and markers and adds only empty capability storage; schema validation rejects GF15 isolation trigger drift and unmarked partial migration artifacts"
+    },
+    {
+      "file": "greenfield-first-launch.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "schema-only creation is exclusive and leaves existing contents unchanged; new domain → existing initializer → fresh synthetic binding → PREPARED → ACTIVE configuration → independent restart"
+    },
+    {
+      "file": "identity-token-bytes.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "business validator rejects ${name} in either role order; agent validator rejects ${name} in either mode order"
+    },
+    {
+      "file": "jso-agent-api-v1.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "agent API accepts only the exact stable envelope and rejects reserved/framing input; duplicate wire keys and invalid unicode fail before service dispatch"
+    },
+    {
+      "file": "jso-conversation-cancellation-restart.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "durable cancellation survives same-store reconstruction and SQLite close/reopen, binds all original identities"
+    },
+    {
+      "file": "jso-conversation-http-boundary.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "owner delegation decodes UTF-8 only after collecting arbitrary byte boundaries; body limit counts raw bytes, not decoded characters"
+    },
+    {
+      "file": "jso-conversation-r1.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "direct variable-minute shift, repeated delivery and new same-text message; presented proposal confirms once; quotes, conditional and multiple plans do not approve"
+    },
+    {
+      "file": "jso-native-stdin.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "native stdin preserves every Chinese byte split and enforces raw byte size"
+    },
+    {
+      "file": "jso-native-stdio-chain.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "native source → HTTP host → real configured stdio → JSO receipt → real VChart; forged/replay/expiry denied"
+    },
+    {
+      "file": "jso-vcp-vchart-local.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. Schema12 native candidate read → pure proposal → synthetic Owner confirmation → guarded execution/reconciliation; pinned actual ChartController + ChartService consume CreateChart/ReplaceData and read back JSO revisions"
+    },
+    {
+      "file": "kiosk-contract-v2.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "kiosk current DTO is resource-scoped, compact, and supports empty slots; kiosk current distinguishes current candidates from active runs and keeps next candidate-only"
+    },
+    {
+      "file": "kiosk-current-v2.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "returns an empty current view for a scoped resource with no schedule rows and performs zero writes; an active shooting or blocked run wins even after its planned window and returns exact run facts"
+    },
+    {
+      "file": "kiosk-device-identity-v1.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "device provisioning writes the server-bound device identity exactly once; stalled identity fetch is bounded and returns unavailable so recovery polling can continue"
+    },
+    {
+      "file": "kiosk-http-result-v2.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "runtime contract validators compile all three Draft 2020 schemas and add current semantics; new accepted event maps to 201 and exact accepted replay maps to 200"
+    },
+    {
+      "file": "kiosk-http-v2.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "V1 routes keep their existing public behavior when Kiosk is not configured; direct HTTP composition reuses the ScheduleStore admission fence for V2 writes"
+    },
+    {
+      "file": "kiosk-offline-queue-v2.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. browser-safe response validators enforce the full frozen schemas; strict queue items reject unknown authority fields and write-ahead storage failure prevents replay"
+    },
+    {
+      "file": "kiosk-offline-v3.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "device-declared start and complete preserve time, immutable commands, original versions and receipts across next-day replay; lost response keeps original queue head; reload queries receipt without a second POST, then completes in order"
+    },
+    {
+      "file": "kiosk-online-v3.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "online runtime is explicit, operator-only, scoped, distinct from business credentials; five categories, device identity, resource isolation and legacy protocol gate remain explicit"
+    },
+    {
+      "file": "kiosk-resource-id-v3.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "Kiosk resource references exactly follow business identifiers without widening other fields; Jenn and Unicode business resource offline queues reload, recover a lost receipt and deny another resource"
+    },
+    {
+      "file": "kiosk-review-schema-v2.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "migration three creates the canonical review and event-id ownership schema; migration three preserves V1 rows and is idempotent"
+    },
+    {
+      "file": "kiosk-run-event-v2.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "first start derives task scope, injects trusted actor, and replays by local-sequence digest; Kiosk start of a pre-provisioned scheduled run captures context on the state transition"
+    },
+    {
+      "file": "kiosk-runtime-auth-integration-v1.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "production Kiosk auth env wiring reaches HTTP challenge, resource scope, and device binding"
+    },
+    {
+      "file": "kiosk-runtime-auth-v1.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "runtime auth maps one Basic credential to an exact operator/device/resource principal; runtime auth rejects wrong credentials without exposing credential material"
+    },
+    {
+      "file": "kiosk-server-composition-v2.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "Kiosk V2 runtime composition is explicit, injected, and empty-resource safe; Kiosk V2 direct mutation is fenced by the bound ScheduleStore admission control"
+    },
+    {
+      "file": "kiosk-smoke-client-v1.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "exact Kiosk client uses Web Crypto UUIDs for run/event IDs and fails closed without it"
+    },
+    {
+      "file": "kiosk-smoke-schema-v1.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. v8 preserves all v7 markers, upgrades idempotently and adds only empty control storage; v8 refuses unmarked partial objects and isolation trigger drift"
+    },
+    {
+      "file": "kiosk-smoke-v1.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "exact two-phase smoke and replay preserve facts; completion is permanently isolated across reopen; smoke ${name} fails with zero business facts and cannot retry into authority"
+    },
+    {
+      "file": "kiosk-ui-v2.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. action state keeps server confirmation separate from immutable pending overlay; blocking reason requires a controlled reason and a note only for other"
+    },
+    {
+      "file": "manage-auto-refresh.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "automatic page read times out, resumes and preserves draft base; older replies and logged-out replies cannot render; button-only calendar exception additions and removals survive background snapshots"
+    },
+    {
+      "file": "manage-ui-flow.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "shipped UI handlers → authenticated HTTP → duration, weekly config preview, dynamic batch and receipts"
+    },
+    {
+      "file": "manage-v3-ui.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "management UI creates distinct still-life order, filters it, sets duration, adopts proposal, records actual start and complete; confirmed forecast survives fresh page/reselection, and nonfirst selections survive mutations and invalidation"
+    },
+    {
+      "file": "migration-apply-v2.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "apply path preflight is read-only and classifies every admitted path; apply path preflight fails closed when the effective uid changes during admission"
+    },
+    {
+      "file": "migration-materialize-v2.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "materializes empty, single, grouped, and L1 plans as exact verifiable targets; materializes a request.submit operation and managed upload without changing upload metadata"
+    },
+    {
+      "file": "migration-recovery-v2.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "stable file hash rejects a descriptor inode different from the inspected identity; verified backup and restore bind database, artifact, and hashed attachment evidence"
+    },
+    {
+      "file": "migration-v2.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "existing path resolution accepts native absolute paths and rejects URL input; CLI enforces one mode and apply-specific paths, hashing, and acknowledgements"
+    },
+    {
+      "file": "offline-maintenance-adapter-v1.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "kernel exclusive fence rejects concurrent acquisition and release permits the next owner; independent observed binding and protected fixture approval admit one exact packet"
+    },
+    {
+      "file": "orphan-cleanup-control.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "disabled cleanup protects startup periodic saveUpload and submitRequest across restart; maintenance apply cannot bypass a persisted disabled cleanup control"
+    },
+    {
+      "file": "outbox-contract-v1.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. canonical JSON is recursive, deterministic and rejects unsafe values; freezes the exact outbox-dispatch-v1 policy"
+    },
+    {
+      "file": "outbox-dispatcher-v1.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "Retained unwired notification capability assurance; support remains UNRESOLVED. readiness failure returns a stable summary and never claims or consumes attempts; claims once, sends the bounded batch concurrently outside repository calls, and settles every item"
+    },
+    {
+      "file": "outbox-worker-v1.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "Retained unwired notification capability assurance; support remains UNRESOLVED. idle polling uses deterministic symmetric jitter around idlePollMs; store busy uses 250→500→1000→2000ms capped backoff and resets after nonbusy"
+    },
+    {
+      "file": "owner-field-reentry.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "loaded personal field reacquires existing control after management → offline → field; offline field reentry never steals another window control; leaving makes it available"
+    },
+    {
+      "file": "production-attachment-copy-v1.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "production attachment-copy module exposes no TEST authority or mutating test wrapper; copy cleanup attempts source target and root descriptor closes independently"
+    },
+    {
+      "file": "production-change-manifest-dynamic-values.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "role assignments reject active shell substitutions before word termination; reference-only boundary rejects short literal quoting as well as dynamic credential values"
+    },
+    {
+      "file": "production-change-manifest-final-sync-exception.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "final-sync exception is narrow, delayed until source drain, revoked/drained and sealed before parity; hostile final-sync bypasses, early/late grants, ordinary reopening and offline invented writes fail closed"
+    },
+    {
+      "file": "production-change-manifest-input-boundary.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "boundary unit: canonical declaration-only manifest remains admitted and unchanged; boundary unit: all five review classes fail across every free-text surface"
+    },
+    {
+      "file": "production-change-manifest-json-source.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "source unit: duplicate keys fail at every object depth before member overwrite; source unit: decoded-equivalent keys cannot hide duplicates with Unicode escapes"
+    },
+    {
+      "file": "production-change-manifest-review-closure.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "colon token values reject multiline plain and quoted YAML without truncation; colon scanner conservatively rejects multiline snippets rather than interpreting YAML scope"
+    },
+    {
+      "file": "production-change-manifest-safety-contract.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "safety contract: both new capabilities remain blocked and the packet grants no action; safety contract: cutover cannot drop fence capability, writer coverage or bound execution proofs"
+    },
+    {
+      "file": "production-change-manifest-scalar-boundaries.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "reference-only boundary rejects retained doubled-apostrophe fixtures at all lengths; reference-only boundary rejects retained quote-pair edge and astral fixtures"
+    },
+    {
+      "file": "production-change-manifest-shell-continuation.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "reference-only boundary rejects all retained shell continuation fixtures; reference-only boundary rejects both continued and separately written credential text"
+    },
+    {
+      "file": "production-change-manifest-source-acquisition.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "source acquisition: both branches explicitly acquire and drain the source before sync admission or parity; source acquisition: the prior target-only step and weakened source acquisition or coverage get no digest"
+    },
+    {
+      "file": "production-change-manifest-source-barrier.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "source barrier: both offline and final-sync paths hold source exclusion through demotion; source barrier: final sync and momentary rechecks cannot substitute for persistent write exclusion"
+    },
+    {
+      "file": "production-change-manifest-unicode.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "reference-only boundary rejects retained astral assignment fixtures at both runtime length boundaries; reference-only boundary rejects retained header fixtures independently of authorizer length"
+    },
+    {
+      "file": "production-change-manifest.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "production change manifest validates with deployment request blocked and no authorization granted; secret scanner rejects ordinary Bearer and token-shaped material inside schema-valid free text"
+    },
+    {
+      "file": "production-greenfield-authority-v1.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "greenfield authority binds the frozen parent and grants no production mutation; greenfield authority records GF14L completion while retaining rolled-back GF14 history"
+    },
+    {
+      "file": "production-run-completed-notification-v1.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "builds the admitted completion intent with event id identity and default route; grouped completion is represented only as block scope and aggregate task count"
+    },
+    {
+      "file": "projections-v2.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. candidate single and grouped records produce exact V1 and frozen V2 projections; V1 projection preserves optional presence, duplicate product order, and merged asset order"
+    },
+    {
+      "file": "public-board.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "public mode serves only scheduled Jenn facts, retains customer/images/five categories, and never grants management authority; anonymous images reject pending, unclaimed, orphan, cross-purpose, cross-resource, cancelled and unsafe files"
+    },
+    {
+      "file": "reference-gallery-state.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "opened and pending reference images survive redraw, while removal and identity changes invalidate them; public image preview sends no credential and retains download when the browser cannot decode it"
+    },
+    {
+      "file": "run-context-capture-v1.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "valid requirement versions outside evaluation token space become RULE_FACT_MISSING evidence"
+    },
+    {
+      "file": "run-events-v2.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "pure fold computes multiple blocked intervals and final net time; pure fold handles cancellation and rejects invalid, out-of-order, and overflowing metrics"
+    },
+    {
+      "file": "scheduling-admin-contract-v1.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. resource register/replace normalize full state and keep actor outside the body; resource command digest excludes operationId but covers optimistic revisions and full resource state"
+    },
+    {
+      "file": "scheduling-admin-contract-v2.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "alternating Saturday uses civil-day anchor, no six-month expiry, lunch and Sunday stay closed; future rule replaces prior recurrence, date override wins and removing override restores rule"
+    },
+    {
+      "file": "scheduling-contract-v1.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "strict canonical JSON uses Unicode code-point key order and has a golden digest; strict canonical JSON rejects non-data, ambiguous and unsafe JavaScript values"
+    },
+    {
+      "file": "scheduling-evaluation-contract-v1.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "snapshot scope/status matrix is exact and capturedAt stays outside digest; classifier reaches Level C only through digest-verified relational evidence"
+    },
+    {
+      "file": "scheduling-http-v2.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. Scheduling V2 application authority controls direct HTTP composition across different stores; scheduling decisions fail closed without a trusted HTTP principal"
+    },
+    {
+      "file": "scheduling-proposal-contract-v1.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "generation command canonicalizes scope/time and excludes operationId from its golden digest; immutable Proposal envelope validates every stored canonical body and is deeply frozen"
+    },
+    {
+      "file": "scheduling-server-composition-v2.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. Scheduling V2 runtime composition is explicit and connects the canonical proposal store; Scheduling V2 direct mutation is fenced by the bound ScheduleStore admission control"
+    },
+    {
+      "file": "schema-migrations.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. historical migration 1-3 identities remain pinned; fresh schema applies the continuous migration prefix and known tables"
+    },
+    {
+      "file": "schema12-acceptance.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "Schema11 initializer packet cannot initialize Schema12; new explicit digest succeeds; R3 Schema11 acceptance cannot admit Schema12; R4 binds both purpose and exact schema"
+    },
+    {
+      "file": "service.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "health and read-only board snapshot are public; public users cannot modify the schedule snapshot"
+    },
+    {
+      "file": "shadow-evaluation-fixture-replay-v1.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "checked-in synthetic fixture replays deterministically with no Level C promotion; fixture replay fails closed on dataset digest or expected-report tampering"
+    },
+    {
+      "file": "shadow-low-disclosure-report-v1.test.mjs",
+      "lanes": [
+        "historical"
+      ],
+      "invariant": "fixture report closes through exact low-disclosure admission; generatedAt is normalized but remains outside the report fact digest"
+    },
+    {
+      "file": "sqlite-outbox-repository-v1.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. enqueue joins the caller transaction and enforces exact no-op, mismatch and id reuse; 160-code-point outbox id completes enqueue, claim and receipt-sealed settlement"
+    },
+    {
+      "file": "sqlite-schedule-reschedule-store-v1.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "reschedule preserves identity/binding, advances both projections once, audits and immutable exact replay; reject ${name} without receipt/revision mutation"
+    },
+    {
+      "file": "sqlite-scheduling-proposal-store-v1.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. acceptance creates canonical schedule, projections and one Outbox intent per item; partial acceptance is one-shot and stales competing drafts in the same transaction"
+    },
+    {
+      "file": "test-lanes.test.mjs",
+      "lanes": [
+        "current",
+        "compat",
+        "historical"
+      ],
+      "invariant": "Lane completeness, invalid classifications, actual CLI selection, skip visibility and child failure propagation."
+    },
+    {
+      "file": "ui-helpers.test.mjs",
+      "lanes": [
+        "current",
+        "compat"
+      ],
+      "invariant": "Whole file retained in current and compat for shared runtime and legacy obligations. calendar dates preserve local dates across year boundaries; live indication is bounded by schedule time and never overrides terminal states"
+    },
+    {
+      "file": "vcp-sync-integration.test.mjs",
+      "lanes": [
+        "compat"
+      ],
+      "invariant": "identified VCPToolBox Jenn adapter completes pull, guarded push, and verification pull"
+    },
+    {
+      "file": "write-admission-v1.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "pre-activation fence stays closed until one in-process admission transition; pre-activation HTTP fence blocks all mutating methods before dispatch"
+    }
+  ]
+}
