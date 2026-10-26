@@ -21,6 +21,8 @@ export function readSchedulingBoardFacts({db, resourceIds, orderRows}) {
           deliverables:{type:'flat',count:r.deliverable_count},requestedBy:r.requested_by,desiredDate:r.desired_date,note:r.note??'',coreBriefSummary:r.core_brief_summary??'',sampleStatus:r.sample_status,lightingPreset:r.lighting_preset,reflectivity:r.reflectivity,priority:r.priority,uploadIds:[]}}));
       return {orderFacts, sessions: db.prepare(`SELECT id, resource_id AS resourceId, planned_start AS plannedStart, planned_end AS plannedEnd,
           buffer_after_minutes AS bufferAfterMinutes, schedule_status AS status, lock_status AS lockStatus,
+          resource_resolution_status AS resourceResolutionStatus, allocation_mode AS allocationMode,
+          legacy_place_text AS legacyPlaceText, note,
           EXISTS(SELECT 1 FROM production_runs r WHERE r.schedule_item_id=s.id) AS hasRunHistory
           FROM schedule_items s ORDER BY planned_start,id`).all().filter(s => resourceIds.includes(s.resourceId)).map(s=>({...s,requestIds:db.prepare('SELECT task_id FROM schedule_item_tasks WHERE schedule_item_id=? ORDER BY display_order').all(s.id).map(r=>r.task_id),confirmedForecast:forecasts.get(s.id)??null,runs:db.prepare('SELECT id,status,run_revision AS runRevision,started_at AS startedAt,completed_at AS completedAt FROM production_runs WHERE schedule_item_id=? ORDER BY created_at,id').all(s.id),requestNames:db.prepare('SELECT r.name FROM schedule_item_tasks b JOIN requests_v2 r ON r.id=b.task_id WHERE b.schedule_item_id=? ORDER BY b.display_order').all(s.id).map(r=>r.name)}))};
 }
