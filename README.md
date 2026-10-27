@@ -19,22 +19,39 @@ Jenn Shooting Operations 是 `jenn-shooting-planner` 的独立协作服务边界
 
 ## 当前阶段
 
-截至 **2026-10-25（America/Adak）**，默认成果主线已更名为 **`main`**，
-业务源码基线为 `56b620ba48a886536941420b73f589088df98280`（#78）。
-Schema12 / V3 业务路径已经包含五类订单、排程与预计结束、实际开拍/完成、参考图、
-管理员会话与本人现场、受限 Kiosk 及 R5 原生对话接入。
+截至 **2026-10-27**，成果集成主线为 **`main`**，当前源码 HEAD 为
+`e5f3599e331d96bcf1dff5cdccc897330570c1f5`（#92）。
 
-腾讯开发机与 Linux 日常 Chat 已完成指定测试场次的图表读取、后移 15 分钟保存、
-恢复保存及原回执核对；原生日历源码和读取状态修正见扩展仓库 #24。
-源码合并、具体部署和客户端实际验收分别记录，其他设备与环境不自动继承本次验收。
+Schema12 / V3 已包含五类订单、排程与预计结束、实际开拍/完成、参考图、管理员会话、
+本人现场、受限 Kiosk、R5 原生对话接入，以及 Product R1 的 **Studio Day / 今日作业台**。
+今日作业通过只读 Daily Operations 投影汇总当天场次、当前/下一场、可排未排订单和
+确定性待处理事项；R1.1 仅优化登录后首屏密度、严重级别文字、动作主次与移动端触控，
+没有改变 read model、API、Schema、写权限或业务语义。
 
-旧 G3 Schema11 记录属于历史域切换与治理路线：物理切换曾完成，但授权核对与
-UNKNOWN 恢复另有边界，#63 仍未合并。它们保留历史效力，不能作为所有当前实例
-仍停在准备期的结论。完整阶段、取舍、来源与保留问题见[项目开发史](docs/PROJECT_DEVELOPMENT_HISTORY.md)。
+真实 Agent 日常链路已在 #83 完成验收：
+`VCPChat → VCPToolBox → JENN Extensions → JSO`。
+AIC-R1 已在 #86 关闭；当前 canonical compatibility release 为 **`JSO_AGENT_R2`**，
+immutable paired harness 为
+`a6c7d447ddaa29799c60aa109d5119b102d1eae4`。该兼容发布固定的是已验收 runtime
+component pins；后续 caller-only CI 提交不自动变成新的 runtime compatibility release。
+
+Studio Day 的源码与 UI polish 已分别通过 #90 / #92 合入 `main`，但父任务 #89
+**仍未完成真实日常客户端验收**。当前准确状态是：
+`JSO_PRODUCT_R1_REAL_USE_ACCEPTANCE_PENDING`。源码合并、CI、兼容验证与 Jenn
+日常客户端真实使用属于不同证据层，不能互相替代。
+
+腾讯开发机与 Linux 日常 Chat 的既有图表验收仍保留：指定测试场次已完成认证读取、
+15 分钟后移保存、恢复保存和原 operationId 回执核对。该结论绑定当时安装版本与测试场次，
+不能自动扩展为 Studio Day 已在所有设备/稳定生产环境完成真实使用验收。
+
+旧 G3 Schema11 记录属于历史域切换与治理路线。物理切换、授权核对和 UNKNOWN 恢复
+继续保留历史效力，但不再作为当前产品主线。完整阶段、取舍、来源与仍待验收事项见
+[项目开发史](docs/PROJECT_DEVELOPMENT_HISTORY.md)。
 
 ## 入口
 
 - [项目开发史](docs/PROJECT_DEVELOPMENT_HISTORY.md)
+- [今日作业只读投影 v1](docs/DAILY_OPERATIONS_V1.md)
 - [Schema12 首发业务路径](docs/operations/first-launch-v3.md)
 - [R5 原生对话接入](docs/operations/NATIVE_VCP_STARTUP_R5.md)
 - [历史 G3 Schema11 Exact Cutover Target R1](docs/operations/G3_SCHEMA11_EXACT_CUTOVER_TARGET_R1.md)
