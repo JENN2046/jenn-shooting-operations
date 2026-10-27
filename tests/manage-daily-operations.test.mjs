@@ -162,6 +162,9 @@ test('request-level risk opens its unique bound reschedule form and never guesse
  const f=await studioDayFixture();try{
   f.setTime('2026-10-13T00:00:00.000Z');const before=databaseFacts(f.server.store.db);
   const p=await page(f),{ids,fire,posts}=p;
+  // Binding checks apply to every backend item, including rows after the local
+  // five-row slice; request IDs need not put this order on the first page.
+  if(!ids.get('daily-attention-toggle').hidden)await fire('daily-attention-toggle');
   const risk=()=>ids.get('daily-attention').children.find(line=>text(line).includes('功能图')&&button(line,'改期'));
   assert.ok(risk());await fire(button(risk(),'改期'));
   assert.equal(ids.get('reschedule-form').hidden,false);assert.equal(vm.runInContext('editing.id',p.context),f.next.id);
