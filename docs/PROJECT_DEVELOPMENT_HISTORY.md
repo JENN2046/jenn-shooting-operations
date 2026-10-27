@@ -4,7 +4,7 @@ Jenn Shooting Operations（JSO）从 VCPChat 中的拍摄计划图表，逐步�
 
 本文覆盖主仓从 **2026 年 9 月 22 日至 10 月 27 日**的演进，并记录完成日常 Chat、Agent 集成与 Studio Day 产品化的相关成果。日期统一使用 **America/Adak**；拍摄业务仍使用 **Asia/Shanghai**。例如，GitHub 的 10 月 26 日 UTC 合并事件，在本文中可能记为 10 月 25 日。
 
-截至本次整理，成果集成主线为 **`main`**，当前源码 HEAD 为 [`e5f3599`](https://github.com/JENN2046/jenn-shooting-operations/commit/e5f3599e331d96bcf1dff5cdccc897330570c1f5)（#92）。`56b620b`（#78）仍是 10 月 25 日日常图表验收与源码归整的历史里程碑，不再是当前源码 HEAD。原默认分支 `codex/v2-1-architecture-freeze` 已重命名为 `main`；更名保留原提交。旧文档中的分支名、Gate 状态和候选标记，应按其当时的目标与日期理解。
+截至本次整理，成果集成主线为 **`main`**，当前产品代码基线为 [`e5f3599`](https://github.com/JENN2046/jenn-shooting-operations/commit/e5f3599e331d96bcf1dff5cdccc897330570c1f5)（#92）；其后的 docs-only 提交不改变该产品代码基线。`56b620b`（#78）仍是 10 月 25 日日常图表验收与源码归整的历史里程碑，不再是当前产品代码基线。原默认分支 `codex/v2-1-architecture-freeze` 已重命名为 `main`；更名保留原提交。旧文档中的分支名、Gate 状态和候选标记，应按其当时的目标与日期理解。
 
 ## 主要阶段时间线
 
@@ -143,9 +143,11 @@ Product R1 [#89](https://github.com/JENN2046/jenn-shooting-operations/issues/89)
 
 | 事项 | 截至本文的准确状态 |
 |---|---|
-| 最新成果主线 | `main@e5f3599e331d96bcf1dff5cdccc897330570c1f5` 已包含 #90 Studio Day 与 #92 R1.1；这是当前源码 HEAD，不等于所有环境已部署。 |
+| 最新成果主线 | `main` 的当前产品代码基线为 `e5f3599e331d96bcf1dff5cdccc897330570c1f5`（#92）；后续 docs-only commit 可位于其上，这不等于所有环境已部署。 |
 | 腾讯开发机日常图表 | 已完成认证读取、15 分钟后移保存、恢复保存、原回执核对及正常重开。该结论绑定当时版本与测试场次；不能自动覆盖 Studio Day 新 UI 的真实使用验收。 |
-| Agent 集成发布 | #83 已完成真实日常 Agent 验收；#86 / Extensions #28 已关闭，canonical compatibility release 为 `JSO_AGENT_R2`。 |\n| Studio Day | #90 / #92 已合入 `main`；#91 已关闭，父任务 #89 仍等待 real-use acceptance。 |\n| 旧 G3 恢复路线 | #63 仍开放；不能将其设计和隔离证据记为已合并或旧域全面恢复。 |
+| Agent 集成发布 | #83 已完成真实日常 Agent 验收；#86 / Extensions #28 已关闭，canonical compatibility release 为 `JSO_AGENT_R2`。 |
+| Studio Day | #90 / #92 已合入 `main`；#91 已关闭，父任务 #89 仍等待 real-use acceptance。 |
+| 旧 G3 恢复路线 | #63 仍开放；不能将其设计和隔离证据记为已合并或旧域全面恢复。 |
 | 现场离线能力 | 代码与隔离浏览器有相应验证；本次日常图表验收没有覆盖摄影棚设备的离线开拍、完成与恢复全过程。 |
 | 身份暂时读取失败 | [#75 的 P2](https://github.com/JENN2046/jenn-shooting-operations/pull/75#discussion_r4307565194)仍未解决：本人现场初次身份/当天读取遇临时故障后，可能需要整页刷新或重新登录。 |
 | 外部通知 | 新 Schema12 业务路径明确关闭外发；不把 Outbox 或钉钉适配器的实现称为真实发送成功。 |
