@@ -41,6 +41,7 @@
 改期与 Proposal 留在下面。快捷按钮只定位、选择或填入现有表单，不提交写请求。
 原 preview、人工采用、CAS、idempotency 和原 operationId 回执核对路径保留；后台新快照
 不会重置草稿或替换其 CAS 基线。未保存草稿所见的较新作业入口要求先刷新再选择。
+请求级入口通过 sourceFacts 中的绑定 id 解析场次；绑定不唯一时要求人工明确选择。
 
 没有新表、migration、写权限或 Agent command；Trusted Action 与 compatibility 基础设施
 不变。现有 `read_state` 已有 scoped orders/sessions/progress，可复用回答今日/当前/下一场，

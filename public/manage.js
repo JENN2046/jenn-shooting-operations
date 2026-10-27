@@ -31,17 +31,22 @@ function exceptionRow(value={date:'',status:'closed',windows:[]}){
 function invalidate(){preview=null;$('#preview').hidden=true;}
 function beginReschedule(s){editing=s;$('#reschedule-form').hidden=false;$('#edit-title').textContent=`调整 ${s.requestNames?.join('、')||'拍摄场次'}`;const start=local(s.plannedStart).split(' '),end=local(s.plannedEnd).split(' ');$('#shoot-date').value=start[0];$('#shoot-start').value=start[1];$('#shoot-end').value=end[1];$('#buffer-note').textContent=`拍后保留 ${s.bufferAfterMinutes} 分钟。改期不会发送外部通知。`;$('#shoot-date').focus();}
 const dailyStatus={notStarted:'待开始',scheduled:'待开始',shooting:'拍摄中',blocked:'受阻',completed:'已完成',cancelled:'已取消',unknown:'事实待核对'};
-function dailyEntry(text,action,type,id,snapshot){
+function dailyEntry(text,action,type,id,snapshot,sourceFacts=null){
  const button=row('button',text);button.type='button';button.className='secondary';button.dataset.dailyAction=action;
- button.addEventListener('click',()=>openDailyEntry(action,type,id,snapshot));return button;
+ button.addEventListener('click',()=>openDailyEntry(action,type,id,snapshot,sourceFacts));return button;
 }
 // Navigation/selection only. Every submit remains in the original handler,
 // with its preview, CAS, idempotency and unknown-result reconciliation intact.
-function openDailyEntry(action,type,id,snapshot){
+function openDailyEntry(action,type,id,snapshot,sourceFacts){
  if(busy||pending){say('请先核对当前管理操作。');return;}
  if(snapshot!==state){say('作业已更新，当前编辑仍使用原版本；请先处理编辑并刷新，再选择快捷入口。');return;}
  const focus=id=>{$('#'+id)?.scrollIntoView?.({block:'start',behavior:'smooth'});$('#'+id)?.focus?.();};
- const session=state.sessions.find(s=>s.id===id),order=state.orderFacts.find(r=>r.id===id);
+ let session=state.sessions.find(s=>s.id===id);const order=state.orderFacts.find(r=>r.id===id);
+ if(type==='request'&&['reschedule','dayAdjustment','selectActual','reconcile'].includes(action)){
+  const bindings=state.sessions.filter(s=>sourceFacts?.scheduleItemIds?.includes(s.id)&&s.requestIds.includes(id)&&s.status!=='cancelled');
+  if(bindings.length!==1){say('此订单没有唯一可选场次，请在下方明确选择并核对。');focus('reschedule-panel');return;}
+  session=bindings[0];
+ }
  if(action==='ownerField'){if(browserSession.enabled)showView(true);else focus('actual-item');return;}
  if(action==='proposal'){focus('proposal-panel');return;}
  if(action==='duration'){const form=[...$('#requests').children].find(form=>form.dataset.requestId===id);(form||$('#durations-panel')).scrollIntoView?.({block:'start'});form?.querySelector?.('input')?.focus();return;}
@@ -52,14 +57,15 @@ function openDailyEntry(action,type,id,snapshot){
  if(action==='reschedule'){
   if(pageDraftDirty||editing){say('请先处理未保存的页面编辑。');return;}
   if(session&&!session.hasRunHistory&&session.lockStatus==='unlocked'&&session.status!=='cancelled')beginReschedule(session);
+  else say('此场已有执行记录或被锁定，请先核对实际执行或当天动态调整。');
   focus('reschedule-panel');return;
  }
  if(action==='dayAdjustment'){
-  if(session&&local(session.plannedStart).slice(0,10)===state.businessToday){$('#dynamic-item').value=id;rememberChoice('dynamic-item');selectDynamic();}
+  if(session&&local(session.plannedStart).slice(0,10)===state.businessToday){$('#dynamic-item').value=session.id;rememberChoice('dynamic-item');selectDynamic();}
   focus('dynamic-panel');return;
  }
  if(action==='selectActual'||action==='reconcile'||action==='viewRun'){
-  if(session){$('#actual-item').value=id;rememberChoice('actual-item');}focus('actual-item');return;
+  if(session){$('#actual-item').value=session.id;rememberChoice('actual-item');}focus('actual-item');return;
  }
  focus('identity');
 }
@@ -99,7 +105,7 @@ function renderDaily(snapshot){
   const evidence=facts.plannedEnd?`计划结束 ${local(facts.plannedEnd)}；${facts.runs.length?facts.runs.map(run=>dailyStatus[run.status]||'待核对').join('、'):'尚无实际执行记录'}`
    :facts.requestId?`期望 ${facts.desiredDate||'未填'} · ${sample[facts.sampleStatus]||'样品待核实'} · ${facts.duration?facts.duration.durationMs/60000+' 分钟':'时长待填'}`:item.reason;
   line.append(row('strong',name+' · '+item.summary),row('small',evidence));
-  line.append(dailyEntry(actionLabels[item.recommendedAction]||'查看记录',item.recommendedAction,item.entityType,item.entityId,snapshot));$('#daily-attention').append(line);
+  line.append(dailyEntry(actionLabels[item.recommendedAction]||'查看记录',item.recommendedAction,item.entityType,item.entityId,snapshot,item.sourceFacts));$('#daily-attention').append(line);
  }
  if(!daily.attentionQueue.length)$('#daily-attention').append(row('li','暂无待处理事项。'));
  $('#daily-ready-title').textContent=`可排但未排订单 · ${daily.readyUnscheduledOrders.length}`;$('#daily-ready').replaceChildren();
@@ -279,7 +285,7 @@ async function refreshScheduleAutomatically(){
   const keys=['scheduleRevision','projectionRevision'],displayed=automaticDisplayed||state.revisions;
   if(keys.some(k=>next.revisions?.[k]<displayed?.[k]))return;
   if(keys.every(k=>next.revisions?.[k]===displayed?.[k])){
-   if(next.businessToday===state.businessToday){state.dailyOperations=next.dailyOperations;state.writeAdmission=next.writeAdmission;renderDaily(state);}
+   if(keys.every(k=>next.revisions?.[k]===state.revisions?.[k])&&next.businessToday===state.businessToday){state.dailyOperations=next.dailyOperations;state.writeAdmission=next.writeAdmission;renderDaily(state);}
    else renderDaily(next);
    syncBusy();return;
   }

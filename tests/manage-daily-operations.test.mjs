@@ -80,8 +80,26 @@ test('daily clock refreshes without a revision change and stale daily shortcuts 
   const r=(await f.state()).revisions;
   await f.ok(`/api/v3/business/requests/${f.extras.readyOne}/duration`,{operationId:'EXTERNAL-DURATION',requestId:f.extras.readyOne,expectedScheduleRevision:r.scheduleRevision,expectedProjectionRevision:r.projectionRevision,durationMinutes:35});
   await vm.runInContext('refreshScheduleAutomatically()',p.context);
+  // Repeated identical newer replies must not acquire the old draft's identity.
+  await vm.runInContext('refreshScheduleAutomatically()',p.context);
+  await vm.runInContext('refreshScheduleAutomatically()',p.context);
   assert.equal(p.ids.get('am-start').value,'07:45');assert.equal(vm.runInContext('state.revisions.scheduleRevision',p.context),revision);
   await p.fire(button(p.ids.get('daily-next'),'查看并开拍'));
   assert.match(p.ids.get('message').textContent,/原版本/);assert.equal(p.posts.length,0);
+ }finally{f.close();}
+});
+
+test('request-level risk opens its unique bound reschedule form and never guesses among multiple sessions',async()=>{
+ const f=await studioDayFixture();try{
+  f.setTime('2026-10-13T00:00:00.000Z');const before=databaseFacts(f.server.store.db);
+  const p=await page(f),{ids,fire,posts}=p;
+  const risk=()=>ids.get('daily-attention').children.find(line=>text(line).includes('功能图')&&button(line,'改期'));
+  assert.ok(risk());await fire(button(risk(),'改期'));
+  assert.equal(ids.get('reschedule-form').hidden,false);assert.equal(vm.runInContext('editing.id',p.context),f.next.id);
+  await fire('cancel-edit');
+  vm.runInContext(`{const bound=state.sessions.find(s=>s.id===${JSON.stringify(f.next.id)});state.sessions.push({...bound,id:'SYNTHETIC-EXTRA-SESSION'});const issue=state.dailyOperations.attentionQueue.find(i=>i.code==='DESIRED_DATE_AT_RISK'&&i.entityId===bound.requestIds[0]);issue.sourceFacts.scheduleItemIds.push('SYNTHETIC-EXTRA-SESSION');renderDaily(state);}`,p.context);
+  await fire(button(risk(),'改期'));assert.equal(ids.get('reschedule-form').hidden,true);
+  assert.match(ids.get('message').textContent,/没有唯一可选场次/);assert.equal(posts.length,0);
+  assert.equal(databaseFacts(f.server.store.db),before);
  }finally{f.close();}
 });
