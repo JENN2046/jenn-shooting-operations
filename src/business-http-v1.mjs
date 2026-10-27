@@ -12,6 +12,7 @@ const POST = new Map([
   ['/api/v2/business/proposals', ['generateProposal']],
 ]);
 export function businessRoute(method, pathname) {
+  if(method==='GET'&&pathname==='/api/v3/business/daily-operations')return {method:'readDailyOperations',dateQuery:true};
   const cancel=method==='POST'&&/^\/api\/v3\/business\/schedule-items\/([^/]+)\/cancel$/u.exec(pathname);
   if(cancel)return {method:'cancelUnstarted',key:'scheduleItemId',encoded:cancel[1]};
   if(method==='GET'&&pathname==='/api/v3/business/board')return {method:'readBoard'};

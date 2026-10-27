@@ -562,11 +562,13 @@ export function createHttpApp({
 
       const business = businessRoute(request.method, url.pathname);
       if (business) {
-        if ([...url.searchParams].length) return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'});
+        if (business.dateQuery ? [...url.searchParams].some(([key])=>key!=='date') || url.searchParams.getAll('date').length>1
+          : [...url.searchParams].length) return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'});
         const auth=await authenticateScheduling(scheduling,request);
         if (!auth.ok) return sendJson(response,auth.code==='FORBIDDEN'?403:401,{ok:false,code:auth.code});
         if (typeof scheduling?.[business.method] !== 'function') return sendJson(response,503,{ok:false,code:'SERVICE_UNAVAILABLE'});
         const input={principal:auth.principal};
+        if(business.dateQuery&&url.searchParams.has('date'))input.date=url.searchParams.get('date');
         if (business.encoded) {
           try { input[business.key]=decodeURIComponent(business.encoded); } catch { return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'}); }
           if (!validIdentifier(input[business.key])) return sendJson(response,400,{ok:false,code:'INVALID_REQUEST'});

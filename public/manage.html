@@ -1,11 +1,19 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>工作安排 · Jenn</title><link rel="stylesheet" href="/manage.css"></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>工作安排 · Jenn</title><link rel="stylesheet" href="/manage.css?v=studio-day-20261027-r1"></head>
 <body><header><a href="/manage">Jenn 拍摄工作台</a><a href="/">拍摄看板</a><span>工作安排</span></header>
-<main><h1>安排工作，也留出调整的余地</h1><p class="muted">工作日历决定可拍时间。改期前，会检查摄影师占用、午休和拍后缓冲。</p>
+<main><h1>今日作业</h1><p class="muted">先看今天、当前拍摄和待处理事项。工作日历与完整管理功能保留在下方。</p>
 <form id="login"><label>管理访问令牌<input id="token" type="password" autocomplete="off" required></label><button id="login-button">连接工作台</button><small id="login-policy">令牌只在当前页面内存中使用。</small></form>
 <p id="message" role="status" aria-live="polite"></p><section id="unknown" hidden><strong>上一次操作结果待核对</strong><p>暂不提交新操作，先读取原操作的结果。</p><button id="reconcile" type="button">核对结果</button></section>
 <nav id="view-switch" hidden aria-label="JSO视图"><button id="view-manage" type="button">工作安排</button><button id="view-field" type="button">本人现场</button></nav><section id="workspace" hidden><div id="management-view"><div class="toolbar"><p id="identity"></p><small id="auto-sync-state" role="status">排班会自动更新。</small><button id="refresh" type="button">刷新状态</button><button id="logout" type="button">退出</button></div>
 <section id="setup" hidden><h2>一个摄影师，一份产能</h2><p>登记 Jenn 摄影师，模特、静物和场景共用同一资源，最多同时拍一场。</p><button id="register" type="button">登记摄影师</button></section>
+<section id="daily-panel" hidden aria-labelledby="daily-title">
+<div class="daily-heading"><h2 id="daily-title">摄影棚今日概览</h2><p id="daily-date"></p></div>
+<div id="daily-summary" class="daily-summary" aria-label="今日场次统计"></div>
+<div class="daily-grid"><article id="daily-current" aria-label="当前拍摄"></article><article id="daily-next" aria-label="下一场"></article></div>
+<div class="daily-grid"><div><h3 id="daily-attention-title">待处理</h3><ul id="daily-attention" class="daily-list" aria-labelledby="daily-attention-title"></ul></div><div><h3 id="daily-ready-title">可排但未排订单</h3><ul id="daily-ready" class="daily-list" aria-labelledby="daily-ready-title"></ul></div></div>
+<details><summary>今日全部场次</summary><div id="daily-sessions"></div></details>
+<small id="daily-observed">实际开拍与完成只采用已记录的执行事实。</small>
+</section>
 <section id="calendar-panel"><h2>工作日历</h2><p id="config-state"></p><form id="calendar-form">
 <fieldset id="calendar-fields"><legend>日常工作时段（北京时间）</legend><div class="grid">
 <label>这次规则从哪天开始<input id="effective" type="date" required></label><label>周六安排<select id="saturday"><option value="weekly">每周上班</option><option value="alternating">隔周上班</option><option value="off">休息</option></select></label><label id="anchor-label">确定上班的周六<input id="anchor" type="date" value="2026-10-10"></label>
@@ -33,11 +41,11 @@
 <fieldset id="order-references"><legend>参考图（可选，仅新建订单）</legend><input id="reference-files" type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,image/heic"><p>JPEG、PNG、WebP、GIF、HEIC；最多10张，每张12 MB，总计40 MB。保存订单时先上传，再关联；不替换已有订单附件。</p><ul id="reference-selection"></ul></fieldset><button type="submit">保存订单</button><button id="order-new" type="button">切换为新建</button></form>
 <h3>订单分类与统计</h3><label>筛选<select id="order-filter"><option value="all">全部</option><option value="静物">静物全部</option><option value="产品3D主图">产品3D主图</option><option value="细节图">细节图</option><option value="功能图">功能图</option><option value="模特">模特</option><option value="场景">场景图</option><option value="细节">历史细节（未细分）</option></select></label><p id="order-counts"></p><div id="order-list"></div>
 <h3>登记实际执行</h3><p>仅在真实发生时点击；记录服务器当前时间，不支持补录或更正。预计结束请使用下方现场预览。</p><label>场次<select id="actual-item"></select></label><p id="actual-item-notice" role="status"></p><button id="actual-start" type="button">现在开拍</button><button id="actual-complete" type="button">现在完成</button></section>
-<section><h2>逐单拍摄时长</h2><p>管理员填写该单预计拍摄分钟数，不改变已排场次。静物包括独立记录的产品3D主图、细节图、功能图；模特与场景图分别记录。</p><div id="requests"></div></section><section><h2>现场变化与当天后续安排</h2><p>仅预览同摄影师当天后续，保持顺序。预计结束不是实际完成；已发生、锁定的安排不改写。不自动跨天、加班或取消。</p>
+<section id="durations-panel"><h2>逐单拍摄时长</h2><p>管理员填写该单预计拍摄分钟数，不改变已排场次。静物包括独立记录的产品3D主图、细节图、功能图；模特与场景图分别记录。</p><div id="requests"></div></section><section id="dynamic-panel"><h2>现场变化与当天后续安排</h2><p>仅预览同摄影师当天后续，保持顺序。预计结束不是实际完成；已发生、锁定的安排不改写。不自动跨天、加班或取消。</p>
 <p id="dynamic-item-notice" role="status"></p><p id="dynamic-facts"></p><form id="dynamic-form"><label>场次<select id="dynamic-item" required></select></label><label>此次变更<select id="dynamic-mode"><option value="plan">尚未开始：修改本场计划</option><option value="forecast">现场预计结束（不改实际事实）</option></select></label><label>本场开始（计划模式）<input id="dynamic-start" type="time"></label><label>本场结束／现场预计结束<input id="dynamic-end" type="time" required></label><label>仅本场拍后缓冲（分钟）<input id="dynamic-buffer" type="number" min="0" max="1440" required></label><button>预览后续影响</button></form><div id="dynamic-preview" hidden><p id="dynamic-summary"></p><ul id="dynamic-changes"></ul><button id="dynamic-confirm" type="button">确认以上整批调整</button></div></section>
-<section><h2>拍摄改期</h2><p>只调整未锁定、尚无执行记录的场次。已确认拍摄不会随工作日历自动移动。</p><div id="sessions"></div>
+<section id="reschedule-panel"><h2>拍摄改期</h2><p>只调整未锁定、尚无执行记录的场次。已确认拍摄不会随工作日历自动移动。</p><div id="sessions"></div>
 <form id="reschedule-form" hidden><h3 id="edit-title"></h3><div class="grid"><label>拍摄日期<input id="shoot-date" type="date" required></label><label>开始时间<input id="shoot-start" type="time" required></label><label>结束时间<input id="shoot-end" type="time" required></label></div><p id="buffer-note"></p><button type="submit">检查并保存改期</button><button id="cancel-edit" type="button" class="secondary">取消</button></form></section>
-<section><h2>排程提案</h2><form id="proposal-form"><div class="grid"><label>开始日期<input id="plan-from" type="date" required></label><label>结束日期（含当天）<input id="plan-through" type="date" required></label></div><button type="submit">生成提案</button></form><div id="proposal"></div></section>
+<section id="proposal-panel"><h2>排程提案</h2><form id="proposal-form"><div class="grid"><label>开始日期<input id="plan-from" type="date" required></label><label>结束日期（含当天）<input id="plan-through" type="date" required></label></div><button type="submit">生成提案</button></form><div id="proposal"></div></section>
 <p class="muted">备份安排：Jenn 负责，首选北京时间每日02:00–03:00，保留7天。115上传与恢复尚未启用；此页面不会启动备份。改期通知尚未接入外部发送。</p>
 </div><section id="owner-field" class="kiosk-shell" hidden>
 <h2>本人现场</h2><p>与管理视图使用同一管理员身份。离线记录先存本机，服务端核对成功后才成为事实。</p>
@@ -102,4 +110,4 @@
     <div class="dialog-actions"><button id="complete-confirm" type="button" class="complete">确认完成</button><button id="complete-cancel" type="button" class="secondary">返回检查</button></div>
   </dialog>
 
-  </section></main><script type="module" src="/manage.js?v=public-board-20261018-r1"></script></body></html>
+  </section></main><script type="module" src="/manage.js?v=studio-day-20261027-r1"></script></body></html>

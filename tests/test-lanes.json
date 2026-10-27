@@ -165,6 +165,13 @@
       "invariant": "conversation rejects otherwise valid static ${action} grants before creating a factory; conversation accepts omitted and empty grants for both identity modes"
     },
     {
+      "file": "daily-operations-v1.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "canonical read-only studio-day projection, real run/forecast facts, deterministic attention and ready-order eligibility with auth/date boundaries and zero persistent writes"
+    },
+    {
       "file": "deterministic-scheduler-v1.test.mjs",
       "lanes": [
         "current"
@@ -532,6 +539,13 @@
         "current"
       ],
       "invariant": "automatic page read times out, resumes and preserves draft base; older replies and logged-out replies cannot render; button-only calendar exception additions and removals survive background snapshots"
+    },
+    {
+      "file": "manage-daily-operations.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "daily first-screen facts and navigation reuse existing management actions, preserve CAS drafts, and reconcile the original operation after an unknown result without duplicate writes"
     },
     {
       "file": "manage-ui-flow.test.mjs",
