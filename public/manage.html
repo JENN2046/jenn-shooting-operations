@@ -1,16 +1,16 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>工作安排 · Jenn</title><link rel="stylesheet" href="/manage.css?v=studio-day-20261027-r1"></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>工作安排 · Jenn</title><link rel="stylesheet" href="/manage.css?v=studio-day-20261027-r1-1"></head>
 <body><header><a href="/manage">Jenn 拍摄工作台</a><a href="/">拍摄看板</a><span>工作安排</span></header>
-<main><h1>今日作业</h1><p class="muted">先看今天、当前拍摄和待处理事项。工作日历与完整管理功能保留在下方。</p>
+<main id="management-shell" data-authenticated="false"><div class="manage-intro"><h1>今日作业</h1><p class="muted">先看今天、当前拍摄和待处理事项。完整管理功能在下方。</p></div>
 <form id="login"><label>管理访问令牌<input id="token" type="password" autocomplete="off" required></label><button id="login-button">连接工作台</button><small id="login-policy">令牌只在当前页面内存中使用。</small></form>
 <p id="message" role="status" aria-live="polite"></p><section id="unknown" hidden><strong>上一次操作结果待核对</strong><p>暂不提交新操作，先读取原操作的结果。</p><button id="reconcile" type="button">核对结果</button></section>
-<nav id="view-switch" hidden aria-label="JSO视图"><button id="view-manage" type="button">工作安排</button><button id="view-field" type="button">本人现场</button></nav><section id="workspace" hidden><div id="management-view"><div class="toolbar"><p id="identity"></p><small id="auto-sync-state" role="status">排班会自动更新。</small><button id="refresh" type="button">刷新状态</button><button id="logout" type="button">退出</button></div>
+<nav id="view-switch" hidden aria-label="JSO视图"><button id="view-manage" type="button">工作安排</button><button id="view-field" type="button">本人现场</button></nav><section id="workspace" hidden><div id="management-view"><div id="management-toolbar" class="toolbar" aria-label="管理状态与操作"><p id="identity"></p><small id="auto-sync-state" role="status">排班会自动更新。</small><button id="refresh" type="button">刷新状态</button><button id="logout" type="button">退出</button></div>
 <section id="setup" hidden><h2>一个摄影师，一份产能</h2><p>登记 Jenn 摄影师，模特、静物和场景共用同一资源，最多同时拍一场。</p><button id="register" type="button">登记摄影师</button></section>
 <section id="daily-panel" hidden aria-labelledby="daily-title">
 <div class="daily-heading"><h2 id="daily-title">摄影棚今日概览</h2><p id="daily-date"></p></div>
 <div id="daily-summary" class="daily-summary" aria-label="今日场次统计"></div>
 <div class="daily-grid"><article id="daily-current" aria-label="当前拍摄"></article><article id="daily-next" aria-label="下一场"></article></div>
-<div class="daily-grid"><div><h3 id="daily-attention-title">待处理</h3><ul id="daily-attention" class="daily-list" aria-labelledby="daily-attention-title"></ul></div><div><h3 id="daily-ready-title">可排但未排订单</h3><ul id="daily-ready" class="daily-list" aria-labelledby="daily-ready-title"></ul></div></div>
+<div class="daily-grid"><div><h3 id="daily-attention-title">待处理</h3><ul id="daily-attention" class="daily-list" aria-labelledby="daily-attention-title"></ul><p id="daily-attention-empty" class="muted" hidden>暂无待处理事项。</p><button id="daily-attention-toggle" type="button" class="secondary daily-action" aria-controls="daily-attention" aria-expanded="false" hidden>展开全部</button></div><div><h3 id="daily-ready-title">可排但未排订单</h3><ul id="daily-ready" class="daily-list" aria-labelledby="daily-ready-title"></ul><p id="daily-ready-empty" class="muted" hidden>暂无样品与时长均具备的未排订单。</p><button id="daily-ready-toggle" type="button" class="secondary daily-action" aria-controls="daily-ready" aria-expanded="false" hidden>展开全部</button></div></div>
 <details><summary>今日全部场次</summary><div id="daily-sessions"></div></details>
 <small id="daily-observed">实际开拍与完成只采用已记录的执行事实。</small>
 </section>
@@ -110,4 +110,4 @@
     <div class="dialog-actions"><button id="complete-confirm" type="button" class="complete">确认完成</button><button id="complete-cancel" type="button" class="secondary">返回检查</button></div>
   </dialog>
 
-  </section></main><script type="module" src="/manage.js?v=studio-day-20261027-r1"></script></body></html>
+  </section></main><script type="module" src="/manage.js?v=studio-day-20261027-r1-1"></script></body></html>

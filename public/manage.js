@@ -3,6 +3,7 @@ import {mergeFiles,fileSelectionError} from './common.js';
 import {referenceGallery,clearReferenceImages} from './references.js?v=public-board-20261018-r1';
 const $=s=>document.querySelector(s);
 let dayPreview=null,editingOrder=null,pageDraftDirty=false;
+const dailyExpanded={attention:false,ready:false};let dailySnapshot=null;
 let token='',state=null,preview=null,published=null,publishedBinding=null,editing=null,proposal=null,busy=false;
 let pending=null;try{pending=JSON.parse(sessionStorage.getItem('jso.pending.operation')||'null');}catch{}
 const messages={DYNAMIC_PLAN_SAME_DATE_ONLY:'计划调整须保持在场次原日期内，开始时间必须晚于现在；跨日期请使用拍摄改期。',DYNAMIC_FORECAST_NOT_CURRENT:'需要已有的正在拍摄或受阻执行记录；未确认的实际状态不能当作已知。',DYNAMIC_OCCUPANCY_UNKNOWN:'已有占用信息不完整，请先核对。',DYNAMIC_PREVIEW_CHANGED:'现场、安排或配置已变化，请重新预览。',DYNAMIC_TODAY_ONLY:'仅支持北京时间当天，结束时间必须晚于现在。',DYNAMIC_UNRESOLVED:'存在未解决项，整批未保存。',FORBIDDEN:'没有这个资源的操作权限。',WRITE_ADMISSION_DISABLED:'当前处于禁写状态，不能保存。',CALENDAR_HAS_CONFLICTS:'新规则与已排场次冲突，请先改期。',SCHEDULING_REVISION_CONFLICT:'安排已被其他操作更新，请刷新并重新核对。',RESCHEDULE_REVISION_CONFLICT:'安排已变化，请刷新后重新核对。',SCHEDULING_RESOURCE_OVERLAP_OR_UNKNOWN:'与已有拍摄或缓冲冲突，或存在尚未确定的占用。',PAST_CALENDAR_CHANGE_FORBIDDEN:'历史工作规则需要保留，请选择今天或以后的生效日。',SCHEDULING_QUIESCENCE_HELD:'维护操作正在持锁，暂不能修改。',OPERATION_NOT_FOUND:'暂未找到回执，不能据此认定未提交。请保持待核对状态。',CONFIG_SCHEMA_TRANSITION_REQUIRES_REVIEW:'已有旧版日历需要单独迁移，页面暂不直接转换。'};
@@ -31,8 +32,8 @@ function exceptionRow(value={date:'',status:'closed',windows:[]}){
 function invalidate(){preview=null;$('#preview').hidden=true;}
 function beginReschedule(s){editing=s;$('#reschedule-form').hidden=false;$('#edit-title').textContent=`调整 ${s.requestNames?.join('、')||'拍摄场次'}`;const start=local(s.plannedStart).split(' '),end=local(s.plannedEnd).split(' ');$('#shoot-date').value=start[0];$('#shoot-start').value=start[1];$('#shoot-end').value=end[1];$('#buffer-note').textContent=`拍后保留 ${s.bufferAfterMinutes} 分钟。改期不会发送外部通知。`;$('#shoot-date').focus();}
 const dailyStatus={notStarted:'待开始',scheduled:'待开始',shooting:'拍摄中',blocked:'受阻',completed:'已完成',cancelled:'已取消',unknown:'事实待核对'};
-function dailyEntry(text,action,type,id,snapshot,sourceFacts=null){
- const button=row('button',text);button.type='button';button.className='secondary';button.dataset.dailyAction=action;
+function dailyEntry(text,action,type,id,snapshot,sourceFacts=null,primary=false){
+ const button=row('button',text);button.type='button';button.className=primary?'daily-action daily-primary':'daily-action secondary';button.dataset.dailyAction=action;
  button.addEventListener('click',()=>openDailyEntry(action,type,id,snapshot,sourceFacts));return button;
 }
 // Navigation/selection only. Every submit remains in the original handler,
@@ -70,7 +71,9 @@ function openDailyEntry(action,type,id,snapshot,sourceFacts){
  }
  focus('identity');
 }
+function clearDailyView(){dailySnapshot=null;dailyExpanded.attention=false;dailyExpanded.ready=false;$('#management-shell').dataset.authenticated='false';}
 function renderDaily(snapshot){
+ dailySnapshot=snapshot;
  const daily=snapshot.dailyOperations;$('#daily-panel').hidden=!daily;
  if(!daily)return;
  $('#daily-date').textContent=daily.date+' · 北京时间';
@@ -92,34 +95,53 @@ function renderDaily(snapshot){
   }
   out.append(referenceGallery(session.referenceImages,()=>token));
   if(!session.referenceImagesAvailable)out.append(row('small','暂无参考图'));
-  if(snapshot.principal.role==='administrator')out.append(dailyEntry('本人现场','ownerField','scheduleItem',session.id,snapshot),dailyEntry(title==='下一场'?'查看并开拍':'查看实际执行','selectActual','scheduleItem',session.id,snapshot),dailyEntry('当天动态调整','dayAdjustment','scheduleItem',session.id,snapshot));
+  if(snapshot.principal.role==='administrator'){
+   const owner=dailyEntry('本人现场','ownerField','scheduleItem',session.id,snapshot,null,title==='当前拍摄');
+   const actual=dailyEntry(title==='下一场'?'查看并开拍':'查看实际执行','selectActual','scheduleItem',session.id,snapshot,null,title==='下一场');
+   out.append(...(title==='下一场'?[actual,owner]:[owner,actual]),dailyEntry('当天动态调整','dayAdjustment','scheduleItem',session.id,snapshot));
+  }
   if(!session.hasRunHistory&&session.lockStatus==='unlocked')out.append(dailyEntry('改期','reschedule','scheduleItem',session.id,snapshot));
  }
  card('daily-current','当前拍摄',daily.currentSession);card('daily-next','下一场',daily.nextSession);
- $('#daily-attention-title').textContent=`待处理 · ${daily.attentionQueue.length}`;$('#daily-attention').replaceChildren();
+ // Presentation only: keep API facts and ordering intact. Ready orders already
+ // have their own list; counts below describe the rows currently displayed.
+ const attention=daily.attentionQueue.filter(item=>item.code!=='UNSCHEDULED_READY');
+ const visibleAttention=dailyExpanded.attention?attention:attention.slice(0,5);
+ const visibleReady=dailyExpanded.ready?daily.readyUnscheduledOrders:daily.readyUnscheduledOrders.slice(0,5);
+ for(const [key,total]of [['attention',attention.length],['ready',daily.readyUnscheduledOrders.length]]){
+  const toggle=$('#daily-'+key+'-toggle');toggle.hidden=total<=5;toggle.textContent=dailyExpanded[key]?'收起':`展开全部（${total} 项）`;
+  toggle.ariaExpanded=String(dailyExpanded[key]);
+ }
+ $('#daily-attention-title').textContent=`待处理 · ${visibleAttention.length}`;$('#daily-attention').replaceChildren();
  const actionLabels={ownerField:'本人现场',selectActual:'核对实际执行',reconcile:'核对执行事实',dayAdjustment:'当天动态调整',reschedule:'改期',editOrder:'订单维护',duration:'时长维护',proposal:'Proposal',viewState:'查看状态'};
- for(const item of daily.attentionQueue){const line=row('li','');line.className=item.severity;
+ for(const item of visibleAttention){const line=row('li','');line.className=item.severity;line.dataset.attentionCode=item.code;
   const session=snapshot.sessions.find(session=>session.id===item.entityId),order=snapshot.orderFacts.find(order=>order.id===item.entityId);
   const name=session?.requestNames.join('、')||order?.name||(item.entityType==='system'?'工作台':'拍摄事实');
   const facts=item.sourceFacts;
   const sample={arrivedVerified:'样品已核实',inTransit:'样品运输中',unavailable:'样品不可用'};
   const evidence=facts.plannedEnd?`计划结束 ${local(facts.plannedEnd)}；${facts.runs.length?facts.runs.map(run=>dailyStatus[run.status]||'待核对').join('、'):'尚无实际执行记录'}`
    :facts.requestId?`期望 ${facts.desiredDate||'未填'} · ${sample[facts.sampleStatus]||'样品待核实'} · ${facts.duration?facts.duration.durationMs/60000+' 分钟':'时长待填'}`:item.reason;
-  line.append(row('strong',name+' · '+item.summary),row('small',evidence));
+  const severity=row('span',({critical:'阻塞',warning:'需核对',info:'提醒'})[item.severity]||'需核对');severity.className='daily-severity';
+  line.append(severity,row('strong',name+' · '+item.summary),row('small',evidence));
   line.append(dailyEntry(actionLabels[item.recommendedAction]||'查看记录',item.recommendedAction,item.entityType,item.entityId,snapshot,item.sourceFacts));$('#daily-attention').append(line);
  }
- if(!daily.attentionQueue.length)$('#daily-attention').append(row('li','暂无待处理事项。'));
- $('#daily-ready-title').textContent=`可排但未排订单 · ${daily.readyUnscheduledOrders.length}`;$('#daily-ready').replaceChildren();
- for(const order of daily.readyUnscheduledOrders){const line=row('li','');line.append(row('strong',order.name),row('small',`${order.shootingSubtype} · 样品已核实 · ${order.duration.durationMs/60000} 分钟 · 期望 ${order.desiredDate||'未填'}`),dailyEntry('订单维护','editOrder','request',order.id,snapshot),dailyEntry('时长维护','duration','request',order.id,snapshot),dailyEntry('Proposal','proposal','request',order.id,snapshot));$('#daily-ready').append(line);}
- if(!daily.readyUnscheduledOrders.length)$('#daily-ready').append(row('li','暂无样品与时长均具备的未排订单。'));
+ $('#daily-attention-empty').hidden=attention.length>0;
+ $('#daily-ready-title').textContent=`可排但未排订单 · ${visibleReady.length}`;$('#daily-ready').replaceChildren();
+ for(const order of visibleReady){const line=row('li','');line.append(row('strong',order.name),row('small',`${order.shootingSubtype} · 样品已核实 · ${order.duration.durationMs/60000} 分钟 · 期望 ${order.desiredDate||'未填'}`),dailyEntry('订单维护','editOrder','request',order.id,snapshot),dailyEntry('时长维护','duration','request',order.id,snapshot),dailyEntry('Proposal','proposal','request',order.id,snapshot));$('#daily-ready').append(line);}
+ $('#daily-ready-empty').hidden=daily.readyUnscheduledOrders.length>0;
  $('#daily-sessions').replaceChildren(...daily.todaySessions.map(session=>row('p',`${local(session.plannedStart).slice(11)} — ${local(session.plannedEnd).slice(11)} · ${session.requestNames.join('、')||session.id} · ${dailyStatus[session.runStatus]||'待核对'}`)));
  $('#daily-observed').textContent=`读取于 ${local(daily.observedAt)}。实际开拍与完成只采用已记录的执行事实。`;
 }
+for(const key of ['attention','ready'])$('#daily-'+key+'-toggle').addEventListener('click',()=>{
+ if(busy||pending||!dailySnapshot)return;
+ dailyExpanded[key]=!dailyExpanded[key];renderDaily(dailySnapshot);syncBusy();
+});
 function renderSessions(snapshot){
  $('#sessions').replaceChildren();for(const s of snapshot.sessions){const e=row('div','');e.className='session';e.dataset.scheduleItemId=s.id;e.append(row('strong',s.requestNames?.join('、')||'未命名拍摄'),row('p',`${local(s.plannedStart)} — ${local(s.plannedEnd)} · 缓冲 ${s.bufferAfterMinutes??'未确定'} 分钟`));const b=row('button','调整时间');b.type='button';b.disabled=s.hasRunHistory||s.lockStatus!=='unlocked'||s.status==='cancelled';b.dataset.locked=b.disabled?'yes':'';b.addEventListener('click',()=>beginReschedule(s));e.append(b);$('#sessions').append(e);}
  if(!snapshot.sessions.length)$('#sessions').append(row('p','暂无已排场次。'));
 }
 function render(){
+ $('#management-shell').dataset.authenticated='true';
  $('#workspace').hidden=false;$('#login').hidden=true;$('#view-switch').hidden=!browserSession.enabled;$('#identity').textContent=`${state.principal.subjectId} · ${state.writeAdmission==='disabled'?'当前禁写':'可编辑'} · 北京时间`;
  $('#setup').hidden=state.resources.length>0||state.principal.role!=='administrator';
  const current=active();$('#config-state').textContent=current?'当前规则已生效。后续修改会保留历史版本。':'尚未设置工作日历。';
@@ -159,7 +181,7 @@ function buildConfig(){const config=draftBase();if(![2,3].includes(config.schema
 function syncSaturday(){$('#anchor-label').hidden=$('#saturday').value!=='alternating';$('#anchor').required=$('#saturday').value==='alternating';}
 $('#saturday').addEventListener('change',syncSaturday);
 $('#login').addEventListener('submit',e=>{e.preventDefault();work(async()=>{const entered=$('#token').value;$('#token').value='';await browserSession.init();if(browserSession.enabled){await browserSession.login(entered);token='';}else token=entered;await refresh();say('已读取工作安排。');});});
-$('#logout').addEventListener('click',async()=>{const confirmed=!browserSession.enabled||await browserSession.logout();token='';state=null;clearReferenceImages();$('#order-list').replaceChildren();if(!pending)resetOrderForm();$('#workspace').hidden=true;$('#login').hidden=false;$('#view-switch').hidden=true;showView(false);say(confirmed?'已退出。未确认操作和现场队列仍保留。':'本机已锁定；服务端退出待联网确认。现场队列仍保留。');});
+$('#logout').addEventListener('click',async()=>{const confirmed=!browserSession.enabled||await browserSession.logout();token='';state=null;clearDailyView();clearReferenceImages();$('#order-list').replaceChildren();if(!pending)resetOrderForm();$('#workspace').hidden=true;$('#login').hidden=false;$('#view-switch').hidden=true;showView(false);say(confirmed?'已退出。未确认操作和现场队列仍保留。':'本机已锁定；服务端退出待联网确认。现场队列仍保留。');});
 $('#refresh').addEventListener('click',()=>work(refresh));
 $('#register').addEventListener('click',()=>work(async()=>{if(!state.revisions)throw new Error('尚未建立初始化控制记录，不能在页面自动初始化。');await mutation('/api/v3/business/resources',{operationId:newId('RESOURCE'),expectedScheduleRevision:state.revisions.scheduleRevision,expectedProjectionRevision:state.revisions.projectionRevision,resource:state.initialResource});await refresh();say('已登记一个摄影师资源。');}));
 $('#add-exception').addEventListener('click',()=>{pageDraftDirty=true;exceptionRow();invalidate();});$('#calendar-form').addEventListener('input',invalidate);
@@ -316,6 +338,6 @@ function showView(field){
 $('#view-manage').addEventListener('click',()=>showView(false));
 $('#view-field').addEventListener('click',()=>{if(pending||busy){say('请先核对当前管理操作。');return;}showView(true);});
 if(typeof window!=='undefined')window.addEventListener('jso-session-changed',()=>{
- if(browserSession.enabled&&!browserSession.authenticated){clearReferenceImages();state=null;$('#workspace').hidden=true;$('#login').hidden=false;$('#view-switch').hidden=true;showView(false);}
+ if(browserSession.enabled&&!browserSession.authenticated){clearReferenceImages();state=null;clearDailyView();$('#workspace').hidden=true;$('#login').hidden=false;$('#view-switch').hidden=true;showView(false);}
 });
 if(typeof window!=='undefined')(async()=>{try{await browserSession.init();if(browserSession.enabled){$('#login-policy').textContent='凭据仅用于换取安全会话，不保存在浏览器存储中。会话过期或服务重启后需重新登录；本人现场原记录保留。';await import('./kiosk-online-v3.js?v=jso-session-field-20261018-r1');if(browserSession.authenticated){await refresh();$('#view-switch').hidden=false;showView(location.hash==='#field');}}}catch{say('会话暂未恢复，请联网后重新登录；未确认记录仍保留。');}})();
