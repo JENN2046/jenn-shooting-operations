@@ -61,6 +61,7 @@ function openDailyEntry(action,type,id,snapshot,sourceFacts){
   focus('reschedule-panel');return;
  }
  if(action==='dayAdjustment'){
+  if(pageDraftDirty||dayPreview){say('请先处理未保存的动态调整或页面编辑。');focus('dynamic-panel');return;}
   if(session&&local(session.plannedStart).slice(0,10)===state.businessToday){$('#dynamic-item').value=session.id;rememberChoice('dynamic-item');selectDynamic();}
   focus('dynamic-panel');return;
  }

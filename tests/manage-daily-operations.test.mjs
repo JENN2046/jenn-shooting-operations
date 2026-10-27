@@ -123,3 +123,27 @@ test('Shanghai midnight adopts a clean snapshot but preserves an actual draft ac
   assert.equal(databaseFacts(f.server.store.db),before);
  }finally{f.close();}
 });
+
+test('daily dynamic shortcuts preserve unsaved inputs and previews for the same or another session',async()=>{
+ const f=await studioDayFixture();try{
+  const before=databaseFacts(f.server.store.db);
+  for(const previewOnly of [false,true]){
+   const p=await page(f),{ids,fire}=p;
+   await fire(button(ids.get('daily-current'),'当天动态调整'));
+   const selected=ids.get('dynamic-item').value;
+   ids.get('dynamic-end').value='12:45';ids.get('dynamic-buffer').value='37';
+   vm.runInContext(previewOnly?"dayPreview={ok:true,previewId:'PRESERVE'};document.querySelector('#dynamic-preview').hidden=false":"pageDraftDirty=true",p.context);
+   const draft=vm.runInContext('JSON.stringify(dayPreview)',p.context);
+   for(const card of ['daily-current','daily-next']){
+    await fire(button(ids.get(card),'当天动态调整'));
+    assert.match(ids.get('message').textContent,/未保存的动态调整/);
+    assert.equal(ids.get('dynamic-item').value,selected);
+    assert.equal(ids.get('dynamic-end').value,'12:45');assert.equal(ids.get('dynamic-buffer').value,'37');
+    assert.equal(vm.runInContext('JSON.stringify(dayPreview)',p.context),draft);
+    if(previewOnly)assert.equal(ids.get('dynamic-preview').hidden,false);
+   }
+   assert.equal(p.posts.length,0);
+  }
+  assert.equal(databaseFacts(f.server.store.db),before);
+ }finally{f.close();}
+});
