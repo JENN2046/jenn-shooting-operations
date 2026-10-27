@@ -19,8 +19,8 @@ Jenn Shooting Operations 是 `jenn-shooting-planner` 的独立协作服务边界
 
 ## 当前阶段
 
-截至 **2026-10-27**，成果集成主线为 **`main`**，当前源码 HEAD 为
-`e5f3599e331d96bcf1dff5cdccc897330570c1f5`（#92）。
+截至 **2026-10-27**，成果集成主线为 **`main`**。当前产品代码基线为
+`e5f3599e331d96bcf1dff5cdccc897330570c1f5`（#92）；其后的 docs-only 提交不改变该产品代码基线。
 
 Schema12 / V3 已包含五类订单、排程与预计结束、实际开拍/完成、参考图、管理员会话、
 本人现场、受限 Kiosk、R5 原生对话接入，以及 Product R1 的 **Studio Day / 今日作业台**。
