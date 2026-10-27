@@ -40,7 +40,7 @@ function matchingRule(rules, candidate) {
     && (rule.shootingSubtype === null || rule.shootingSubtype === candidate.shootingSubtype)) ?? null;
 }
 
-function resolveDuration(candidate, resource, config, stats) {
+export function resolveDuration(candidate, resource, config, stats) {
   if (candidate.durationEstimate) {
     return {
       durationMs: candidate.durationEstimate.durationMs,

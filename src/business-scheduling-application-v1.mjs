@@ -2,6 +2,7 @@ import {createBusinessCancelV3} from './business-cancel-v3.mjs';
 import {readSchedulingBoardFacts} from './scheduling-board-read-model.mjs';
 import {createBusinessRunV3} from './business-run-v3.mjs';
 import {createBusinessOrderV3} from './business-order-v3.mjs';
+import {projectDailyOperations} from './daily-operations-v1.mjs';
 import { createDynamicDayAdjustment } from './dynamic-day-adjustment-v1.mjs';
 import { businessInitialResource, businessInitialConfig, businessInitialConfigV3 } from './business-defaults-v1.mjs';
 import { createSqliteSchedulingAdminStoreV1 } from './sqlite-scheduling-admin-store-v1.mjs';
@@ -114,10 +115,19 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
       if(!ownsRequestCatalogue(principal))return denied('FORBIDDEN');
       return this.readManagement({principal});
     },
+    readDailyOperations({principal,date}) {
+      if(!db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get())return denied('BUSINESS_SCHEMA12_REQUIRED');
+      const snapshot=this.readManagement({principal});
+      if(!snapshot.ok)return snapshot;
+      return date===undefined?snapshot.dailyOperations:projectDailyOperations(snapshot,{now:snapshot.dailyOperations.observedAt,date});
+    },
     recordActualEvent(input) {return db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get()?runEvent(input):denied('BUSINESS_SCHEMA12_REQUIRED');},
     createOrder(input) {return db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get()?orders.create(input):denied('BUSINESS_SCHEMA12_REQUIRED');},
     editOrder(input) {return db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get()?orders.edit(input):denied('BUSINESS_SCHEMA12_REQUIRED');},
     readManagement({ principal }) {
+      const ownTransaction=!db.isTransaction;
+      if(ownTransaction)db.exec('BEGIN');
+      try {
       const schema = requireBusinessSchema(); if (schema) return schema;
       if (!scoped(principal, principal?.resourceIds)) return denied('FORBIDDEN');
       const resources = db.prepare(`SELECT resource_id, v1_display_place, status, capability_json,
@@ -125,11 +135,11 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
       const versions = db.prepare(`SELECT * FROM scheduling_config_versions ORDER BY published_at DESC, config_version DESC`).all()
         .filter(v => scoped(principal, JSON.parse(v.config_json).resourceCalendars.map(c => c.resourceId)));
       const current = active();
-      const today=dateAt(clock().toISOString(),'Asia/Shanghai');
+      const observedAt=clock().toISOString(),today=dateAt(observedAt,'Asia/Shanghai');
       const initialResource=businessInitialResource(principal.resourceIds[0]);
       const orderRows=ownsRequestCatalogue(principal)?db.prepare('SELECT * FROM requests_v2 ORDER BY source_ordinal').all().filter(r=>ownsRequest(principal,r.id)):[];
       const {orderFacts,sessions}=readSchedulingBoardFacts({db,resourceIds:principal.resourceIds,orderRows});
-      return { ok: true, protocolVersion:db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get()?3:2,orderFacts, businessToday:today, initialResource, initialConfig:(db.prepare("SELECT 1 FROM schema_migrations WHERE version=12").get()?businessInitialConfigV3:businessInitialConfig)(initialResource,today), principal: { subjectId: principal.subjectId, role: principal.role, resourceIds: principal.resourceIds },
+      const snapshot={ ok: true, protocolVersion:db.prepare('SELECT 1 FROM schema_migrations WHERE version=12').get()?3:2,orderFacts, businessToday:today, initialResource, initialConfig:(db.prepare("SELECT 1 FROM schema_migrations WHERE version=12").get()?businessInitialConfigV3:businessInitialConfig)(initialResource,today), principal: { subjectId: principal.subjectId, role: principal.role, resourceIds: principal.resourceIds },
         revisions: db.prepare('SELECT schedule_revision AS scheduleRevision, projection_revision AS projectionRevision FROM revision_counters WHERE id=1').get() ?? null,
         resources, configs: versions.map(v => ({ configVersion: v.config_version, publishedAt: v.published_at, configJson: JSON.parse(v.config_json), configDigest: v.config_digest,
           calendarCompilerVersion: v.calendar_compiler_version, active: v.config_version === current?.config_version,
@@ -140,6 +150,9 @@ export function createBusinessSchedulingApplication({ db, writeAdmissionControl,
           FROM requests_v2 r LEFT JOIN scheduling_request_requirements q ON q.request_id=r.id
           WHERE r.request_lifecycle='open' ORDER BY r.id`).all().filter(r => ownsRequest(principal,r.id)) : [],
         writeAdmission: writeAdmissionControl.status().mode };
+      if(snapshot.protocolVersion===3)snapshot.dailyOperations=projectDailyOperations(snapshot,{now:observedAt});
+      return snapshot;
+      } finally {if(ownTransaction)db.exec('ROLLBACK');}
     },
     previewDayAdjustment({command,principal}) { const schema=requireBusinessSchema();return schema??dynamic.preview(command,principal); },
     applyDayAdjustment({command,principal}) { const schema=requireBusinessSchema();return schema??dynamic.apply(command,principal); },

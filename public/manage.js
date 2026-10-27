@@ -29,8 +29,87 @@ function exceptionRow(value={date:'',status:'closed',windows:[]}){
  e.values=()=>({date:date.value,status:select.value,windows:select.value==='closed'?[]:[{start:times[0].value,end:times[1].value},...(times[2].value||times[3].value?[{start:times[2].value,end:times[3].value}]:[])]});$('#exceptions').append(e);
 }
 function invalidate(){preview=null;$('#preview').hidden=true;}
+function beginReschedule(s){editing=s;$('#reschedule-form').hidden=false;$('#edit-title').textContent=`调整 ${s.requestNames?.join('、')||'拍摄场次'}`;const start=local(s.plannedStart).split(' '),end=local(s.plannedEnd).split(' ');$('#shoot-date').value=start[0];$('#shoot-start').value=start[1];$('#shoot-end').value=end[1];$('#buffer-note').textContent=`拍后保留 ${s.bufferAfterMinutes} 分钟。改期不会发送外部通知。`;$('#shoot-date').focus();}
+const dailyStatus={notStarted:'待开始',scheduled:'待开始',shooting:'拍摄中',blocked:'受阻',completed:'已完成',cancelled:'已取消',unknown:'事实待核对'};
+function dailyEntry(text,action,type,id,snapshot){
+ const button=row('button',text);button.type='button';button.className='secondary';button.dataset.dailyAction=action;
+ button.addEventListener('click',()=>openDailyEntry(action,type,id,snapshot));return button;
+}
+// Navigation/selection only. Every submit remains in the original handler,
+// with its preview, CAS, idempotency and unknown-result reconciliation intact.
+function openDailyEntry(action,type,id,snapshot){
+ if(busy||pending){say('请先核对当前管理操作。');return;}
+ if(snapshot!==state){say('作业已更新，当前编辑仍使用原版本；请先处理编辑并刷新，再选择快捷入口。');return;}
+ const focus=id=>{$('#'+id)?.scrollIntoView?.({block:'start',behavior:'smooth'});$('#'+id)?.focus?.();};
+ const session=state.sessions.find(s=>s.id===id),order=state.orderFacts.find(r=>r.id===id);
+ if(action==='ownerField'){if(browserSession.enabled)showView(true);else focus('actual-item');return;}
+ if(action==='proposal'){focus('proposal-panel');return;}
+ if(action==='duration'){const form=[...$('#requests').children].find(form=>form.dataset.requestId===id);(form||$('#durations-panel')).scrollIntoView?.({block:'start'});form?.querySelector?.('input')?.focus();return;}
+ if(action==='editOrder'){
+  if(pageDraftDirty||editingOrder||referenceFiles.length){say('请先处理未保存的订单或页面编辑。');return;}
+  if(order?.editable&&order.shootingSubtype!=='细节')beginOrderEdit(order);focus('order-panel');return;
+ }
+ if(action==='reschedule'){
+  if(pageDraftDirty||editing){say('请先处理未保存的页面编辑。');return;}
+  if(session&&!session.hasRunHistory&&session.lockStatus==='unlocked'&&session.status!=='cancelled')beginReschedule(session);
+  focus('reschedule-panel');return;
+ }
+ if(action==='dayAdjustment'){
+  if(session&&local(session.plannedStart).slice(0,10)===state.businessToday){$('#dynamic-item').value=id;rememberChoice('dynamic-item');selectDynamic();}
+  focus('dynamic-panel');return;
+ }
+ if(action==='selectActual'||action==='reconcile'||action==='viewRun'){
+  if(session){$('#actual-item').value=id;rememberChoice('actual-item');}focus('actual-item');return;
+ }
+ focus('identity');
+}
+function renderDaily(snapshot){
+ const daily=snapshot.dailyOperations;$('#daily-panel').hidden=!daily;
+ if(!daily)return;
+ $('#daily-date').textContent=daily.date+' · 北京时间';
+ $('#daily-summary').replaceChildren();
+ for(const [label,value]of [['今日场次',daily.summary.total],['已完成',daily.summary.completed],['拍摄中',daily.summary.shooting],['待开始',daily.summary.pending],['受阻',daily.summary.blocked],['预计最晚拍完',daily.summary.latestExpectedEnd?local(daily.summary.latestExpectedEnd).slice(11):'—']]){
+  const stat=row('div','');stat.className='daily-stat';stat.append(row('strong',String(value)),row('span',label));$('#daily-summary').append(stat);
+ }
+ function card(target,title,session){
+  const out=$('#'+target);out.replaceChildren(row('h3',title));
+  if(!session){out.append(row('p',title==='当前拍摄'?'没有唯一执行中场次，请查看待处理。':'暂无待开始场次。'));return;}
+  out.append(row('strong',session.requestNames.join('、')||session.id),row('p',dailyStatus[session.runStatus]||'事实待核对'),row('p',`计划 ${local(session.plannedStart)} — ${local(session.plannedEnd)} · 缓冲 ${session.bufferAfterMinutes??'未确定'} 分钟`));
+  if(session.startedAt)out.append(row('p','实际开始 '+local(session.startedAt)+(session.elapsedMinutes!==null?` · 已过 ${session.elapsedMinutes} 分钟`:'')));
+  if(session.completedAt)out.append(row('p','实际完成 '+local(session.completedAt)));
+  if(session.confirmedForecast)out.append(row('p','已确认预计结束 '+local(session.confirmedForecast.estimatedEnd)+'（不是实际完成）'));
+  if(title==='下一场'){
+   out.append(row('p',session.orders.map(order=>`${order.shootingSubtype} · ${order.sampleStatus==='arrivedVerified'?'样品已核实': '样品尚未核实'}`).join('；')));
+   out.append(row('p',`计划拍摄 ${Math.round((Date.parse(session.plannedEnd)-Date.parse(session.plannedStart))/60000)} 分钟`));
+   if(daily.summary.gapToNextMinutes!==null)out.append(row('p',`与当前场的计划间隔 ${daily.summary.gapToNextMinutes} 分钟`));
+  }
+  out.append(referenceGallery(session.referenceImages,()=>token));
+  if(!session.referenceImagesAvailable)out.append(row('small','暂无参考图'));
+  if(snapshot.principal.role==='administrator')out.append(dailyEntry('本人现场','ownerField','scheduleItem',session.id,snapshot),dailyEntry(title==='下一场'?'查看并开拍':'查看实际执行','selectActual','scheduleItem',session.id,snapshot),dailyEntry('当天动态调整','dayAdjustment','scheduleItem',session.id,snapshot));
+  if(!session.hasRunHistory&&session.lockStatus==='unlocked')out.append(dailyEntry('改期','reschedule','scheduleItem',session.id,snapshot));
+ }
+ card('daily-current','当前拍摄',daily.currentSession);card('daily-next','下一场',daily.nextSession);
+ $('#daily-attention-title').textContent=`待处理 · ${daily.attentionQueue.length}`;$('#daily-attention').replaceChildren();
+ const actionLabels={ownerField:'本人现场',selectActual:'核对实际执行',reconcile:'核对执行事实',dayAdjustment:'当天动态调整',reschedule:'改期',editOrder:'订单维护',duration:'时长维护',proposal:'Proposal',viewState:'查看状态'};
+ for(const item of daily.attentionQueue){const line=row('li','');line.className=item.severity;
+  const session=snapshot.sessions.find(session=>session.id===item.entityId),order=snapshot.orderFacts.find(order=>order.id===item.entityId);
+  const name=session?.requestNames.join('、')||order?.name||(item.entityType==='system'?'工作台':'拍摄事实');
+  const facts=item.sourceFacts;
+  const sample={arrivedVerified:'样品已核实',inTransit:'样品运输中',unavailable:'样品不可用'};
+  const evidence=facts.plannedEnd?`计划结束 ${local(facts.plannedEnd)}；${facts.runs.length?facts.runs.map(run=>dailyStatus[run.status]||'待核对').join('、'):'尚无实际执行记录'}`
+   :facts.requestId?`期望 ${facts.desiredDate||'未填'} · ${sample[facts.sampleStatus]||'样品待核实'} · ${facts.duration?facts.duration.durationMs/60000+' 分钟':'时长待填'}`:item.reason;
+  line.append(row('strong',name+' · '+item.summary),row('small',evidence));
+  line.append(dailyEntry(actionLabels[item.recommendedAction]||'查看记录',item.recommendedAction,item.entityType,item.entityId,snapshot));$('#daily-attention').append(line);
+ }
+ if(!daily.attentionQueue.length)$('#daily-attention').append(row('li','暂无待处理事项。'));
+ $('#daily-ready-title').textContent=`可排但未排订单 · ${daily.readyUnscheduledOrders.length}`;$('#daily-ready').replaceChildren();
+ for(const order of daily.readyUnscheduledOrders){const line=row('li','');line.append(row('strong',order.name),row('small',`${order.shootingSubtype} · 样品已核实 · ${order.duration.durationMs/60000} 分钟 · 期望 ${order.desiredDate||'未填'}`),dailyEntry('订单维护','editOrder','request',order.id,snapshot),dailyEntry('时长维护','duration','request',order.id,snapshot),dailyEntry('Proposal','proposal','request',order.id,snapshot));$('#daily-ready').append(line);}
+ if(!daily.readyUnscheduledOrders.length)$('#daily-ready').append(row('li','暂无样品与时长均具备的未排订单。'));
+ $('#daily-sessions').replaceChildren(...daily.todaySessions.map(session=>row('p',`${local(session.plannedStart).slice(11)} — ${local(session.plannedEnd).slice(11)} · ${session.requestNames.join('、')||session.id} · ${dailyStatus[session.runStatus]||'待核对'}`)));
+ $('#daily-observed').textContent=`读取于 ${local(daily.observedAt)}。实际开拍与完成只采用已记录的执行事实。`;
+}
 function renderSessions(snapshot){
- $('#sessions').replaceChildren();for(const s of snapshot.sessions){const e=row('div','');e.className='session';e.dataset.scheduleItemId=s.id;e.append(row('strong',s.requestNames?.join('、')||'未命名拍摄'),row('p',`${local(s.plannedStart)} — ${local(s.plannedEnd)} · 缓冲 ${s.bufferAfterMinutes??'未确定'} 分钟`));const b=row('button','调整时间');b.type='button';b.disabled=s.hasRunHistory||s.lockStatus!=='unlocked'||s.status==='cancelled';b.dataset.locked=b.disabled?'yes':'';b.addEventListener('click',()=>{editing=s;$('#reschedule-form').hidden=false;$('#edit-title').textContent=`调整 ${s.requestNames?.join('、')||'拍摄场次'}`;const start=local(s.plannedStart).split(' '),end=local(s.plannedEnd).split(' ');$('#shoot-date').value=start[0];$('#shoot-start').value=start[1];$('#shoot-end').value=end[1];$('#buffer-note').textContent=`拍后保留 ${s.bufferAfterMinutes} 分钟。改期不会发送外部通知。`;$('#shoot-date').focus();});e.append(b);$('#sessions').append(e);}
+ $('#sessions').replaceChildren();for(const s of snapshot.sessions){const e=row('div','');e.className='session';e.dataset.scheduleItemId=s.id;e.append(row('strong',s.requestNames?.join('、')||'未命名拍摄'),row('p',`${local(s.plannedStart)} — ${local(s.plannedEnd)} · 缓冲 ${s.bufferAfterMinutes??'未确定'} 分钟`));const b=row('button','调整时间');b.type='button';b.disabled=s.hasRunHistory||s.lockStatus!=='unlocked'||s.status==='cancelled';b.dataset.locked=b.disabled?'yes':'';b.addEventListener('click',()=>beginReschedule(s));e.append(b);$('#sessions').append(e);}
  if(!snapshot.sessions.length)$('#sessions').append(row('p','暂无已排场次。'));
 }
 function render(){
@@ -48,16 +127,16 @@ function render(){
  $('#exceptions').replaceChildren();cal.dateOverrides.forEach(exceptionRow);
  for(const [id,subtype] of durationFields(config)){const rule=config.durationFallbackRules.find(r=>r.shootingSubtype===subtype);$(`#${id}`).value=rule?rule.durationMs/60000:'';}
  const buffers=config.bufferRules.map(r=>r.bufferAfterMinutes);$('#buffer-minutes').value=new Set(buffers).size===1?buffers[0]:'';
- $('#requests').replaceChildren();for(const request of state.requests||[]){const form=document.createElement('form');form.append(row('strong',request.name));const label=row('label','预计拍摄分钟数'),input=document.createElement('input');input.type='number';input.min='1';input.max='1440';input.required=true;input.value=request.durationEstimateJson?JSON.parse(request.durationEstimateJson).durationMs/60000:'';label.append(input);form.append(label);const save=row('button','保存该单时长');save.type='submit';form.append(save);form.addEventListener('submit',e=>{e.preventDefault();work(async()=>{await mutation(`/api/v3/business/requests/${encodeURIComponent(request.id)}/duration`,{operationId:newId('DURATION'),requestId:request.id,expectedScheduleRevision:state.revisions.scheduleRevision,expectedProjectionRevision:state.revisions.projectionRevision,durationMinutes:Number(input.value)});await refresh();say('逐单时长已保存，已有场次未移动。');});});$('#requests').append(form);}
+ $('#requests').replaceChildren();for(const request of state.requests||[]){const form=document.createElement('form');form.dataset.requestId=request.id;form.append(row('strong',request.name));const label=row('label','预计拍摄分钟数'),input=document.createElement('input');input.type='number';input.min='1';input.max='1440';input.required=true;input.value=request.durationEstimateJson?JSON.parse(request.durationEstimateJson).durationMs/60000:'';label.append(input);form.append(label);const save=row('button','保存该单时长');save.type='submit';form.append(save);form.addEventListener('submit',e=>{e.preventDefault();work(async()=>{await mutation(`/api/v3/business/requests/${encodeURIComponent(request.id)}/duration`,{operationId:newId('DURATION'),requestId:request.id,expectedScheduleRevision:state.revisions.scheduleRevision,expectedProjectionRevision:state.revisions.projectionRevision,durationMinutes:Number(input.value)});await refresh();say('逐单时长已保存，已有场次未移动。');});});$('#requests').append(form);}
  renderSessions(state);
  dayPreview=null;$('#dynamic-preview').hidden=true;renderSessionChoice('dynamic-item',state.sessions.filter(s=>s.status==='confirmed'&&local(s.plannedStart).slice(0,10)===state.businessToday),s=>s.requestNames?.join('、')||s.id);selectDynamic();
  $('#plan-from').value=state.businessToday;$('#plan-through').value=state.businessToday;
  const inactive=state.configs.filter(c=>!c.active&&!c.everActive);published=null;$('#saved-preview').hidden=true;
  $('#saved-version').replaceChildren(...inactive.map(c=>{const o=row('option',`保存于 ${local(c.publishedAt)} · ${c.configVersion.slice(-8)}`);o.value=c.configVersion;return o;}));$('#published').hidden=!inactive.length||state.principal.role!=='administrator';
- renderOrderPanel();invalidate();syncBusy();
+ renderOrderPanel();renderDaily(state);invalidate();syncBusy();
 }
 // All user times are explicit Asia/Shanghai; host timezone is irrelevant.
-function local(iso){const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(iso)).map(v=>[v.type,v.value]));return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;}
+function local(iso){if(!iso||!Number.isFinite(Date.parse(iso)))return '时间待核对';const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(iso)).map(v=>[v.type,v.value]));return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;}
 async function refresh(){state=await api('/api/v3/business/state');pageDraftDirty=false;automaticDisplayed=state.revisions;clearReferenceImages();render();}
 function previewBinding(){return {expectedProjectionRevision:state.revisions?.projectionRevision,baseConfigDigest:active()?.configDigest??null};}
 function buildConfig(){const config=draftBase();if(![2,3].includes(config.schemaVersion))throw new Error('旧版日历需要迁移后再编辑。');const cal=config.resourceCalendars[0],effectiveFrom=$('#effective').value;
@@ -163,13 +242,14 @@ async function uploadReferences(){
 }
 
 const orderFields={sku:'sku',name:'name',requestedBy:'requested',desiredDate:'date',aspectRatio:'ratio',sampleStatus:'sample',priority:'priority',lightingPreset:'light',reflectivity:'reflectivity',coreBriefSummary:'brief',note:'note'};
+function beginOrderEdit(r){editingOrder=r.id;resetOrderDraft();$('#order-references').disabled=true;const v=r.submission;for(const [key,id]of Object.entries(orderFields))$('#order-'+id).value=v[key]??'';$('#order-category').value=v.kind;$('#order-subtype').value=v.shootingSubtype;$('#order-count').value=v.deliverables.count;$('#order-edit-state').textContent='维护：'+r.name;syncOrderCategory();}
 function renderOrderPanel(){
  $('#order-panel').hidden=state.protocolVersion!==3||state.principal.role!=='administrator';
  const facts=state.orderFacts||[],filter=$('#order-filter').value||'all';
  const names=['产品3D主图','细节图','功能图','模特','场景','细节'];
  $('#order-counts').textContent=`全部 ${facts.length}；静物 ${facts.filter(r=>r.kind==='静物').length}；`+names.map(n=>`${n==='细节'?'历史细节（未细分）':n} ${facts.filter(r=>r.shootingSubtype===n).length}`).join('；');
  $('#order-list').replaceChildren();
- for(const r of facts.filter(r=>filter==='all'||(filter==='静物'?r.kind==='静物':r.shootingSubtype===filter))){const line=row('p',`${r.name} · ${r.kind==='静物'?'静物 / ':''}${r.shootingSubtype==='细节'?'历史细节（未细分）':r.shootingSubtype} · ${r.lifecycle}`);if(r.editable&&r.shootingSubtype!=='细节'){const b=row('button','维护未排订单');b.type='button';b.addEventListener('click',()=>{editingOrder=r.id;resetOrderDraft();$('#order-references').disabled=true;const v=r.submission;for(const [key,id]of Object.entries(orderFields))$('#order-'+id).value=v[key]??'';$('#order-category').value=v.kind;$('#order-subtype').value=v.shootingSubtype;$('#order-count').value=v.deliverables.count;$('#order-edit-state').textContent='维护：'+r.name;syncOrderCategory();});line.append(b);}line.append(referenceGallery(r.references,()=>token));$('#order-list').append(line);}
+ for(const r of facts.filter(r=>filter==='all'||(filter==='静物'?r.kind==='静物':r.shootingSubtype===filter))){const line=row('p',`${r.name} · ${r.kind==='静物'?'静物 / ':''}${r.shootingSubtype==='细节'?'历史细节（未细分）':r.shootingSubtype} · ${r.lifecycle}`);if(r.editable&&r.shootingSubtype!=='细节'){const b=row('button','维护未排订单');b.type='button';b.addEventListener('click',()=>beginOrderEdit(r));line.append(b);}line.append(referenceGallery(r.references,()=>token));$('#order-list').append(line);}
  renderSessionChoice('actual-item',state.sessions.filter(s=>s.status==='confirmed'),s=>`${s.requestNames?.join('、')||s.id} · ${local(s.plannedStart)} · ${s.runs?.[0]?.status||'未开始'}`);
 }
 function syncOrderCategory(){$('#order-subtype-label').hidden=$('#order-category').value!=='静物';}
@@ -197,10 +277,15 @@ async function refreshScheduleAutomatically(){
  try{const next=await api('/api/v3/business/state',undefined,controller.signal);
   if(token!==identityToken||state!==original||busy||pending)return;
   const keys=['scheduleRevision','projectionRevision'],displayed=automaticDisplayed||state.revisions;
-  if(keys.some(k=>next.revisions?.[k]<displayed?.[k])||keys.every(k=>next.revisions?.[k]===displayed?.[k]))return;
+  if(keys.some(k=>next.revisions?.[k]<displayed?.[k]))return;
+  if(keys.every(k=>next.revisions?.[k]===displayed?.[k])){
+   if(next.businessToday===state.businessToday){state.dailyOperations=next.dailyOperations;state.writeAdmission=next.writeAdmission;renderDaily(state);}
+   else renderDaily(next);
+   syncBusy();return;
+  }
   automaticDisplayed=next.revisions;
   const draft=pageDraftDirty||editingOrder||editing||dayPreview||preview||proposal||published||referenceFiles.length;
-  if(draft){renderSessions(next);$('#auto-sync-state').textContent='排班已更新；未保存的编辑已保留，请刷新后重新核对。';}
+  if(draft){renderSessions(next);renderDaily(next);syncBusy();$('#auto-sync-state').textContent='排班已更新；未保存的编辑已保留，请刷新后重新核对。';}
   else{state=next;render();$('#auto-sync-state').textContent='排班已自动更新。';}
  }catch{if(token===identityToken)$('#auto-sync-state').textContent='暂未更新，当前显示为最近读取的安排。';}
  finally{window.clearTimeout(deadline);if(automaticController===controller)automaticController=null;automaticRead=false;}
