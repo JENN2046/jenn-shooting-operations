@@ -333,3 +333,57 @@ test('actual JSO host composition exposes read scope but respects global write a
     fixture.close();
   }
 });
+
+test('JSO-A2/A3 reserved authority fields fail before dispatch', async () => {
+  const f = fixture();
+  for (const key of ['authorization', 'token', 'principal', 'role', 'grant', 'mode']) {
+    for (const payload of [{ [key]: 'model-claimed' }, { nested: [{ [key]: 'model-claimed' }] }]) {
+      assert.deepEqual(await f.call('read_state', payload), { ok: false, code: 'INVALID_AGENT_ARGUMENTS' });
+    }
+    assert.deepEqual(await f.application.call({ authorization: `Bearer ${plannerToken}`,
+      arguments: { ...args('read_state'), [key]: 'model-claimed' } }), { ok: false, code: 'INVALID_AGENT_ARGUMENTS' });
+  }
+  assert.deepEqual(await f.application.call({ authorization: 'Bearer model-claimed',
+    arguments: args('read_state', { human: true, approved: true }) }), { ok: false, code: 'UNAUTHENTICATED' });
+  assert.deepEqual(await f.call('reschedule', { ...command, human: true, approved: true }),
+    { ok: false, code: 'AGENT_SUGGEST_ONLY' });
+  assert.deepEqual(await f.application.call({ authorization: `Bearer ${plannerToken}`,
+    arguments: { command: 'read_state', payload_json: JSON.stringify({ note: 'x'.repeat(256 * 1024) }) } }),
+  { ok: false, code: 'INVALID_AGENT_ARGUMENTS' });
+  assert.equal(parseJsoAgentEnvelope(' '.repeat(256 * 1024 + 4097)).ok, false);
+  assert.equal(f.calls.length, 0);
+});
+
+test('JSO-A6 claim settles before dispatch and failures disclose no exception', async () => {
+  for (const outcome of ['accepted', 'conflict', 'exception']) {
+    let release, entered, settled = false;
+    const gate = new Promise(resolve => { release = resolve; });
+    const claiming = new Promise(resolve => { entered = resolve; });
+    const g = grant();
+    const f = fixture({ mode: 'executor', grants: [g], claimGrantAttempt: async input => {
+      entered();
+      assert.deepEqual(input, { approvalRef: g.approvalRef, subjectId: g.subjectId,
+        action: g.action, commandDigest: g.commandDigest });
+      await gate;
+      settled = true;
+      if (outcome === 'exception') throw new Error('synthetic-private-path-and-token');
+      return outcome === 'conflict' ? { ok: false, code: 'RECONCILIATION_REQUIRED' } : { ok: true };
+    }, handler: () => {
+      assert.equal(settled, true);
+      return { ok: true };
+    } });
+    const pending = f.call('reschedule', command);
+    await claiming;
+    assert.equal(f.calls.length, 0, `${outcome}: pending claim cannot dispatch`);
+    release();
+    const result = await pending;
+    if (outcome === 'accepted') {
+      assert.equal(result.ok, true);
+      assert.equal(result.agent.retry, 'NEVER_AUTOMATIC');
+      assert.equal(f.calls.length, 1);
+    } else {
+      assert.deepEqual(result, { ok: false, code: outcome === 'conflict' ? 'RECONCILIATION_REQUIRED' : 'SERVICE_UNAVAILABLE' });
+      assert.equal(f.calls.length, 0);
+    }
+  }
+});
