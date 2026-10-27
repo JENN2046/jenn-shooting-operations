@@ -2,9 +2,9 @@
 
 Jenn Shooting Operations（JSO）从 VCPChat 中的拍摄计划图表，逐步发展为拥有独立业务数据库、订单管理、确定性排程、现场执行记录和 VCP 原生客户端的协作系统。贯穿这段开发的核心问题是：多人和 Agent 可以共同查看、提出和执行操作，但需求、计划、实际开拍和已保存结果必须各有明确来源，不能由界面显示或一次网络响应互相替代。
 
-本文覆盖主仓从 **2026 年 9 月 22 日至 10 月 25 日**的演进，并记录完成日常 Chat 实际验收的相关客户端成果。日期统一使用 **America/Adak**；拍摄业务仍使用 **Asia/Shanghai**。例如，GitHub 的 10 月 26 日 UTC 合并事件，在本文中可能记为 10 月 25 日。
+本文覆盖主仓从 **2026 年 9 月 22 日至 10 月 27 日**的演进，并记录完成日常 Chat、Agent 集成与 Studio Day 产品化的相关成果。日期统一使用 **America/Adak**；拍摄业务仍使用 **Asia/Shanghai**。例如，GitHub 的 10 月 26 日 UTC 合并事件，在本文中可能记为 10 月 25 日。
 
-截至本次整理，成果集成主线为 **`main`**，业务源码基线为 [`56b620b`](https://github.com/JENN2046/jenn-shooting-operations/commit/56b620ba48a886536941420b73f589088df98280)。原默认分支 `codex/v2-1-architecture-freeze` 已重命名为 `main`；更名保留原提交。旧文档中的分支名、Gate 状态和候选标记，应按其当时的目标与日期理解。
+截至本次整理，成果集成主线为 **`main`**，当前源码 HEAD 为 [`e5f3599`](https://github.com/JENN2046/jenn-shooting-operations/commit/e5f3599e331d96bcf1dff5cdccc897330570c1f5)（#92）。`56b620b`（#78）仍是 10 月 25 日日常图表验收与源码归整的历史里程碑，不再是当前源码 HEAD。原默认分支 `codex/v2-1-architecture-freeze` 已重命名为 `main`；更名保留原提交。旧文档中的分支名、Gate 状态和候选标记，应按其当时的目标与日期理解。
 
 ## 主要阶段时间线
 
@@ -19,6 +19,9 @@ Jenn Shooting Operations（JSO）从 VCPChat 中的拍摄计划图表，逐步�
 | 10 月 13–14 日 | 原生对话执行与 R5 | 增加绑定业务身份、原确认和持久回执的对话执行；R5 将这一路径纳入独立启动接纳。见 [#70](https://github.com/JENN2046/jenn-shooting-operations/pull/70)、[#71](https://github.com/JENN2046/jenn-shooting-operations/pull/71)。 |
 | 10 月 17–18 日 | 网页与图表持续读取 | 管理页补读已提交排期、现场离线续记、R5/Kiosk 共存、统一管理员登录、本人现场视图、默认关闭的公共看板和未来日期图表调整陆续合并。见 [#72](https://github.com/JENN2046/jenn-shooting-operations/pull/72) 至 [#77](https://github.com/JENN2046/jenn-shooting-operations/pull/77)。 |
 | 10 月 25 日 | 日常客户端验收与源码归整 | 收敛 Linux 日常 Chat 的实际安装；完成独立测试场次后移 15 分钟保存及恢复保存。补齐未开拍取消 API 和原生日历正式源码，修正日期缓存与读取文案；[#78](https://github.com/JENN2046/jenn-shooting-operations/pull/78) 和[扩展 #24](https://github.com/JENN2046/VCPToolBox-JENN-Extensions/pull/24) 合并。默认主分支更名为 `main`。 |
+| 10 月 26 日 | Agent 日常真实验收 | [#83](https://github.com/JENN2046/jenn-shooting-operations/issues/83) 完成 VCPChat → VCPToolBox → JENN Extensions → JSO 的真实日常 Agent 验收，覆盖读取、proposal、人工确认写入、丢回包后按原 operationId 核对、取消与重启恢复；结论为 `JSO_AGENT_REAL_ACCEPTANCE_R1_PASS`。 |
+| 10 月 26–27 日 | AIC-R1 与 JSO_AGENT_R2 | [#86](https://github.com/JENN2046/jenn-shooting-operations/issues/86) 将四仓集成收敛为 canonical paired CI、compatibility manifest 与 Trusted Action v1；Extensions [#28](https://github.com/JENN2046/VCPToolBox-JENN-Extensions/issues/28) 完成 R2A/R2B/R2C，canonical compatibility release 晋升为 `JSO_AGENT_R2`，四仓 caller post-merge 均为 512/512 PASS。 |
+| 10 月 27 日 | Product R1 Studio Day | [#90](https://github.com/JENN2046/jenn-shooting-operations/pull/90) 合入只读 Daily Operations 投影与「今日作业」第一屏；[#92](https://github.com/JENN2046/jenn-shooting-operations/pull/92) 完成 R1.1 UI polish。源码与 UI 已进 `main`，但父任务 [#89](https://github.com/JENN2046/jenn-shooting-operations/issues/89) 仍等待 Jenn 日常客户端真实使用验收，不能把 CI/浏览器 fixture 当作真实使用完成。 |
 
 时间线的日期是代码合并或所述验收发生的日期；一项功能合并时尚未部署，不会因出现在表中就被记为当天已上线。
 
@@ -85,13 +88,64 @@ Kiosk 的开拍、完成和离线队列，以及事务 Outbox 的投递状态，
 
 两次真实正常退出和重开也通过，第二次捕获退出码 0、用户 service 立即回收。历史约 90 秒的收尾等待本轮未复现，根因仍未确认；没有通过缩短超时或强制结束进程宣称修复。随后 #78 与扩展 #24 合并，并完成 `main` 更名。
 
+## Agent 实际验收与兼容发布
+
+10 月 26 日的 [#83](https://github.com/JENN2046/jenn-shooting-operations/issues/83) 首次把日常 Agent 链路作为一个真实组合验收，而不是分别引用四个仓库的局部测试。验收链路为：
+
+`VCPChat → VCPToolBox → JENN Extensions → JSO`
+
+该验收覆盖了只读查询、proposal、人工确认后的受控写入、响应丢失后的原 operationId reconciliation、取消 tombstone 和重启后的重复写保护。它证明的是当时冻结组合上的真实日常 Agent 行为，不能自动替代未来任意新 commit 的兼容性证明。
+
+随后 [#86](https://github.com/JENN2046/jenn-shooting-operations/issues/86) 完成 AIC-R1，将四仓集成从一次性验收整理为机器可验证发布：
+
+- Extensions 持有 JSO Agent compatibility manifest、paired harness 与 reusable workflow；
+- VCPToolBox 持有通用 Trusted Action v1 normative contract；
+- VCPChat 作为 consumer；
+- JSO 继续只持有业务事实、Agent API 与业务授权。
+
+Extensions [#28](https://github.com/JENN2046/VCPToolBox-JENN-Extensions/issues/28) 最终完成 `JSO_AGENT_R2` compatibility advancement。当前 canonical immutable harness 为：
+
+`a6c7d447ddaa29799c60aa109d5119b102d1eae4`
+
+R2 固定的 accepted runtime component pins 为：
+
+| Component | Accepted SHA |
+|---|---|
+| Extensions | `54b0bfb4d94bc9f3a53516cd4082fb7c4c6d351c` |
+| VCPChat | `900fdda5e24347d802b738924d8456a42c01477f` |
+| VCPToolBox | `b0552cd3e109a8cfe38ac5ee292cc026891d7442` |
+| JSO | `bfaf4dfe1c6558beb0ff9113990946aa85a257a3` |
+
+这组 pins 描述 **compatibility release 的已验收 runtime composition**，不是当前四个仓库所有后续文档、CI 或 UI commit 的 HEAD。R2C 之后的 caller-only 或产品 UI 提交会作为 candidate against accepted-other-three 运行 paired CI；不能因为 candidate CI 通过，就无条件把 compatibility manifest 的 accepted runtime pins 改成最新 HEAD。
+
+## Studio Day 产品化
+
+Product R1 [#89](https://github.com/JENN2046/jenn-shooting-operations/issues/89) 将现有订单、排程、执行与参考图事实组织成一个日常工作视图，而没有再创建第二套业务模型。
+
+[#90](https://github.com/JENN2046/jenn-shooting-operations/pull/90) 新增只读 Daily Operations 投影和 `GET /api/v3/business/daily-operations`。它从现有 Schema12 facts 派生：
+
+- 当天场次；
+- 唯一当前执行场次；
+- 下一场；
+- 已到样且具备时长但尚未排期的订单；
+- 确定性 attention queue；
+- 当日摘要。
+
+该投影不会因为计划时间已经过去就制造实际开拍或完成，也不会把 forecast 当成完成。多场执行中、占用事实不完整等情况显式进入 `UNKNOWN_OCCUPANCY`，而不是让 UI 猜一个“当前场”。
+
+[#92](https://github.com/JENN2046/jenn-shooting-operations/pull/92) 的 R1.1 只做 presentation polish：压缩登录后首屏、给 attention severity 增加「阻塞 / 需核对 / 提醒」文字、在 UI 层去掉 `UNSCHEDULED_READY` 与可排订单区域的重复展示、强化当前/下一场主动作，并改善移动端触控和列表展开。它没有修改 Daily Operations read model、API、Schema、写权限、Agent command 或 business semantics。
+
+当前源码已包含 R1 + R1.1，但 [#89](https://github.com/JENN2046/jenn-shooting-operations/issues/89) 仍保持 open。剩余验收是 **Jenn 日常客户端 real-use acceptance**：实际打开 Studio Day，核对今日/当前/下一场/待处理，并用独立测试订单或场次完成一个既有安全动作后按原 operationId 查回 receipt。完成前，准确状态为：
+
+`JSO_PRODUCT_R1_REAL_USE_ACCEPTANCE_PENDING`
+
 ## 已完成与仍需区分的边界
 
 | 事项 | 截至本文的准确状态 |
 |---|---|
-| 最新成果主线 | `main` 已包含 #78；分支更名未改代码和历史。 |
-| 腾讯开发机日常图表 | 已完成认证读取、15 分钟后移保存、恢复保存、原回执核对及正常重开。该结论绑定本轮版本与测试场次。 |
-| 旧 G3 恢复路线 | #63 仍开放；不能将其设计和隔离证据记为已合并或旧域全面恢复。 |
+| 最新成果主线 | `main@e5f3599e331d96bcf1dff5cdccc897330570c1f5` 已包含 #90 Studio Day 与 #92 R1.1；这是当前源码 HEAD，不等于所有环境已部署。 |
+| 腾讯开发机日常图表 | 已完成认证读取、15 分钟后移保存、恢复保存、原回执核对及正常重开。该结论绑定当时版本与测试场次；不能自动覆盖 Studio Day 新 UI 的真实使用验收。 |
+| Agent 集成发布 | #83 已完成真实日常 Agent 验收；#86 / Extensions #28 已关闭，canonical compatibility release 为 `JSO_AGENT_R2`。 |\n| Studio Day | #90 / #92 已合入 `main`；#91 已关闭，父任务 #89 仍等待 real-use acceptance。 |\n| 旧 G3 恢复路线 | #63 仍开放；不能将其设计和隔离证据记为已合并或旧域全面恢复。 |
 | 现场离线能力 | 代码与隔离浏览器有相应验证；本次日常图表验收没有覆盖摄影棚设备的离线开拍、完成与恢复全过程。 |
 | 身份暂时读取失败 | [#75 的 P2](https://github.com/JENN2046/jenn-shooting-operations/pull/75#discussion_r4307565194)仍未解决：本人现场初次身份/当天读取遇临时故障后，可能需要整页刷新或重新登录。 |
 | 外部通知 | 新 Schema12 业务路径明确关闭外发；不把 Outbox 或钉钉适配器的实现称为真实发送成功。 |
