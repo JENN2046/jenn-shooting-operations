@@ -103,3 +103,23 @@ test('request-level risk opens its unique bound reschedule form and never guesse
   assert.equal(databaseFacts(f.server.store.db),before);
  }finally{f.close();}
 });
+
+test('Shanghai midnight adopts a clean snapshot but preserves an actual draft across repeated polls',async()=>{
+ const f=await studioDayFixture();try{
+  const before=databaseFacts(f.server.store.db);
+  for(const draft of [false,true]){
+   f.setTime('2026-10-12T15:59:00.000Z');const p=await page(f);p.context.window={setTimeout:()=>1,clearTimeout(){}};
+   if(draft)vm.runInContext("pageDraftDirty=true;document.querySelector('#am-start').value='07:45'",p.context);
+   f.setTime('2026-10-12T16:01:00.000Z');
+   for(let i=0;i<3;i++)await vm.runInContext('refreshScheduleAutomatically()',p.context);
+   assert.match(p.ids.get('daily-date').textContent,/2026-10-13/);
+   assert.equal(vm.runInContext('state.businessToday',p.context),draft?'2026-10-12':'2026-10-13');
+   assert.equal(p.ids.get('plan-from').value,draft?'2026-10-12':'2026-10-13');
+   await p.fire(button(p.ids.get('daily-ready').children[0],'Proposal'));
+   if(draft){assert.equal(p.ids.get('am-start').value,'07:45');assert.match(p.ids.get('message').textContent,/原版本/);}
+   else assert.doesNotMatch(p.ids.get('message').textContent,/原版本/);
+   assert.equal(p.posts.length,0);
+  }
+  assert.equal(databaseFacts(f.server.store.db),before);
+ }finally{f.close();}
+});

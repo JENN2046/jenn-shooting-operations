@@ -283,14 +283,16 @@ async function refreshScheduleAutomatically(){
  try{const next=await api('/api/v3/business/state',undefined,controller.signal);
   if(token!==identityToken||state!==original||busy||pending)return;
   const keys=['scheduleRevision','projectionRevision'],displayed=automaticDisplayed||state.revisions;
+  const draft=pageDraftDirty||editingOrder||editing||dayPreview||preview||proposal||published||referenceFiles.length;
   if(keys.some(k=>next.revisions?.[k]<displayed?.[k]))return;
   if(keys.every(k=>next.revisions?.[k]===displayed?.[k])){
-   if(keys.every(k=>next.revisions?.[k]===state.revisions?.[k])&&next.businessToday===state.businessToday){state.dailyOperations=next.dailyOperations;state.writeAdmission=next.writeAdmission;renderDaily(state);}
+   const sameBase=keys.every(k=>next.revisions?.[k]===state.revisions?.[k])&&next.businessToday===state.businessToday;
+   if(!sameBase&&!draft){state=next;render();$('#auto-sync-state').textContent='今日作业已更新。';}
+   else if(sameBase){state.dailyOperations=next.dailyOperations;state.writeAdmission=next.writeAdmission;renderDaily(state);}
    else renderDaily(next);
    syncBusy();return;
   }
   automaticDisplayed=next.revisions;
-  const draft=pageDraftDirty||editingOrder||editing||dayPreview||preview||proposal||published||referenceFiles.length;
   if(draft){renderSessions(next);renderDaily(next);syncBusy();$('#auto-sync-state').textContent='排班已更新；未保存的编辑已保留，请刷新后重新核对。';}
   else{state=next;render();$('#auto-sync-state').textContent='排班已自动更新。';}
  }catch{if(token===identityToken)$('#auto-sync-state').textContent='暂未更新，当前显示为最近读取的安排。';}
