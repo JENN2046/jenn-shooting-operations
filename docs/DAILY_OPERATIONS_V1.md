@@ -47,3 +47,33 @@
 不变。现有 `read_state` 已有 scoped orders/sessions/progress，可复用回答今日/当前/下一场，
 但没有完整时长/confirmed forecast，不能声称它已经覆盖所有 daily attention。
 本批不扩充 Agent API；P1D 若需要完整 briefing，另行复用这个只读投影。
+
+
+## R1.1 展示层说明
+
+Product R1.1（#92）只调整 `/manage` 的 Studio Day presentation，不改变本文件定义的
+Daily Operations v1 read model 或 API 语义。
+
+展示层当前约定：
+
+- 登录后的状态头压缩为更紧凑的日常工具栏，但 identity、auto-sync、refresh、logout、
+  pending reconciliation 与错误提示继续保留；
+- `attentionQueue.severity` 直接映射为可见文字：
+  `critical → 阻塞`、`warning → 需核对`、`info → 提醒`，不能只依赖颜色表达优先级；
+- 后端 `attentionQueue` 仍完整保留 `UNSCHEDULED_READY`。因为页面已有独立
+  `readyUnscheduledOrders` 区域，主待处理列表在 UI 层不重复渲染这类项目；这不修改
+  API 数据、排序或业务条件；
+- 当前拍摄卡的 primary action 为「本人现场」，下一场卡的 primary action 为「查看并开拍」。
+  这只是视觉层级，按钮仍调用原有 navigation/selection handler，不会自动 POST、自动开拍
+  或绕过 preview/CAS/idempotency/receipt reconciliation；
+- attention 与 ready 列表默认展示前 5 条，可本地展开/收起；展开状态属于纯 UI state，
+  同一 snapshot 自动刷新不会改变服务器事实，也不会创建业务写入；
+- 移动端日常按钮采用更大的触控尺寸，并移除嵌套小滚动区；这些变化不改变 canonical facts。
+
+因此，R1.1 后仍成立：
+
+`read model / API / business semantics changes = 0`
+
+当前产品源码已经包含 R1 + R1.1，但真实日常客户端验收由父任务 #89 单独记录。
+在该验收完成前，不应把 fixture/Chromium/CI 通过表述为
+`JSO_PRODUCT_R1_REAL_USE_ACCEPTANCE_PASS`。
