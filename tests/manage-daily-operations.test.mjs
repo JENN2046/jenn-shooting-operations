@@ -39,6 +39,7 @@ test('shipped /manage first screen shows real daily facts and read-only navigati
   const js=new URL(html.match(/src="([^\"]*manage\.js[^\"]*)"/)[1],'http://localhost');
   const css=new URL(html.match(/href="([^\"]*manage\.css[^\"]*)"/)[1],'http://localhost');
   assert.ok(js.searchParams.get('v'));assert.equal(js.searchParams.get('v'),css.searchParams.get('v'));assert.notEqual(js.searchParams.get('v'),'public-board-20261018-r1');
+  assert.notEqual(js.searchParams.get('v'),'studio-day-20261027-r1-1','refresh recovery fix must bypass the previous script cache key');
   assert.equal(ids.get('management-shell').dataset.authenticated,'true');
   assert.match(ids.get('identity').textContent,/Jenn.*可编辑.*北京时间/);
   assert.match(html,/<small id="auto-sync-state" role="status">排班会自动更新。/);
