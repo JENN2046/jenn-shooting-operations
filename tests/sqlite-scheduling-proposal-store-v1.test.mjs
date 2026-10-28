@@ -112,7 +112,7 @@ function fixture({ mutateAfterFirst = false, requestIds = ['REQ-1'] } = {}) {
 
 function acceptanceFixture(requestIds = ['REQ-1']) {
   const f = fixture({ requestIds });
-  const at = '2026-09-23T08:00:00.000Z';
+  let at = '2026-09-23T08:00:00.000Z';
   f.db.prepare(`INSERT INTO scheduling_resources
     (resource_id, v1_display_place, status, capability_json, capability_digest,
      created_at, updated_at, source_operation_id)
@@ -165,8 +165,40 @@ function acceptanceFixture(requestIds = ['REQ-1']) {
       ...context, businessTimeZone: 'Asia/Shanghai',
     }),
   });
-  return { ...f, store };
+  return { ...f, store, setNow(value) { at = value; } };
 }
+
+test('acceptance rejects a preview whose start has elapsed without any schedule writes', () => {
+  const f = acceptanceFixture();
+  try {
+    const generated = f.store.generate(f.command, schedulerPrincipal.subjectId);
+    assert.equal(generated.ok, true);
+    const items = JSON.parse(generated.proposal.proposedItemsJson);
+    f.setNow(items[0].plannedStart);
+    const before = JSON.stringify(f.db.prepare('SELECT * FROM revision_counters').all());
+    const operations = f.db.prepare('SELECT count(*) AS n FROM operations').get().n;
+    const result = f.store.accept({decisionId:'EXPIRED-ACCEPT',proposalId:generated.proposal.proposalId,
+      decisionType:'accept',selectedProposalItemIds:items.map(i=>i.proposalItemId),decisionNote:null,reasonCode:null}, schedulerPrincipal);
+    assert.deepEqual(result, {ok:false,code:'SCHEDULE_PAST_INTERVAL'});
+    assert.equal(f.db.prepare('SELECT count(*) AS n FROM schedule_items').get().n, 0);
+    assert.equal(f.db.prepare('SELECT count(*) AS n FROM notification_outbox').get().n, 0);
+    assert.equal(f.db.prepare('SELECT count(*) AS n FROM operations').get().n, operations);
+    assert.equal(JSON.stringify(f.db.prepare('SELECT * FROM revision_counters').all()), before);
+  } finally { f.db.close(); }
+});
+
+test('partial acceptance checks selected intervals, allowing a future item after another expired', () => {
+  const f = acceptanceFixture(['REQ-1','REQ-2']);
+  try {
+    const generated = f.store.generate(f.command, schedulerPrincipal.subjectId);
+    const items = JSON.parse(generated.proposal.proposedItemsJson);
+    f.setNow(items[0].plannedEnd);
+    const result = f.store.accept({decisionId:'FUTURE-PARTIAL',proposalId:generated.proposal.proposalId,
+      decisionType:'partiallyAccept',selectedProposalItemIds:[items[1].proposalItemId],decisionNote:null,reasonCode:null}, schedulerPrincipal);
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(f.db.prepare('SELECT count(*) AS n FROM schedule_items').get().n, 1);
+  } finally { f.db.close(); }
+});
 
 test('acceptance creates canonical schedule, projections and one Outbox intent per item', () => {
   const f = acceptanceFixture(['REQ-1', 'REQ-2']);

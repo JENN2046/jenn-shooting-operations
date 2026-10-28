@@ -86,6 +86,15 @@ function command(overrides = {}) {
   };
 }
 
+test('elapsed proposal denial is a definite conflict on both V2 and V3 HTTP routes',async()=>{
+ for(const version of ['v2','v3']){
+  const app=createHttpApp({store:fakeStore(),scheduling:{authenticate:()=>principal(),
+   decideProposal:()=>({ok:false,code:'SCHEDULE_PAST_INTERVAL'})}});
+  const r=await invoke(app,{url:`/api/${version}/proposals/sp_123/decisions`,body:JSON.stringify(command())});
+  assert.deepEqual(r,{status:409,body:{ok:false,code:'SCHEDULE_PAST_INTERVAL'}});
+ }
+});
+
 test('Scheduling V2 application authority controls direct HTTP composition across different stores', async () => {
   const disabledAdmission = createWriteAdmissionControl({ initialMode: 'disabled' });
   const disabledStore = new ScheduleStore({

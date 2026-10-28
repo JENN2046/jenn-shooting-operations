@@ -9,7 +9,9 @@ import {dom,managementScript} from './support/manage-synthetic-dom.mjs';
 test('management UI creates distinct still-life order, filters it, sets duration, adopts proposal, records actual start and complete',async()=>{
  const f=await launch();try{
  const {ids,document}=dom();
- const context=vm.createContext({document,structuredClone,Intl,Date,Number,JSON,Map,Set,Error,crypto:{randomUUID},sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}},fetch:async(path,opt)=>{const r=await f.call(path,opt.body?JSON.parse(opt.body):undefined,opt.headers.Authorization.slice(7));return {ok:r.status<400,status:r.status,json:async()=>r.body};}});
+ // Keep the browser clock on the same synthetic day as the HTTP fixture.
+ class BrowserClock extends Date {static now(){return Date.parse('2026-10-12T00:00:00.000Z');}}
+ const context=vm.createContext({document,structuredClone,Intl,Date:BrowserClock,Number,JSON,Map,Set,Error,crypto:{randomUUID},sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}},fetch:async(path,opt)=>{const r=await f.call(path,opt.body?JSON.parse(opt.body):undefined,opt.headers.Authorization.slice(7));return {ok:r.status<400,status:r.status,json:async()=>r.body};}});
  vm.runInContext(managementScript(),context);
  async function fire(id,event){const e=typeof id==='string'?ids.get(id):id;await e.fire(event);for(let i=0;i<150;i++){await new Promise(r=>setImmediate(r));if(ids.get('message').textContent!=='正在处理…')return;}throw Error('UI did not settle');}
  ids.get('token').value='a'.repeat(40);await fire('login','submit');assert.equal(ids.get('order-panel').hidden,false);
