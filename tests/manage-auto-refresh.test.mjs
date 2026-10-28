@@ -35,3 +35,56 @@ test('button-only calendar exception additions and removals survive background s
   assert.deepEqual(list.children,localRows,action+' stays local without input/change');assert.equal(vm.runInContext('state.revisions.scheduleRevision',context),initial.revisions.scheduleRevision);
  }}finally{f.close();}
 });
+
+async function recoveryPage(f){
+ const {ids,document}=dom(),storage=new Map();let failure=false,hold=false,release,calls=0;
+ let next=await f.state();
+ const context=vm.createContext({document,structuredClone,Intl,Date,Number,JSON,Map,Set,Error,AbortController,crypto:{randomUUID},
+  sessionStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
+  fetch:async()=>{calls++;if(hold){hold=false;await new Promise(r=>release=r);throw Error('late failure');}if(failure)throw Error('offline');return {ok:true,status:200,json:async()=>structuredClone(next)};}});
+ vm.runInContext(managementScript(),context);context.window={setTimeout(){return 1;},clearTimeout(){}};
+ context.initial=next;vm.runInContext("token='a'.repeat(40);state=initial;automaticDisplayed=state.revisions;render()",context);
+ return {ids,context,storage,setFailure:v=>failure=v,setNext:v=>next=v,holdNext(){hold=true;},release(){release();},get calls(){return calls;}};
+}
+
+test('same-revision recovery clears offline status without overwriting a draft or touching UNKNOWN',async()=>{
+ const f=await launch();try{
+  const p=await recoveryPage(f);p.setFailure(true);await vm.runInContext('refreshScheduleAutomatically()',p.context);
+  assert.match(p.ids.get('auto-sync-state').textContent,/暂未更新/);
+  vm.runInContext("pageDraftDirty=true;document.querySelector('#am-start').value='07:45'",p.context);
+  p.setFailure(false);await vm.runInContext('refreshScheduleAutomatically()',p.context);
+  assert.match(p.ids.get('auto-sync-state').textContent,/已核对/);
+  assert.equal(p.ids.get('am-start').value,'07:45');assert.equal(vm.runInContext('pageDraftDirty',p.context),true);
+  vm.runInContext("savePending({id:'ORIGINAL-UNKNOWN',path:'/existing-write',body:{operationId:'ORIGINAL-UNKNOWN'}})",p.context);
+  const before=p.storage.get('jso.pending.operation'),calls=p.calls;
+  await vm.runInContext('refreshScheduleAutomatically()',p.context);
+  assert.equal(p.calls,calls);assert.equal(p.storage.get('jso.pending.operation'),before);
+  assert.equal(p.ids.get('unknown').hidden,false);
+ }finally{f.close();}
+});
+
+test('same displayed revision recovery retains the warning when the editable draft base is older',async()=>{
+ const f=await launch();try{
+  const p=await recoveryPage(f),initial=await f.state();
+  vm.runInContext("pageDraftDirty=true;document.querySelector('#am-start').value='07:45'",p.context);
+  p.setNext({...initial,revisions:{scheduleRevision:initial.revisions.scheduleRevision+1,projectionRevision:initial.revisions.projectionRevision+1}});
+  await vm.runInContext('refreshScheduleAutomatically()',p.context);
+  p.setFailure(true);await vm.runInContext('refreshScheduleAutomatically()',p.context);
+  assert.match(p.ids.get('auto-sync-state').textContent,/暂未更新/);
+  p.setFailure(false);await vm.runInContext('refreshScheduleAutomatically()',p.context);
+  assert.match(p.ids.get('auto-sync-state').textContent,/未保存的编辑已保留/);
+  assert.equal(p.ids.get('am-start').value,'07:45');assert.equal(vm.runInContext('state.revisions.scheduleRevision',p.context),initial.revisions.scheduleRevision);
+ }finally{f.close();}
+});
+
+test('manual refresh clears offline status and a late automatic failure cannot restore it',async()=>{
+ const f=await launch();try{
+  const p=await recoveryPage(f);p.setFailure(true);await vm.runInContext('refreshScheduleAutomatically()',p.context);
+  assert.match(p.ids.get('auto-sync-state').textContent,/暂未更新/);
+  p.setFailure(false);p.holdNext();const held=vm.runInContext('refreshScheduleAutomatically()',p.context);
+  await new Promise(r=>setImmediate(r));await vm.runInContext('refresh()',p.context);
+  assert.match(p.ids.get('auto-sync-state').textContent,/已更新/);
+  p.release();await held;
+  assert.match(p.ids.get('auto-sync-state').textContent,/已更新/);
+ }finally{f.close();}
+});

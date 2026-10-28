@@ -167,7 +167,7 @@ function render(){
 }
 // All user times are explicit Asia/Shanghai; host timezone is irrelevant.
 function local(iso){if(!iso||!Number.isFinite(Date.parse(iso)))return '时间待核对';const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date(iso)).map(v=>[v.type,v.value]));return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;}
-async function refresh(){state=await api('/api/v3/business/state');pageDraftDirty=false;automaticDisplayed=state.revisions;clearReferenceImages();render();}
+async function refresh(){state=await api('/api/v3/business/state');pageDraftDirty=false;automaticDisplayed=state.revisions;clearReferenceImages();render();$('#auto-sync-state').textContent='排班已更新。';}
 function previewBinding(){return {expectedProjectionRevision:state.revisions?.projectionRevision,baseConfigDigest:active()?.configDigest??null};}
 function buildConfig(){const config=draftBase();if(![2,3].includes(config.schemaVersion))throw new Error('旧版日历需要迁移后再编辑。');const cal=config.resourceCalendars[0],effectiveFrom=$('#effective').value;
  if(effectiveFrom<state.businessToday)throw new Error('请选择今天或以后的生效日期。');
@@ -313,14 +313,14 @@ async function refreshScheduleAutomatically(){
   if(keys.every(k=>next.revisions?.[k]===displayed?.[k])){
    const sameBase=keys.every(k=>next.revisions?.[k]===state.revisions?.[k])&&next.businessToday===state.businessToday;
    if(!sameBase&&!draft){state=next;render();$('#auto-sync-state').textContent='今日作业已更新。';}
-   else if(sameBase){state.dailyOperations=next.dailyOperations;state.writeAdmission=next.writeAdmission;renderDaily(state);}
-   else renderDaily(next);
+   else if(sameBase){state.dailyOperations=next.dailyOperations;state.writeAdmission=next.writeAdmission;renderDaily(state);$('#auto-sync-state').textContent='排班已核对，当前安排没有变化。';}
+   else{renderDaily(next);$('#auto-sync-state').textContent='排班已更新；未保存的编辑已保留，请刷新后重新核对。';}
    syncBusy();return;
   }
   automaticDisplayed=next.revisions;
   if(draft){renderSessions(next);renderDaily(next);syncBusy();$('#auto-sync-state').textContent='排班已更新；未保存的编辑已保留，请刷新后重新核对。';}
   else{state=next;render();$('#auto-sync-state').textContent='排班已自动更新。';}
- }catch{if(token===identityToken)$('#auto-sync-state').textContent='暂未更新，当前显示为最近读取的安排。';}
+ }catch{if(token===identityToken&&state===original&&!busy&&!pending)$('#auto-sync-state').textContent='暂未更新，当前显示为最近读取的安排。';}
  finally{window.clearTimeout(deadline);if(automaticController===controller)automaticController=null;automaticRead=false;}
 }
 if(typeof window!=='undefined'){
