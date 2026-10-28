@@ -572,6 +572,11 @@ export function createSqliteSchedulingProposalStoreV1({ db, assembleInput, now,
         const selected = admitted.command.selectedProposalItemIds.map(id => byId.get(id));
         if (selected.some(item => !item)) throw new Error('SCHEDULING_SELECTION_REVALIDATION_FAILED');
         const decidedAt = now().toISOString();
+        // A valid preview can expire while the owner is reviewing it. Recheck
+        // the clock inside the acceptance transaction before any schedule write.
+        if (selected.some(item => Date.parse(item.plannedStart) <= Date.parse(decidedAt))) {
+          return denied('SCHEDULE_PAST_INTERVAL');
+        }
         if (beforeAcceptanceCommit) beforeAcceptanceCommit({
           db, proposal, selectedItems: selected, decision: admitted.command, decidedAt,
         });

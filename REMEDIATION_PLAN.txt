@@ -1,0 +1,22 @@
+JSO R4 review remediation — 2026-10-28
+
+Baseline: 178e33e9caf0df063eaa1af5f694e429940a4ea5
+Production: 106.52.85.232; source retained stopped on 159.75.139.246.
+
+1. Evidence correction: reopen #89; retain original record with explicit correction.
+2. VCP: identify effective plugin registration, pinned extension source and state;
+   repair migrated binding through the existing supported registration mechanism;
+   verify actual tool dispatch read_state and original receipt without business writes.
+3. Product fixes: render authoritative receipt decisionType; stale must not show
+   success. Clip today's planning window forward, visibly block expired previews,
+   and reject expired selections at server acceptance time. Test stale, accepted,
+   rejected, clock crossing and atomic no-write behavior.
+4. Migration recovery: prepare latest-data reverse synchronization procedure with
+   single-writer fencing, verified snapshot/attachments, exact target R5 binding,
+   route rollback and recovery on interruption. Never restart stale old data.
+5. Run focused tests and required current checks; publish reviewable changes and
+   deployment evidence. Revalidate runtime/receipts, then close #89 only when all
+   reviewed conditions actually pass. Synthetic writes require concrete confirmation.
+
+Boundaries: no schema migration, direct SQL business repair, credential rotation,
+or authority expansion. No automatic production rollback or duplicate write retry.

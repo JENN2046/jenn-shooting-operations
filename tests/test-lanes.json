@@ -548,6 +548,11 @@
       "invariant": "daily first-screen facts and navigation reuse existing management actions, preserve CAS drafts, and reconcile the original operation after an unknown result without duplicate writes"
     },
     {
+      "file": "manage-proposal-receipt.test.mjs",
+      "lanes": ["current"],
+      "invariant": "Shipped proposal UI reports authoritative receipt outcomes and blocks clock-expired previews before writing."
+    },
+    {
       "file": "manage-ui-flow.test.mjs",
       "lanes": [
         "current"
