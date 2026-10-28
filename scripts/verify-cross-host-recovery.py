@@ -1,9 +1,47 @@
 """Read-only verification of a detached JSO recovery snapshot; never restores it."""
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 from pathlib import Path
 import sqlite3
+import shutil
+import tempfile
+
+
+@contextmanager
+def snapshot_connection(database):
+    # mode=ro/query_only do not stop SQLite creating WAL/SHM files. Never open
+    # the sealed database itself. Rebuild the WAL index in private scratch space;
+    # immutable=1 on the original would silently ignore committed WAL contents.
+    # This is a sealed, detached family, not a concurrent-writer backup API.
+    def family():
+        result = {}
+        for suffix in ['', '-wal', '-shm', '-journal']:
+            path = Path(str(database) + suffix)
+            if path.exists():
+                stat = path.lstat()
+                if path.is_symlink() or not path.is_file():
+                    raise ValueError('SNAPSHOT_FILE_TYPE')
+                result[suffix] = (stat.st_dev, stat.st_ino, stat.st_size,
+                                  stat.st_mtime_ns, stat.st_ctime_ns)
+        return result
+
+    before = family()
+    with tempfile.TemporaryDirectory(prefix='jso-recovery-verify-') as temporary:
+        copied = Path(temporary) / database.name
+        for suffix in ['', '-wal', '-journal']:
+            if suffix in before:
+                shutil.copyfile(Path(str(database) + suffix), Path(str(copied) + suffix))
+        if '' not in before:
+            raise sqlite3.OperationalError('SNAPSHOT_DATABASE_MISSING')
+        if family() != before:
+            raise ValueError('SNAPSHOT_CHANGED_DURING_COPY')
+        connection = sqlite3.connect(copied.as_uri() + '?mode=ro', uri=True)
+        try:
+            yield connection
+        finally:
+            connection.close()
 
 
 def sha(path):
@@ -28,8 +66,7 @@ def verify(root, manifest_path):
         raise ValueError('SNAPSHOT_SYMLINK')
     expected = json.loads(Path(manifest_path).read_text(encoding='utf-8'))['facts']
     database = root / 'shooting-operations.sqlite'
-    connection = sqlite3.connect(database.as_uri() + '?mode=ro', uri=True)
-    try:
+    with snapshot_connection(database) as connection:
         connection.execute('PRAGMA query_only=ON;')
         connection.execute('BEGIN')
         if connection.execute('PRAGMA integrity_check').fetchall() != [('ok',)]:
@@ -61,8 +98,6 @@ def verify(root, manifest_path):
         return {'ok': True, 'schemaVersion': schema, 'businessTables': len(tables),
                 'scheduleRevision': revisions[0], 'projectionRevision': revisions[1],
                 'verifiedAttachments': attachments, 'businessMutations': 0}
-    finally:
-        connection.close()
 
 
 if __name__ == '__main__':

@@ -34,6 +34,11 @@ authoritative until an explicitly authorized recovery window starts.
    ```
 
    This is a verifier only. It must not initialize/migrate/repair a database.
+   SQLite is opened only on a private temporary copy of the sealed database
+   family. Committed WAL records are copied and read; SHM is rebuilt in scratch
+   space. The backup directory and its existing files remain unchanged, including
+   on read-only storage. Supply a quiesced sealed family, never a changing live
+   database: independent file copying is not an online SQLite backup mechanism.
 4. Transfer the sealed archive over authenticated encrypted channels. Do not
    persist the business data or credentials on the chat/workstation. Verify the
    archive digest at the destination before extraction; reject links/path escapes.
