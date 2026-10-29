@@ -14,7 +14,7 @@ export function createConversationBoundary({store,identities,ownerAuthenticate,c
   const cancellationKey=sourceRef=>'conversation-cancel:'+createHash('sha256').update(sourceRef).digest('hex');
   const cancelled=sourceRef=>store.getOperation(cancellationKey(sourceRef),'conversation.cancel');
   const attempts=createSqliteAgentGrantAttemptStoreV1({db:store.db,now:clock});
-  const application=createJsoAgentApplication({service,identities,clock,claimGrantAttempt:attempts.claim,
+  const application=createJsoAgentApplication({service,identities,clock,claimGrantAttempt:attempts.claimConversation,
     resolveGrant:({subjectId,action,commandDigest})=>[...records.values()].find(r=>!r.cancelled&&r.grant.subjectId===subjectId&&r.grant.action===action&&r.grant.commandDigest===commandDigest)?.grant,
     isGrantActive:g=>!cancelled(g.approvalRef)&&records.get(g.approvalRef)?.cancelled!==true});
   const agentHandler=createJsoAgentHttpHandler(application);

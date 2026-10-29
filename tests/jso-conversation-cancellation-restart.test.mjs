@@ -23,11 +23,17 @@ test('full adoption delegation binds action, all resources, cancellation and dur
  const dispatched={...body,sourceRef:'sent'};assert.equal((await make().ownerCall('',dispatched)).ok,true);
  assert.equal(createSqliteAgentGrantAttemptStoreV1({db:store.db}).claim({approvalRef:'sent',subjectId:'assistant',action:'adopt_proposal',commandDigest:agentCommandDigest('adopt_proposal',adoption)}).ok,true);
  assert.equal((await make().ownerCall('',dispatched)).code,'RECONCILIATION_REQUIRED');
- assert.equal(createSqliteAgentGrantAttemptStoreV1({db:store.db}).claim({approvalRef:'sent',subjectId:'other-assistant',action:'reschedule',commandDigest:agentCommandDigest('reschedule',command)}).code,'RECONCILIATION_REQUIRED');
+ assert.equal(createSqliteAgentGrantAttemptStoreV1({db:store.db}).claimConversation({approvalRef:'sent',subjectId:'other-assistant',action:'reschedule',commandDigest:agentCommandDigest('reschedule',command)}).code,'RECONCILIATION_REQUIRED');
  assert.equal((await make().ownerCall('',{...dispatched,action:'reschedule',command})).code,'SOURCE_REBOUND');
  assert.equal((await make().ownerCall('',{sourceRef:'legacy',assistantSubjectId:'assistant',command})).ok,true);
  ownerResources=['OTHER'];assert.equal((await make().ownerCall('',{...body,sourceRef:'owner-denied'})).code,'FORBIDDEN');
  ownerResources=['R'];assistantResources=['OTHER'];assert.equal((await make().ownerCall('',{...body,sourceRef:'assistant-denied'})).code,'FORBIDDEN');
+ const attempts=createSqliteAgentGrantAttemptStoreV1({db:store.db});
+ // Generic trusted-server grants retain their existing per-tuple semantics;
+ // the stronger source-wide rule belongs specifically to daily conversation.
+ assert.equal(attempts.claim({approvalRef:'generic',subjectId:'assistant',action:'reschedule',commandDigest:agentCommandDigest('reschedule',command)}).ok,true);
+ assert.equal(attempts.claim({approvalRef:'generic',subjectId:'assistant',action:'adopt_proposal',commandDigest:agentCommandDigest('adopt_proposal',adoption)}).ok,true);
+ assert.equal(attempts.claimConversation({approvalRef:'generic',subjectId:'assistant',action:'adopt_proposal',commandDigest:'sha256:'+'f'.repeat(64)}).code,'RECONCILIATION_REQUIRED');
 });
 test('durable cancellation survives same-store reconstruction and SQLite close/reopen, binds all original identities',async t=>{
  const dir=mkdtempSync(join(tmpdir(),'jso-cancel-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const filename=join(dir,'test.sqlite');let store=new ScheduleStore({filename});t.after(()=>{if(store.db.isOpen)store.close()});initializeWritableSchema(store.db);

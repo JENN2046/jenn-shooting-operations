@@ -21,8 +21,7 @@ export function agentGrantAttemptKeyV1(input) {
 
 export function createSqliteAgentGrantAttemptStoreV1({ db, now = () => new Date() } = {}) {
   if (!db || typeof now !== 'function') throw new TypeError('database and clock required');
-  return Object.freeze({
-    claim(input) {
+  function claim(input, bindSource = false) {
       let attemptKey;
       try { attemptKey = agentGrantAttemptKeyV1(input); }
       catch { return denied('INVALID_AGENT_GRANT'); }
@@ -33,9 +32,8 @@ export function createSqliteAgentGrantAttemptStoreV1({ db, now = () => new Date(
       try {
         const inserted = db.prepare(`INSERT INTO agent_grant_attempts
           (attempt_key, approval_ref, subject_id, action, command_digest, attempted_at)
-          SELECT ?, ?, ?, ?, ?, ? WHERE NOT EXISTS
-            (SELECT 1 FROM agent_grant_attempts WHERE approval_ref = ?)`).run(
-          attemptKey, input.approvalRef, input.subjectId, input.action, input.commandDigest, attemptedAt, input.approvalRef,
+          ${bindSource ? 'SELECT ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM agent_grant_attempts WHERE approval_ref = ?)' : 'VALUES (?, ?, ?, ?, ?, ?)'}`).run(
+          attemptKey, input.approvalRef, input.subjectId, input.action, input.commandDigest, attemptedAt, ...(bindSource ? [input.approvalRef] : []),
         );
         // One source gets one dispatch opportunity across actions and identities,
         // including independent boundary instances. Existing rows need no rewrite.
@@ -51,6 +49,6 @@ export function createSqliteAgentGrantAttemptStoreV1({ db, now = () => new Date(
         if (prior) return denied('RECONCILIATION_REQUIRED');
         throw error;
       }
-    },
-  });
+  }
+  return Object.freeze({claim: input => claim(input), claimConversation: input => claim(input, true)});
 }
