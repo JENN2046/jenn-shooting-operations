@@ -168,7 +168,7 @@ export function createAgentSchedulingServiceV1({ db, proposalStore, application,
           const found = checkedProposal(decision.proposal_id), receipt = checkedReceipt(decision);
           if (!found || !receipt || receipt.proposalId !== found.proposal.proposalId || receipt.decisionId !== command.operationId) return invalid();
           if (!scoped(principal,found.proposal.resourceScope)) return denied('FORBIDDEN');
-          try { return {ok:true,kind:'proposalDecision',receipt:decisionSummary(receipt),receiptDigest:decision.receipt_digest}; }
+          try { return {ok:true,kind:'proposalDecision',receipt:decisionSummary(receipt),resourceScope:[...found.proposal.resourceScope],receiptDigest:decision.receipt_digest}; }
           catch { return invalid(); }
         }
         const generated = db.prepare('SELECT proposal_id FROM scheduling_proposals WHERE generation_operation_id=?').get(command.operationId);

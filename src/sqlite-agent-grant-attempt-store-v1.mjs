@@ -31,11 +31,15 @@ export function createSqliteAgentGrantAttemptStoreV1({ db, now = () => new Date(
       if (!admitted) return denied('BUSINESS_SCHEMA11_REQUIRED');
       const attemptedAt = now().toISOString();
       try {
-        db.prepare(`INSERT INTO agent_grant_attempts
+        const inserted = db.prepare(`INSERT INTO agent_grant_attempts
           (attempt_key, approval_ref, subject_id, action, command_digest, attempted_at)
-          VALUES (?, ?, ?, ?, ?, ?)`).run(
-          attemptKey, input.approvalRef, input.subjectId, input.action, input.commandDigest, attemptedAt,
+          SELECT ?, ?, ?, ?, ?, ? WHERE NOT EXISTS
+            (SELECT 1 FROM agent_grant_attempts WHERE approval_ref = ?)`).run(
+          attemptKey, input.approvalRef, input.subjectId, input.action, input.commandDigest, attemptedAt, input.approvalRef,
         );
+        // One source gets one dispatch opportunity across actions and identities,
+        // including independent boundary instances. Existing rows need no rewrite.
+        if (inserted.changes !== 1) return denied('RECONCILIATION_REQUIRED');
         return Object.freeze({ ok: true, attemptKey, attemptedAt });
       } catch (error) {
         if (error?.code === 'WRITE_ADMISSION_DISABLED') return denied('WRITE_ADMISSION_DISABLED');
