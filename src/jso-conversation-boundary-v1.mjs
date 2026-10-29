@@ -4,6 +4,7 @@ import {createJsoAgentApplication,createJsoAgentHttpHandler,agentCommandDigest} 
 import {createSqliteAgentGrantAttemptStoreV1} from './sqlite-agent-grant-attempt-store-v1.mjs';
 import {validateTrustedPrincipal,authorizeCapability} from './authorization-v2.mjs';
 import {normalizeScheduleRescheduleCommandV1} from './sqlite-schedule-reschedule-store-v1.mjs';
+import {validateConversationAdoption} from './conversation-adoption-v1.mjs';
 
 // Opt-in trusted composition. No credentials, listener or authority are discovered here.
 // Owner capability stays in the authenticated client; the assistant only gets its own token.
@@ -13,7 +14,7 @@ export function createConversationBoundary({store,identities,ownerAuthenticate,c
   const cancellationKey=sourceRef=>'conversation-cancel:'+createHash('sha256').update(sourceRef).digest('hex');
   const cancelled=sourceRef=>store.getOperation(cancellationKey(sourceRef),'conversation.cancel');
   const attempts=createSqliteAgentGrantAttemptStoreV1({db:store.db,now:clock});
-  const application=createJsoAgentApplication({service,identities,clock,claimGrantAttempt:attempts.claim,
+  const application=createJsoAgentApplication({service,identities,clock,claimGrantAttempt:attempts.claimConversation,
     resolveGrant:({subjectId,action,commandDigest})=>[...records.values()].find(r=>!r.cancelled&&r.grant.subjectId===subjectId&&r.grant.action===action&&r.grant.commandDigest===commandDigest)?.grant,
     isGrantActive:g=>!cancelled(g.approvalRef)&&records.get(g.approvalRef)?.cancelled!==true});
   const agentHandler=createJsoAgentHttpHandler(application);
@@ -21,18 +22,21 @@ export function createConversationBoundary({store,identities,ownerAuthenticate,c
     const principal=await ownerAuthenticate({headers:{authorization}});
     if(!validateTrustedPrincipal(principal).ok||principal.role!=='administrator')return {ok:false,code:'OWNER_REQUIRED'};
     const {sourceRef,assistantSubjectId,command,cancel=false}=body??{};
+    const action=Object.hasOwn(body??{},'action')?body.action:'reschedule';
+    if(!['reschedule','adopt_proposal'].includes(action))return {ok:false,code:'INVALID_DELEGATION'};
     if(typeof sourceRef!=='string'||!/^[A-Za-z0-9_-]{1,160}$/.test(sourceRef)
       || !identities.some(i=>i.subjectId===assistantSubjectId&&i.mode==='executor'))return {ok:false,code:'INVALID_DELEGATION'};
-    const normalized=normalizeScheduleRescheduleCommandV1(command);
+    const normalized=action==='reschedule'?normalizeScheduleRescheduleCommandV1(command):validateConversationAdoption(command);
     if(!normalized.ok)return normalized;
-    if(!authorizeCapability({principal,capability:'modifySchedule',resourceId:command.resourceId}).allowed)return {ok:false,code:'FORBIDDEN'};
+    const resources=action==='reschedule'?[command.resourceId]:normalized.resourceIds;
+    if(!resources.every(resourceId=>authorizeCapability({principal,capability:'modifySchedule',resourceId}).allowed))return {ok:false,code:'FORBIDDEN'};
     const identity=identities.find(i=>i.subjectId===assistantSubjectId);
-    if(!identity.resourceIds.includes(command.resourceId))return {ok:false,code:'FORBIDDEN'};
-    const digest=agentCommandDigest('reschedule',command),prior=records.get(sourceRef);
+    if(!resources.every(id=>identity.resourceIds.includes(id)))return {ok:false,code:'FORBIDDEN'};
+    const digest=agentCommandDigest(action,command),prior=records.get(sourceRef);
     if(prior&&(prior.grant.commandDigest!==digest||prior.owner!==principal.subjectId||prior.grant.subjectId!==assistantSubjectId))return {ok:false,code:'SOURCE_REBOUND'};
     // The durable dispatch record is authoritative across boundary reconstruction.
-    const attempted=store.db.prepare('SELECT command_digest FROM agent_grant_attempts WHERE approval_ref=? AND subject_id=?').all(sourceRef,assistantSubjectId);
-    if(attempted.some(a=>a.command_digest!==digest))return {ok:false,code:'SOURCE_REBOUND'};
+    const attempted=store.db.prepare('SELECT command_digest,subject_id,action FROM agent_grant_attempts WHERE approval_ref=?').all(sourceRef);
+    if(attempted.some(a=>a.command_digest!==digest||a.subject_id!==assistantSubjectId||a.action!==action))return {ok:false,code:'SOURCE_REBOUND'};
     const binding=createHash('sha256').update(JSON.stringify([principal.subjectId,sourceRef,assistantSubjectId,digest])).digest('hex');
     const tombstone=cancelled(sourceRef);
     if(tombstone){if(tombstone.binding!==binding)return {ok:false,code:'SOURCE_REBOUND'};return cancel?{ok:true,cancelled:true}:{ok:false,code:'CANCELLED'};}
@@ -55,10 +59,10 @@ export function createConversationBoundary({store,identities,ownerAuthenticate,c
     }
     if(prior?.cancelled)return {ok:false,code:'CANCELLED'};
     if(attempted.length)return {ok:false,code:'RECONCILIATION_REQUIRED'};
-    const grant=prior?.grant??{approvalRef:sourceRef,subjectId:assistantSubjectId,action:'reschedule',commandDigest:digest,
+    const grant=prior?.grant??{approvalRef:sourceRef,subjectId:assistantSubjectId,action,commandDigest:digest,
       notBefore:clock().toISOString(),expiresAt:new Date(clock().getTime()+300000).toISOString()};
     records.set(sourceRef,{owner:principal.subjectId,grant,cancelled:false});
-    return {ok:true,operationId:command.operationId,commandDigest:digest};
+    return {ok:true,operationId:action==='reschedule'?command.operationId:normalized.operationId,commandDigest:digest};
   }
   async function handler(req,res){
     const send=(status,result)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(result));};

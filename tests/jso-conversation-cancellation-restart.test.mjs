@@ -4,6 +4,37 @@ import {ScheduleStore} from '../src/store.mjs';import {initializeWritableSchema}
 import {createConversationBoundary} from '../src/jso-conversation-boundary-v1.mjs';import {createTrustedPrincipal} from '../src/authorization-v2.mjs';
 import {createSqliteAgentGrantAttemptStoreV1} from '../src/sqlite-agent-grant-attempt-store-v1.mjs';import {agentCommandDigest} from '../src/jso-agent-api-v1.mjs';
 const command={operationId:'operation1',scheduleItemId:'item1',resourceId:'R',plannedStart:'2040-01-01T01:00:00.000Z',plannedEnd:'2040-01-01T02:00:00.000Z',expectedScheduleRevision:0,expectedProjectionRevision:0,configDigest:'sha256:'+'a'.repeat(64)};
+const adoption={generationCommand:{operationId:'gen',planningWindowStart:'2040-01-01T00:00:00.000Z',planningWindowEnd:'2040-01-02T00:00:00.000Z',resourceScope:['R']},expectedPreview:{baseScheduleRevision:0,configVersion:'c1',configDigest:'sha256:'+'a'.repeat(64),inputDigest:'sha256:'+'b'.repeat(64),resultDigest:'sha256:'+'c'.repeat(64)},decision:{decisionId:'adopt',proposalId:'proposal',decisionType:'accept',selectedProposalItemIds:['spi_'+'d'.repeat(64)],decisionNote:null,reasonCode:null}};
+
+test('full adoption delegation binds action, all resources, cancellation and durable attempts; old requests remain reschedules',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'jso-adopt-delegation-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
+ const filename=join(dir,'test.sqlite');let store=new ScheduleStore({filename});t.after(()=>{if(store.db.isOpen)store.close()});initializeWritableSchema(store.db);
+ let ownerResources=['R'],assistantResources=['R'];
+ const make=()=>createConversationBoundary({store,identities:[{token:'x'.repeat(40),subjectId:'assistant',mode:'executor',resourceIds:assistantResources}],ownerAuthenticate:async()=>createTrustedPrincipal({subjectId:'owner',role:'administrator',resourceIds:ownerResources}).principal});
+ const body={sourceRef:'adoption-source',assistantSubjectId:'assistant',action:'adopt_proposal',command:adoption};
+ const b=make();assert.equal((await b.ownerCall('',body)).operationId,'adopt');
+ assert.equal((await b.ownerCall('',{...body,action:'other'})).code,'INVALID_DELEGATION');
+ assert.equal((await b.ownerCall('',{...body,action:undefined})).code,'INVALID_DELEGATION');
+ assert.equal((await b.ownerCall('',{...body,action:'reschedule',command})).code,'SOURCE_REBOUND');
+ for(const changed of [{decision:{...adoption.decision,decisionType:'partiallyAccept'}},{generationCommand:{...adoption.generationCommand,resourceScope:['R','OTHER']}}])assert.equal((await b.ownerCall('',{...body,sourceRef:'different',command:{...adoption,...changed}})).ok,false);
+ assert.equal((await b.ownerCall('',{...body,cancel:true})).cancelled,true);
+ store.close();store=new ScheduleStore({filename});assert.equal((await make().ownerCall('',body)).code,'CANCELLED');
+ assert.equal((await make().ownerCall('',{...body,action:'reschedule',command})).code,'SOURCE_REBOUND');
+ const dispatched={...body,sourceRef:'sent'};assert.equal((await make().ownerCall('',dispatched)).ok,true);
+ assert.equal(createSqliteAgentGrantAttemptStoreV1({db:store.db}).claim({approvalRef:'sent',subjectId:'assistant',action:'adopt_proposal',commandDigest:agentCommandDigest('adopt_proposal',adoption)}).ok,true);
+ assert.equal((await make().ownerCall('',dispatched)).code,'RECONCILIATION_REQUIRED');
+ assert.equal(createSqliteAgentGrantAttemptStoreV1({db:store.db}).claimConversation({approvalRef:'sent',subjectId:'other-assistant',action:'reschedule',commandDigest:agentCommandDigest('reschedule',command)}).code,'RECONCILIATION_REQUIRED');
+ assert.equal((await make().ownerCall('',{...dispatched,action:'reschedule',command})).code,'SOURCE_REBOUND');
+ assert.equal((await make().ownerCall('',{sourceRef:'legacy',assistantSubjectId:'assistant',command})).ok,true);
+ ownerResources=['OTHER'];assert.equal((await make().ownerCall('',{...body,sourceRef:'owner-denied'})).code,'FORBIDDEN');
+ ownerResources=['R'];assistantResources=['OTHER'];assert.equal((await make().ownerCall('',{...body,sourceRef:'assistant-denied'})).code,'FORBIDDEN');
+ const attempts=createSqliteAgentGrantAttemptStoreV1({db:store.db});
+ // Generic trusted-server grants retain their existing per-tuple semantics;
+ // the stronger source-wide rule belongs specifically to daily conversation.
+ assert.equal(attempts.claim({approvalRef:'generic',subjectId:'assistant',action:'reschedule',commandDigest:agentCommandDigest('reschedule',command)}).ok,true);
+ assert.equal(attempts.claim({approvalRef:'generic',subjectId:'assistant',action:'adopt_proposal',commandDigest:agentCommandDigest('adopt_proposal',adoption)}).ok,true);
+ assert.equal(attempts.claimConversation({approvalRef:'generic',subjectId:'assistant',action:'adopt_proposal',commandDigest:'sha256:'+'f'.repeat(64)}).code,'RECONCILIATION_REQUIRED');
+});
 test('durable cancellation survives same-store reconstruction and SQLite close/reopen, binds all original identities',async t=>{
  const dir=mkdtempSync(join(tmpdir(),'jso-cancel-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));const filename=join(dir,'test.sqlite');let store=new ScheduleStore({filename});t.after(()=>{if(store.db.isOpen)store.close()});initializeWritableSchema(store.db);
  let owner='owner';const make=()=>createConversationBoundary({store,identities:['assistant','other'].map(subjectId=>({token:subjectId.padEnd(40,'x'),subjectId,mode:'executor',resourceIds:['R']})),ownerAuthenticate:async()=>createTrustedPrincipal({subjectId:owner,role:'administrator',resourceIds:['R']}).principal});

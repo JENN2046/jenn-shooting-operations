@@ -175,7 +175,7 @@ Owner authentication MUST yield an administrator covering the target resource;
 the assistant must be a configured executor covering it too. The live delegation
 record binds `owner + sourceRef + assistantSubjectId + exact command digest` and
 rejects a changed binding as `SOURCE_REBOUND`. It supplies a five-minute live
-reschedule grant; it does not accept model text as human evidence or mint a
+grant for either `reschedule` or full `adopt_proposal`; it does not accept model text as human evidence or mint a
 ToolBox/Trusted Action receipt.
 
 Before dispatch, cancellation records a durable tombstone for that four-part
@@ -184,6 +184,17 @@ binding. It serializes with claim insertion; reconstruction/reopen preserves
 exists, cancellation/re-delegation returns `RECONCILIATION_REQUIRED`, not a claim
 that the write never happened. Durable attempts prevent a second write
 opportunity after reconstruction; in-memory grants are not revived as authority.
+Owner delegation accepts explicit `action: reschedule | adopt_proposal`. Omission
+preserves legacy reschedule behavior; explicit invalid values are rejected. Adoption
+uses the existing `generationCommand + expectedPreview + decision` command and
+requires full `accept`. Owner and assistant must cover every generation resource.
+The action participates in the exact command digest and cancellation binding.
+One approval reference has at most one durable dispatch opportunity across actions
+and identities, via an atomic conditional insert; no schema change or history
+rewrite is required. Verified `proposalDecision` reads additionally return top-level
+`resourceScope` from the stored proposal. Their original operation ID is
+`receipt.decisionId`.
+
 The source lifetime/presentation and physical input checks still belong to the
 client/adapter/host composition, not this target API.
 

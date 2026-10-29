@@ -7,7 +7,7 @@ import {createConversationBoundary} from '../src/jso-conversation-boundary-v1.mj
 import {createTrustedPrincipal} from '../src/authorization-v2.mjs';
 function setup(t,ownerAuthenticate){
  const store=new ScheduleStore({filename:':memory:'});t.after(()=>store.close());
- store.db.exec('CREATE TABLE IF NOT EXISTS agent_grant_attempts (command_digest TEXT, approval_ref TEXT, subject_id TEXT)');
+ store.db.exec('CREATE TABLE IF NOT EXISTS agent_grant_attempts (command_digest TEXT, approval_ref TEXT, subject_id TEXT, action TEXT)');
  const principal=createTrustedPrincipal({subjectId:'owner',role:'administrator',resourceIds:['摄影棚']}).principal;
  return createConversationBoundary({store,identities:[{token:'synthetic-token-'.padEnd(40,'x'),subjectId:'assistant',mode:'executor',resourceIds:['摄影棚']}],ownerAuthenticate:ownerAuthenticate||async function(){return principal;}}).handler;
 }
