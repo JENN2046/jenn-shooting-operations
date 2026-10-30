@@ -2,11 +2,11 @@
 
 更新日期：**2026-10-30（Asia/Shanghai）**。这是当前实现及启用状态的说明图，不新增架构决定、权限或生产启用授权；历史冻结基线仍由[架构基线索引](ARCHITECTURE_BASELINE_INDEX_V2.1.md)管理。
 
-当前阶段：**独立应用已上线；VCP 改期与完整方案采用的兼容代码已部署；真实日常客户端接入与业务验收未完成。**
+当前阶段：**独立应用已上线；VCP 兼容代码已部署；日常客户端 Owner 会话已通过真实 WSS 只读核验；原生业务写入、生产准入与最终业务验收尚未完成。**
 
 ## 1. 组件与数据权威
 
-箭头表示调用或依赖。实线为当前可用的应用/只读调用及内部实现关系；虚线为已实现、尚未启用并完成实机验收的原生业务链。图按逻辑边界组织，不表示服务器数量或物理位置。
+箭头表示调用或依赖。实线为当前可用的应用/只读调用及内部实现关系；虚线为尚未启用并完成实机验收的原生业务写入链。黄色节点包含尚未放行的业务能力，不表示其全部代码未运行。图按逻辑边界组织，不表示服务器数量或物理位置。
 
 ```mermaid
 flowchart TB
@@ -16,20 +16,20 @@ flowchart TB
     subgraph CLIENT["使用入口：浏览器与 VCPChat"]
         WEB["JSO 管理页 / 今日作业"]
         CHAT["日常 VCPChat"]
-        MAIN["可信主进程<br/>原生输入、展示核对、连接绑定<br/>Owner 会话接入待完成"]
+        MAIN["可信主进程<br/>原生输入、展示核对、连接绑定<br/>Owner 会话已通过只读核验"]
         CHART["VChart<br/>派生显示，不保存业务权威事实"]
     end
 
     subgraph VCP["VCP 适配边界"]
         TOOLBOX["VCPToolBox<br/>标准工具调度"]
         READ["Jenn Extensions / JSO 适配器<br/>当前策略：read-only"]
-        NATIVE["原生 WSS / stdio 会话链<br/>兼容代码已部署；插件未启用"]
+        NATIVE["原生 WSS / stdio 会话链<br/>宿主只读核验已启用；业务写入关闭"]
     end
 
     subgraph JSO["JSO：Node.js 模块化单体"]
         BUSINESS["业务 HTTP<br/>可信身份、角色、资源与能力校验"]
         AGENT["Agent API<br/>固定工具契约、身份与资源校验<br/>写入另需精确授权"]
-        DELEGATE["Owner 会话 / 精确委托<br/>绑定来源、动作、完整命令摘要与期限"]
+        DELEGATE["Owner 会话 / 精确委托<br/>会话校验已通；业务委托未放行"]
         APP["应用命令 / 业务校验 / 事务<br/>订单 → 排程 → 生产执行"]
         SCHED["确定性排程核心<br/>预览与方案，不自动采用"]
         VIEW["只读派生视图<br/>Daily Operations / 今日作业"]
@@ -54,14 +54,14 @@ flowchart TB
     READ -->|"状态快照"| CHART
 
     OWNER --> CHAT
-    CHAT -. "待接入的原生输入与展示核对" .-> MAIN
-    MAIN -. "认证后的原生会话通道" .-> NATIVE
-    NATIVE -. "Owner 委托" .-> DELEGATE
+    CHAT -->|"本机会话绑定"| MAIN
+    MAIN -->|"已核验：status / recover"| NATIVE
+    NATIVE -->|"只读 Owner 会话校验"| DELEGATE
     NATIVE -. "改期 / 完整采用 / 原回执恢复" .-> AGENT
     DELEGATE -. "精确授权校验" .-> AGENT
 
     classDef pending fill:#fff4d6,stroke:#996b00,color:#422f00,stroke-dasharray:5 5;
-    class MAIN,NATIVE,DELEGATE pending;
+    class NATIVE,DELEGATE pending;
 ```
 
 - **JSO 是业务事实的权威。** 订单、场次、任务绑定、生产事件及业务回执保存于 SQLite；VCPChat、VChart、模型输出和备份都不是第二套可独立写入的业务库。
@@ -83,7 +83,7 @@ sequenceDiagram
     participant JSO as JSO 授权与业务边界
     participant DB as SQLite
 
-    Note over Owner,DB: 生产入口尚未启用；须先完成实际客户端绑定与准入
+    Note over Owner,DB: Owner 只读连接已核验；原生业务写入仍需生产准入与逐次本人确认
     Main->>Host: 认证会话中的读取 / 提案请求
     Host->>Ext: 宿主绑定上下文与受限调用能力
     Ext->>JSO: read_state / preview_shift / generate_proposal
@@ -119,14 +119,16 @@ sequenceDiagram
 
 ## 3. 当前状态与证据边界
 
-本次 **2026-10-30** 只读复核确认：生产 JSO 镜像与 #96 部署记录相符、容器运行；ToolBox 服务 active，broker 与部署记录匹配；受保护配置及源文件摘要一致；原生插件仍未启用，`vcp_chat.c2` 仍为 `PRODUCTION_DISABLED`。
+截至 **2026-10-30**：JSO 镜像与 #96 部署记录相符；ToolBox 的只读原生核验通道已启用，策略仍为 `read-only`；错误 Owner 凭据被拒绝；公网原生 HTTP 已封闭，核验走既有认证 WSS。日常 Windows 客户端已实际收到成功的 Owner 会话核验回复，记录与本次启动 UUID、客户端 UUID 和主进程 PID 对应。
+
+Owner 凭据经受控启动只进入进程内存：启动器仅向本次 Electron 启动显式提供引用，其他探测子进程使用去除 Owner 的环境；主进程捕获后移除该环境引用，不再向插件继承。不写入绑定 JSON、诊断文件或持久系统环境。诊断只表示最近一次会话核验成功，**不证明本人已确认业务动作，也不构成生产客户端准入**。`vcp_chat.c2` 仍为 `PRODUCTION_DISABLED`，原生业务写入没有开启。
 
 | 层次 | 已具备 / 已部署 | 尚未完成或不能据此推断 |
 |---|---|---|
 | JSO 独立应用 | Schema12 / V3 订单、排程、生产执行、附件与今日作业；生产兼容更新已应用 | Studio Day 的当前日常客户端完整验收仍由 #89 收尾 |
 | 标准 VCP 工具 | 授权范围内读取、预览及原改期回执探测通过；适配策略保持 `read-only` | 模型工具调用不获得写权限 |
-| 原生改期 / 完整采用 | #96 / 扩展 #32 / ToolBox #300 的兼容代码已合并部署；针对性与跨仓库隔离测试通过 | 实际客户端 Owner 会话绑定、生产准入与拒绝测试、两类逐次确认业务写入及回执核对 |
-| VCPChat / VChart | 现有通用原生展示、输入捕获、连接失效及状态投影实现 | 客户端源码或 UUID 的存在不证明当前本人会话已接入 |
+| 原生改期 / 完整采用 | #96 / 扩展 #32 / ToolBox #300 的兼容代码已合并部署；针对性与跨仓库隔离测试通过；宿主只读核验可用 | 生产客户端准入、写入拒绝路径、两类逐次确认业务写入及原回执核对 |
+| VCPChat / VChart | #79 的内存凭据隔离与最小诊断已应用，实际日常客户端 Owner 会话只读核验通过；保留原有展示与投影实现 | 本轮未通过真实客户端执行业务写入；源码、UUID 和诊断文件都不授予写权限 |
 | Kiosk / 现场与通知 | 既有代码能力与独立授权边界；Outbox 属于业务数据 | 本图未重新验收 Kiosk 启用状态，也不表示真实外部通知已开启 |
 | 备份 / 回滚 | 部署备份及恢复副本核验；最新业务库与 VCP journal 的隔离恢复测试 | 实际版本两端协同回滚的最终验收仍待完成；不得用旧快照覆盖后续新写入 |
 
@@ -137,6 +139,7 @@ sequenceDiagram
 | JSO | [`f39be58`](https://github.com/JENN2046/jenn-shooting-operations/pull/96) | 动作绑定的 Owner 委托、完整采用和 scoped 回执 |
 | Jenn Extensions | [`9f99d81`](https://github.com/JENN2046/VCPToolBox-JENN-Extensions/pull/32) | 原生完整采用、白名单、展示与未知结果恢复 |
 | VCPToolBox | [`0e3a1cd`](https://github.com/JENN2046/VCPToolBox/pull/300) | 在现有运行基线上补齐 broker 支持，保留 NativeSync |
+| VCPChat | [`20268e7`](https://github.com/JENN2046/VCPChat/pull/79) | 最小会话诊断与进程内凭据隔离；日常安装按文件应用，保留 NativeSync 与原有主进程逻辑 |
 
 JSO 生产 Node 为 **24.22.1**。这些部署提交不自动改变已接受的 `JSO_AGENT_R2` compatibility release pins；历史 #83 验收只证明其当时版本与场景，不能替代当前日常客户端验收。本文的当前集成批次也不构成新的兼容发布。
 

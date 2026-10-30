@@ -22,8 +22,8 @@ Jenn Shooting Operations 是 `jenn-shooting-planner` 的独立协作服务边界
 截至 **2026-10-30**，成果集成主线为 **`main`**。当前已部署的 JSO 代码基线为
 `f39be58afa8787c4a5ecdfb9de9c12bb0cfd3511`（#96），生产 Node 为 **24.22.1**。
 组件关系、事实权威与实际启用状态见[当前系统架构图](docs/architecture/CURRENT_SYSTEM_ARCHITECTURE.md)。
-VCP 原生改期与完整采用的兼容代码已部署，但原生插件仍未启用、适配策略保持只读；
-当前日常客户端的 Owner 会话绑定、原生业务写入和最终验收尚未完成。
+VCP 原生改期与完整采用的兼容代码已部署，只读会话核验通道已启用；日常客户端的
+Owner 会话已通过实际 WSS 核验。适配策略仍为只读，生产客户端准入、原生业务写入和最终验收尚未完成。
 
 Schema12 / V3 已包含五类订单、排程与预计结束、实际开拍/完成、参考图、管理员会话、
 本人现场、受限 Kiosk、R5 原生对话接入，以及 Product R1 的 **Studio Day / 今日作业台**。
