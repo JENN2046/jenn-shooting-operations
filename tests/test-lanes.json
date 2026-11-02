@@ -3,6 +3,11 @@
   "auditCommit": "4b4e145394ccb7c84f174f37a307c5ff8cdf4ed8",
   "tests": [
     {
+      "file": "server-shutdown.test.mjs",
+      "lanes": ["current"],
+      "invariant": "Native shutdown drains admitted handlers and streamed responses before closing the store, preserves timeout/error failures and handles actual entrypoint signals without force-exit"
+    },
+    {
       "file": "agent-daily-briefing-integration.test.mjs",
       "lanes": [
         "current"
