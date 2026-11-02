@@ -4,7 +4,7 @@ import {assertConversationStartupBinding} from './conversation-runtime-v1.mjs';
 import {createKioskOnlineOptionsFromEnv,requireKioskOnlineRuntimeV3} from './kiosk-online-runtime-v3.mjs';
 import {createKioskOnlineV3} from './kiosk-online-v3.mjs';
 import { createKioskServiceBindingV1, requireKioskServiceBindingV1, assertKioskContextIdentityV1 } from './kiosk-service-context-v1.mjs';
-import { createServer } from 'node:http';
+import { createDrainingHttpServer, installShutdownSignals } from './server-shutdown.mjs';
 import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHttpApp } from './http-app.mjs';
@@ -197,6 +197,8 @@ export function createOperationsServer({
   browserSessionRuntime,
   writeAdmissionMode = 'enabled',
   publicBoardEnabled = false,
+  shutdownTimeoutMs = 25_000,
+  shutdownObserver,
 }) {
   if(conversationBoundaryFactory!==undefined && kioskAuthenticate!==undefined)
     throw new Error('CONVERSATION_LEGACY_KIOSK_CONFLICT');
@@ -290,8 +292,14 @@ export function createOperationsServer({
     publicBoardEnabled,
     writeAdmissionControl,
   });
-  const server = createServer(app);
-  const cleanupTimer = !coreAccepted && cleanupIntervalMs > 0
+  let cleanupTimer=null;
+  const lifecycle=createDrainingHttpServer({handler:app,timeoutMs:shutdownTimeoutMs,
+    onEvent:shutdownObserver,
+    onDrain:()=>{if(cleanupTimer)clearInterval(cleanupTimer);},
+    closeResources:()=>{if(cleanupTimer)clearInterval(cleanupTimer);store.close();},
+  });
+  const server=lifecycle.server;
+  cleanupTimer = !coreAccepted && cleanupIntervalMs > 0
     ? setInterval(() => {
         try {
           store.cleanupOrphanUploads();
@@ -308,15 +316,14 @@ export function createOperationsServer({
     enable: options => store.enableOrphanCleanup(options),
   });
 
-  server.on('close', () => {
-    if (cleanupTimer) clearInterval(cleanupTimer);
-    store.close();
-  });
   return {
     server,
     store,
     orphanCleanupControl,
     writeAdmissionControl,
+    shutdown:lifecycle.shutdown,
+    shutdownStatus:lifecycle.status,
+    shutdownCompletion:lifecycle.completion,
   };
 }
 
@@ -384,7 +391,7 @@ export function startOperationsFromEnv({conversationBoundaryFactory} = {}) {
   if(![undefined,'disabled','enabled'].includes(process.env.JSO_PUBLIC_BOARD))throw new Error('INVALID_PUBLIC_BOARD_MODE');
   const publicBoardEnabled=process.env.JSO_PUBLIC_BOARD==='enabled';
   const kioskRuntimeOptions = createKioskRuntimeOptionsFromEnv(process.env);
-  const { server, writeAdmissionControl } = createOperationsServer({
+  const { server, writeAdmissionControl, shutdown, shutdownStatus, shutdownCompletion } = createOperationsServer({
     databasePath,
     uploadRoot,
     tokens,
@@ -398,9 +405,17 @@ export function startOperationsFromEnv({conversationBoundaryFactory} = {}) {
     ...createBrowserSessionOptionsFromEnv(process.env),
     ...createKioskOnlineOptionsFromEnv(process.env),
     conversationBoundaryFactory,
+    shutdownObserver:event=>{
+      if(event.ok===false&&!process.exitCode)process.exitCode=1;
+      console.log(JSON.stringify(event));
+    },
   });
+  installShutdownSignals({shutdown,completion:shutdownCompletion});
 
   const enableWriteAdmission = () => {
+    if(shutdownStatus().draining){
+      console.log(JSON.stringify({event:'WRITE_ADMISSION_ENABLE_REFUSED_DURING_SHUTDOWN'}));return;
+    }
     const result = writeAdmissionControl.enable();
     console.log(JSON.stringify({
       event: result.code,
@@ -410,7 +425,7 @@ export function startOperationsFromEnv({conversationBoundaryFactory} = {}) {
   };
   if (writeAdmissionControl.isDisabled()) {
     process.on('SIGUSR2', enableWriteAdmission);
-    server.on('close', () => process.off('SIGUSR2', enableWriteAdmission));
+    shutdownCompletion.then(() => process.off('SIGUSR2', enableWriteAdmission));
   }
 
   server.listen(port, host, () => {
