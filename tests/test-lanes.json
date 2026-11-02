@@ -3,6 +3,20 @@
   "auditCommit": "4b4e145394ccb7c84f174f37a307c5ff8cdf4ed8",
   "tests": [
     {
+      "file": "agent-daily-briefing-integration.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "read_state additive Schema12 briefing preserves requested scope and one read snapshot, remains query-only and backwards compatible; optional immutable Extensions stdio source carries the result without new authority"
+    },
+    {
+      "file": "agent-daily-briefing-v1.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "Agent daily presentation reuses scoped facts without transaction ownership or private estimate/name/note reads, retaining explicit partial coverage"
+    },
+    {
       "file": "agent-scheduling-service-v1.test.mjs",
       "lanes": [
         "current"

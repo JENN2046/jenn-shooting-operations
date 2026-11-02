@@ -42,6 +42,28 @@ not start a listener or enable a legacy business route. In the accepted R5
 composition, the conversation handler is mounted before the ordinary V2 protocol
 upgrade-rejection gate; its old route name does not make it obsolete.
 
+### Additive Schema12 read-state briefing (source integration)
+
+Schema12 `read_state` additionally returns `dailyBriefing`. The request envelope,
+command vocabulary, existing response fields, authentication and write gates are
+unchanged. Schema11 retains its existing response shape. This is local source
+integration, not evidence of deployment or real-use acceptance.
+
+The projection runs inside the existing read transaction after permission and
+**requested** `resourceScope` validation, using the same revision snapshot and a
+trusted host observation clock. It never widens a requested subset to the full
+principal scope, impersonates a management role, or reads private catalogue
+estimates, attachments, notes or cross-bound order names. Confirmed forecasts
+retain the shared read model's existing receipt/operation validation.
+
+Today/current/next reflect scoped facts. Ready-unscheduled orders remain
+`unknown`, and attention is explicitly partial/`unknown`: estimates are withheld
+and catalogue coverage may be incomplete. Withheld estimates are not reported as
+missing duration; partial results are not evidence of an empty queue. Enrichment
+failure returns `dailyBriefing: {ok:false, code:"DAILY_BRIEFING_UNAVAILABLE"}` while
+preserving the old successful state and suppressing raw exception details.
+See [Daily Briefing v1](DAILY_BRIEFING_V1.md) for rendering and coverage semantics.
+
 ## JSO-A2 — Strict parsing
 
 The existing parser MUST reject ambiguous input before service dispatch:

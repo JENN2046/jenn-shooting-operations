@@ -53,7 +53,7 @@ Studio Day 的源码与 UI polish 已分别通过 #90 / #92 合入 `main`，但�
 
 ## 入口
 
-- [只读日常简报与固定合成本地演示](docs/DAILY_BRIEFING_V1.md)：`npm run demo:daily-briefing`，不连接真实服务或数据。
+- [只读日常简报与固定合成本地演示](docs/DAILY_BRIEFING_V1.md)：`npm run demo:daily-briefing`，不连接真实服务或数据。 Schema12 的原 `read_state` 已在源码中接入按权限裁剪的简报，未部署；订单估时与完整待排覆盖仍明确未知。
 
 - [当前系统架构图与启用边界](docs/architecture/CURRENT_SYSTEM_ARCHITECTURE.md)
 - [项目开发史](docs/PROJECT_DEVELOPMENT_HISTORY.md)

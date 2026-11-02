@@ -143,7 +143,7 @@ export function createSchedulingV2Application({
     ...business,
     // Injection port only. No route or identity is enabled by constructing this facade.
     agentService: createAgentSchedulingServiceV1({ db: store.db, proposalStore,
-      application: business, writeAdmissionControl }),
+      application: business, writeAdmissionControl, clock }),
     authenticate,
     writeAdmissionControl,
     decideProposal({ command, principal } = {}) {

@@ -1,4 +1,5 @@
 import { readAgentBusinessFactsV3 } from './agent-business-facts-v3.mjs';
+import { readAgentDailyBriefingV1 } from './agent-daily-briefing-v1.mjs';
 import { agentCommandDigest } from './jso-agent-api-v1.mjs';
 import { canonicalJsonSchedulingV1, digestCanonicalJsonSchedulingV1 } from './scheduling-contract-v1.mjs';
 import { authorizeCapability, validateTrustedPrincipal } from './authorization-v2.mjs';
@@ -60,7 +61,7 @@ const rescheduleSummary = receipt => ({ operationId: receipt.operationId, schedu
 /** Local injected facade. Authentication and exact write grants belong to its trusted adapter.
  * No user/model supplied role, approval reference or prompt can create that authority.
  */
-export function createAgentSchedulingServiceV1({ db, proposalStore, application, writeAdmissionControl } = {}) {
+export function createAgentSchedulingServiceV1({ db, proposalStore, application, writeAdmissionControl, clock = () => new Date() } = {}) {
   if (!db || typeof proposalStore?.preview !== 'function' || typeof proposalStore?.adoptPreview !== 'function'
     || typeof application?.reschedule !== 'function' || typeof writeAdmissionControl?.isDisabled !== 'function') {
     throw new TypeError('trusted database, proposal store, application and write-admission control required');
@@ -100,10 +101,21 @@ export function createAgentSchedulingServiceV1({ db, proposalStore, application,
         const sessions = db.prepare(`SELECT id AS scheduleItemId,resource_id AS resourceId,planned_start AS plannedStart,planned_end AS plannedEnd,
           buffer_after_minutes AS bufferAfterMinutes,schedule_status AS status,lock_status AS lockStatus
           FROM schedule_items ORDER BY planned_start,id`).all().filter(r => command.resourceScope.includes(r.resourceId));
-        return { ok: true, revisions: revisions(db), resources, sessions,
+        const state = { ok: true, revisions: revisions(db), resources, sessions,
           ...readAgentBusinessFactsV3(db, command.resourceScope),
           activeConfig: row ? { configVersion: row.config_version, configDigest: row.config_digest, businessTimeZone: config.businessTimeZone } : null,
           writeAdmission: writeAdmissionControl.isDisabled() ? 'disabled' : 'enabled' };
+        // Schema11 callers keep their original response. The Schema12 addition
+        // is read-only, in this same authorized transaction and exact request scope.
+        if (state.businessSchemaVersion === 12) {
+          try {
+            state.dailyBriefing = readAgentDailyBriefingV1({ db, state, resourceScope: command.resourceScope,
+              configRow: row, config, observedAt: clock().toISOString() });
+          } catch {
+            state.dailyBriefing = { ok: false, code: 'DAILY_BRIEFING_UNAVAILABLE' };
+          }
+        }
+        return state;
       });
     },
     previewCalendar({ principal, command }) {
