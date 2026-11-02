@@ -3,6 +3,20 @@
   "auditCommit": "4b4e145394ccb7c84f174f37a307c5ff8cdf4ed8",
   "tests": [
     {
+      "file": "agent-daily-briefing-integration.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "read_state additive Schema12 briefing preserves requested scope and one read snapshot, remains query-only and backwards compatible; optional immutable Extensions stdio source carries the result without new authority"
+    },
+    {
+      "file": "agent-daily-briefing-v1.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "Agent daily presentation reuses scoped facts without transaction ownership or private estimate/name/note reads, retaining explicit partial coverage"
+    },
+    {
       "file": "agent-scheduling-service-v1.test.mjs",
       "lanes": [
         "current"
@@ -163,6 +177,20 @@
         "current"
       ],
       "invariant": "conversation rejects otherwise valid static ${action} grants before creating a factory; conversation accepts omitted and empty grants for both identity modes"
+    },
+    {
+      "file": "daily-briefing-render-v1.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "briefing text and standalone HTML preserve evidence states and business timezone, escape displayed data, identify synthetic samples and expose no write/network controls"
+    },
+    {
+      "file": "daily-briefing-v1.test.mjs",
+      "lanes": [
+        "current"
+      ],
+      "invariant": "read-only briefing consumes the existing authorized daily projection without mutation or I/O; missing, inconsistent, date-scoped and unknown run evidence stays explicit and cannot manufacture completion"
     },
     {
       "file": "daily-operations-v1.test.mjs",
@@ -549,7 +577,9 @@
     },
     {
       "file": "manage-proposal-receipt.test.mjs",
-      "lanes": ["current"],
+      "lanes": [
+        "current"
+      ],
       "invariant": "Shipped proposal UI reports authoritative receipt outcomes and blocks clock-expired previews before writing."
     },
     {

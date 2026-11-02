@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.mjs",
+    "demo:daily-briefing": "node scripts/demo-daily-briefing.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:current": "node scripts/test-lanes.mjs current",
     "test:compat": "node scripts/test-lanes.mjs compat",

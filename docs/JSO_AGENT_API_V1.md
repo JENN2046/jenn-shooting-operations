@@ -42,6 +42,28 @@ not start a listener or enable a legacy business route. In the accepted R5
 composition, the conversation handler is mounted before the ordinary V2 protocol
 upgrade-rejection gate; its old route name does not make it obsolete.
 
+### Additive Schema12 read-state briefing (source integration)
+
+Schema12 `read_state` additionally returns `dailyBriefing`. The request envelope,
+command vocabulary, existing response fields, authentication and write gates are
+unchanged. Schema11 retains its existing response shape. This is local source
+integration, not evidence of deployment or real-use acceptance.
+
+The projection runs inside the existing read transaction after permission and
+**requested** `resourceScope` validation, using the same revision snapshot and a
+trusted host observation clock. It never widens a requested subset to the full
+principal scope, impersonates a management role, or reads private catalogue
+estimates, attachments, notes or cross-bound order names. Confirmed forecasts
+retain the shared read model's existing receipt/operation validation.
+
+Today/current/next reflect scoped facts. Ready-unscheduled orders remain
+`unknown`, and attention is explicitly partial/`unknown`: estimates are withheld
+and catalogue coverage may be incomplete. Withheld estimates are not reported as
+missing duration; partial results are not evidence of an empty queue. Enrichment
+failure returns `dailyBriefing: {ok:false, code:"DAILY_BRIEFING_UNAVAILABLE"}` while
+preserving the old successful state and suppressing raw exception details.
+See [Daily Briefing v1](DAILY_BRIEFING_V1.md) for rendering and coverage semantics.
+
 ## JSO-A2 — Strict parsing
 
 The existing parser MUST reject ambiguous input before service dispatch:
@@ -233,7 +255,7 @@ extend its existing `jso-agent-api-v1.test.mjs` entry; other rows reuse coverage
 | JSO-A10 | `jso-conversation-cancellation-restart`: durable cancellation, rebound owner/assistant/digest, attempted-dispatch reconciliation; `jso-conversation-r1`: cancellation races, revocation, restart and receipt recovery; `jso-conversation-http-boundary`: owner HTTP byte limits and scrubbed failures |
 
 Names in the table omit `tests/` and `.test.mjs`. The complete frozen profile is
-[Extensions profile v1](https://github.com/JENN2046/VCPToolBox-JENN-Extensions/blob/77e89fae03202a3d861d6f3e78c8a06666df304d/integrations/jso-agent/profile.v1.json).
+[Extensions profile v1](https://github.com/JENN2046/VCPToolBox-JENN-Extensions/blob/a6c7d447ddaa29799c60aa109d5119b102d1eae4/integrations/jso-agent/profile.v1.json).
 Local `agent-scheduling-service-v1.test.mjs` also protects independent resource,
 admission, transaction rollback and receipt-integrity rules through current CI;
 it is not falsely claimed to be another paired-profile entry.
@@ -246,24 +268,27 @@ external integration cases report skips, not acceptance. Then run
 dependencies, exact sources and per-component runtimes; **any required skip fails**.
 Only synthetic temporary stores/local sockets are used, never daily credentials.
 
-## Immutable paired caller and accepted pins
+## Immutable paired caller and accepted R2 pins
 
 [JSO's thin caller](../.github/workflows/jso-agent-paired-candidate.yml) runs on PR,
 push to `main`, and manual dispatch with read-only repository permission. Both
 reusable workflow and `harness_sha` pin
-`77e89fae03202a3d861d6f3e78c8a06666df304d`. JSO is the sole substitution:
+`a6c7d447ddaa29799c60aa109d5119b102d1eae4`. Its compatibility manifest is the
+source of truth for the accepted R2 pins below; deployment commits in the
+architecture document describe a separate composition. JSO is the sole substitution:
 actual PR **head SHA**, or push/manual `github.sha`, not a synthetic PR merge SHA.
 
-The other source pins remain:
+The manifest fixes the other source pins as follows:
 
 | Component | Accepted SHA |
 |---|---|
-| Extensions | `6a6f0a9c0ca27e366bb4d81aa3a09ce999baef9c` |
-| VCPChat | `1f86d5912c6acb3588577945e19045edc1256731` |
-| VCPToolBox | `ce904c476f58e0857aa9ee828619158a82d75e7e` |
+| Extensions | `54b0bfb4d94bc9f3a53516cd4082fb7c4c6d351c` |
+| VCPChat | `900fdda5e24347d802b738924d8456a42c01477f` |
+| VCPToolBox | `b0552cd3e109a8cfe38ac5ee292cc026891d7442` |
 
-The contract owner publication at `b0552cd...` and the harness SHA are distinct
-from these accepted runtime pins. Neither publication nor a CI merge advances
+The contract owner publication currently shares `b0552cd...` with the ToolBox
+source pin, but publication and runtime acceptance remain different roles. The
+harness SHA is separate. Neither a publication nor a CI merge advances
 compatibility pins. Verify GitHub `referenced_workflows` and the downloaded receipt:
 candidate component/repository/exact SHA, all four resolved sources, harness SHA,
 contract/profile versions, passing counts and **zero required skips**. There are
